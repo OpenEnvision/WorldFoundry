@@ -5,7 +5,7 @@
 [![CLI](https://img.shields.io/badge/CLI-worldfoundry--eval-purple)](docs/fumadocs/content/docs/reference/cli.mdx)
 [![Docs](https://img.shields.io/badge/docs-Fumadocs-orange)](docs/fumadocs)
 
-WorldFoundry is an open-source framework for world models: a shared stack for in-tree runners, local asset staging, inference (TUI / CLI / Studio), and benchmark evaluation across video generation, 3D/4D representation, embodied action, and interactive worlds.
+WorldFoundry is an open-source infrastructure for world models: a shared stack for in-tree runners, local asset staging, inference (TUI / CLI / Studio), and benchmark evaluation across video generation, 3D/4D representation, embodied action, and interactive worlds.
 
 > ⚠️ This repository is still under active development. We will keep updating it regularly. Feel free to open an issue if you encounter any problem.
 
