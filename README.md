@@ -17,21 +17,31 @@ Day-one workflow:
 
 ## 🤝 Community
 
-### 💬 Slack (Recommended)
-
-Join our Slack workspace to connect with the community, discuss development, and receive the latest project updates.
-
-👉 **Join here:** https://join.slack.com/t/worldfoundrycommunity/shared_invite/zt-43nbi9fw4-okYiELzZHp0_1UPa3dh3bQ
-
-
-Join the **WorldFoundry WeChat Community** for discussions, announcements, and technical support.
+Join the **WorldFoundry Community** for discussions, announcements, technical support, and the latest project updates.
 
 <p align="center">
-  <img src="docs/fumadocs/public/wechat_qr.png" alt="WorldFoundry WeChat Community" width="320">
+
+<a href="https://join.slack.com/t/worldfoundrycommunity/shared_invite/zt-43nbi9fw4-okYiELzZHp0_1UPa3dh3bQ">
+  <img src="https://img.shields.io/badge/Slack-Join%20Workspace-4A154B?logo=slack&logoColor=white" alt="Join Slack">
+</a>
+
+<a href="https://github.com/WorldFoundry/WorldFoundry/discussions">
+  <img src="https://img.shields.io/badge/GitHub-Discussions-181717?logo=github" alt="GitHub Discussions">
+</a>
+
 </p>
 
 <p align="center">
-  <em>Scan the QR code to join. The QR code will be updated periodically if it expires.</em>
+  <strong>WeChat Community</strong>
+</p>
+
+<p align="center">
+  <img src="docs/fumadocs/public/wechat_qr.png" alt="WorldFoundry WeChat Community" width="280">
+</p>
+
+<p align="center">
+  <em>Scan the QR code to join our WeChat community.<br>
+  The QR code is updated periodically if it expires.</em>
 </p>
 
 ## 📰 News
