@@ -46,7 +46,7 @@ Join the **WorldFoundry Community** [Slack / Wechat] for discussions, announceme
 
 ## 📰 News
 
-- **[2026-07-12]** 🎉 **WorldFoundry reached 100+ stars on its very first day!** Thanks to the community for the incredible support and encouragement. More exciting updates are coming!
+- **[2026-07-12]** 🔥 **WorldFoundry reached 100+ stars on its very first day!** Thanks to the community for the incredible support and encouragement. More exciting updates are coming!
 - **[2026-07-11]** 🎉 **WorldFoundry is officially open-sourced.** We welcome ⭐ stars, bug reports, feature requests, and pull requests from the community!
 - **[Coming Soon]** Documentation improvements and additional benchmark integrations.
 
