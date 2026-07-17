@@ -5,14 +5,12 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import os
 import sys
-from dataclasses import asdict
+from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
-from typing import Mapping
+from typing import Any
 
-from .utils import json_dump, load_json_mapping, parse_key_value_mapping
 from worldfoundry.evaluation.utils import (
     BENCHMARK_ZOO_DIR,
     MODEL_ZOO_DIR,
@@ -20,8 +18,10 @@ from worldfoundry.evaluation.utils import (
     TMP_ROOT,
 )
 
+from .help import WorldFoundryArgumentParser
+from .utils import json_dump, load_json_mapping, parse_key_value_mapping
 
-_BENCHMARK_RUN_MODE_CHOICES = ("normalizer", "official-run", "official-validation")
+_BENCHMARK_RUN_MODE_CHOICES = ("normalizer", "official-run", "official-validation", "contract")
 
 # ── CLI banners and public command surface ──────────────────────
 
@@ -58,6 +58,9 @@ _PUBLIC_ROOT_COMMANDS = (
     "zoo",
     "mcp",
     "evaluate",
+    "score",
+    "generate-score",
+    "reproduce",
     "embodied",
     "validate",
     "run",
@@ -619,8 +622,60 @@ def _run_uses_unified_framework(args: argparse.Namespace) -> bool:
 
 
 def _run_model_ids(args: argparse.Namespace) -> tuple[str, ...]:
-    """Collect model ids from both ``--model`` (repeated) and singular ``--model-id``."""
-    return tuple(args.model_ids or ()) + (((args.model_id,) if args.model_id else ()))
+    """Collect positional, repeated, and singular model ids without duplicates."""
+    schema = getattr(args, "model_run_schema", None)
+    positional_model = getattr(schema, "model_id", None) or getattr(args, "model_slug", None)
+    values = (
+        *((positional_model,) if positional_model else ()),
+        *(args.model_ids or ()),
+        *((args.model_id,) if args.model_id else ()),
+    )
+    return tuple(dict.fromkeys(str(value) for value in values if value))
+
+
+def _deep_merge_mapping(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
+    """Recursively merge nested CLI configuration mappings."""
+    merged = dict(base)
+    for key, value in override.items():
+        current = merged.get(key)
+        if isinstance(current, Mapping) and isinstance(value, Mapping):
+            merged[key] = _deep_merge_mapping(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _resolved_model_run_options(args: argparse.Namespace):
+    from .model_run import resolve_model_run_options
+
+    return resolve_model_run_options(args)
+
+
+def _run_model_parameters(args: argparse.Namespace) -> dict[str, Any]:
+    """Merge legacy KEY=VALUE parameters with typed model-specific load options."""
+    from worldfoundry.evaluation.models.pipelines.loading import GENERATION_DEFAULTS_PARAMETER
+
+    resolution = _resolved_model_run_options(args)
+    parameters = _deep_merge_mapping(
+        parse_key_value_mapping(args.model_parameter),
+        resolution.model_parameters,
+    )
+    if resolution.generation_defaults:
+        existing = parameters.get(GENERATION_DEFAULTS_PARAMETER)
+        parameters[GENERATION_DEFAULTS_PARAMETER] = _deep_merge_mapping(
+            existing if isinstance(existing, Mapping) else {},
+            resolution.generation_defaults,
+        )
+    return parameters
+
+
+def _run_model_runtime(args: argparse.Namespace) -> dict[str, Any]:
+    """Merge legacy KEY=VALUE runtime settings with typed runtime options."""
+    resolution = _resolved_model_run_options(args)
+    return _deep_merge_mapping(
+        parse_key_value_mapping(args.model_runtime),
+        resolution.model_runtime,
+    )
 
 
 def _run_benchmark_ids(args: argparse.Namespace) -> tuple[str, ...]:
@@ -675,8 +730,8 @@ def _worldfoundry_run_request_from_args(args: argparse.Namespace):
         fail_on_skipped=args.fail_on_skipped,
         model_runner=args.model_runner,
         model_variant_id=args.model_variant,
-        model_parameters=parse_key_value_mapping(args.model_parameter),
-        model_runtime=parse_key_value_mapping(args.model_runtime),
+        model_parameters=_run_model_parameters(args),
+        model_runtime=_run_model_runtime(args),
         model_config=load_json_mapping(args.model_config),
         requests_path=args.requests_path,
         results_path=args.results_path,
@@ -699,6 +754,7 @@ def _worldfoundry_run_request_from_args(args: argparse.Namespace):
         benchmark_timeout_seconds=args.timeout,
         benchmark_workdir=args.workdir,
         benchmark_env=parse_key_value_mapping(args.env),
+        benchmark_parameters=parse_key_value_mapping(args.benchmark_parameter),
         materialize_placeholders=args.materialize_placeholders,
         contract_fixture=getattr(args, "contract_fixture", False),
         fail_on_generation_error=args.fail_on_generation_error,
@@ -722,8 +778,159 @@ def _handle_worldfoundry_run(args: argparse.Namespace) -> int:
     return result.exit_code
 
 
+def _model_run_plan(args: argparse.Namespace) -> dict[str, Any]:
+    """Build a side-effect-free report of the resolved model-specific configuration."""
+    from worldfoundry.evaluation.models.pipelines.loading import GENERATION_DEFAULTS_PARAMETER
+
+    schema = getattr(args, "model_run_schema", None)
+    if schema is None:
+        raise ValueError("model-specific configuration requires `run <model-id>`")
+    resolution = _resolved_model_run_options(args)
+    parameters = _run_model_parameters(args)
+    generation_defaults = parameters.pop(GENERATION_DEFAULTS_PARAMETER, {})
+    resolved = resolution.to_dict()
+    resolved["model_parameters"] = parameters
+    resolved["model_runtime"] = _run_model_runtime(args)
+    resolved["generation_defaults"] = generation_defaults
+    return {
+        "schema_version": "worldfoundry-model-run-config-v1",
+        "model": schema.to_dict(),
+        "resolved": resolved,
+        "execution": {
+            "output_dir": str(args.output_dir),
+            "requests_path": None if args.requests_path is None else str(args.requests_path),
+            "plan_only": bool(args.plan_only),
+        },
+    }
+
+
+def _print_model_run_plan(args: argparse.Namespace) -> int:
+    payload = _model_run_plan(args)
+    if args.json:
+        json_dump(payload)
+    else:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+def _uses_direct_model_run(args: argparse.Namespace) -> bool:
+    """Return whether positional model syntax should execute direct inference."""
+    if getattr(args, "model_run_schema", None) is None:
+        return False
+    return not any(
+        (
+            args.plan is not None,
+            args.all_benchmarks,
+            bool(args.suite_ids),
+            bool(_run_benchmark_ids(args)),
+            args.results_path is not None,
+            args.generated_artifact_dir is not None,
+            _has_complete_task_args(args),
+        )
+    )
+
+
+def _handle_direct_model_run(args: argparse.Namespace) -> int:
+    """Execute one model directly from its typed inference contract."""
+    from worldfoundry.evaluation.api import GenerationRequest
+    from worldfoundry.evaluation.runner import EvaluateRunRequest, execute_evaluate_run
+
+    schema = args.model_run_schema
+    if not schema.runnable:
+        print(
+            f"error: model {schema.model_id!r} is not runnable: {schema.blocked_reason}. "
+            f"Use `worldfoundry-eval run {schema.requested_model_id} --model-status` for its contract.",
+            file=sys.stderr,
+        )
+        return 2
+    resolution = _resolved_model_run_options(args)
+    missing = [
+        field.option
+        for field in schema.fields
+        if field.scope == "input"
+        and field.required
+        and not resolution.inputs.get(field.input_key or field.key_path[-1])
+    ]
+    if missing and args.requests_path is None:
+        print(f"error: direct {schema.model_id} inference requires {', '.join(missing)}", file=sys.stderr)
+        return 2
+
+    requests = None
+    if args.requests_path is None:
+        requests = [
+            GenerationRequest(
+                sample_id="sample-0000",
+                task_name=resolution.task_id or schema.task_id,
+                split=args.split,
+                inputs=resolution.inputs,
+                generation_kwargs=resolution.generation_defaults,
+            )
+        ]
+    runtime = _run_model_runtime(args)
+    runtime.setdefault("output_dir", str(Path(args.output_dir) / "generated"))
+    result = execute_evaluate_run(
+        EvaluateRunRequest(
+            output_dir=args.output_dir,
+            mode="model",
+            requests=requests,
+            requests_path=args.requests_path,
+            metrics=tuple(args.metric) if args.metric is not None else ("artifact_count",),
+            required_artifacts=tuple(args.required_artifact or ()),
+            benchmark={
+                "suite": "model_direct",
+                "benchmark_name": resolution.task_id or schema.task_id,
+                "task_type": resolution.task_id or schema.task_id,
+                "evaluation_protocol": "direct_model_inference",
+            },
+            model_id=schema.model_id,
+            model_runner=args.model_runner,
+            model_zoo_manifest_dir=args.model_manifest_dir or MODEL_ZOO_DIR,
+            model_variant_id=args.model_variant or schema.catalog_variant_id,
+            model_parameters=_run_model_parameters(args),
+            model_runtime=runtime,
+            model_config=load_json_mapping(args.model_config),
+            dataset_id=args.dataset_id or f"{schema.model_id}:direct",
+            run_id=args.run_id,
+            fail_on_sample_error=args.fail_on_sample_error,
+            write_artifacts_index=not args.no_artifacts_index,
+            generation_cache_dir=args.generation_cache_dir,
+            generation_cache_mode=args.generation_cache_mode,
+            generation_cache_namespace=args.generation_cache_namespace,
+        )
+    )
+    payload = result.to_dict()
+    payload["engine"] = "model-direct"
+    payload["model_cli"] = {
+        "model_id": schema.model_id,
+        "variant_id": schema.variant_id,
+        "task_id": resolution.task_id,
+    }
+    if args.json:
+        json_dump(payload)
+    else:
+        print(
+            f"Run {result.status}: model={schema.model_id}, "
+            f"samples={result.sample_count}, scorecard={result.scorecard_path}"
+        )
+    return result.exit_code
+
+
 def _handle_run(args: argparse.Namespace) -> int:
     """Route run into either plan replay or unified/in-process execution."""
+    if getattr(args, "model_run_schema", None) is not None and len(_run_model_ids(args)) > 1:
+        print(
+            "error: positional model syntax accepts one model; remove conflicting --model/--model-id values",
+            file=sys.stderr,
+        )
+        return 2
+    schema = getattr(args, "model_run_schema", None)
+    if schema is not None and not schema.runnable and not args.print_config and not args.plan_only:
+        print(
+            f"error: model {schema.model_id!r} is not runnable: {schema.blocked_reason}. "
+            f"Use `worldfoundry-eval run {schema.requested_model_id} --model-status` for its contract.",
+            file=sys.stderr,
+        )
+        return 2
     if args.plan is not None:
         result = _execute_run_plan_file(args)
         payload = result.to_dict()
@@ -736,6 +943,17 @@ def _handle_run(args: argparse.Namespace) -> int:
                 f"samples={result.sample_count}, scorecard={result.scorecard_path}"
             )
         return result.exit_code
+
+    if args.print_config:
+        return _print_model_run_plan(args)
+
+    if _uses_direct_model_run(args):
+        if args.engine != "in-process":
+            print("error: direct model execution requires --engine in-process", file=sys.stderr)
+            return 2
+        if args.plan_only:
+            return _print_model_run_plan(args)
+        return _handle_direct_model_run(args)
 
     if _run_uses_unified_framework(args):
         if (
@@ -766,7 +984,11 @@ def _handle_run(args: argparse.Namespace) -> int:
 
 def _handle_run_in_process(args: argparse.Namespace) -> int:
     from worldfoundry.cli.utils import resolve_cli_benchmark_for_materialize
-    from worldfoundry.evaluation.runner import EvaluateRunRequest, execute_evaluate_run, materialize_requests_from_benchmark
+    from worldfoundry.evaluation.runner import (
+        EvaluateRunRequest,
+        execute_evaluate_run,
+        materialize_requests_from_benchmark,
+    )
 
     benchmark = resolve_cli_benchmark_for_materialize(args.task_type, args.benchmark_name)
     materialized = materialize_requests_from_benchmark(
@@ -807,12 +1029,12 @@ def _handle_run_in_process(args: argparse.Namespace) -> int:
             benchmark=benchmark_metadata,
             dataset=dataset_metadata,
             benchmark_id=args.benchmark_id or args.benchmark_name,
-            model_id=args.model_id or args.model_type,
+            model_id=(_run_model_ids(args)[0] if _run_model_ids(args) else args.model_type),
             model_runner=args.model_runner,
             model_zoo_manifest_dir=args.model_manifest_dir,
             model_variant_id=args.model_variant,
-            model_parameters=parse_key_value_mapping(args.model_parameter),
-            model_runtime=parse_key_value_mapping(args.model_runtime),
+            model_parameters=_run_model_parameters(args),
+            model_runtime=_run_model_runtime(args),
             model_config=load_json_mapping(args.model_config),
             dataset_id=args.dataset_id or args.benchmark_name,
             run_id=args.run_id,
@@ -835,9 +1057,9 @@ def _handle_run_in_process(args: argparse.Namespace) -> int:
     return result.exit_code
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParser:
     """Build all CLI commands, keeping parser wiring near handler selection."""
-    parser = argparse.ArgumentParser(
+    parser = WorldFoundryArgumentParser(
         prog="worldfoundry-eval",
         description="WorldFoundry benchmark evaluation subsystem for the WorldFoundry repository.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -845,9 +1067,9 @@ def _build_parser() -> argparse.ArgumentParser:
             "Command areas:\n"
             "  Discovery:   zoo benchmarks, zoo models, tasks list\n"
             "  Run:         run\n"
-            "  Score:       evaluate, reports\n"
+            "  Score:       evaluate, compare-runs, index-runs, validate-artifact\n"
             "  Extend:      model and benchmark manifests, task YAML, runtime profiles\n"
-            "  Maintain:    zoo validate, dataset, plan, metric\n"
+            "  Maintain:    task validate, preflight, dataset, plan, metric\n"
         ),
     )
     subparsers = parser.add_subparsers(dest="command")
@@ -930,6 +1152,10 @@ def _build_parser() -> argparse.ArgumentParser:
     from .plan_metric import register_plan_metric_subparsers
 
     register_plan_metric_subparsers(subparsers)
+
+    from .evaluation_intents import register_evaluation_intent_subparsers
+
+    register_evaluation_intent_subparsers(subparsers)
 
     from .reporting import register_reporting_subparsers
 
@@ -1152,7 +1378,26 @@ def _build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--json", action="store_true")
     validate_parser.set_defaults(func=_handle_validate)
 
-    run_parser = subparsers.add_parser("run", help="Execute or score a WorldFoundry benchmark through the unified facade")
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Execute or score a WorldFoundry benchmark through the unified facade",
+        description=(
+            (
+                f"{model_run_schema.display_name}: {model_run_schema.description}\n"
+                f"Status: {model_run_schema.runner_entry_kind}; "
+                f"integration={model_run_schema.integration_status}; "
+                f"source={model_run_schema.source_status}."
+            )
+            if model_run_schema is not None
+            else "Execute a model directly, or run and score a model through the unified benchmark facade."
+        ),
+    )
+    run_parser.add_argument(
+        "model_slug",
+        nargs="?",
+        metavar="MODEL",
+        help="Model id or alias. Positional syntax enables typed model-specific pipeline options.",
+    )
     run_parser.add_argument("--plan", type=Path, help="worldfoundry-run-plan JSON file to execute.")
     run_parser.add_argument("--suite", action="append", dest="suite_ids", default=None)
     run_parser.add_argument(
@@ -1184,6 +1429,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Benchmark runner mode for model x benchmark runs.",
     )
     run_parser.add_argument("--plan-only", action="store_true", help="Plan a suite without executing cells.")
+    run_parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print the resolved model-specific configuration and exit without loading the model.",
+    )
     run_parser.add_argument("--resume", action="store_true", help="Reuse completed suite cells when fingerprints match.")
     run_parser.add_argument("--no-skip-incompatible", dest="skip_incompatible", action="store_false", default=True)
     run_parser.add_argument("--fail-on-skipped", action="store_true")
@@ -1254,14 +1504,31 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--timeout", type=float)
     run_parser.add_argument("--workdir", type=Path)
     run_parser.add_argument("--env", action="append", default=None, metavar="KEY=VALUE")
+    run_parser.add_argument(
+        "--benchmark-parameter",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help="Official benchmark-runner parameter. VALUE is parsed as JSON when possible; repeatable.",
+    )
     run_parser.add_argument("--materialize-placeholders", action="store_true", default=None)
     run_parser.add_argument("--no-materialize-placeholders", dest="materialize_placeholders", action="store_false")
     run_parser.add_argument("--fail-on-generation-error", action="store_true")
+    run_parser.add_argument(
+        "--contract-fixture",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     run_parser.add_argument("--run-id")
     run_parser.add_argument("--fail-on-sample-error", action="store_true")
     run_parser.add_argument("--no-artifacts-index", action="store_true")
     _add_generation_cache_args(run_parser, namespace="worldfoundry_run")
     run_parser.add_argument("--json", action="store_true")
+    if model_run_schema is not None:
+        from .model_run import register_model_run_arguments
+
+        register_model_run_arguments(run_parser, model_run_schema)
+        run_parser.set_defaults(model_run_schema=model_run_schema)
     run_parser.set_defaults(func=_handle_run)
 
     _curate_root_subparser_help(subparsers)
@@ -1276,7 +1543,35 @@ def main(argv: list[str] | None = None) -> int:
 
         return tui_main([item for item in raw_argv if item != "--tui"])
 
-    parser = _build_parser()
+    model_run_schema = None
+    if raw_argv and raw_argv[0] == "run":
+        from .model_run import (
+            ModelRunSchemaError,
+            load_model_run_schema,
+            model_id_from_run_argv,
+            option_from_argv,
+        )
+
+        model_ref = model_id_from_run_argv(raw_argv)
+        positional_model = len(raw_argv) > 1 and not raw_argv[1].startswith("-")
+        wants_model_schema = positional_model or any(
+            item in {"-h", "--help", "--print-config", "--model-status"}
+            or item.startswith("--pipeline.")
+            or item.startswith("--runtime.")
+            for item in raw_argv[1:]
+        )
+        if model_ref and wants_model_schema:
+            try:
+                model_run_schema = load_model_run_schema(
+                    model_ref,
+                    variant_id=option_from_argv(raw_argv, "--model-variant"),
+                    task_id=option_from_argv(raw_argv, "--pipeline.task-profile"),
+                )
+            except ModelRunSchemaError as exc:
+                parser = _build_parser()
+                parser.error(str(exc))
+
+    parser = _build_parser(model_run_schema)
     args = parser.parse_args(raw_argv)
     if not hasattr(args, "func"):
         _print_first_run_banner()

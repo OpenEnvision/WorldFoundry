@@ -14,7 +14,6 @@ from worldfoundry.cli.tui_discovery import load_tui_catalog
 
 from .context import DEFAULT_CONTEXT, MCPToolContext
 
-
 # ── Model discovery ─────────────────────────────────────────────────────
 
 

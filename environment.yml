@@ -13,8 +13,11 @@ dependencies:
   - git
   - git-lfs
   - ffmpeg
+  - libexpat
   - cmake
   - ninja
+  # Native ViPE/DROID kernels require Eigen headers at build time.
+  - eigen=3.4
   - pkg-config
   - libgl
   - libglib

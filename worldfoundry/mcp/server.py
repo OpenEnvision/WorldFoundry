@@ -56,7 +56,13 @@ def run_server(transport: str = "stdio") -> int:
         server = create_mcp_server()
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
-    server.run(transport=transport)
+    try:
+        server.run(transport=transport)
+    except KeyboardInterrupt:
+        # Interactive HTTP transports are commonly stopped with Ctrl-C.  The
+        # SDK may re-raise KeyboardInterrupt after uvicorn has already shut
+        # down cleanly; treat that normal operator action as a successful stop.
+        return 0
     return 0
 
 

@@ -161,6 +161,10 @@ EOF
 
 export PYTHONPATH="$WORLDFOUNDRY_SOURCE_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export WORLDFOUNDRY_WORKSPACE_MAX_JOBS="$MAX_JOBS"
+# Unless explicitly overridden, give every scheduled job a resident-worker
+# slot.  This is what lets large video models reuse loaded weights instead of
+# silently falling back to a fresh one-shot process once two jobs are active.
+export WORLDFOUNDRY_STUDIO_RESIDENT_WORKER_MAX_WORKERS="${WORLDFOUNDRY_STUDIO_RESIDENT_WORKER_MAX_WORKERS:-$MAX_JOBS}"
 export WORLDFOUNDRY_CKPT_DIR="$CKPT_DIR"
 export WORLDFOUNDRY_DATA_DIR="$DATA_DIR"
 export WORLDFOUNDRY_BENCHMARK_DATA_ROOT="$BENCHMARK_DATA_ROOT"

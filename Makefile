@@ -1,4 +1,4 @@
-.PHONY: help install-core install-dev test-fast test-eval-core test-ux docs-check lint ruff-check format-check shell-check data-check compile-eval cli-check precommit precommit-install preflight
+.PHONY: help install-core install-dev test-fast test-eval-core test-ux docs-check lint ruff-check format-check shell-check data-check runtime-registry-check compile-eval cli-check precommit precommit-install preflight
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -20,7 +20,14 @@ EVAL_CORE_CHECK_TESTS ?= \
 	test/eval_core/test_contract_stability.py
 
 help:
-	@$(PYTHON) scripts/dev/check_dev_tools.py --help-targets
+	@printf '%s\n' \
+		'WorldFoundry development targets:' \
+		'  make install-core      Install the editable core package.' \
+		'  make install-dev       Install lightweight development dependencies.' \
+		'  make test-fast         Run fast evaluation and CLI checks.' \
+		'  make docs-check        Validate documented CLI entrypoints.' \
+		'  make lint              Run lightweight source and catalog checks.' \
+		'  make preflight         Run the public runtime preflight.'
 
 install-core:
 	$(PIP) install -e .
@@ -44,20 +51,27 @@ docs-check:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli --help >/dev/null
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli zoo benchmarks --json >/dev/null
 
-lint:
-	$(PYTHON) scripts/dev/check_dev_tools.py --lint
+lint: format-check shell-check data-check runtime-registry-check
 
 ruff-check:
-	$(PYTHON) scripts/dev/check_dev_tools.py --ruff-check
+	@if $(PYTHON) -c 'import ruff' >/dev/null 2>&1; then \
+		$(PYTHON) -m ruff check worldfoundry/cli worldfoundry/evaluation worldfoundry/mcp worldfoundry/runtime scripts/benchmark_zoo scripts/model_zoo test/eval_core; \
+	else \
+		printf '%s\n' 'ruff-check: skipped because ruff is not installed; run `make install-dev` first'; \
+	fi
 
 format-check:
-	$(PYTHON) scripts/dev/check_dev_tools.py --format-check
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m compileall -q worldfoundry/evaluation scripts test/eval_core
 
 shell-check:
-	$(PYTHON) scripts/dev/check_dev_tools.py --shell-check
+	find scripts/setup -type f -name '*.sh' -exec bash -n {} +
 
 data-check:
-	$(PYTHON) scripts/dev/check_dev_tools.py --data-check
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli zoo models --json >/dev/null
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli zoo benchmarks --json >/dev/null
+
+runtime-registry-check:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -c 'from worldfoundry.evaluation.models.runtime.validate import validate_runtime_registry; errors = [issue for issue in validate_runtime_registry() if issue.severity == "error"]; assert not errors, "\\n".join(f"[{issue.code}] {issue.message}" for issue in errors)'
 
 compile-eval:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m compileall -q worldfoundry/evaluation scripts

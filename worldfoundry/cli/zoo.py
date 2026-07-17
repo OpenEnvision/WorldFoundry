@@ -175,7 +175,9 @@ def _benchmark_needs(entry) -> tuple[str, ...]:
     needs = list(entry.requires)
     if entry.requires_auth:
         needs.append("auth")
-    if entry.hf_dataset_ids and not _benchmark_declared_dataset_paths_ready(entry):
+    runner_availability = entry.runner_availability if isinstance(entry.runner_availability, Mapping) else {}
+    dataset_optional = runner_availability.get("dataset_optional_for_generated_artifacts") is True
+    if entry.hf_dataset_ids and not dataset_optional and not _benchmark_declared_dataset_paths_ready(entry):
         needs.append("dataset")
     if entry.runner_target is None:
         needs.append("runner")
@@ -321,6 +323,8 @@ def _benchmark_next_action(entry) -> str:
         return "resolve blocker before integration"
     if _benchmark_official_runner_ready(entry):
         return f"run with worldfoundry-eval run --benchmark {entry.benchmark_id}"
+    if _benchmark_bounded_official_component_ready(entry):
+        return f"run bounded official component with {commands['official_run']}"
     if _benchmark_official_runtime_declared(entry) or _benchmark_bounded_official_validation_ready(entry):
         if entry.verification_status == "normalizer_only" and commands.get("normalizer_run"):
             return f"run official validation with {commands['normalizer_run']}"
@@ -365,6 +369,20 @@ def _benchmark_official_runner_ready(entry) -> bool:
         and entry.runner_target is not None
         and bool(entry.official_benchmark_verified)
         and bool(entry.integration_evidence)
+    )
+
+
+def _benchmark_bounded_official_component_ready(entry) -> bool:
+    """Check for a verified, runnable official component without claiming the full suite."""
+    runner_availability = entry.runner_availability if isinstance(entry.runner_availability, Mapping) else {}
+    return bool(
+        entry.integration_status == "integrated"
+        and entry.verification_status == "verified"
+        and entry.runner_target is not None
+        and entry.run_command is not None
+        and entry.integration_evidence
+        and runner_availability.get("bounded_official_component") is True
+        and runner_availability.get("runtime_verified") is True
     )
 
 
@@ -465,6 +483,7 @@ def _shell_command_text(command: str | tuple[str, ...]) -> str:
 def _benchmark_command_readiness(entry) -> dict[str, bool]:
     """Compute the readiness flags for benchmark CLI commands."""
     official_ready = _benchmark_official_runner_ready(entry)
+    bounded_official_component_ready = _benchmark_bounded_official_component_ready(entry)
     leaderboard_capable = _benchmark_leaderboard_capable(entry)
     commands = _benchmark_user_commands(entry)
     normalizer_command_ready = "normalizer_run" in commands
@@ -477,6 +496,7 @@ def _benchmark_command_readiness(entry) -> dict[str, bool]:
         "official_runner_ready": official_ready,
         "official_runtime_declared": official_runtime_declared,
         "official_runtime_command_ready": official_runtime_declared,
+        "bounded_official_component_ready": bounded_official_component_ready,
         "bounded_official_validation_ready": bounded_official_validation_ready,
         "official_evidence_ready": official_evidence_ready,
         "leaderboard_capable": leaderboard_capable,
@@ -486,8 +506,10 @@ def _benchmark_command_readiness(entry) -> dict[str, bool]:
         "ready_now_command_ready": official_ready and bool(entry.ready_now_command),
         "normalizer_command_ready": normalizer_command_ready,
         "normalizer_ready": normalizer_command_ready,
-        "validation_or_normalizer_ready": official_ready or normalizer_command_ready,
-        "one_command_ready": official_ready,
+        "validation_or_normalizer_ready": (
+            official_ready or bounded_official_component_ready or normalizer_command_ready
+        ),
+        "one_command_ready": official_ready or bounded_official_component_ready,
     }
 
 
@@ -496,6 +518,8 @@ def _benchmark_ready_surface(entry) -> str:
     readiness = _benchmark_command_readiness(entry)
     if readiness["eval_ready"]:
         return "eval"
+    if readiness["bounded_official_component_ready"]:
+        return "bounded"
     return "-"
 
 
@@ -857,6 +881,12 @@ def _handle_zoo_benchmark_show(args: argparse.Namespace) -> int:
     print(f"needs: {', '.join(payload['discovery']['needs']) if payload['discovery']['needs'] else '-'}")
     print(f"manifest_path: {payload['discovery']['manifest_path'] or '-'}")
     print(f"next_action: {payload['discovery']['next_action']}")
+    print(
+        "bounded_official_component_ready: "
+        f"{payload['discovery']['bounded_official_component_ready']}"
+    )
+    print(f"official_runner_ready: {payload['discovery']['official_runner_ready']}")
+    print(f"one_command_ready: {payload['discovery']['one_command_ready']}")
     print(f"official_benchmark_verified: {entry.official_benchmark_verified}")
     print(f"integration_evidence: {entry.integration_evidence}")
     print(f"leaderboard_valid: {entry.leaderboard_valid}")
@@ -912,6 +942,8 @@ def _handle_zoo_benchmark_run(args: argparse.Namespace) -> int:
         score_dir=args.score_dir,
         benchmark_data_root=args.benchmark_data_root,
         prompt_manifest=args.prompt_manifest,
+        metrics=args.metrics,
+        limit=args.limit,
         result_model_id=args.result_model_id,
         timeout_seconds=args.timeout,
         workdir=args.workdir,
@@ -1030,7 +1062,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_benchmarks_parser.add_argument(
         "--ready-now",
         action="store_true",
-        help="Only show benchmarks with a verified official one-command runner surface.",
+        help="Only show benchmarks with a verified full or bounded official one-command surface.",
     )
     zoo_benchmarks_parser.add_argument(
         "--official-ready",
@@ -1086,6 +1118,16 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     )
     zoo_benchmark_run_parser.add_argument("--output-dir", type=Path, required=True)
     zoo_benchmark_run_parser.add_argument("--generated-artifact-dir", type=Path)
+    zoo_benchmark_run_parser.add_argument(
+        "--metrics",
+        action="append",
+        help="Metric ids or dimensions to run; comma-separated values are accepted and the flag may repeat.",
+    )
+    zoo_benchmark_run_parser.add_argument(
+        "--limit",
+        type=int,
+        help="Evaluate only the first N benchmark samples for a bounded smoke run.",
+    )
     zoo_benchmark_run_parser.add_argument(
         "--benchmark-data-root",
         type=Path,

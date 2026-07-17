@@ -29,17 +29,17 @@ from worldfoundry.evaluation.utils import (
     MODEL_RUNTIME_ENVIRONMENTS_ROOT,
     MODEL_RUNTIME_PROFILES_ROOT,
     MODEL_ZOO_DIR,
-    REPO_ROOT,
     load_manifest,
     load_manifest_collection,
 )
-from worldfoundry.runtime import resolve_cache_dir
+from worldfoundry.runtime.env import resolve_cache_dir
 
 # ── Default directories ──────────────────────────────────────────
 DEFAULT_MODEL_ZOO_DIR = MODEL_ZOO_DIR
 DEFAULT_BENCHMARK_ZOO_DIR = BENCHMARK_ZOO_DIR
 DEFAULT_RUNTIME_PROFILES_PATH = MODEL_RUNTIME_PROFILES_ROOT
 DEFAULT_CONDA_ENVS_PATH = MODEL_RUNTIME_ENVIRONMENTS_ROOT
+DEFAULT_INFERENCE_EVIDENCE_PATH = MODEL_ZOO_DIR.parent / "validation" / "inference_evidence.yaml"
 # NOTE: These defaults mirror the global paths from :mod:`worldfoundry.evaluation.utils`.
 TUI_ACTIONS = ("infer", "eval", "ui")
 """Available TUI action modes."""
@@ -264,8 +264,8 @@ INFER_VARIANT_LABELS = {
     "hunyuan-world-voyager": "world-voyager",
     "hunyuan-worldplay": "worldplay",
     "hy-world-2.0": "hy-world-2.0",
-    "lyra1": "lyra1",
-    "lyra2": "lyra2",
+    "lyra1": "Lyra 1",
+    "lyra2": "Lyra 2",
     "wow": "default",
     "worldfm": "default",
     "inspatio-world": "default",
@@ -275,9 +275,7 @@ INFER_VARIANT_LABELS = {
 }
 # Reverse mapping from variant ID to model family ID, built from INFER_MODEL_VARIANTS.
 INFER_VARIANT_TO_MODEL = {
-    variant: model_id
-    for model_id, variants in INFER_MODEL_VARIANTS.items()
-    for variant in variants
+    variant: model_id for model_id, variants in INFER_MODEL_VARIANTS.items() for variant in variants
 }
 INFER_VARIANT_TO_MODEL.update(
     {
@@ -393,8 +391,7 @@ INFER_MODEL_GROUPS = INFER_VARIANT_GROUPS
 
 # Mapping from model family ID to its group category, derived from the first variant.
 INFER_MODEL_FAMILY_GROUPS = {
-    model_id: INFER_VARIANT_GROUPS[variants[0]]
-    for model_id, variants in INFER_MODEL_VARIANTS.items()
+    model_id: INFER_VARIANT_GROUPS[variants[0]] for model_id, variants in INFER_MODEL_VARIANTS.items()
 }
 # Preferred default variant for model families that have multiple choices.
 INFER_MODEL_DEFAULT_VARIANTS = {
@@ -404,6 +401,26 @@ INFER_MODEL_DEFAULT_VARIANTS = {
     "wan2.1": "wan2.1-i2v-14b-480p",
     "hunyuan": "hunyuan-worldplay",
     "lyra": "lyra2",
+}
+# The shell inference registry predates the model catalog and uses a handful of
+# different punctuation conventions.  Keep those IDs as command aliases, but
+# present the catalog's canonical family ID in the TUI so one model is not
+# rendered twice (for example ``flash-world`` and ``flashworld``).
+SCRIPT_INFER_FAMILY_TO_TUI_MODEL_ID = {
+    "cosmos-predict2.5": "cosmos-predict-2.5",
+    "fantasy-world": "fantasyworld",
+    "flash-world": "flashworld",
+    "longvie2": "longvie-2",
+}
+TUI_MODEL_ID_TO_SCRIPT_INFER_FAMILY = {
+    tui_model_id: script_family for script_family, tui_model_id in SCRIPT_INFER_FAMILY_TO_TUI_MODEL_ID.items()
+}
+
+# Studio exposes these implementation variants as separate create-job entries.
+# In the TUI model browser they belong under the corresponding family selector.
+STUDIO_MODEL_TO_TUI_MODEL_ID = {
+    "fantasyworld-wan21": "fantasyworld",
+    "fantasyworld-wan22": "fantasyworld",
 }
 # Canonical task labels per inference group category.
 INFER_GROUP_TASKS = {
@@ -534,7 +551,24 @@ def infer_variant_options(model_id: str) -> tuple[tuple[str, str], ...]:
     family_id = _script_infer_family_id(model_id)
     variants = _ordered_script_variants(family_id)
     if variants:
-        return tuple((INFER_VARIANT_LABELS.get(variant, variant), variant) for variant in variants)
+        options: list[tuple[str, str]] = []
+        seen_targets: set[tuple[str, str]] = set()
+        for variant in variants:
+            try:
+                target_model, target_variant, target_label = _studio_runtime_target_for_script_variant(
+                    model_id,
+                    variant,
+                )
+            except ValueError:
+                continue
+            target = (target_model, target_variant)
+            if target in seen_targets:
+                continue
+            seen_targets.add(target)
+            exact_target = _studio_entries_by_model_id().get(variant)
+            label = INFER_VARIANT_LABELS.get(variant, variant) if exact_target is not None else target_label
+            options.append((label, variant))
+        return tuple(options)
     core_spec = _studio_inference_spec(model_id)
     if core_spec is not None:
         return tuple((variant.label, variant.variant_id) for variant in core_spec.variants)
@@ -560,7 +594,9 @@ def infer_control_specs(model_id: str, ckpt_type: str | None = None) -> tuple[In
     overrides = _infer_control_text_overrides(variant)
     specs: list[InferControlSpec] = []
     for field_id in fields:
-        spec = _INFER_CONTROL_DEFAULT_SPECS.get(field_id, InferControlSpec(field_id, field_id.replace("_", " ").title()))
+        spec = _INFER_CONTROL_DEFAULT_SPECS.get(
+            field_id, InferControlSpec(field_id, field_id.replace("_", " ").title())
+        )
         override = overrides.get(field_id)
         if override:
             spec = replace(spec, **override)
@@ -626,7 +662,13 @@ def infer_control_fields(model_id: str, ckpt_type: str | None = None) -> tuple[s
         fields = {"video", "prompt", "task", "size", "steps", "seed", "fps", "interactions", "output_path"}
     elif variant == "yume-1p5-i2v":
         fields = {"input", "prompt", "task", "size", "steps", "seed", "fps", "interactions", "output_path"}
-    elif variant in {LINGBOT_VARIANT_BASE_CAM, LINGBOT_VARIANT_BASE_ACT_PREVIEW, LINGBOT_VARIANT_FAST} or variant.startswith("lingbot-world"):
+    elif variant in {"lingbot-world-v2", "lingbot-world-infinity"}:
+        fields = {"input", "input_dir", "prompt", "frames", "seed", "output_path"}
+    elif variant in {
+        LINGBOT_VARIANT_BASE_CAM,
+        LINGBOT_VARIANT_BASE_ACT_PREVIEW,
+        LINGBOT_VARIANT_FAST,
+    } or variant.startswith("lingbot-world"):
         fields = {"input", "input_dir", "prompt", "mode", "frames", "steps", "seed", "interactions", "output_path"}
     elif variant in {
         "cogvideox-2b-t2v",
@@ -645,7 +687,17 @@ def infer_control_fields(model_id: str, ckpt_type: str | None = None) -> tuple[s
     elif variant == "motionctrl":
         fields = {"prompt", "size", "steps", "seed", "fps", "interactions", "guidance_scale", "output_path"}
     elif variant.startswith("animatediff"):
-        fields = {"prompt", "negative_prompt", "size", "frames", "steps", "seed", "fps", "guidance_scale", "output_path"}
+        fields = {
+            "prompt",
+            "negative_prompt",
+            "size",
+            "frames",
+            "steps",
+            "seed",
+            "fps",
+            "guidance_scale",
+            "output_path",
+        }
     elif variant.startswith("cosmos-predict2.5"):
         fields = {"input", "prompt", "mode", "size", "frames", "steps", "seed", "fps", "output_path"}
     elif variant == "astra":
@@ -698,7 +750,19 @@ def infer_control_fields(model_id: str, ckpt_type: str | None = None) -> tuple[s
     elif variant == "hy-world-2.0":
         fields = {"input", "input_dir", "task", "output_path"}
     elif variant == "lyra1":
-        fields = {"input", "prompt", "mode", "size", "frames", "steps", "guidance_scale", "seed", "fps", "interactions", "output_path"}
+        fields = {
+            "input",
+            "prompt",
+            "mode",
+            "size",
+            "frames",
+            "steps",
+            "guidance_scale",
+            "seed",
+            "fps",
+            "interactions",
+            "output_path",
+        }
     elif variant == "worldfm":
         fields = {"input", "fps", "output_path"}
     elif variant == "inspatio-world":
@@ -752,7 +816,22 @@ def _infer_control_text_overrides(variant: str) -> dict[str, dict[str, str]]:
                 "placeholder": "video,spz,ply",
             },
         }
-    if variant.startswith("lingbot-world") or variant in {LINGBOT_VARIANT_BASE_CAM, LINGBOT_VARIANT_BASE_ACT_PREVIEW, LINGBOT_VARIANT_FAST}:
+    if variant in {"lingbot-world-v2", "lingbot-world-infinity"}:
+        return {
+            "input": {
+                "label": "Reference image",
+                "placeholder": "path/to/image.jpg",
+            },
+            "input_dir": {
+                "label": "Action directory",
+                "placeholder": "directory with poses.npy and intrinsics.npy",
+            },
+        }
+    if variant.startswith("lingbot-world") or variant in {
+        LINGBOT_VARIANT_BASE_CAM,
+        LINGBOT_VARIANT_BASE_ACT_PREVIEW,
+        LINGBOT_VARIANT_FAST,
+    }:
         return {
             "input": {
                 "label": "Reference image",
@@ -844,7 +923,7 @@ def _infer_control_text_overrides(variant: str) -> dict[str, dict[str, str]]:
             "input_dir": {
                 "label": "Input directory",
                 "placeholder": "image sequence directory",
-            }
+            },
         }
     if variant == "hunyuan-world-voyager":
         return {
@@ -955,7 +1034,9 @@ def resolve_infer_model_variant(model_id: str, ckpt_type: str | None = None) -> 
             return core_spec.variant(requested).variant_id
         except ValueError as exc:
             valid = ", ".join(variant.label for variant in core_spec.variants)
-            raise ValueError(f"unknown checkpoint type {ckpt_type!r} for {family_id!r}; choose one of: {valid}") from exc
+            raise ValueError(
+                f"unknown checkpoint type {ckpt_type!r} for {family_id!r}; choose one of: {valid}"
+            ) from exc
 
     raise ValueError(f"model infer script is not registered for {model_id!r}")
 
@@ -967,7 +1048,10 @@ def _option_key(value: str) -> str:
 
 def _script_infer_family_id(model_id: str) -> str:
     """Resolve a variant *model_id* to its script-infer family ID using :data:`INFER_VARIANT_TO_MODEL`."""
-    return INFER_VARIANT_TO_MODEL.get(model_id, model_id)
+    return INFER_VARIANT_TO_MODEL.get(
+        model_id,
+        TUI_MODEL_ID_TO_SCRIPT_INFER_FAMILY.get(model_id, model_id),
+    )
 
 
 def is_script_infer_model_id(model_id: str) -> bool:
@@ -1047,6 +1131,19 @@ def _unique_studio_entries() -> tuple[Any, ...]:
     return tuple(entries)
 
 
+def _tui_model_id_for_studio_entry(entry: Any) -> str:
+    """Return the family row that should own a Studio catalog entry in the TUI."""
+    explicit = STUDIO_MODEL_TO_TUI_MODEL_ID.get(entry.model_id)
+    if explicit is not None:
+        return explicit
+    candidate_ids = _dedupe_text((entry.model_id, *(getattr(entry, "aliases", ()) or ())))
+    for candidate_id in candidate_ids:
+        script_family = _script_infer_family_id(candidate_id)
+        if script_family in INFER_MODEL_VARIANTS:
+            return SCRIPT_INFER_FAMILY_TO_TUI_MODEL_ID.get(script_family, script_family)
+    return entry.model_id
+
+
 def _studio_entry_for_model(model_id: str) -> Any | None:
     """Return the studio catalog entry for *model_id*, falling back to its family ID."""
     entries = _studio_entries_by_model_id()
@@ -1055,6 +1152,44 @@ def _studio_entry_for_model(model_id: str) -> Any | None:
         return direct_entry
     family_id = INFER_VARIANT_TO_MODEL.get(model_id, model_id)
     return entries.get(family_id)
+
+
+def _studio_runtime_target_for_script_variant(model_id: str, variant_id: str) -> tuple[str, str, str]:
+    """Resolve a legacy shell variant to one concrete Studio model contract.
+
+    Several old shell variants now share one Studio runtime.  Returning the
+    concrete model and contract variant lets the TUI deduplicate those choices
+    and avoids forwarding obsolete variant IDs to ``workspace_job``.
+    """
+    entries = _studio_entries_by_model_id()
+    family_id = _script_infer_family_id(model_id)
+    entry = next(
+        (entries[candidate] for candidate in _dedupe_text((variant_id, model_id, family_id)) if candidate in entries),
+        None,
+    )
+    if entry is None:
+        raise ValueError(f"no Studio runtime is registered for {model_id!r} variant {variant_id!r}")
+    spec = _studio_inference_spec(entry.model_id)
+    if spec is None or not spec.variants:
+        raise ValueError(f"Studio runtime {entry.model_id!r} has no inference contract")
+
+    requested_key = _option_key(variant_id)
+    selected = next(
+        (
+            variant
+            for variant in spec.variants
+            if requested_key in {_option_key(variant.variant_id), _option_key(variant.label)}
+        ),
+        None,
+    )
+    if selected is None:
+        selected = next(
+            (variant for variant in spec.variants if requested_key.endswith(_option_key(variant.variant_id))),
+            None,
+        )
+    if selected is None:
+        selected = spec.variant(None)
+    return entry.model_id, selected.variant_id, selected.label
 
 
 def _studio_inference_spec(model_id: str):
@@ -1147,6 +1282,7 @@ def is_studio_infer_model_id(model_id: str) -> bool:
 # NOTE: Each frozen dataclass represents a single row in the TUI's catalog
 # tables (models, benchmarks, runtime profiles).
 
+
 @dataclass(frozen=True)
 class ModelCatalogRow:
     """Row representation of a model zoo entry for the TUI catalog tables.
@@ -1168,6 +1304,7 @@ class ModelCatalogRow:
         requires_auth: Whether HuggingFace gated access is required.
         notes: Free-form notes tuple.
     """
+
     model_id: str
     name: str
     tasks: tuple[str, ...]
@@ -1230,6 +1367,7 @@ class BenchmarkCatalogRow:
         requires_auth: Whether gated dataset access is required.
         notes: Free-form notes tuple.
     """
+
     benchmark_id: str
     name: str
     domains: tuple[str, ...]
@@ -1295,6 +1433,7 @@ class RuntimeProfileRow:
         validation_imports: Import paths validated for the environment.
         notes: Free-form notes tuple.
     """
+
     profile_id: str
     task_family: str | None
     artifact_kind: str | None
@@ -1337,6 +1476,7 @@ class TuiCatalog:
         runtime_profiles: Ordered runtime profile rows.
         conda_status: Mapping of Conda availability diagnostics, or ``None``.
     """
+
     models: tuple[ModelCatalogRow, ...]
     benchmarks: tuple[BenchmarkCatalogRow, ...]
     runtime_profiles: tuple[RuntimeProfileRow, ...] = ()
@@ -1383,11 +1523,8 @@ def _model_tasks(entry) -> tuple[str, ...]:
 
 def _runnable_variant_ids(entry) -> tuple[str, ...]:
     """Return variant IDs that have runnable runner entries."""
-    return _dedupe_text(
-        variant.variant_id
-        for variant in entry.variants
-        if variant.is_runnable_runner_entry
-    )
+    return _dedupe_text(variant.variant_id for variant in entry.variants if variant.is_runnable_runner_entry)
+
 
 def _model_runtime_profile(entry) -> str | None:
     """Return the first non-empty runtime profile identifier from an entry or its variants."""
@@ -1429,6 +1566,53 @@ def _model_to_row(entry) -> ModelCatalogRow:
     )
 
 
+def _normalised_evidence_id(value: object) -> str:
+    """Normalize model identifiers for evidence matching across punctuation aliases."""
+    return "".join(character for character in str(value or "").casefold() if character.isalnum())
+
+
+@lru_cache(maxsize=1)
+def _verified_inference_evidence_ids() -> frozenset[str]:
+    """Load model IDs backed by recorded real-inference evidence."""
+    try:
+        payload = load_manifest(DEFAULT_INFERENCE_EVIDENCE_PATH)
+    except (OSError, ValueError):
+        return frozenset()
+    verified = {
+        _normalised_evidence_id(model_id)
+        for model_id in payload.get("verified_methods") or ()
+        if _normalised_evidence_id(model_id)
+    }
+    for model_id, item in (payload.get("methods") or {}).items():
+        if not isinstance(item, Mapping):
+            continue
+        status = str(item.get("status") or "").strip().casefold()
+        if status not in {"verified", "pass", "passed", "complete", "completed"}:
+            continue
+        verified.add(_normalised_evidence_id(model_id))
+        verified.update(
+            _normalised_evidence_id(alias) for alias in item.get("aliases") or () if _normalised_evidence_id(alias)
+        )
+    return frozenset(verified)
+
+
+def _inference_runner_status(
+    model_id: str,
+    variants: Sequence[str] = (),
+    aliases: Sequence[str] = (),
+) -> str:
+    """Distinguish recorded real inference from a structurally valid contract."""
+    verified = _verified_inference_evidence_ids()
+    if any(_normalised_evidence_id(value) in verified for value in (model_id, *aliases)):
+        return "verified"
+    variant_matches = [_normalised_evidence_id(variant) in verified for variant in variants]
+    if variant_matches and all(variant_matches):
+        return "verified"
+    if any(variant_matches):
+        return "partially_verified"
+    return "contract_ready"
+
+
 def _infer_virtual_model_row(model_id: str, group: str) -> ModelCatalogRow:
     """Build a :class:`ModelCatalogRow` for a script-infer model not present in the zoo registry."""
     return ModelCatalogRow(
@@ -1438,7 +1622,7 @@ def _infer_virtual_model_row(model_id: str, group: str) -> ModelCatalogRow:
         provider=None,
         source_status="in_tree",
         integration_status="integrated",
-        runner_status="ready",
+        runner_status=_inference_runner_status(model_id, INFER_MODEL_VARIANTS.get(model_id, ())),
         runner_kind="infer_script",
         runnable_variants=INFER_MODEL_VARIANTS.get(model_id, ()),
         runtime_profile=None,
@@ -1457,8 +1641,7 @@ def _merge_script_infer_row(existing: ModelCatalogRow | None, script_row: ModelC
     return replace(
         existing,
         integration_status="integrated",
-        runner_status="ready",
-        runner_kind="infer_script",
+        runner_status=script_row.runner_status,
         tasks=_dedupe_text((*script_row.tasks, *existing.tasks)),
         runnable_variants=script_row.runnable_variants,
         runtime_profile=existing.runtime_profile or script_row.runtime_profile,
@@ -1488,7 +1671,11 @@ def _studio_infer_model_row(entry: Any) -> ModelCatalogRow:
         provider=None,
         source_status="in_tree",
         integration_status="integrated",
-        runner_status="ready",
+        runner_status=_inference_runner_status(
+            entry.model_id,
+            variants,
+            tuple(getattr(entry, "aliases", ()) or ()),
+        ),
         runner_kind="studio_runtime",
         runnable_variants=variants,
         runtime_profile=None,
@@ -1504,9 +1691,14 @@ def _row_has_studio_runtime(row: ModelCatalogRow) -> bool:
     """Return whether *row* carries a ``studio_runtime`` runner kind or note."""
     return row.runner_kind == "studio_runtime" or any("studio_runtime" in note for note in row.notes)
 
+
 def is_infer_model_row(row: ModelCatalogRow) -> bool:
     """Return whether *row* supports inference (script-based or studio-runtime)."""
-    return row.model_id in INFER_MODEL_FAMILY_GROUPS or _row_has_studio_runtime(row)
+    script_family = _script_infer_family_id(row.model_id)
+    if script_family in INFER_MODEL_VARIANTS:
+        tui_family = SCRIPT_INFER_FAMILY_TO_TUI_MODEL_ID.get(script_family, script_family)
+        return row.model_id == tui_family and bool(infer_variant_options(row.model_id))
+    return _row_has_studio_runtime(row)
 
 
 def infer_model_variant_ids(model_id: str) -> tuple[str, ...]:
@@ -1519,11 +1711,11 @@ def _merge_studio_infer_row(existing: ModelCatalogRow | None, studio_row: ModelC
     """Merge a studio-runtime row into an existing model row, enriching metadata where applicable."""
     if existing is None:
         return studio_row
-    if existing.model_id in INFER_MODEL_FAMILY_GROUPS:
+    if is_script_infer_model_id(existing.model_id):
         return replace(
             existing,
             integration_status="integrated",
-            runner_status="ready",
+            runner_status=existing.runner_status,
             tasks=_dedupe_text((*existing.tasks, *studio_row.tasks)),
             hf_repo_ids=_dedupe_text((*existing.hf_repo_ids, *studio_row.hf_repo_ids)),
             notes=_dedupe_text((*existing.notes, "workspace_job infer available")),
@@ -1531,7 +1723,7 @@ def _merge_studio_infer_row(existing: ModelCatalogRow | None, studio_row: ModelC
     return replace(
         existing,
         integration_status="integrated",
-        runner_status="ready",
+        runner_status=studio_row.runner_status,
         runner_kind="studio_runtime",
         tasks=_dedupe_text((*existing.tasks, *studio_row.tasks)),
         runnable_variants=studio_row.runnable_variants,
@@ -1734,8 +1926,8 @@ def load_tui_catalog(
     Returns:
         A fully populated :class:`TuiCatalog`.
     """
-    from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
     from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+    from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
 
     # ── Load registries ──
     model_registry = load_model_zoo_registry(model_manifest_dir or DEFAULT_MODEL_ZOO_DIR)
@@ -1749,20 +1941,14 @@ def load_tui_catalog(
     # ── Merge script-infer virtual rows ──
     for model_id, group in INFER_MODEL_FAMILY_GROUPS.items():
         script_row = _infer_virtual_model_row(model_id, group)
-        model_rows[model_id] = _merge_script_infer_row(model_rows.get(model_id), script_row)
+        tui_model_id = SCRIPT_INFER_FAMILY_TO_TUI_MODEL_ID.get(model_id, model_id)
+        script_row = replace(script_row, model_id=tui_model_id)
+        model_rows[tui_model_id] = _merge_script_infer_row(model_rows.get(tui_model_id), script_row)
     # ── Merge studio-runtime rows ──
     for entry in _unique_studio_entries():
-        studio_row = _studio_infer_model_row(entry)
-        matched_model_ids = tuple(
-            model_id
-            for model_id in _dedupe_text((entry.model_id, *(getattr(entry, "aliases", ()) or ())))
-            if model_id in model_rows
-        )
-        if matched_model_ids:
-            for model_id in matched_model_ids:
-                model_rows[model_id] = _merge_studio_infer_row(model_rows.get(model_id), studio_row)
-        else:
-            model_rows[entry.model_id] = _merge_studio_infer_row(model_rows.get(entry.model_id), studio_row)
+        tui_model_id = _tui_model_id_for_studio_entry(entry)
+        studio_row = replace(_studio_infer_model_row(entry), model_id=tui_model_id)
+        model_rows[tui_model_id] = _merge_studio_infer_row(model_rows.get(tui_model_id), studio_row)
     # ── Sort and build the final catalog ──
     models = tuple(sorted(model_rows.values(), key=lambda row: row.model_id))
     benchmarks = tuple(
@@ -1777,6 +1963,7 @@ def load_tui_catalog(
 
 
 # ── Shell-command builders ──────────────────────────────────────────
+
 
 def build_model_benchmark_command(
     *,
@@ -1814,6 +2001,23 @@ def build_model_benchmark_command(
     Returns:
         Shell command tuple for ``asyncio.create_subprocess_exec``.
     """
+    if generated_artifact_dir is not None:
+        command = [
+            *_worldfoundry_cli_prefix(),
+            "score",
+            "--benchmark",
+            str(benchmark_id),
+            "--artifacts",
+            str(generated_artifact_dir),
+            "--output-dir",
+            str(output_dir),
+        ]
+        _append_optional(command, "--mode", mode)
+        _append_optional_path(command, "--benchmark-manifest-dir", benchmark_manifest_dir)
+        if json_output:
+            command.append("--json")
+        return tuple(command)
+
     command = [
         *_worldfoundry_cli_prefix(),
         "run",
@@ -1836,6 +2040,50 @@ def build_model_benchmark_command(
         command.extend(["--metric", str(metric)])
     if json_output:
         command.append("--json")
+    return tuple(command)
+
+
+def _build_workspace_infer_command(
+    *,
+    model_id: str,
+    variant_id: str,
+    output_dir: str | Path,
+    ckpt_root: str | Path | None,
+    conda_envs_root: str | Path | None,
+    gpu: str | None,
+    values: Sequence[tuple[str, object | None]],
+) -> tuple[str, ...]:
+    """Build one validated ``workspace_job infer`` command."""
+    command = [
+        sys.executable,
+        "-m",
+        "worldfoundry.studio.workspace_job",
+        "infer",
+        "--model-id",
+        model_id,
+        "--variant-id",
+        variant_id,
+        "--output-dir",
+        str(output_dir),
+    ]
+    for flag, value in values:
+        _append_optional(command, flag, value)
+
+    env_values: list[str] = []
+    if ckpt_root is not None:
+        env_values.append(f"WORLDFOUNDRY_CKPT_DIR={Path(ckpt_root).expanduser()}")
+    if conda_envs_root is not None:
+        env_root = Path(conda_envs_root).expanduser()
+        env_values.extend(
+            (
+                f"WORLDFOUNDRY_CONDA_ENVS_ROOT={env_root}",
+                f"WORLDFOUNDRY_CONDA_ENV_ROOT={env_root}",
+            )
+        )
+    if gpu:
+        env_values.append(f"CUDA_VISIBLE_DEVICES={gpu}")
+    if env_values:
+        command = ["env", *env_values, *command]
     return tuple(command)
 
 
@@ -1886,9 +2134,8 @@ def build_model_infer_command(
 ) -> tuple[str, ...]:
     """Build a shell command tuple for model inference.
 
-    Dispatches to either a studio ``workspace_job infer`` command or a
-    ``run_infer.sh`` shell script depending on the model's runner kind.
-    Applies variant-specific defaults (e.g. Astra camera type, Neoverse
+    Resolves legacy model aliases to a concrete Studio inference contract and
+    applies variant-specific defaults (e.g. Astra camera type and Neoverse
     trajectory mode).
 
     Args:
@@ -1944,64 +2191,8 @@ def build_model_infer_command(
     resolved_variant = resolve_infer_model_variant(model_id, ckpt_type)
     script_family = _script_infer_family_id(model_id)
     script_infer = script_family in INFER_MODEL_VARIANTS
-    command_model = script_family if script_infer else model_id
-    # NOTE: Studio-runtime models use ``workspace_job infer``; script models use ``run_infer.sh``
-    if not script_infer and is_studio_infer_model_id(command_model):
-        command = [
-            sys.executable,
-            "-m",
-            "worldfoundry.studio.workspace_job",
-            "infer",
-            "--model-id",
-            command_model,
-            "--variant-id",
-            resolved_variant,
-            "--output-dir",
-            str(output_dir),
-        ]
-        _append_optional_path(command, "--model-ref", ckpt_path)
-        _append_optional_path(command, "--input-path", input_path)
-        _append_optional_path(command, "--input-dir", input_dir)
-        _append_optional_path(command, "--video-path", video_path)
-        _append_optional_path(command, "--trajectory-file", trajectory_file)
-        _append_optional(command, "--prompt", prompt)
-        _append_optional(command, "--negative-prompt", negative_prompt)
-        _append_optional(command, "--interactions", interactions)
-        _append_optional(command, "--task", task)
-        _append_optional(command, "--mode", mode)
-        _append_optional(command, "--resize-mode", resize_mode)
-        _append_optional(command, "--size", size)
-        _append_optional(command, "--frames", frames)
-        _append_optional(command, "--steps", steps)
-        _append_optional(command, "--frames-per-generation", frames_per_generation)
-        _append_optional(command, "--guidance-scale", guidance_scale)
-        _append_optional(command, "--seed", seed)
-        _append_optional(command, "--fps", fps)
-        _append_optional(command, "--dtype", dtype)
-        _append_optional(command, "--max-sequence-length", max_sequence_length)
-        _append_optional(command, "--cam-type", cam_type)
-        _append_optional(command, "--output-formats", output_formats)
-        _append_optional(command, "--trajectory", trajectory)
-        _append_optional(command, "--angle", angle)
-        _append_optional(command, "--distance", distance)
-        _append_optional(command, "--orbit-radius", orbit_radius)
-        _append_optional(command, "--zoom-ratio", zoom_ratio)
-        _append_optional(command, "--alpha-threshold", alpha_threshold)
-        _append_optional(command, "--static-scene", static_scene)
-        _append_optional(command, "--low-vram", low_vram)
-        _append_optional(command, "--disable-lora", disable_lora)
-        _append_optional(command, "--vis-rendering", vis_rendering)
-        _append_optional(command, "--offload-t5", offload_t5)
-        _append_optional(command, "--offload-transformer-during-vae", offload_transformer_during_vae)
-        _append_optional(command, "--offload-vae", offload_vae)
-        _append_optional_path(command, "--output-path", output_path)
-        if gpu:
-            command = ["env", f"CUDA_VISIBLE_DEVICES={gpu}", *command]
-        return tuple(command)
-
-    group = INFER_VARIANT_GROUPS.get(resolved_variant)
-    if group is None:
-        raise ValueError(f"model infer script is not registered for {resolved_variant!r}")
+    if not script_infer and not is_studio_infer_model_id(model_id):
+        raise ValueError(f"no inference runtime is registered for {model_id!r}")
     # NOTE: Apply variant-specific defaults before building the command
     if resolved_variant == "astra":
         frames = frames or 24
@@ -2013,7 +2204,6 @@ def build_model_infer_command(
         output_formats = output_formats or "video,spz,ply"
         if input_dir is None:
             frames = frames or 24
-            size = size or "704*480"
     if resolved_variant == "neoverse":
         # NOTE: Neoverse defaults — trajectory ``tilt_up``, mode ``relative``, 81 frames
         if not trajectory and not trajectory_file and not interactions:
@@ -2030,70 +2220,59 @@ def build_model_infer_command(
         alpha_threshold = alpha_threshold or 1.0
     if resolved_variant == "recammaster" and not trajectory:
         trajectory = "100,100,0,0,30"
-    command_ckpt_type = infer_variant_label(resolved_variant)
-    script = REPO_ROOT / "scripts" / "inference" / "run_infer.sh"
-    command = [
-        "bash",
-        str(script),
-        "--category",
-        group,
-        "--model",
-        command_model,
-        "--ckpt-type",
-        command_ckpt_type,
-        "--output-root",
-        str(output_dir),
-    ]
-    if ckpt_root is not None:
-        command.extend(["--ckpt-root", str(ckpt_root)])
-    if ckpt_path is not None:
-        command.extend(["--ckpt-path", str(ckpt_path)])
-    if input_path is not None:
-        command.extend(["--input", str(input_path)])
-    if input_dir is not None:
-        command.extend(["--input-dir", str(input_dir)])
-    if video_path is not None:
-        command.extend(["--video", str(video_path)])
-    _append_optional_path(command, "--trajectory-file", trajectory_file)
-    _append_optional(command, "--prompt", prompt)
-    _append_optional(command, "--negative-prompt", negative_prompt)
-    _append_optional(command, "--task", task)
-    if resolved_variant == "neoverse":
-        _append_optional(command, "--traj-mode", mode)
+    if script_infer:
+        command_model, command_variant, _label = _studio_runtime_target_for_script_variant(
+            model_id,
+            resolved_variant,
+        )
     else:
-        _append_optional(command, "--mode", mode)
-    _append_optional(command, "--resize-mode", resize_mode)
-    _append_optional(command, "--size", size)
-    _append_optional(command, "--frames", frames)
-    _append_optional(command, "--steps", steps)
-    _append_optional(command, "--frames-per-generation", frames_per_generation)
-    _append_optional(command, "--guidance-scale", guidance_scale)
-    _append_optional(command, "--seed", seed)
-    _append_optional(command, "--fps", fps)
-    _append_optional(command, "--dtype", dtype)
-    _append_optional(command, "--max-sequence-length", max_sequence_length)
-    _append_optional(command, "--cam-type", cam_type)
-    _append_optional(command, "--interactions", interactions)
-    _append_optional(command, "--output-formats", output_formats)
-    _append_optional(command, "--trajectory", trajectory)
-    _append_optional(command, "--angle", angle)
-    _append_optional(command, "--distance", distance)
-    _append_optional(command, "--orbit-radius", orbit_radius)
-    _append_optional(command, "--zoom-ratio", zoom_ratio)
-    _append_optional(command, "--alpha-threshold", alpha_threshold)
-    _append_optional_flag(command, "--static-scene", static_scene)
-    _append_optional_flag(command, "--low-vram", low_vram)
-    _append_optional_flag(command, "--disable-lora", disable_lora)
-    _append_optional_flag(command, "--vis-rendering", vis_rendering)
-    _append_optional_flag(command, "--offload-t5", offload_t5)
-    _append_optional_flag(command, "--offload-transformer-during-vae", offload_transformer_during_vae)
-    _append_optional_flag(command, "--offload-vae", offload_vae)
-    _append_optional_path(command, "--output-path", output_path)
-    if conda_envs_root is not None:
-        command.extend(["--env-root", str(conda_envs_root)])
-    if gpu:
-        command.extend(["--gpu", str(gpu)])
-    return tuple(command)
+        command_model, command_variant = model_id, resolved_variant
+    return _build_workspace_infer_command(
+        model_id=command_model,
+        variant_id=command_variant,
+        output_dir=output_dir,
+        ckpt_root=ckpt_root,
+        conda_envs_root=conda_envs_root,
+        gpu=gpu,
+        values=(
+            ("--model-ref", ckpt_path),
+            ("--input-path", input_path),
+            ("--input-dir", input_dir),
+            ("--video-path", video_path),
+            ("--trajectory-file", trajectory_file),
+            ("--prompt", prompt),
+            ("--negative-prompt", negative_prompt),
+            ("--interactions", interactions),
+            ("--task", task),
+            ("--mode", mode),
+            ("--resize-mode", resize_mode),
+            ("--size", size),
+            ("--frames", frames),
+            ("--steps", steps),
+            ("--frames-per-generation", frames_per_generation),
+            ("--guidance-scale", guidance_scale),
+            ("--seed", seed),
+            ("--fps", fps),
+            ("--dtype", dtype),
+            ("--max-sequence-length", max_sequence_length),
+            ("--cam-type", cam_type),
+            ("--output-formats", output_formats),
+            ("--trajectory", trajectory),
+            ("--angle", angle),
+            ("--distance", distance),
+            ("--orbit-radius", orbit_radius),
+            ("--zoom-ratio", zoom_ratio),
+            ("--alpha-threshold", alpha_threshold),
+            ("--static-scene", static_scene),
+            ("--low-vram", low_vram),
+            ("--disable-lora", disable_lora),
+            ("--vis-rendering", vis_rendering),
+            ("--offload-t5", offload_t5),
+            ("--offload-transformer-during-vae", offload_transformer_during_vae),
+            ("--offload-vae", offload_vae),
+            ("--output-path", output_path),
+        ),
+    )
 
 
 def build_studio_command(*, host: str = "127.0.0.1", port: int = 7860) -> tuple[str, ...]:

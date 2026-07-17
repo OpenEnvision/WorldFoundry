@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.metadata
 import os
 import sys
-from pathlib import Path
 from typing import Any
 
 from .context import DEFAULT_CONTEXT, DEFAULT_MCP_OUTPUT_ROOT, MCPToolContext

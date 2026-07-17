@@ -12,7 +12,7 @@ if [[ -z "$MODEL_ID" || "$MODEL_ID" == "-h" || "$MODEL_ID" == "--help" ]]; then
 Usage: bash scripts/inference/prepare_model_infer.sh <model-id> [options]
 
 Options:
-  --download             Download missing public Hugging Face checkpoints.
+  --download             Download missing public model checkpoints.
   --skip-env             Do not install or verify the model conda profile.
   --verify-env-only      Verify the resolved conda env; do not install/update it.
   --home PATH            Runtime state root forwarded to model_env_install.sh.
@@ -25,6 +25,10 @@ Options:
 Example:
   bash scripts/inference/prepare_model_infer.sh matrix-game-2
   bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
+
+RollingForcing downloads prefer ModelScope when its Python package is available.
+Set WORLDFOUNDRY_HF_ENDPOINT (or HF_ENDPOINT) to override its Hugging Face
+fallback endpoint; the fallback defaults to https://hf-mirror.com.
 EOF
   if [[ -z "$MODEL_ID" ]]; then
     exit 2
@@ -44,6 +48,12 @@ HF_HOME_VALUE="${HF_HOME:-${HOME}/.cache/huggingface}"
 CACHE_DIR="${HF_HUB_CACHE:-${HF_HOME_VALUE}/hub}"
 OUTPUT_DIR="tmp/worldfoundry_infer/${MODEL_ID}"
 OUTPUT_DIR_EXPLICIT=0
+COSMOS3_NANO_REVISION="411f42a8fdfb8c5b2583cb8786e0938f49796eaa"
+COSMOS3_SUPER_REVISION="e0262be9d8f7586bc24c069a2aed2b665bdff266"
+COSMOS3_REPO_ID=""
+COSMOS3_EXPECTED_REVISION=""
+COSMOS3_PINNED_MODEL_REF=""
+COSMOS3_CHECKPOINT_REPORT=""
 
 while (($#)); do
   case "$1" in
@@ -123,11 +133,26 @@ case "$MODEL_ID" in
   longcat|longcat_video)
     MODEL_ID="longcat-video"
     ;;
+  helios-distilled|helios_distilled|helios-base|helios_base|helios-mid|helios_mid)
+    MODEL_ID="helios"
+    ;;
+  gammaworld|gamma_world|gamma-world-causal|gamma-world-causal-few-step)
+    MODEL_ID="gamma-world"
+    ;;
+  lingbot_video|lingbotvideo|lingbot-video-dense|lingbot-video-moe)
+    MODEL_ID="lingbot-video"
+    ;;
+  lingbot-world-v2|lingbot_world_v2|lingbot-v2|lingbot-world-infinity)
+    MODEL_ID="lingbot-world-v2"
+    ;;
   self_forcing|selfforcing)
     MODEL_ID="self-forcing"
     ;;
   causal_forcing|causalforcing)
     MODEL_ID="causal-forcing"
+    ;;
+  rolling_forcing|rollingforcing|rolling)
+    MODEL_ID="rolling-forcing"
     ;;
   allegro|allegro_ti2v)
     MODEL_ID="allegro-ti2v"
@@ -162,6 +187,12 @@ case "$MODEL_ID" in
   lyra1)
     MODEL_ID="lyra-1"
     ;;
+  cosmos-3|cosmos-3-nano|cosmos3_nano)
+    MODEL_ID="cosmos3-nano"
+    ;;
+  cosmos-3-super|cosmos3_super)
+    MODEL_ID="cosmos3-super"
+    ;;
 esac
 if [[ "$MODEL_ID" != "$REQUESTED_MODEL_ID" ]]; then
   echo "Normalized model id: ${REQUESTED_MODEL_ID} -> ${MODEL_ID}"
@@ -193,8 +224,15 @@ case "$MODEL_ID" in
     longcat-video)
       ZOO_MODEL_ID="longcat-video"
       ;;
-    self-forcing|causal-forcing)
+    lingbot-video)
+      ZOO_MODEL_ID="lingbot-video"
+      ;;
+    self-forcing|causal-forcing|rolling-forcing)
       ZOO_MODEL_ID="$MODEL_ID"
+      ;;
+    cosmos3|cosmos3-nano|cosmos3-super)
+      INFER_MODEL_ID="cosmos3"
+      ZOO_MODEL_ID="cosmos3"
       ;;
 esac
 
@@ -218,6 +256,93 @@ link_if_present() {
   if [[ -e "$source_path" ]]; then
     mkdir -p "$(dirname "$target_path")"
     ln -s "$source_path" "$target_path"
+  fi
+}
+
+download_modelscope_snapshot() {
+  local repo_id="$1"
+  local target_root="$2"
+  shift 2
+
+  if ! "$PYTHON_BIN" -c 'import modelscope' >/dev/null 2>&1; then
+    return 1
+  fi
+
+  MODELSCOPE_DOWNLOAD_PARALLELS="${MODELSCOPE_DOWNLOAD_PARALLELS:-8}" \
+    "$PYTHON_BIN" - "$repo_id" "$target_root" "$@" <<'PY'
+import sys
+
+from modelscope.hub.snapshot_download import snapshot_download
+
+repo_id, local_dir, *allow_patterns = sys.argv[1:]
+snapshot_download(
+    repo_id,
+    revision="master",
+    local_dir=local_dir,
+    allow_patterns=allow_patterns or None,
+    max_workers=4,
+)
+PY
+}
+
+download_hf_with_mirror() {
+  local endpoint="${WORLDFOUNDRY_HF_ENDPOINT:-${HF_ENDPOINT:-https://hf-mirror.com}}"
+  HF_ENDPOINT="$endpoint" HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}" hf download "$@"
+}
+
+verify_rolling_forcing_checkpoint() {
+  local checkpoint_path="$1"
+  local expected_size="17028919541"
+  local expected_sha256="08448992460d85ef1b992dd30585d5724d098d805a48399730c8e717027a6d9d"
+  local actual_size
+  local actual_sha256
+
+  if [[ ! -f "$checkpoint_path" ]]; then
+    echo "RollingForcing checkpoint is missing: ${checkpoint_path}" >&2
+    return 1
+  fi
+  actual_size="$(stat -c '%s' "$checkpoint_path")"
+  if [[ "$actual_size" != "$expected_size" ]]; then
+    echo "RollingForcing checkpoint size mismatch: expected ${expected_size}, got ${actual_size}" >&2
+    return 1
+  fi
+  actual_sha256="$(sha256sum "$checkpoint_path" | awk '{print $1}')"
+  if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+    echo "RollingForcing checkpoint SHA256 mismatch: expected ${expected_sha256}, got ${actual_sha256}" >&2
+    return 1
+  fi
+}
+
+download_rolling_forcing_assets() {
+  local checkpoint_root="${WORLDFOUNDRY_CKPT_DIR}/RollingForcing"
+  local checkpoint_path="${checkpoint_root}/checkpoints/rolling_forcing_dmd.pt"
+  local wan_root="${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B"
+
+  if ! verify_rolling_forcing_checkpoint "$checkpoint_path"; then
+    echo "Downloading TencentARC/RollingForcing from ModelScope ..."
+    if download_modelscope_snapshot \
+      TencentARC/RollingForcing \
+      "$checkpoint_root" \
+      checkpoints/rolling_forcing_dmd.pt \
+      && verify_rolling_forcing_checkpoint "$checkpoint_path"; then
+      :
+    else
+      echo "ModelScope download failed or was invalid; falling back to Hugging Face mirror." >&2
+      rm -f "$checkpoint_path"
+      download_hf_with_mirror \
+        TencentARC/RollingForcing \
+        checkpoints/rolling_forcing_dmd.pt \
+        --local-dir "$checkpoint_root"
+      verify_rolling_forcing_checkpoint "$checkpoint_path"
+    fi
+  fi
+
+  if [[ ! -f "${wan_root}/config.json" ]]; then
+    echo "Downloading Wan-AI/Wan2.1-T2V-1.3B from ModelScope ..."
+    if ! download_modelscope_snapshot Wan-AI/Wan2.1-T2V-1.3B "$wan_root"; then
+      echo "ModelScope base-model download failed; falling back to Hugging Face mirror." >&2
+      download_hf_with_mirror Wan-AI/Wan2.1-T2V-1.3B --local-dir "$wan_root"
+    fi
   fi
 }
 
@@ -342,6 +467,154 @@ Studio default demo parameters are recorded in:
 EOF
 }
 
+prepare_cosmos3_layout() {
+  local repo_id="nvidia/Cosmos3-Nano"
+  local revision="$COSMOS3_NANO_REVISION"
+  if [[ "$MODEL_ID" == "cosmos3-super" ]]; then
+    repo_id="nvidia/Cosmos3-Super"
+    revision="$COSMOS3_SUPER_REVISION"
+  fi
+  cat <<EOF
+
+Cosmos3 checkpoint layout:
+  Repository: ${repo_id}
+  Pinned revision: ${revision}
+  The repository already has an official Diffusers layout; no conversion is required.
+  This script downloads/checks the exact revision in the native Hugging Face cache:
+    ${CACHE_DIR}/models--${repo_id//\//--}/snapshots/${revision}/model_index.json
+  Direct HFD aliases are accepted only when .hfd/repo_metadata.json records the same revision.
+  An older directory may still be usable for compatibility testing, but is never reported as current.
+
+Environment:
+  bash scripts/setup/model_env_install.sh --model ${MODEL_ID}
+
+Safety checker:
+  The official default requires cosmos-guardrail and approved Hugging Face access to
+  nvidia/Cosmos-1.0-Guardrail. Set an authorized HF_TOKEN after accepting its access terms.
+  For an explicitly unscreened run, set enable_safety_checker=false at load time and
+  enable_safety_check=false at call time; Workspace manifests preserve both settings.
+EOF
+}
+
+inspect_cosmos3_checkpoint_revisions() {
+  local repo_id="$1"
+  local expected_revision="$2"
+  REPO_ID="$repo_id" EXPECTED_REVISION="$expected_revision" \
+  CACHE_DIR_VALUE="$CACHE_DIR" HFD_ROOT_VALUE="$WORLDFOUNDRY_HFD_ROOT" \
+  CKPT_DIR_VALUE="$WORLDFOUNDRY_CKPT_DIR" REPORT_PATH_VALUE="$COSMOS3_CHECKPOINT_REPORT" \
+  "$PYTHON_BIN" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+from worldfoundry.base_models.diffusion_model.video.cosmos3.worldfoundry_runtime import Cosmos3Runtime
+
+repo_id = os.environ["REPO_ID"]
+expected = os.environ["EXPECTED_REVISION"]
+cache_dir = Path(os.environ["CACHE_DIR_VALUE"]).expanduser()
+hfd_root = Path(os.environ["HFD_ROOT_VALUE"]).expanduser()
+ckpt_dir = Path(os.environ["CKPT_DIR_VALUE"]).expanduser()
+namespace = repo_id.replace("/", "--")
+basename = repo_id.rsplit("/", 1)[-1]
+
+candidates = [
+    ("pinned_hf_snapshot", cache_dir / f"models--{namespace}" / "snapshots" / expected, expected),
+    ("cache_direct_hfd", cache_dir / namespace, None),
+    ("worldfoundry_hfd", hfd_root / namespace, None),
+    ("worldfoundry_hfd_basename", hfd_root / basename, None),
+    ("worldfoundry_hfd_pinned", hfd_root / f"{basename}-{expected[:8]}", None),
+    ("workspace_hfd", ckpt_dir / namespace, None),
+    ("workspace_checkpoint", ckpt_dir / basename, None),
+    ("workspace_pinned_checkpoint", ckpt_dir / f"{basename}-{expected[:8]}", None),
+]
+seen = set()
+current = []
+rows = []
+for label, path, known_revision in candidates:
+    try:
+        key = path.resolve() if path.exists() else path.absolute()
+    except OSError:
+        key = path.absolute()
+    if key in seen or not path.exists():
+        continue
+    seen.add(key)
+    actual = known_revision
+    metadata_path = path / ".hfd" / "repo_metadata.json"
+    if actual is None and metadata_path.is_file():
+        try:
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        value = payload.get("sha") or payload.get("revision") or payload.get("commit")
+        actual = str(value).strip() if value else None
+    layout_plan = Cosmos3Runtime.plan(model_path=str(path))
+    has_layout = not layout_plan["blocked"]
+    if not has_layout:
+        state = "incomplete"
+    elif actual == expected:
+        state = "current"
+        current.append(path.resolve())
+    elif actual:
+        state = "stale"
+    else:
+        state = "unverified"
+    print(
+        f"Cosmos3 revision check: {state}: {path} "
+        f"(actual={actual or 'unknown'}, expected={expected})",
+        file=sys.stderr,
+    )
+    if layout_plan["blocked"]:
+        for blocker in layout_plan["blockers"]:
+            print(f"  layout blocker: {blocker}", file=sys.stderr)
+    rows.append(
+        {
+            "label": label,
+            "path": str(path),
+            "state": state,
+            "actual_revision": actual,
+            "expected_revision": expected,
+            "layout_blockers": list(layout_plan["blockers"]),
+        }
+    )
+
+if current:
+    selected_path = current[0]
+else:
+    selected_path = cache_dir / f"models--{namespace}" / "snapshots" / expected
+    print(
+        "Cosmos3 revision check: no complete checkpoint matching the pinned revision is ready; "
+        f"expected {selected_path}",
+        file=sys.stderr,
+    )
+
+report_path = Path(os.environ["REPORT_PATH_VALUE"])
+try:
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+except (FileNotFoundError, OSError, json.JSONDecodeError):
+    report = {
+        "schema_version": "worldfoundry-cosmos3-checkpoint-revision-report-v1",
+        "ok": bool(current),
+    }
+report["model_download_check_ok"] = bool(report.get("ok"))
+report["ok"] = bool(current)
+report["cosmos3_revision_selection"] = {
+    "repo_id": repo_id,
+    "expected_revision": expected,
+    "current_revision_ready": bool(current),
+    "selected_model_ref": str(selected_path),
+    "candidates": rows,
+}
+report_path.parent.mkdir(parents=True, exist_ok=True)
+temporary_path = report_path.with_suffix(report_path.suffix + ".tmp")
+temporary_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+temporary_path.replace(report_path)
+
+# Preserve the exact future target so the printed demo command cannot silently use a stale directory.
+print(selected_path)
+PY
+}
+
 prepare_lyra_layout() {
   cat <<EOF
 
@@ -412,6 +685,33 @@ LingBot-World checkpoint layout:
 Environment:
   LingBot-World currently uses the dedicated lingbot-world conda profile:
     bash scripts/setup/model_env_install.sh --model lingbot-world
+
+EOF
+}
+
+prepare_lingbot_world_v2_layout() {
+  if [[ "$DOWNLOAD" == "1" ]]; then
+    hf download robbyant/lingbot-world-v2-14b-causal-fast --cache-dir "$CACHE_DIR"
+  fi
+  cat <<EOF
+
+LingBot-World-V2 causal-fast checkpoint layout:
+  Native Hugging Face cache is supported for:
+    robbyant/lingbot-world-v2-14b-causal-fast
+  Direct HFD alias is also accepted:
+    ${WORLDFOUNDRY_HFD_ROOT}/robbyant--lingbot-world-v2-14b-causal-fast
+
+Required files:
+  models_t5_umt5-xxl-enc-bf16.pth
+  google/umt5-xxl/
+  Wan2.1_VAE.pth
+  transformers/config.json
+
+Action input must be a directory containing poses.npy [F,4,4] and
+intrinsics.npy [F,4]. The default public recipe uses eight GPUs:
+  bash scripts/setup/model_env_install.sh --model lingbot-world-v2
+
+License: CC BY-NC-SA 4.0 (non-commercial, share-alike).
 
 EOF
 }
@@ -789,7 +1089,7 @@ HY-WorldPlay checkpoint layout:
     ${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo-1.5
     ${WORLDFOUNDRY_HFD_ROOT}/tencent--HunyuanVideo-1.5
 
-  On shared NFS/CPFS systems, optional local staging avoids every rank
+  On remote or shared storage, optional local staging avoids every rank
   cold-reading the same large safetensors file:
     export WORLDFOUNDRY_HY_WORLDPLAY_LOCAL_CKPT_CACHE_DIR=/local/fast/worldfoundry_ckpt
 
@@ -806,6 +1106,69 @@ LongCat-Video checkpoint layout:
   The Studio default also accepts local aliases:
     ${WORLDFOUNDRY_CKPT_DIR}/LongCat-Video
     ${WORLDFOUNDRY_HFD_ROOT}/meituan-longcat--LongCat-Video
+
+EOF
+      ;;
+    helios)
+      if [[ "$DOWNLOAD" == "1" ]]; then
+        hf download BestWishYsh/Helios-Distilled --cache-dir "$CACHE_DIR"
+      fi
+      cat <<EOF
+
+Helios checkpoint layout:
+  The default WorldFoundry route uses BestWishYsh/Helios-Distilled.
+  Accepted local aliases:
+    ${WORLDFOUNDRY_CKPT_DIR}/Helios-Distilled
+    ${WORLDFOUNDRY_HFD_ROOT}/BestWishYsh--Helios-Distilled
+
+  Install the pinned official inference environment with:
+    bash scripts/setup/model_env_install.sh --model helios
+
+  Base and Mid checkpoints can be selected by overriding checkpoint_path and
+  setting variant to base or mid in the inference call JSON.
+
+EOF
+      ;;
+    gamma-world)
+      if [[ "$DOWNLOAD" == "1" ]]; then
+        hf download chijw/Gamma-World --cache-dir "$CACHE_DIR"
+        hf download nvidia/Cosmos-Reason1-7B --cache-dir "$CACHE_DIR"
+      fi
+      cat <<EOF
+
+Gamma-World checkpoint layout:
+  World model and tokenizer:
+    ${WORLDFOUNDRY_CKPT_DIR}/Gamma-World
+    ${WORLDFOUNDRY_HFD_ROOT}/chijw--Gamma-World
+  Gated text encoder:
+    ${WORLDFOUNDRY_CKPT_DIR}/Cosmos-Reason1-7B
+    ${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Reason1-7B
+
+  Runtime source:
+    ${WORLDFOUNDRY_SOURCE_ROOT}/worldfoundry/synthesis/visual_generation/gamma_world
+
+  Accept the NVIDIA Open Model License for Cosmos-Reason1-7B and authenticate
+  with Hugging Face before downloading. The default mode is causal_few_step.
+
+EOF
+      ;;
+    lingbot-video)
+      if [[ "$DOWNLOAD" == "1" ]]; then
+        hf download robbyant/lingbot-video-dense-1.3b --cache-dir "$CACHE_DIR"
+      fi
+      cat <<EOF
+
+LingBot-Video checkpoint layout:
+  Dense default:
+    ${WORLDFOUNDRY_HFD_ROOT}/robbyant--lingbot-video-dense-1.3b
+  Optional MoE + refiner variant:
+    ${WORLDFOUNDRY_HFD_ROOT}/robbyant--lingbot-video-moe-30b-a3b
+
+  Install the dedicated inference environment before running:
+    bash scripts/setup/model_env_install.sh --model lingbot-video
+
+  The runtime consumes structured JSON captions. The prompt rewriter is not
+  included in this inference-only integration.
 
 EOF
       ;;
@@ -844,6 +1207,27 @@ Causal-Forcing checkpoint layout:
     ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-14B
   Local chunk-wise checkpoint alias:
     ${WORLDFOUNDRY_CKPT_DIR}/Causal-Forcing/chunkwise/causal_forcing.pt
+
+EOF
+      ;;
+    rolling-forcing)
+      if [[ "$DOWNLOAD" == "1" ]]; then
+        download_rolling_forcing_assets
+      fi
+      cat <<EOF
+
+RollingForcing checkpoint layout:
+  Runtime: flat, in-tree inference-only package under
+    worldfoundry/synthesis/visual_generation/rolling_forcing
+  Runtime source never depends on an external RollingForcing checkout.
+  Downloads prefer the official ModelScope mirror and fall back to Hugging Face.
+  Native Hugging Face cache is also supported for TencentARC/RollingForcing.
+  Local official checkpoint alias:
+    ${WORLDFOUNDRY_CKPT_DIR}/RollingForcing/checkpoints/rolling_forcing_dmd.pt
+  Wan2.1 base weights:
+    ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B
+
+  License restriction: academic use only; commercial and production use are prohibited.
 
 EOF
       ;;
@@ -924,6 +1308,26 @@ if [[ "$SKIP_ENV" != "1" ]]; then
 fi
 
 download_args=("$PYTHON_BIN" -m worldfoundry.cli zoo model-download --model-id "$ZOO_MODEL_ID" --cache-dir "$CACHE_DIR" --check-local --json)
+if [[ "$MODEL_ID" == "helios" ]]; then
+  download_args+=(--repo-id BestWishYsh/Helios-Distilled)
+elif [[ "$MODEL_ID" == "gamma-world" ]]; then
+  download_args+=(--repo-id chijw/Gamma-World)
+elif [[ "$MODEL_ID" == "lingbot-video" ]]; then
+  download_args+=(--repo-id robbyant/lingbot-video-dense-1.3b)
+elif [[ "$MODEL_ID" == "cosmos3-super" ]]; then
+  COSMOS3_REPO_ID="nvidia/Cosmos3-Super"
+  COSMOS3_EXPECTED_REVISION="$COSMOS3_SUPER_REVISION"
+  download_args+=(--repo-id "$COSMOS3_REPO_ID")
+elif [[ "$MODEL_ID" == "cosmos3" || "$MODEL_ID" == "cosmos3-nano" ]]; then
+  COSMOS3_REPO_ID="nvidia/Cosmos3-Nano"
+  COSMOS3_EXPECTED_REVISION="$COSMOS3_NANO_REVISION"
+  download_args+=(--repo-id "$COSMOS3_REPO_ID")
+fi
+if [[ -n "$COSMOS3_REPO_ID" ]]; then
+  mkdir -p "$OUTPUT_DIR"
+  COSMOS3_CHECKPOINT_REPORT="${OUTPUT_DIR}/cosmos3-checkpoint-report.json"
+  download_args+=(--report-path "$COSMOS3_CHECKPOINT_REPORT")
+fi
 if [[ "$DOWNLOAD" == "1" ]]; then
   download_args+=(--execute --disable-xet)
 fi
@@ -941,6 +1345,9 @@ case "$MODEL_ID" in
   yume|yume-1p5|yume-1.5|yume1.5)
     prepare_yume_layout
     ;;
+  cosmos3|cosmos3-nano|cosmos3-super)
+    prepare_cosmos3_layout
+    ;;
   lyra|lyra-1|lyra-2)
     prepare_lyra_layout
     ;;
@@ -949,6 +1356,9 @@ case "$MODEL_ID" in
     ;;
   lingbot-world)
     prepare_lingbot_world_layout
+    ;;
+  lingbot-world-v2)
+    prepare_lingbot_world_v2_layout
     ;;
   matrix-game-1)
     prepare_matrix_game_1_layout
@@ -965,7 +1375,7 @@ case "$MODEL_ID" in
   cogvideox|cogvideox-2b-t2v|cogvideox-5b-t2v|cogvideox-5b-i2v)
     prepare_cogvideox_layout
     ;;
-  i2vgen-xl|dynamicrafter-512-i2v|dynamicrafter-1024-i2v|allegro-ti2v|wan2.2-ti2v-5b|wan2.2-ti2v-5b-1280x704-121f|stable-virtual-camera|skyreels-v2|zeroscope|modelscope-t2v|animatediff|krea-realtime-video|framepack|motionctrl|easyanimate-i2v|hunyuan-worldplay|longcat-video|self-forcing|causal-forcing|worldgen|pusa-vidgen|dualcamctrl)
+  i2vgen-xl|dynamicrafter-512-i2v|dynamicrafter-1024-i2v|allegro-ti2v|wan2.2-ti2v-5b|wan2.2-ti2v-5b-1280x704-121f|stable-virtual-camera|skyreels-v2|zeroscope|modelscope-t2v|animatediff|krea-realtime-video|framepack|motionctrl|easyanimate-i2v|hunyuan-worldplay|longcat-video|helios|gamma-world|lingbot-video|self-forcing|causal-forcing|rolling-forcing|worldgen|pusa-vidgen|dualcamctrl)
     prepare_recent_video_layout
     ;;
 esac
@@ -975,7 +1385,57 @@ set +e
 download_status=$?
 set -e
 
-if [[ "$MODEL_ID" == "dualcamctrl" ]]; then
+if [[ "$MODEL_ID" == "cosmos3" || "$MODEL_ID" == "cosmos3-nano" || "$MODEL_ID" == "cosmos3-super" ]]; then
+  COSMOS3_PINNED_MODEL_REF="$(inspect_cosmos3_checkpoint_revisions "$COSMOS3_REPO_ID" "$COSMOS3_EXPECTED_REVISION")"
+  if "$PYTHON_BIN" - "$COSMOS3_CHECKPOINT_REPORT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+ready = bool(report.get("cosmos3_revision_selection", {}).get("current_revision_ready"))
+raise SystemExit(0 if ready else 1)
+PY
+  then
+    # A verified exact-revision checkpoint on shared CKPT/HFD storage is just
+    # as runnable as a native Hugging Face cache snapshot.
+    download_status=0
+  fi
+  cosmos3_variant="cosmos3-nano"
+  if [[ "$MODEL_ID" == "cosmos3-super" ]]; then
+    cosmos3_variant="cosmos3-super"
+  fi
+  cat <<EOF
+
+Suggested inference command:
+  PYTHONPATH=${WORLDFOUNDRY_SOURCE_ROOT} python -m worldfoundry.studio.workspace_job infer \
+    --model-id cosmos3 \
+    --variant-id ${cosmos3_variant} \
+    --model-ref '${COSMOS3_PINNED_MODEL_REF}' \
+    --prompt 'A robot arm carefully cleans a plate in a bright kitchen.' \
+    --call-json '{"num_frames":189,"height":720,"width":1280,"fps":24,"num_inference_steps":35,"guidance_scale":6.0,"seed":0}' \
+    --output-path ${OUTPUT_DIR}/cosmos3.mp4 \
+    --output-dir ${OUTPUT_DIR} \
+    --device cuda
+
+Checkpoint verification report:
+  ${COSMOS3_CHECKPOINT_REPORT}
+EOF
+elif [[ "$MODEL_ID" == "lingbot-world-v2" ]]; then
+  cat <<EOF
+
+Suggested inference command:
+  CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+  PYTHONPATH=${WORLDFOUNDRY_SOURCE_ROOT} python -m worldfoundry.studio.workspace_job infer \
+    --model-id lingbot-world-v2 \
+    --input-path /path/to/image.jpg \
+    --prompt "A cinematic first-person journey through a detailed world." \
+    --call-json '{"action_path":"/path/to/action_directory","frame_num":361,"chunk_size":4,"local_attn_size":18,"sink_size":6,"nproc_per_node":8,"return_dict":true}' \
+    --output-path ${OUTPUT_DIR}/lingbot-world-v2.mp4 \
+    --output-dir ${OUTPUT_DIR} \
+    --device cuda
+EOF
+elif [[ "$MODEL_ID" == "dualcamctrl" ]]; then
   cat <<EOF
 
 Suggested inference command:

@@ -20,6 +20,7 @@ TORCHVISION_SPEC="${WORLDFOUNDRY_TORCHVISION_SPEC:-torchvision>=0.22,<0.27.0}"
 TORCHAUDIO_SPEC="${WORLDFOUNDRY_TORCHAUDIO_SPEC:-torchaudio>=2.7,<2.12.0}"
 VERIFY_ONLY=0
 ALLOW_NO_CUDA="${WORLDFOUNDRY_ALLOW_NO_CUDA:-0}"
+CUDA_NVCC_DRY_RUN=0
 
 usage() {
   cat <<'EOF'
@@ -48,6 +49,7 @@ Options:
   --torchaudio SPEC     Torchaudio package spec. Default: torchaudio>=2.7,<2.12.0.
   --verify-only         Only run import and CUDA verification in the env.
   --allow-no-cuda       Do not fail verification when CUDA is not visible.
+  --cuda-nvcc-dry-run   Print the tier-aware nvcc install command and exit.
   -h, --help            Show this help.
 EOF
 }
@@ -115,6 +117,10 @@ while (($#)); do
       ALLOW_NO_CUDA=1
       shift
       ;;
+    --cuda-nvcc-dry-run)
+      CUDA_NVCC_DRY_RUN=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -156,12 +162,25 @@ CUDA_PROFILE="$(printf '%s' "$CUDA_REPORT" | "$PYTHON_BIN" -c 'import json, sys;
 DETECTED_DRIVER_CUDA="$(printf '%s' "$CUDA_REPORT" | "$PYTHON_BIN" -c 'import json, sys; print(json.load(sys.stdin).get("driver_cuda") or "")')"
 
 case "$CUDA_PROFILE" in
-  cu121|cu124|cu128) ;;
+  cu121) CUDA_NVCC_VERSION="12.1" ;;
+  cu124) CUDA_NVCC_VERSION="12.4" ;;
+  cu128) CUDA_NVCC_VERSION="12.8" ;;
   *)
     echo "Unsupported resolved CUDA profile: ${CUDA_PROFILE}. Use auto, cu121, cu124, or cu128." >&2
     exit 2
     ;;
 esac
+
+if [[ "$CUDA_NVCC_DRY_RUN" == "1" ]]; then
+  if [[ -n "$ENV_PREFIX" ]]; then
+    target=(--prefix "$ENV_PREFIX")
+  else
+    target=(--name "$ENV_NAME")
+  fi
+  printf '%q ' "$CONDA_EXE_PATH" install "${target[@]}" --yes --channel nvidia "cuda-nvcc=${CUDA_NVCC_VERSION}"
+  printf '\n'
+  exit 0
+fi
 
 case "$FLASH_ATTN_BUCKET" in
   flash_attn_fa25|flash_attn_fa28) ;;
@@ -203,6 +222,23 @@ conda_run() {
   "${env_prefix[@]}" "$CONDA_EXE_PATH" run "${args[@]}" "$@"
 }
 
+ensure_matching_cuda_nvcc() {
+  local current_release=""
+  local nvcc_output=""
+  if nvcc_output="$(conda_run nvcc --version 2>/dev/null)"; then
+    current_release="$(printf '%s\n' "$nvcc_output" | sed -n 's/.*release \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)"
+  fi
+  if [[ "$current_release" == "$CUDA_NVCC_VERSION" ]]; then
+    echo "Matching CUDA nvcc already installed: ${current_release}"
+    return 0
+  fi
+
+  local selector=()
+  mapfile -t selector < <(env_selector)
+  echo "Installing CUDA nvcc ${CUDA_NVCC_VERSION} from the NVIDIA conda channel."
+  run_cmd "$CONDA_EXE_PATH" install "${selector[@]}" --yes --channel nvidia "cuda-nvcc=${CUDA_NVCC_VERSION}"
+}
+
 run_cmd() {
   "$@"
 }
@@ -223,6 +259,8 @@ if [[ "$VERIFY_ONLY" != "1" ]]; then
   else
     run_cmd "$CONDA_EXE_PATH" env create "${selector[@]}" -f "$CONDA_ENVIRONMENT_FILE"
   fi
+
+  ensure_matching_cuda_nvcc
 
   PIP_CONFIG_FILE="${WORLDFOUNDRY_PIP_CONFIG_FILE:-/dev/null}" conda_run \
     python -m pip install --no-cache-dir --upgrade pip
@@ -250,6 +288,7 @@ import os
 mods = [
     "cv2",
     "h5py",
+    "matplotlib",
     "numpy",
     "PIL",
     "pyarrow",
@@ -259,6 +298,7 @@ mods = [
     "diffusers",
     "worldfoundry",
     "worldfoundry.cli",
+    "xml.parsers.expat",
 ]
 out = {}
 for name in mods:

@@ -18,9 +18,13 @@ from worldfoundry.core.io import (
     dump_serialized,
     exists_uri,
     load_serialized,
-    parse_uri_scheme,
     save_image_or_video_tensor,
-    uri_to_local_path,
+)
+from worldfoundry.core.io.cache import (
+    download_from_cache_or_uri as _download_from_cache_or_uri,
+)
+from worldfoundry.core.io.cache import (
+    load_from_cache_or_uri as _load_from_cache_or_uri,
 )
 
 
@@ -28,16 +32,6 @@ def _strip_storage_compat_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     kwargs.pop("backend_args", None)
     kwargs.pop("backend_key", None)
     return kwargs
-
-
-def _storage_options_from_backend_args(backend_args: dict[str, Any] | None) -> dict[str, Any]:
-    if not backend_args:
-        return {}
-    options = dict(backend_args)
-    options.pop("backend", None)
-    options.pop("path_mapping", None)
-    options.pop("s3_credential_path", None)
-    return options
 
 
 def load(file: str | os.PathLike[str] | IO[Any], *, file_format: str | None = None, **kwargs: Any) -> Any:
@@ -105,15 +99,7 @@ def download_from_cache_or_uri(
 ) -> str:
     """Resolve a local/URI source to a local cached file."""
 
-    del backend_key
-    cache_path = _cache_path_for_source(source_path, cache_fp, cache_dir)
-
-    if rank_sync:
-        _run_on_rank0(lambda: _populate_cache_file(source_path, cache_path, backend_args=backend_args))
-        _distributed_barrier()
-    else:
-        _populate_cache_file(source_path, cache_path, backend_args=backend_args)
-    return str(cache_path)
+    return _download_from_cache_or_uri(source_path, cache_fp, cache_dir, rank_sync, backend_args, backend_key)
 
 
 def load_from_cache_or_uri(
@@ -127,15 +113,9 @@ def load_from_cache_or_uri(
 ) -> Any:
     """Load a local/URI data object, caching remote sources on local disk first."""
 
-    cached_path = download_from_cache_or_uri(
-        source_path,
-        cache_fp=cache_fp,
-        cache_dir=cache_dir,
-        rank_sync=rank_sync,
-        backend_args=backend_args,
-        backend_key=backend_key,
+    return _load_from_cache_or_uri(
+        source_path, cache_fp, cache_dir, rank_sync, backend_args, backend_key, easy_io_kwargs
     )
-    return load(cached_path, **(easy_io_kwargs or {}))
 
 
 def load_from_s3_with_cache(*args: Any, **kwargs: Any) -> Any:
@@ -167,59 +147,6 @@ def save_img_or_video(
         ffmpeg_params=ffmpeg_params,
         value_range="0,1",
     )
-
-
-def _cache_path_for_source(
-    source_path: str | os.PathLike[str],
-    cache_fp: str | os.PathLike[str] | None,
-    cache_dir: str | os.PathLike[str] | None,
-) -> Path:
-    if cache_dir is None:
-        cache_dir = os.environ.get("TORCH_HOME") or os.environ.get("IMAGINAIRE_CACHE_DIR", "~/.cache/imaginaire")
-    cache_root = Path(os.path.expanduser(str(cache_dir)))
-    if cache_fp is None:
-        source_text = str(source_path).replace("://", "/").lstrip("/")
-        cache_fp = cache_root / source_text
-    cache_path = Path(os.path.expanduser(str(cache_fp)))
-    if not cache_path.is_absolute():
-        cache_path = cache_root / cache_path
-    return cache_path
-
-
-def _populate_cache_file(
-    source_path: str | os.PathLike[str],
-    cache_path: Path,
-    *,
-    backend_args: dict[str, Any] | None,
-) -> None:
-    if parse_uri_scheme(source_path) == "file":
-        local_source = uri_to_local_path(source_path)
-        if local_source.resolve() == cache_path.resolve():
-            return
-    if cache_path.exists() and cache_path.stat().st_size > 0:
-        return
-    if cache_path.exists():
-        cache_path.unlink()
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    copy_uri(source_path, cache_path, **_storage_options_from_backend_args(backend_args))
-
-
-def _run_on_rank0(func) -> None:
-    try:
-        from worldfoundry.core.distributed import torch_process_group as distributed
-    except Exception:
-        func()
-        return
-    if distributed.get_rank() == 0:
-        func()
-
-
-def _distributed_barrier() -> None:
-    try:
-        from worldfoundry.core.distributed import torch_process_group as distributed
-    except Exception:
-        return
-    distributed.barrier()
 
 
 easy_io = SimpleNamespace(

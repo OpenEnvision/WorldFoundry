@@ -16,10 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.cli.tui_discovery import build_model_benchmark_command, build_suite_command
-from worldfoundry.runtime import python_module_command
+from worldfoundry.runtime.jobs import python_module_command
 
 from .context import DEFAULT_CONTEXT, MCPToolContext
-
 
 # ── Preview and submission ──────────────────────────────────────────────
 

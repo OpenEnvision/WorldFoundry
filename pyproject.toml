@@ -45,7 +45,7 @@ worldfoundry-tui = "worldfoundry.cli.tui:main"
 [project.optional-dependencies]
 api = [
     "dashscope",
-    "openai",
+    "openai>=1",
     "pillow",
     "qwen-vl-utils",
     "requests>=2.32.0,<3.0.0",
@@ -70,6 +70,7 @@ video = [
     "imageio",
     "imageio-ffmpeg",
     "iopath",
+    "joblib>=1.0",
     "lightning==2.6.1",
     "librosa",
     "lmdb",
@@ -80,6 +81,7 @@ video = [
     "omegaconf",
     "onnxruntime",
     "opencv-python",
+    "openpyxl",
     "pandas",
     "pillow",
     "pipablepytorch3d",
@@ -87,6 +89,7 @@ video = [
     "pyarrow",
     "pydantic",
     "pyexr",
+    "pyrallis",
     "safetensors",
     "scipy",
     "sentencepiece",
@@ -94,6 +97,26 @@ video = [
     "submitit",
     "termcolor",
     "trimesh",
+]
+vipe = [
+    "einops",
+    "filelock",
+    "gdown",
+    "hydra-core",
+    "imageio[ffmpeg]",
+    "kornia",
+    "ninja",
+    "numpy",
+    "omegaconf",
+    "opencv-python",
+    "OpenEXR<3.3.0",
+    "pillow",
+    "pydantic>=2,<3",
+    "rerun-sdk==0.22.1",
+    "scipy",
+    "torch",
+    "torchvision",
+    "tqdm",
 ]
 molmoact2 = [
     "accelerate>=1.0",
@@ -115,6 +138,7 @@ molmoact2 = [
 metrics = [
     "h5py",
     "matplotlib",
+    "joblib>=1.0",
     "nltk",
     "numpy",
     "pandas",
@@ -167,6 +191,9 @@ dvlt = [
     "wandb",
 ]
 ui = [
+    "aiohttp>=3.10,<4",
+    "aiortc>=1.9,<2",
+    "av>=12",
     "dominate",
     "fastapi",
     "flask",
@@ -176,6 +203,13 @@ ui = [
     "pydantic",
     "textual",
     "uvicorn",
+]
+studio_realtime = [
+    "aiohttp>=3.10,<4",
+    "aiortc>=1.9,<2",
+    "av>=12",
+    "numpy>=1.26,<3",
+    "pillow>=10",
 ]
 tui = [
     "pillow",
@@ -196,7 +230,7 @@ web = [
     "uvicorn",
 ]
 mcp = [
-    "mcp",
+    "mcp>=1.28.1,<2",
 ]
 worldscore = [
     "addict",
@@ -259,6 +293,8 @@ dev = [
 all = [
     "accelerate",
     "addict",
+    "aiohttp>=3.10,<4",
+    "aiortc>=1.9,<2",
     "albumentations",
     "av",
     "boto3",
@@ -297,6 +333,7 @@ all = [
     "modelscope",
     "moviepy==1.0.3",
     "numpy",
+    "num2words>=0.5.14",
     "numpydantic",
     "omegaconf",
     "onnxruntime",
@@ -444,6 +481,8 @@ testpaths = [
     "test/eval_core/test_run_manifest.py",
     "test/eval_core/test_public_namespace.py",
     "test/eval_core/test_video_quality_local_evaluator.py",
+    "tests/evaluation/test_mcp_server.py",
+    "tests/evaluation/test_tui.py",
 ]
 addopts = [
     "--strict-markers",
@@ -471,14 +510,14 @@ packages = { find = { where = ["."], include = ["worldfoundry*"], exclude = [
     "worldfoundry.base_models.*.depth_anything",
     "worldfoundry.base_models.*.depth_anything.*",
     "worldfoundry.base_models.*.*.dvlt_runtime.src*",
-    "worldfoundry.base_models.*.*.pixelsplat_full.src*",
+    "worldfoundry.base_models.*.*.pixelsplat.src*",
     "worldfoundry.base_models.*.vggt.vggt",
     "worldfoundry.base_models.*.vggt.vggt.*",
     "worldfoundry.base_models.*.vggt_omega.vggt_omega",
     "worldfoundry.base_models.*.vggt_omega.vggt_omega.*",
     "worldfoundry.base_models.*.vggt_fantasy_world.vggt",
     "worldfoundry.base_models.*.vggt_fantasy_world.vggt.*",
-    "worldfoundry.base_models.*.pixelsplat_runtime",
+    "worldfoundry.base_models.*.pixelsplat",
     "worldfoundry.base_models.*.gaussian_splatting.arguments",
     "worldfoundry.base_models.*.gaussian_splatting.scene",
     "worldfoundry.base_models.*.gaussian_splatting.gaussian_renderer",
@@ -502,13 +541,25 @@ include-package-data = true
     "benchmarks/**/*.yaml",
     "benchmarks/**/*.yml",
     "benchmarks/**/*.md",
+    "benchmarks/**/*.png",
     "models/**/*.yaml",
     "models/**/*.yml",
+    "models/**/*.json",
 ]
 "worldfoundry.evaluation.tasks.execution.runners" = [
+    "chronomagic_bench/runtime/chronomagic_bench/MTScore/configs/*.json",
+    "devil_dynamics/runtime/official/*.sh",
+    "ewmbench/runtime/ewmbench/*.yaml",
     "fetv/runtime/fetv_eval/**/*",
+    "phyfps_bench_gen/runtime/visual_chronometer/inference/configs/*.yaml",
+    "t2v_compbench/runtime/t2v_compbench/dot/configs/*.json",
+    "vbench_plus_plus/runtime/vbench2_beta_long/configs/*.yaml",
     "vmbench/runtime/official/**/*",
+    "wbench/runtime/wbench/LICENSE*",
+    "wbench/runtime/wbench/src/*.yaml",
     "world_in_world/runtime/official/**/*",
+    "worldarena/runtime/video_quality/*.yaml",
+    "wrbench/runtime/**/*",
 ]
 "worldfoundry.base_models" = [
     "diffusion_model/diffsynth/tokenizer_configs/**/*",
@@ -517,8 +568,33 @@ include-package-data = true
     "perception_core/general_perception/open_clip/bpe_simple_vocab_16e6.txt.gz",
     "perception_core/segment/sam3/assets/bpe_simple_vocab_16e6.txt.gz",
     "diffusion_model/video/cosmos3/UPSTREAM*.txt",
-    "diffusion_model/video/cosmos3/diffusers_cosmos3/sample_args/*.json",
+    "three_dimensions/general_3d/vipe/csrc/**/*",
+    "three_dimensions/general_3d/vipe/LICENSE",
+    "three_dimensions/general_3d/vipe/THIRD_PARTY_LICENSES.md",
+    "three_dimensions/general_3d/vipe/UPSTREAM.md",
 ]
 "worldfoundry.studio" = [
     "assets/**/*",
+]
+"worldfoundry.synthesis.visual_generation.lingbot_video" = [
+    "default_negative_prompt*.json",
+]
+"worldfoundry.synthesis.visual_generation.rolling_forcing" = [
+    "LICENSE*",
+    "LEGAL.md",
+    "UPSTREAM.md",
+]
+"worldfoundry.synthesis.visual_generation.moverse" = [
+    "UPSTREAM.md",
+    "moverse_runtime/**/*",
+]
+"worldfoundry.synthesis.visual_generation.uni3c" = [
+    "uni3c_runtime/**/*",
+]
+
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "**/__pycache__/*",
+    "**/*.pyc",
+    "**/*.pyo",
 ]

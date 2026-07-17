@@ -24,6 +24,10 @@ from .discovery import (
     list_tasks_payload,
 )
 
+# ── Metric and readiness payloads ─────────────────────────────────
+from .metrics import list_metrics_payload, show_metric_payload
+from .readiness import check_benchmark_datasets_payload
+
 # ── Registration ───────────────────────────────────────────────
 from .registration import register_tools
 
@@ -33,9 +37,13 @@ from .runs import (
     get_run_result_payload,
     get_run_samples_payload,
     get_run_status_payload,
+    list_runs_payload,
     preview_run_payload,
     run_evaluation_payload,
 )
+
+# ── Server metadata ─────────────────────────────────────────────────────
+from .server_info import MCP_TOOL_NAMES, server_info_payload
 
 # ── Studio workspace payloads ────────────────────────────────────
 from .studio import (
@@ -57,7 +65,9 @@ __all__ = [
     "DEFAULT_MCP_OUTPUT_ROOT",
     "DEFAULT_STUDIO_WORKSPACE_URL",
     "MCPToolContext",
+    "MCP_TOOL_NAMES",
     "cancel_run_payload",
+    "check_benchmark_datasets_payload",
     "get_benchmark_info_payload",
     "get_model_info_payload",
     "get_run_result_payload",
@@ -69,7 +79,9 @@ __all__ = [
     "get_studio_model_info_payload",
     "get_task_info_payload",
     "list_benchmarks_payload",
+    "list_metrics_payload",
     "list_models_payload",
+    "list_runs_payload",
     "list_studio_artifacts_payload",
     "list_studio_jobs_payload",
     "list_studio_models_payload",
@@ -77,6 +89,8 @@ __all__ = [
     "preview_run_payload",
     "register_tools",
     "run_evaluation_payload",
+    "server_info_payload",
+    "show_metric_payload",
     "stop_studio_job_payload",
     "submit_studio_inference_payload",
     "wait_for_studio_job_payload",

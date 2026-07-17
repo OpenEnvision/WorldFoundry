@@ -98,6 +98,29 @@ Footer {
     padding: 1 1;
 }
 
+Screen.-narrow #main-content {
+    layout: vertical;
+    overflow-y: auto;
+}
+
+Screen.-narrow #left-column {
+    width: 1fr;
+    min-width: 0;
+    height: auto;
+}
+
+Screen.-narrow #catalogs-pane {
+    height: 18;
+}
+
+Screen.-narrow #right-column {
+    width: 1fr;
+    min-width: 0;
+    height: auto;
+    margin-left: 0;
+    margin-top: 1;
+}
+
 #left-column {
     width: 2fr;
     height: 100%;

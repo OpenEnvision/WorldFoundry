@@ -22,6 +22,9 @@ canonical_model_id() {
     lyra1)
       printf '%s\n' "lyra-1"
       ;;
+    cosmos3-nano|cosmos3-super|cosmos-3|cosmos-3-nano|cosmos-3-super)
+      printf '%s\n' "cosmos3"
+      ;;
     *)
       printf '%s\n' "$1"
       ;;
@@ -50,7 +53,7 @@ Options:
                         runtime-profile models that default to the unified env.
   --cuda TIER           auto, cu128, cu124, or cu121. Default: auto.
   --home PATH           Runtime state root. Default: ${XDG_CACHE_HOME:-$HOME/.cache}/worldfoundry.
-  --env-root PATH       Conda envs directory. Default: ${WORLDFOUNDRY_HOME}/conda_envs.
+  --env-root PATH       Conda envs directory. Default: the same WorldFoundry path resolver used at runtime.
   --verify-only         Verify imports in the resolved env; do not install.
   --skip-flash-attn     Forwarded when installing the unified env.
   --allow-no-cuda       Forwarded when installing/verifying the unified env.
@@ -129,7 +132,14 @@ fi
 CUDA_REPORT="$(PYTHONPATH="$WORLDFOUNDRY_SOURCE_ROOT" "$PYTHON_BIN" -m worldfoundry.runtime.cuda_tiers --requested "$CUDA_TIER_REQUEST" --field json)"
 CUDA_TIER="$(printf '%s' "$CUDA_REPORT" | "$PYTHON_BIN" -c 'import json, sys; print(json.load(sys.stdin)["tier"])')"
 DETECTED_DRIVER_CUDA="$(printf '%s' "$CUDA_REPORT" | "$PYTHON_BIN" -c 'import json, sys; print(json.load(sys.stdin).get("driver_cuda") or "")')"
-ENV_ROOT="${ENV_ROOT:-${HOME_ROOT}/conda_envs}"
+if [[ -z "$ENV_ROOT" ]]; then
+  ENV_ROOT="$(WORLDFOUNDRY_HOME="$HOME_ROOT" PYTHONPATH="$WORLDFOUNDRY_SOURCE_ROOT" "$PYTHON_BIN" <<'PY'
+from worldfoundry.core.io.paths import conda_envs_root_path
+
+print(conda_envs_root_path())
+PY
+)"
+fi
 
 export WORLDFOUNDRY_HOME="$HOME_ROOT"
 export WORLDFOUNDRY_CONDA_ENVS_ROOT="$ENV_ROOT"
@@ -234,15 +244,27 @@ for model_id, spec in specs.items():
         spec.python,
         "explicit-conda-profile",
     )
-for model_id in profiles:
+for model_id, profile in profiles.items():
+    profile_env = profile.conda_env or {}
+    if profile_env:
+        resolved_env = profile_env.get("resolved_env_name") or profile_env.get("env_name") or unified
+        profile_tier = profile_env.get("cuda_profile") or tier
+        profile_python = profile_env.get("python") or "3.11"
+        source_model = profile_env.get("model_id") or model_id
+        source = f"runtime-profile-environment:{source_model}"
+    else:
+        resolved_env = unified
+        profile_tier = tier
+        profile_python = "3.11"
+        source = f"runtime-profile-default:{root / unified}"
     rows.setdefault(
         model_id,
         (
             model_id,
-            unified,
-            tier,
-            "3.11",
-            f"runtime-profile-default:{root / unified}",
+            resolved_env,
+            profile_tier,
+            profile_python,
+            source,
         ),
     )
 for row in sorted(rows.values(), key=lambda item: item[0]):
@@ -302,6 +324,43 @@ raise SystemExit(1 if failed else 0)
 PY
 }
 
+verify_env_runtime_tools() {
+  local model_id="$1"
+  local env_prefix="$2"
+  if [[ "$model_id" != "cosmos3" ]]; then
+    return 0
+  fi
+  CUDA_HOME="$env_prefix" \
+  LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
+  PATH="$env_prefix/bin:$PATH" \
+  "$env_prefix/bin/python" <<'PY'
+import json
+import subprocess
+from pathlib import Path
+
+import imageio_ffmpeg
+
+candidates = [Path(__import__("sys").prefix) / "bin" / "ffmpeg", Path(imageio_ffmpeg.get_ffmpeg_exe())]
+results = {}
+for candidate in dict.fromkeys(candidates):
+    try:
+        completed = subprocess.run(
+            [str(candidate), "-version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        results[str(candidate)] = f"FAIL: {type(exc).__name__}: {exc}"
+    else:
+        results[str(candidate)] = "ok" if completed.returncode == 0 else f"FAIL: {completed.stderr.strip()}"
+print(json.dumps({"cosmos3_ffmpeg_candidates": results}, sort_keys=True))
+if not any(value == "ok" for value in results.values()):
+    raise SystemExit("No usable ffmpeg executable is available in the Cosmos3 environment.")
+PY
+}
+
 runtime_ld_library_path() {
   local env_prefix="$1"
   local dirs=()
@@ -332,6 +391,21 @@ filter_bootstrap_conda_packages() {
         ;;
     esac
   done
+}
+
+bootstrap_pip_package() {
+  local package resolved="pip"
+  for package in "$@"; do
+    case "$package" in
+      pip==*)
+        resolved="pip=${package#pip==}"
+        ;;
+      pip=*)
+        resolved="$package"
+        ;;
+    esac
+  done
+  printf '%s\n' "$resolved"
 }
 
 append_pip_index_options() {
@@ -399,71 +473,6 @@ install_transformer_engine_official() {
   "${pip_args[@]}"
 }
 
-apex_import_ok() {
-  local env_prefix="$1"
-  CUDA_HOME="$env_prefix" \
-  LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
-  "$env_prefix/bin/python" - <<'PY' >/dev/null 2>&1
-import apex
-from apex.normalization import FusedLayerNorm
-PY
-}
-
-install_apex_from_source() {
-  local env_prefix="$1"
-  local apex_dir="${WORLDFOUNDRY_APEX_SOURCE_DIR:-$HOME_ROOT/sources/apex}"
-  if apex_import_ok "$env_prefix"; then
-    echo "==> apex already importable in ${env_prefix}"
-    return
-  fi
-  if [[ ! -d "$apex_dir/.git" ]]; then
-    command -v git >/dev/null 2>&1 || {
-      echo "git is required to clone NVIDIA/apex for this official runtime." >&2
-      exit 1
-    }
-    mkdir -p "$(dirname "$apex_dir")"
-    git clone --depth 1 https://github.com/NVIDIA/apex "$apex_dir"
-  fi
-  CUDA_HOME="$env_prefix" \
-  LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
-  PATH="$env_prefix/bin:$PATH" \
-  "$env_prefix/bin/python" -m pip install --index-url "${WORLDFOUNDRY_PIP_INDEX_URL:-https://pypi.org/simple}" \
-    -v --disable-pip-version-check --no-cache-dir --no-build-isolation \
-    --config-settings "--build-option=--cpp_ext" \
-    --config-settings "--build-option=--cuda_ext" \
-    "$apex_dir"
-}
-
-evalcrafter_action_stack_import_ok() {
-  local env_prefix="$1"
-  "$env_prefix/bin/python" - <<'PY' >/dev/null 2>&1
-import mmcv
-import mmengine
-import mmaction
-from mmaction.apis import inference_recognizer, init_recognizer
-PY
-}
-
-install_evalcrafter_action_stack() {
-  local env_prefix="$1"
-  if evalcrafter_action_stack_import_ok "$env_prefix"; then
-    echo "==> evalcrafter: MMAction2 runtime already importable in ${env_prefix}"
-    return
-  fi
-
-  local openmim_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
-  append_pip_index_options openmim_args
-  openmim_args+=(openmim==0.3.9)
-  "${openmim_args[@]}"
-
-  "$CONDA_EXE_PATH" run -p "$env_prefix" python -m mim install "mmcv==2.1.0"
-
-  local mmaction_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
-  append_pip_index_options mmaction_args
-  mmaction_args+=("mmengine>=0.10.3,<0.11" "mmaction2==1.2.0")
-  "${mmaction_args[@]}"
-}
-
 four_d_worldbench_aux_imports_ok() {
   local env_prefix="$1"
   "$env_prefix/bin/python" - <<'PY' >/dev/null 2>&1
@@ -487,6 +496,25 @@ install_four_d_worldbench_aux_stack() {
   "${pip_args[@]}"
 }
 
+install_gamecraft_flash_attn() {
+  local env_prefix="$1"
+  if CUDA_HOME="$env_prefix" \
+    LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
+    "$env_prefix/bin/python" - <<'PY' >/dev/null 2>&1
+import flash_attn
+PY
+  then
+    echo "==> Hunyuan GameCraft: flash-attn already importable"
+    return
+  fi
+  local pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install)
+  append_pip_index_options pip_args
+  pip_args+=(--no-cache-dir --no-build-isolation "flash-attn==2.6.3")
+  CUDA_HOME="$env_prefix" \
+  LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
+  "${pip_args[@]}"
+}
+
 post_install_model_env() {
   local model_id="$1"
   local env_prefix="$2"
@@ -495,15 +523,14 @@ post_install_model_env() {
       echo "==> 4dworldbench: installing auxiliary metric runtime packages"
       install_four_d_worldbench_aux_stack "$env_prefix"
       ;;
-    evalcrafter)
-      echo "==> evalcrafter: installing MMAction2/MMCV action-recognition runtime"
-      install_evalcrafter_action_stack "$env_prefix"
-      ;;
     gen3c|lyra-1)
-      echo "==> ${model_id}: applying upstream Cosmos Predict1 Transformer Engine/Apex setup"
+      echo "==> ${model_id}: applying the Cosmos Predict1 Transformer Engine setup"
       patch_transformer_engine_links "$env_prefix"
       install_transformer_engine_official "$env_prefix"
-      install_apex_from_source "$env_prefix"
+      ;;
+    hunyuan-game-craft)
+      echo "==> Hunyuan GameCraft: building the pinned released flash-attn package"
+      install_gamecraft_flash_attn "$env_prefix"
       ;;
   esac
 }
@@ -525,6 +552,8 @@ install_dedicated_env() {
   mapfile -t pip_find_links < <(json_array_lines "$spec_json" pip_find_links)
   mapfile -t channels < <(json_array_lines "$spec_json" channels)
   mapfile -t resolved_conda_packages < <(filter_bootstrap_conda_packages "${conda_packages[@]}")
+  local pip_package
+  pip_package="$(bootstrap_pip_package "${conda_packages[@]}")"
   local conda_channel_args=()
   for channel in "${channels[@]}"; do
     conda_channel_args+=(-c "$channel")
@@ -535,15 +564,20 @@ install_dedicated_env() {
   else
     echo "==> ${model_id}: installing ${env_name} at ${env_prefix}"
   fi
+  local installing_marker="${env_prefix}.worldfoundry-installing"
+  local ready_marker="${env_prefix}/.worldfoundry-ready"
   if [[ "$VERIFY_ONLY" != "1" ]]; then
+    mkdir -p "$(dirname "$env_prefix")"
+    touch "$installing_marker"
+    rm -f "$ready_marker"
     if [[ ! -x "$env_prefix/bin/python" ]]; then
-      local create_args=("$CONDA_EXE_PATH" create -y "${conda_channel_args[@]}" -p "$env_prefix" "python=${python_version}" pip)
+      local create_args=("$CONDA_EXE_PATH" create -y "${conda_channel_args[@]}" -p "$env_prefix" "python=${python_version}" "$pip_package")
       if [[ "${#resolved_conda_packages[@]}" -gt 0 ]]; then
         create_args+=("${resolved_conda_packages[@]}")
       fi
       "${create_args[@]}"
     elif [[ -d "$env_prefix/conda-meta" ]]; then
-      local install_args=("$CONDA_EXE_PATH" install -y "${conda_channel_args[@]}" -p "$env_prefix" "python=${python_version}" pip)
+      local install_args=("$CONDA_EXE_PATH" install -y "${conda_channel_args[@]}" -p "$env_prefix" "python=${python_version}" "$pip_package")
       if [[ "${#resolved_conda_packages[@]}" -gt 0 ]]; then
         install_args+=("${resolved_conda_packages[@]}")
       fi
@@ -552,10 +586,12 @@ install_dedicated_env() {
       echo "Existing runtime at ${env_prefix} is not a conda environment. Remove it or choose a different --env-root." >&2
       exit 1
     fi
-    local pip_upgrade_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install)
-    append_pip_index_options pip_upgrade_args
-    pip_upgrade_args+=(--upgrade pip)
-    "${pip_upgrade_args[@]}"
+    if [[ "$pip_package" == "pip" ]]; then
+      local pip_upgrade_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install)
+      append_pip_index_options pip_upgrade_args
+      pip_upgrade_args+=(--upgrade pip)
+      "${pip_upgrade_args[@]}"
+    fi
     if [[ "${#pip_packages[@]}" -gt 0 ]]; then
       local pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
       append_pip_index_options pip_args
@@ -595,6 +631,11 @@ install_dedicated_env() {
     post_install_model_env "$model_id" "$env_prefix"
   fi
   verify_env_imports "$env_prefix" "${validation_imports[@]}"
+  verify_env_runtime_tools "$model_id" "$env_prefix"
+  if [[ "$VERIFY_ONLY" != "1" ]]; then
+    rm -f "$installing_marker" "$env_prefix/.worldfoundry-installing"
+    touch "$ready_marker"
+  fi
 }
 
 install_model_env() {

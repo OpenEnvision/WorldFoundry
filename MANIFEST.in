@@ -5,14 +5,37 @@ include worldfoundry/data/benchmarks/*.md
 recursive-include worldfoundry/data/benchmarks/catalog *.yaml
 recursive-include worldfoundry/data/benchmarks/tasks *.yaml
 recursive-include worldfoundry/data/benchmarks/runtime_profiles *.yaml
-recursive-include worldfoundry/data/benchmarks/assets *.json *.jsonl *.csv *.txt *.md
+recursive-include worldfoundry/data/benchmarks/assets *.json *.jsonl *.csv *.txt *.md *.png
+recursive-include worldfoundry/data/benchmarks/assets/larybench *.yaml
+recursive-include worldfoundry/evaluation/tasks/execution/runners/larybench *.md LICENSE.*
+recursive-include worldfoundry/synthesis/visual_generation/rolling_forcing LICENSE* LEGAL.md UPSTREAM.md
+recursive-include worldfoundry/synthesis/visual_generation/stable_video_infinity LICENSE
+include worldfoundry/synthesis/visual_generation/moverse/UPSTREAM.md
+recursive-include worldfoundry/synthesis/visual_generation/moverse/moverse_runtime *
+recursive-include worldfoundry/synthesis/visual_generation/uni3c/uni3c_runtime *
+recursive-include worldfoundry/synthesis/visual_generation/world_model/mira_wm *.py *.md *.txt LICENSE .worldfoundry_upstream_commit
+recursive-include worldfoundry/evaluation/tasks/execution/runners/physics_iq/official *.py
+recursive-include worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench/MTScore/configs *.json
+include worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/runtime/official/cal_temporal_info.sh
+recursive-include worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench *.yaml *.yml
 recursive-include worldfoundry/evaluation/tasks/execution/runners/fetv/runtime/fetv_eval *.py *.cpp *.cu *.h *.txt *.yaml *.yml *.json
+recursive-include worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer/inference/configs *.yaml *.yml
+recursive-include worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench/dot/configs *.json
+recursive-include worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime/vbench2_beta_long/configs *.yaml *.yml
 recursive-include worldfoundry/evaluation/tasks/execution/runners/vmbench/runtime/official *.py *.sh *.txt *.md *.yaml *.yml *.json
+recursive-include worldfoundry/evaluation/tasks/execution/runners/wbench/runtime/wbench *.yaml *.yml LICENSE LICENSE.*
 recursive-include worldfoundry/evaluation/tasks/execution/runners/world_in_world/runtime/official *.py *.sh *.txt *.md *.yaml *.yml *.json
+recursive-include worldfoundry/evaluation/tasks/execution/runners/worldarena/runtime/video_quality *.yaml *.yml
+recursive-include worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime *.py *.json *.txt *.md LICENSE
 recursive-include worldfoundry/base_models/perception_core/video_text/fetv_blip *.py *.json *.yaml *.yml *.txt
 recursive-include worldfoundry/base_models/perception_core/video_quality/fetv_stylegan_v *.py *.cpp *.cu *.h *.json *.yaml *.yml *.txt
+recursive-include worldfoundry/base_models/three_dimensions/general_3d/vipe/csrc *.cpp *.cu *.h *.cuh
+include worldfoundry/base_models/three_dimensions/general_3d/vipe/LICENSE
+include worldfoundry/base_models/three_dimensions/general_3d/vipe/THIRD_PARTY_LICENSES.md
+include worldfoundry/base_models/three_dimensions/general_3d/vipe/UPSTREAM.md
 recursive-include worldfoundry/data/models/catalog *.yaml
 recursive-include worldfoundry/data/models/runtime *.yaml
+recursive-include worldfoundry/data/models/runtime *.json
 recursive-include worldfoundry/data/models/bindings *.yaml
 recursive-include worldfoundry/data/models/runtime/configs *.yaml
 recursive-include worldfoundry/data/models/runtime/configs *.yml
@@ -20,7 +43,6 @@ recursive-include worldfoundry/data/models/runtime/configs *.json
 recursive-include worldfoundry/data/models/runtime/environments *.yaml
 include worldfoundry/base_models/diffusion_model/video/cosmos3/UPSTREAM*.txt
 recursive-include worldfoundry/base_models/diffusion_model/diffsynth/tokenizer_configs *
-recursive-include worldfoundry/base_models/diffusion_model/video/cosmos3/diffusers_cosmos3/sample_args *.json
 # Keep source distributions reproducible from a dirty development checkout.
 prune tmp
 prune cache

@@ -35,7 +35,7 @@ declare -a FAILED_REPOS=()
 declare -a ACTIVE_PIDS=()
 declare -a ACTIVE_REPOS=()
 
-# group|model_alias|component_key|repo_id
+# group|model_alias|component_key|repo_id|revision(optional)
 MODEL_COMPONENTS=(
     "navigation|matrix-game-2|pretrained_model_path|Skywork/Matrix-Game-2.0"
     "navigation|hunyuan-game-craft|pretrained_model_path|tencent/Hunyuan-GameCraft-1.0"
@@ -51,11 +51,14 @@ MODEL_COMPONENTS=(
     "navigation|vmem|surfel_model_path|liguang0115/cut3r"
     "navigation|neoverse|pretrained_model_path|Yuppie1204/NeoVerse"
     "navigation|lingbot-world|pretrained_model_path|robbyant/lingbot-world-base-cam"
+    "navigation|lingbot-world-v2|pretrained_model_path|robbyant/lingbot-world-v2-14b-causal-fast"
     "video|wan-2.2|pretrained_model_path|Wan-AI/Wan2.2-TI2V-5B"
     "video|wow|pretrained_model_path|WoW-world-model/WoW-1-Wan-14B-600k"
     "video|cosmos-predict-2.5|pretrained_model_path|nvidia/Cosmos-Predict2.5-2B"
     "video|cosmos-predict-2.5|text_encoder_model_path|nvidia/Cosmos-Reason1-7B"
     "video|cosmos-predict-2.5|vae_model_path|Wan-AI/Wan2.1-T2V-1.3B"
+    "video|cosmos3|pretrained_model_path|nvidia/Cosmos3-Nano|411f42a8fdfb8c5b2583cb8786e0938f49796eaa"
+    "video|cosmos3-super|pretrained_model_path|nvidia/Cosmos3-Super|e0262be9d8f7586bc24c069a2aed2b665bdff266"
     "video|recammaster|pretrained_model_path|KlingTeam/ReCamMaster-Wan2.1"
     "video|recammaster|wan_model_path|Wan-AI/Wan2.1-T2V-1.3B"
     "video|inspatio-world|pretrained_model_path|inspatio/world"
@@ -69,6 +72,8 @@ MODEL_COMPONENTS=(
     "video|pusa-vidgen|pretrained_model_path|RaphaelLiu/Pusa-Wan2.2-V1"
     "video|pusa-vidgen|wan_model_path|Wan-AI/Wan2.2-T2V-A14B"
     "video|pusa-vidgen|lightx2v_path|lightx2v/Wan2.2-Lightning"
+    "video|lingbot-video|dense_model_path|robbyant/lingbot-video-dense-1.3b"
+    "video|lingbot-video|moe_model_path|robbyant/lingbot-video-moe-30b-a3b"
     "3d|hy-world-2p0|pretrained_model_path|tencent/HY-World-2.0"
     "3d|depth-anything-v2|pretrained_model_path|depth-anything/Depth-Anything-V2-Large"
     "3d|vggt|representation_path|facebook/VGGT-1B"
@@ -133,9 +138,9 @@ Description:
 
 Selections:
   all                 Download everything (default)
-  navigation          Matrix-Game-2, Hunyuan-GameCraft, Hunyuan-World-Voyager, Astra, YUME-1.5, Infinite-World, WorldCam, VMem, LingBot-World
+  navigation          Matrix-Game-2, Hunyuan-GameCraft, Hunyuan-World-Voyager, Astra, YUME-1.5, Infinite-World, WorldCam, VMem, LingBot-World/V2
                       NeoVerse
-  video               Wan-2.2, WoW, Cosmos-Predict-2.5, ReCamMaster, InSpatio-World, GEN3C, Pusa VidGen
+  video               Wan-2.2, WoW, Cosmos-Predict-2.5, Cosmos3 Nano/Super, ReCamMaster, InSpatio-World, GEN3C, Pusa VidGen, LingBot-Video
   3d                  HY-World-2.0, Depth-Anything-V2, VGGT, Infinite-VGGT, FlashWorld, CUT3R
   video-official      Step-Video-T2V, Open-MAGVIT2, Show-o, AnimateDiff, ZeroScope
   world-official      CameraCtrl, MotionCtrl, DreamDojo, DreamZero
@@ -151,13 +156,17 @@ Selections:
   vmem
   neoverse
   lingbot-world
+  lingbot-world-v2
   wan-2.2
   wow
   cosmos-predict-2.5
+  cosmos3             Cosmos3 Nano (default)
+  cosmos3-super       Cosmos3 Super
   recammaster
   inspatio-world
   gen3c
   pusa-vidgen
+  lingbot-video
   hy-world-2p0
   depth-anything-v2
   vggt
@@ -185,7 +194,10 @@ Options:
 
 Notes:
   - The script uses `hf download` when available and falls back to Python `huggingface_hub.snapshot_download`.
-  - Cosmos and Llama/CogACT repos may require --hf_username plus the HF_TOKEN environment variable.
+  - Cosmos3 Nano/Super generator checkpoints are public. Its default safety checker separately
+    downloads gated nvidia/Cosmos-1.0-Guardrail plus public Qwen/Qwen3Guard-Gen-0.6B at first use,
+    so fresh machines need an approved HF_TOKEN unless safety is explicitly disabled.
+  - Some older Cosmos and Llama/CogACT repos may also require --hf_username plus HF_TOKEN.
   - CogACT needs access to the gated meta-llama/Llama-2-7b-hf backbone in addition to CogACT checkpoints.
   - A manifest is written to <download-root>/model_paths.tsv after selection.
 EOF
@@ -229,41 +241,47 @@ is_selected_record() {
         return 0
     fi
 
+    if [[ "$model_alias" == "cosmos3" ]] && has_selection "cosmos3-nano"; then
+        return 0
+    fi
+
     return 1
 }
 
 print_model_mapping() {
-    local record group model_alias component_key repo_id
-    printf "group\tmodel\tcomponent_key\trepo_id\tlocal_dir\n"
+    local record group model_alias component_key repo_id revision
+    printf "group\tmodel\tcomponent_key\trepo_id\trevision\tlocal_dir\n"
     for record in "${MODEL_COMPONENTS[@]}"; do
-        IFS='|' read -r group model_alias component_key repo_id <<< "$record"
+        IFS='|' read -r group model_alias component_key repo_id revision <<< "$record"
         if ! is_selected_record "$group" "$model_alias"; then
             continue
         fi
-        printf "%s\t%s\t%s\t%s\t%s\n" \
+        printf "%s\t%s\t%s\t%s\t%s\t%s\n" \
             "$group" \
             "$model_alias" \
             "$component_key" \
             "$repo_id" \
+            "${revision:-}" \
             "$(repo_dir "$repo_id")"
     done
 }
 
 write_manifest() {
     local manifest_path="${DOWNLOAD_ROOT}/model_paths.tsv"
-    local record group model_alias component_key repo_id
+    local record group model_alias component_key repo_id revision
 
     mkdir -p "${DOWNLOAD_ROOT}"
     {
-        printf "group\tmodel\tcomponent_key\trepo_id\tlocal_dir\n"
+        printf "group\tmodel\tcomponent_key\trepo_id\trevision\tlocal_dir\n"
         for record in "${MODEL_COMPONENTS[@]}"; do
-            IFS='|' read -r group model_alias component_key repo_id <<< "$record"
+            IFS='|' read -r group model_alias component_key repo_id revision <<< "$record"
             if is_selected_record "$group" "$model_alias"; then
-                printf "%s\t%s\t%s\t%s\t%s\n" \
+                printf "%s\t%s\t%s\t%s\t%s\t%s\n" \
                     "$group" \
                     "$model_alias" \
                     "$component_key" \
                     "$repo_id" \
+                    "${revision:-}" \
                     "$(repo_dir "$repo_id")"
             fi
         done
@@ -271,8 +289,45 @@ write_manifest() {
     echo "${manifest_path}"
 }
 
+record_download_revision() {
+    local repo_id="$1"
+    local revision="$2"
+    local local_dir="$3"
+    [[ -n "$revision" ]] || return 0
+
+    mkdir -p "${local_dir}/.hfd"
+    if [[ -n "${PYTHON_BIN}" ]]; then
+        REPO_ID="$repo_id" REVISION="$revision" LOCAL_DIR="$local_dir" "${PYTHON_BIN}" <<'PY'
+import json
+import os
+from pathlib import Path
+
+metadata_path = Path(os.environ["LOCAL_DIR"]) / ".hfd" / "repo_metadata.json"
+try:
+    payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+except (FileNotFoundError, json.JSONDecodeError, OSError):
+    payload = {}
+payload.update(
+    {
+        "id": os.environ["REPO_ID"],
+        "revision": os.environ["REVISION"],
+        "sha": os.environ["REVISION"],
+        "worldfoundry_pinned_download": True,
+    }
+)
+temporary_path = metadata_path.with_suffix(".json.tmp")
+temporary_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+temporary_path.replace(metadata_path)
+PY
+    else
+        printf '{"id":"%s","revision":"%s","sha":"%s","worldfoundry_pinned_download":true}\n' \
+            "$repo_id" "$revision" "$revision" >"${local_dir}/.hfd/repo_metadata.json"
+    fi
+}
+
 download_repo() {
     local repo_id="$1"
+    local revision="${2:-}"
     local local_dir
     local log_path
     local_dir="$(repo_dir "$repo_id")"
@@ -284,7 +339,7 @@ download_repo() {
         echo "[resume] ${repo_id} at ${local_dir}"
     fi
 
-    echo "[start] ${repo_id} -> ${local_dir}"
+    echo "[start] ${repo_id}${revision:+@${revision}} -> ${local_dir}"
     if [[ -n "${HF_TOKEN}" ]]; then
         export HF_TOKEN
     fi
@@ -295,13 +350,16 @@ download_repo() {
             --repo-type model
             --local-dir "${local_dir}"
         )
+        if [[ -n "$revision" ]]; then
+            cmd+=(--revision "$revision")
+        fi
         env -u all_proxy -u ALL_PROXY "${cmd[@]}" > "${log_path}" 2>&1
     else
         if [[ -z "${PYTHON_BIN}" ]]; then
             echo "No Hugging Face CLI found and PYTHON is unset." > "${log_path}"
             return 1
         fi
-        REPO_ID="${repo_id}" LOCAL_DIR="${local_dir}" "${PYTHON_BIN}" <<'PY' > "${log_path}" 2>&1
+        REPO_ID="${repo_id}" REVISION="${revision}" LOCAL_DIR="${local_dir}" "${PYTHON_BIN}" <<'PY' > "${log_path}" 2>&1
 import os
 from huggingface_hub import snapshot_download
 
@@ -309,10 +367,12 @@ snapshot_download(
     repo_id=os.environ["REPO_ID"],
     repo_type="model",
     local_dir=os.environ["LOCAL_DIR"],
+    revision=os.environ.get("REVISION") or None,
     token=os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None,
 )
 PY
     fi
+    record_download_revision "$repo_id" "$revision" "$local_dir" >>"${log_path}" 2>&1
 }
 
 wait_for_oldest() {
@@ -367,11 +427,12 @@ while (($# > 0)); do
 done
 
 declare -A UNIQUE_REPOS=()
+declare -A REPO_REVISIONS=()
 declare -a ORDERED_REPOS=()
 declare -A SELECTED_MODELS=()
 
 for record in "${MODEL_COMPONENTS[@]}"; do
-    IFS='|' read -r group model_alias component_key repo_id <<< "$record"
+    IFS='|' read -r group model_alias component_key repo_id revision <<< "$record"
     if ! is_selected_record "$group" "$model_alias"; then
         continue
     fi
@@ -379,7 +440,13 @@ for record in "${MODEL_COMPONENTS[@]}"; do
     SELECTED_MODELS["${model_alias}"]=1
     if [[ -z "${UNIQUE_REPOS[${repo_id}]+x}" ]]; then
         UNIQUE_REPOS["${repo_id}"]=1
+        REPO_REVISIONS["${repo_id}"]="${revision:-}"
         ORDERED_REPOS+=("${repo_id}")
+    elif [[ -n "${revision:-}" && -n "${REPO_REVISIONS[${repo_id}]:-}" && "${revision}" != "${REPO_REVISIONS[${repo_id}]}" ]]; then
+        echo "[error] Conflicting pinned revisions for ${repo_id}: ${REPO_REVISIONS[${repo_id}]} vs ${revision}" >&2
+        exit 1
+    elif [[ -n "${revision:-}" ]]; then
+        REPO_REVISIONS["${repo_id}"]="$revision"
     fi
 done
 
@@ -430,11 +497,12 @@ fi
 
 echo "Selected repos:"
 for repo_id in "${ORDERED_REPOS[@]}"; do
-    echo "  - ${repo_id} -> $(repo_dir "${repo_id}")"
+    revision="${REPO_REVISIONS[${repo_id}]:-}"
+    echo "  - ${repo_id}${revision:+@${revision}} -> $(repo_dir "${repo_id}")"
 done
 
 for repo_id in "${ORDERED_REPOS[@]}"; do
-    download_repo "${repo_id}" &
+    download_repo "${repo_id}" "${REPO_REVISIONS[${repo_id}]:-}" &
     ACTIVE_PIDS+=("$!")
     ACTIVE_REPOS+=("${repo_id}")
 

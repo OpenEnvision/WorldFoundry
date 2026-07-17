@@ -21,6 +21,7 @@ token
 # Node
 node_modules/
 .next/
+**/.next.cpfs.bak.*/
 out/
 *.tsbuildinfo
 .turbo/
@@ -87,6 +88,7 @@ playwright-report/
 
 # Runtime outputs and local experiment artifacts
 tmp/
+.runtime/
 # Repo-local runtime cache (OSS default: $HOME/.cache/worldfoundry/{cache,data,models,...})
 /cache/
 /cache*/
@@ -320,6 +322,8 @@ worldfoundry/base_models/three_dimensions/general_3d/four_d_gaussians/four_d_gau
 worldfoundry/base_models/three_dimensions/general_3d/mvdiffusion/mvdiffusion_runtime/assets/
 worldfoundry/data/models/runtime/configs/*/assets/
 worldfoundry/data/models/runtime/configs/*/data/
+worldfoundry/data/models/validation/
+worldfoundry/data/benchmarks/reproduction_profiles/
 worldfoundry/data/test_cases/
 worldfoundry/synthesis/visual_generation/wonderworld/wonderworld_runtime/sky_img/
 worldfoundry/cli/assets/*.png

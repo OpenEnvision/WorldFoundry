@@ -9,18 +9,19 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Sequence
 
+from .help import WorldFoundryArgumentParser
 from .tui_brand import render_fallback_header
 from .tui_discovery import (
     INFER_VARIANT_GROUPS,
     INFER_VARIANT_TO_MODEL,
-    build_model_infer_command,
     build_model_benchmark_command,
-    build_suite_command,
+    build_model_infer_command,
     build_studio_command,
+    build_suite_command,
     format_shell_command,
     infer_control_fields,
     infer_variant_options,
@@ -31,7 +32,7 @@ from .tui_discovery import (
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the ``worldfoundry-tui`` argument parser with inference, evaluation, and Studio flags."""
-    parser = argparse.ArgumentParser(
+    parser = WorldFoundryArgumentParser(
         prog="worldfoundry-tui",
         description="Launch real WorldFoundry model inference, benchmark evaluation, and Studio commands.",
     )

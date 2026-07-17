@@ -31,13 +31,13 @@ repos:
         name: ruff import sort
         id: ruff-check
         args: ["--fix", "--select", "I"]
-        files: ^(worldfoundry/(cli|evaluation|mcp|runtime)|scripts/(benchmark_zoo|dev|docs|model_zoo|qa|tools)|test/eval_core)/.*\.py$
+        files: ^(worldfoundry/(cli|evaluation|mcp|runtime)|scripts/(benchmark_zoo|model_zoo)|test/eval_core)/.*\.py$
       - id: ruff-format
-        files: ^(worldfoundry/(cli|evaluation|mcp|runtime)|scripts/(benchmark_zoo|dev|docs|model_zoo|qa|tools)|test/eval_core)/.*\.py$
+        files: ^(worldfoundry/(cli|evaluation|mcp|runtime)|scripts/(benchmark_zoo|model_zoo)|test/eval_core)/.*\.py$
   - repo: local
     hooks:
       - id: worldfoundry-lightweight-lint
         name: worldfoundry lightweight lint
-        entry: bash -c '${PYTHON:-python3} scripts/dev/check_dev_tools.py --lint'
+        entry: make lint
         language: system
         pass_filenames: false

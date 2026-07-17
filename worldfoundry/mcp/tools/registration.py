@@ -18,14 +18,18 @@ from .discovery import (
     list_models_payload,
     list_tasks_payload,
 )
+from .metrics import list_metrics_payload, show_metric_payload
+from .readiness import check_benchmark_datasets_payload
 from .runs import (
     cancel_run_payload,
     get_run_result_payload,
     get_run_samples_payload,
     get_run_status_payload,
+    list_runs_payload,
     preview_run_payload,
     run_evaluation_payload,
 )
+from .server_info import server_info_payload
 from .studio import (
     get_studio_job_logs_payload,
     get_studio_job_payload,
@@ -49,6 +53,11 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
     """
 
     ctx = context or DEFAULT_CONTEXT
+
+    @mcp.tool()
+    def server_info() -> dict:
+        """Return WorldFoundry MCP server metadata and configured paths."""
+        return server_info_payload(context=ctx)
 
     # ── Discovery tools ──────────────────────────────────────────────────
 
@@ -141,6 +150,44 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
             Task payload dictionary.
         """
         return get_task_info_payload(task, benchmark)
+
+    @mcp.tool()
+    def list_metrics(
+        query: str | None = None,
+        family: str | None = None,
+        tag: str | None = None,
+    ) -> dict:
+        """List registered evaluation metrics, optionally filtered.
+
+        Args:
+            query: Glob or substring filter.
+            family: Exact metric-family filter.
+            tag: Required metric tag.
+        """
+        return list_metrics_payload(query=query, family=family, tag=tag)
+
+    @mcp.tool()
+    def show_metric(metric_id: str) -> dict:
+        """Return metadata for one metric id or alias.
+
+        Args:
+            metric_id: Metric identifier or registered alias.
+        """
+        return show_metric_payload(metric_id)
+
+    @mcp.tool()
+    def check_benchmark_datasets(benchmark_id: str, data_root: str | None = None) -> dict:
+        """Check local dataset readiness for one benchmark.
+
+        Args:
+            benchmark_id: Benchmark catalog identifier.
+            data_root: Optional local dataset cache root.
+        """
+        return check_benchmark_datasets_payload(
+            benchmark_id=benchmark_id,
+            data_root=data_root,
+            context=ctx,
+        )
 
     # ── Run lifecycle tools ──────────────────────────────────────────────
 
@@ -236,6 +283,16 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         )
 
     # ── Run inspection tools ─────────────────────────────────────────────
+
+    @mcp.tool()
+    def list_runs(limit: int = 50, status: str | None = None) -> dict:
+        """List MCP-managed evaluation runs, newest first.
+
+        Args:
+            limit: Maximum runs to return (1–500).
+            status: Optional exact lifecycle-status filter.
+        """
+        return list_runs_payload(limit=limit, status=status, context=ctx)
 
     @mcp.tool()
     async def get_run_status(run_id: str) -> dict:

@@ -9,6 +9,8 @@ blocks.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -23,11 +25,15 @@ class MCPClient:
     Attributes:
         command: Server executable to launch.
         args: Extra arguments passed to the server command.
+        env: Optional complete environment for the server subprocess.
+        cwd: Optional working directory for the server subprocess.
         timeout: Maximum wait time for server responses.
     """
 
     command: str = "worldfoundry-mcp"
     args: tuple[str, ...] = ()
+    env: Mapping[str, str] | None = None
+    cwd: str | None = None
     timeout: timedelta = timedelta(seconds=600)
 
     async def list_tools(self) -> list[Any]:
@@ -108,23 +114,32 @@ class MCPClient:
         except ImportError as exc:
             raise RuntimeError("Install the MCP extra first: pip install 'worldfoundry[mcp]'") from exc
 
-        params = StdioServerParameters(command=self.command, args=self.args)
+        params = StdioServerParameters(
+            command=self.command,
+            args=list(self.args),
+            env=dict(self.env) if self.env is not None else None,
+            cwd=self.cwd,
+        )
         timeout = self.timeout
 
         # NOTE: _SessionContext wraps both the stdio transport and the ClientSession
         # so callers can use ``async with client as session:``.
         class _SessionContext:
             async def __aenter__(self):
-                self._stdio = stdio_client(params)
-                read, write = await self._stdio.__aenter__()
-                self._session = ClientSession(read, write, read_timeout_seconds=timeout)
-                self.session = await self._session.__aenter__()
-                await self.session.initialize()
-                return self.session
+                self._stack = AsyncExitStack()
+                try:
+                    read, write = await self._stack.enter_async_context(stdio_client(params))
+                    self.session = await self._stack.enter_async_context(
+                        ClientSession(read, write, read_timeout_seconds=timeout)
+                    )
+                    await self.session.initialize()
+                    return self.session
+                except BaseException:
+                    await self._stack.aclose()
+                    raise
 
             async def __aexit__(self, exc_type, exc, tb):
-                await self._session.__aexit__(exc_type, exc, tb)
-                await self._stdio.__aexit__(exc_type, exc, tb)
+                return await self._stack.__aexit__(exc_type, exc, tb)
 
         return _SessionContext()
 

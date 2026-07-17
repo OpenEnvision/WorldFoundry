@@ -16,6 +16,7 @@ from typing import Iterable
 
 from rich.syntax import Syntax
 from rich.text import Text
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
@@ -38,7 +39,6 @@ from textual.widgets import (
 from worldfoundry.core.io.paths import checkpoint_root_path, conda_envs_root_path
 
 from .tui_brand import render_brand_logo
-from .tui_icons import icons
 from .tui_discovery import (
     ASTRA_CAM_TYPE_OPTIONS,
     INFER_VARIANT_TO_MODEL,
@@ -46,8 +46,8 @@ from .tui_discovery import (
     BenchmarkCatalogRow,
     InferControlSpec,
     ModelCatalogRow,
-    build_model_infer_command,
     build_model_benchmark_command,
+    build_model_infer_command,
     build_studio_command,
     format_shell_command,
     infer_control_fields,
@@ -59,9 +59,14 @@ from .tui_discovery import (
     load_tui_catalog,
     resolve_infer_model_variant,
 )
-
+from .tui_icons import icons
 
 # ── Module constants ──────────────────────────────────────────────
+
+EVALUATION_INTENT_OPTIONS = (
+    ("Model Benchmark", "model-benchmark"),
+    ("Score Artifact Directory", "score-artifacts"),
+)
 
 DEFAULT_CKPT_ROOT = str(checkpoint_root_path())  # Default checkpoint root directory path.
 DEFAULT_CONDA_ENVS_ROOT = str(conda_envs_root_path())  # Default Conda environments root directory path.
@@ -84,9 +89,11 @@ class WorldFoundryTui(App[None]):
     TITLE = f"{icons['app']} WorldFoundry"
     SUB_TITLE = "Inference · Evaluation · Studio"
     ENABLE_COMMAND_PALETTE = True
+    HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (120, "-wide")]
 
     BINDINGS = [
         ("q", "quit", "Quit"),
+        ("ctrl+q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
         ("c", "copy_command", "Copy cmd"),
         ("p", "preflight", "Preflight"),
@@ -187,6 +194,8 @@ class WorldFoundryTui(App[None]):
         # ── Action mode and evaluation config ──
         self.action = "infer"
         self.eval_metrics = ",".join(_split_csv_values(metrics))
+        self.eval_intent = "model-benchmark"
+        self.eval_artifact_dir = ""
         # ── Inference parameter overrides ──
         self.input_path = "" if input_path is None else str(input_path)
         self.input_dir = "" if input_dir is None else str(input_dir)
@@ -314,12 +323,27 @@ class WorldFoundryTui(App[None]):
                                         yield Label("Mode", id="mode-label", classes="field-caption")
                                         yield Input(value=self.infer_mode, placeholder="mode override", id="mode")
                                 with Vertical(id="eval-controls", classes="field-group"):
-                                    yield Label("Metrics", id="metrics-label", classes="field-caption")
-                                    yield Input(
-                                        value=self.eval_metrics,
-                                        placeholder="artifact_count,required_artifacts_present",
-                                        id="metrics",
+                                    yield Label("Evaluation intent", classes="field-caption")
+                                    yield Select(
+                                        EVALUATION_INTENT_OPTIONS,
+                                        value=self.eval_intent,
+                                        allow_blank=False,
+                                        id="eval-intent",
                                     )
+                                    with Vertical(id="eval-artifact-controls", classes="field-group"):
+                                        yield Label("Artifact directory", classes="field-caption")
+                                        yield Input(
+                                            value=self.eval_artifact_dir,
+                                            placeholder="directory containing generated artifacts",
+                                            id="eval-artifact-dir",
+                                        )
+                                    with Vertical(id="eval-metrics-controls", classes="field-group"):
+                                        yield Label("Metrics", id="metrics-label", classes="field-caption")
+                                        yield Input(
+                                            value=self.eval_metrics,
+                                            placeholder="artifact_count,required_artifacts_present",
+                                            id="metrics",
+                                        )
                                 yield Static(icons["paths_runtime"], classes="section-title", id="section-paths-title")
                                 yield Rule(line_style="heavy", classes="section-rule", id="section-paths-rule")
                                 with Grid(id="path-controls", classes="field-grid"):
@@ -498,6 +522,8 @@ class WorldFoundryTui(App[None]):
         self.query_one("#log-panel", Vertical).border_title = " Execution Log "
         
         self.query_one("#selection-summary", Static).border_title = " Overview "
+        if self.size.width < 120 or self.size.height < 35:
+            self.query_one("#brand-collapse", Collapsible).collapsed = True
         # ── Configure DataTables ──
         for table_id in ("models-table", "benchmarks-table"):
             table = self.query_one(f"#{table_id}", DataTable)
@@ -514,7 +540,8 @@ class WorldFoundryTui(App[None]):
         self._update_command()
         self._write_log(
             f"[bold green]{icons['ready']}[/] · catalog loaded · "
-            "[dim]q[/] quit · [dim]r[/] refresh · [dim]c[/] copy · [dim]Tab[/] / [dim]Shift+Tab[/] navigate"
+            "[dim]Ctrl+Q[/] quit · [dim]r[/] refresh · [dim]c[/] copy · "
+            "[dim]Tab[/] / [dim]Shift+Tab[/] navigate"
         )
         # NOTE: Show font-setup hint if the icon mode needs user intervention
         hint = icons.startup_hint()
@@ -524,8 +551,13 @@ class WorldFoundryTui(App[None]):
         # NOTE: Automatically focus the filter input on startup for smooth keyboard usage
         self.query_one("#filter", Input).focus()
 
-    def on_resize(self) -> None:
+    def on_resize(self, event: events.Resize) -> None:
         """Re-render the brand logo when the terminal size changes."""
+        if event.size.width < 120 or event.size.height < 35:
+            try:
+                self.query_one("#brand-collapse", Collapsible).collapsed = True
+            except NoMatches:
+                pass
         self._sync_brand_logo()
 
     def on_input_changed(self, event: Input.Changed) -> None:
@@ -534,7 +566,11 @@ class WorldFoundryTui(App[None]):
             self._populate_tables(event.value)
             self._collapse_brand()
         elif event.input.id == "output-dir":
-            self.output_dir_touched = True
+            # Initial composition and mode/model changes also assign this
+            # value.  Only preserve it as a user override while the field is
+            # actively focused by the user.
+            if event.input.has_focus:
+                self.output_dir_touched = True
             self._update_command()
         elif event.input.id == "input-path":
             self.input_path = event.value.strip()
@@ -598,6 +634,9 @@ class WorldFoundryTui(App[None]):
             self._update_command()
         elif event.input.id == "metrics":
             self.eval_metrics = event.value.strip()
+            self._update_command()
+        elif event.input.id == "eval-artifact-dir":
+            self.eval_artifact_dir = event.value.strip()
             self._update_command()
         elif event.input.id == "trajectory":
             self.infer_trajectory = event.value.strip()
@@ -666,7 +705,7 @@ class WorldFoundryTui(App[None]):
 
             try:
                 collapse = self.query_one("#brand-collapse", Collapsible)
-                collapse.collapsed = False
+                collapse.collapsed = self.size.width < 120 or self.size.height < 35
             except NoMatches:
                 pass
 
@@ -693,6 +732,18 @@ class WorldFoundryTui(App[None]):
                 return
             self.ckpt_type = ckpt_type
             self._sync_infer_control_layout()
+            self._update_command()
+        elif event.select.id == "eval-intent":
+            intent = _normalize_select_value(
+                event.value,
+                allowed={value for _label, value in EVALUATION_INTENT_OPTIONS},
+            )
+            if intent is None:
+                return
+            self.eval_intent = intent
+            self._sync_action_layout()
+            if not self.output_dir_touched:
+                self.query_one("#output-dir", Input).value = str(self._default_output_dir())
             self._update_command()
         elif event.select.id == "cam-type":
             cam_type = _normalize_select_value(event.value)
@@ -789,12 +840,16 @@ class WorldFoundryTui(App[None]):
 
     def action_refresh(self) -> None:
         """Reload the catalog from disk and re-sync all UI state."""
-        self.catalog = load_tui_catalog(
-            model_manifest_dir=self.model_manifest_dir,
-            benchmark_manifest_dir=self.benchmark_manifest_dir,
-            runtime_profile_dir=self.runtime_profile_dir,
-            conda_envs_root=self.conda_envs_root,
-        )
+        try:
+            self.catalog = load_tui_catalog(
+                model_manifest_dir=self.model_manifest_dir,
+                benchmark_manifest_dir=self.benchmark_manifest_dir,
+                runtime_profile_dir=self.runtime_profile_dir,
+                conda_envs_root=self.conda_envs_root,
+            )
+        except Exception as exc:  # noqa: BLE001 - keep the interactive app alive and surface the failure in its log.
+            self._write_log(f"Catalog refresh failed: {type(exc).__name__}: {exc}")
+            return
         self.model_rows = list(self.catalog.models)
         self.benchmark_rows = list(self.catalog.benchmarks)
         visible_model_ids = {row.model_id for row in self.model_rows if self._model_visible_for_action(row)}
@@ -838,6 +893,7 @@ class WorldFoundryTui(App[None]):
 
     def action_show_artifacts(self) -> None:
         """List recent output artifacts from the current output directory."""
+        self._show_artifacts()
 
     def _run_preflight(self) -> None:
         """Log a preflight summary of paths, environment, and readiness checks."""
@@ -950,8 +1006,12 @@ class WorldFoundryTui(App[None]):
         if self.action == "eval":
             bench = self.selected_benchmark_id or "-"
             variant = ""
-            catalog = f"{visible_models} models · {visible_benchmarks} benchmarks"
-            body = f"[bold cyan]{model}[/]  [dim]→[/]  [bold magenta]{bench}[/]"
+            if self.eval_intent == "score-artifacts":
+                catalog = f"{visible_benchmarks} benchmarks"
+                body = f"[bold cyan]Artifact directory[/]  [dim]→[/]  [bold magenta]{bench}[/]"
+            else:
+                catalog = f"{visible_models} models · {visible_benchmarks} benchmarks"
+                body = f"[bold cyan]{model}[/]  [dim]→[/]  [bold magenta]{bench}[/]"
         elif self.action == "infer":
             variant = self._selected_ckpt_type_label()
             variant_part = f"  [dim]·[/]  [bold yellow]{variant}[/]" if variant else ""
@@ -992,8 +1052,9 @@ class WorldFoundryTui(App[None]):
             self.query_one("#conda-status", Static).update(self._conda_status_text())
 
             if self.action == "eval":
+                eval_source = "artifacts" if self.eval_intent == "score-artifacts" else self.selected_model_id or "-"
                 self.query_one("#selection-status", Static).update(
-                    icons.status_eval(self.selected_model_id or "-", self.selected_benchmark_id or "-")
+                    icons.status_eval(eval_source, self.selected_benchmark_id or "-")
                 )
             elif self.action == "infer":
                 ckpt_type = self._selected_ckpt_type_label()
@@ -1102,15 +1163,23 @@ class WorldFoundryTui(App[None]):
             output_dir=self.query_one("#output-dir", Input).value or self._default_output_dir(),
             model_manifest_dir=self.model_manifest_dir,
             benchmark_manifest_dir=self.benchmark_manifest_dir,
+            generated_artifact_dir=(
+                _blank_to_none(self.query_one("#eval-artifact-dir", Input).value)
+                if self.eval_intent == "score-artifacts"
+                else None
+            ),
             metrics=_split_csv_values([self.query_one("#metrics", Input).value]),
         )
 
     def _command_text(self) -> str:
         """Return a human-readable shell command string, or a selection prompt if IDs are missing."""
-        if self.action != "ui" and not self.selected_model_id:
+        model_required = self.action != "eval" or self.eval_intent == "model-benchmark"
+        if self.action != "ui" and model_required and not self.selected_model_id:
             return "Select a model."
         if self.action == "eval" and not self.selected_benchmark_id:
-            return "Select a model and benchmark."
+            return "Select a benchmark."
+        if self.action == "eval" and self.eval_intent == "score-artifacts" and not self.eval_artifact_dir:
+            return "Select an artifact directory."
         try:
             return format_shell_command(self._command())
         except ValueError as exc:
@@ -1143,8 +1212,13 @@ class WorldFoundryTui(App[None]):
         if self.action == "infer":
             lines.extend(self._infer_preflight_lines())
         elif self.action == "eval":
-            metrics = _split_csv_values([self.query_one("#metrics", Input).value])
-            lines.append(f"  metrics: {', '.join(metrics) if metrics else 'default'}")
+            if self.eval_intent == "score-artifacts":
+                artifact_dir = _blank_to_none(self.query_one("#eval-artifact-dir", Input).value)
+                lines.append(_path_status("artifacts", Path(artifact_dir).expanduser() if artifact_dir else None))
+                lines.append("  metrics: complete benchmark protocol")
+            else:
+                metrics = _split_csv_values([self.query_one("#metrics", Input).value])
+                lines.append(f"  metrics: {', '.join(metrics) if metrics else 'default'}")
         else:
             lines.append("  studio: launches the local Studio server")
         return tuple(lines)
@@ -1190,6 +1264,8 @@ class WorldFoundryTui(App[None]):
             return self.base_output_dir / "infer"
         if self.action == "ui":
             return self.base_output_dir / "ui"
+        if self.eval_intent == "score-artifacts" and self.selected_benchmark_id:
+            return self.base_output_dir / f"artifacts__{self.selected_benchmark_id}"
         if not self.selected_model_id or not self.selected_benchmark_id:
             return self.base_output_dir
         return self.base_output_dir / f"{self.selected_model_id}__{self.selected_benchmark_id}"
@@ -1237,6 +1313,10 @@ class WorldFoundryTui(App[None]):
                     await process.wait()
             self._write_log("Run cancelled.")
             raise
+        except OSError as exc:
+            self._write_log(f"Unable to start command: {type(exc).__name__}: {exc}")
+        except Exception as exc:  # noqa: BLE001 - report unexpected runner failures without crashing the TUI.
+            self._write_log(f"Run failed: {type(exc).__name__}: {exc}")
         finally:
             self.running_process = None
             self.running_task = None
@@ -1598,18 +1678,19 @@ class WorldFoundryTui(App[None]):
 
     def _brand_logo_width(self) -> int:
         """Compute an appropriate Braille-art logo width constrained by terminal size and aspect ratio."""
-        
+
         # NOTE: The cropped logo's bounding box is roughly 921×713 pixels.
         aspect = 921 / 713
-        
+
         # Determine maximum acceptable height in rows — never so large that
         # the CSS/Textual layout engine gets confused.
         max_rows = max(18, int(self.size.height * 0.35))
-        
+
         # A width of ~60 chars yields ~23 rows of Braille art.
         max_width = int(max_rows * 2 * aspect)
-        
+
         # NOTE: Render width is constrained by available terminal width and our max height allowance.
+        available = max(40, int(self.size.width * 0.4) - 8)
         render_width = max(40, min(available, max_width, 80))
         return render_width
 
@@ -1651,12 +1732,19 @@ class WorldFoundryTui(App[None]):
     def _sync_action_layout(self) -> None:
         """Toggle the benchmarks pane visibility and update filter placeholder based on action."""
         show_benchmarks = self.action == "eval"
+        score_artifacts = show_benchmarks and self.eval_intent == "score-artifacts"
         try:
             self.query_one("#benchmarks-pane", Vertical).display = show_benchmarks
+            self.query_one("#models-pane", Vertical).display = not score_artifacts
             filter_input = self.query_one("#filter", Input)
         except NoMatches:
             return
-        filter_input.placeholder = "Filter models and benchmarks" if show_benchmarks else "Filter models"
+        if score_artifacts:
+            filter_input.placeholder = "Filter benchmarks"
+        else:
+            filter_input.placeholder = "Filter models and benchmarks" if show_benchmarks else "Filter models"
+        self._set_group_visible("eval-artifact-controls", score_artifacts)
+        self._set_group_visible("eval-metrics-controls", show_benchmarks and not score_artifacts)
         self._sync_action_theme()
         self._sync_action_select()
         self._sync_infer_control_layout()
@@ -1916,6 +2004,7 @@ def _path_status(label: str, path: Path | None, *, require_exists: bool = True) 
 
 def _looks_like_remote_id(value: str) -> bool:
     """Heuristic check for whether *value* looks like a remote model reference (HuggingFace repo ID or URL)."""
+    path = Path(value).expanduser()
     if path.exists() or path.is_absolute() or value.startswith("."):
         return False
     if "://" in value:
@@ -1943,11 +2032,12 @@ def _looks_like_remote_id(value: str) -> bool:
 def _format_file_artifact(path: Path, *, root: Path | None = None) -> str:
     """Format a file artifact entry with its relative path and human-readable size."""
     label = str(path.relative_to(root)) if root is not None else str(path)
-    return f"{label} ({_human_bytes(stat.st_size)})"
+    return f"{label} ({_human_bytes(path.stat().st_size)})"
 
 
 def _human_bytes(size: int) -> str:
     """Convert a byte count to a human-readable string (e.g. ``"1.2GiB"``)."""
+    value = float(size)
     for unit in ("B", "KiB", "MiB", "GiB"):
         if value < 1024.0 or unit == "GiB":
             return f"{value:.1f}{unit}" if unit != "B" else f"{int(value)}B"
@@ -1957,6 +2047,7 @@ def _human_bytes(size: int) -> str:
 
 def _looks_like_media_file(path: str) -> bool:
     """Return whether *path* has an image or video file extension."""
+    suffix = Path(path).suffix.casefold()
     return suffix in {
         ".jpg",
         ".jpeg",
@@ -1974,3 +2065,4 @@ def _looks_like_media_file(path: str) -> bool:
 
 def _looks_like_video_file(path: str) -> bool:
     """Return whether *path* has a video file extension."""
+    return Path(path).suffix.casefold() in {".mp4", ".mov", ".avi", ".mkv", ".webm"}
