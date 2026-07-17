@@ -34,7 +34,8 @@ metadata:
     verified: true
     dimension: Diversity
     generated_video_count: 20
-    official_benchmark_verified: true
+    official_component_verified: true
+    official_benchmark_verified: false
     integration_evidence: true
     full_suite_verified: false
     leaderboard_valid: false
@@ -103,12 +104,14 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
+    runtime_verification_scope: bounded_diversity_dimension
+    full_suite_verified: false
     evidence:
       dimension: Diversity
       generated_video_count: 20
       full_suite_verified: false
     normalizer_verified: false
-    surface: official_runner
+    surface: bounded_official_gpu_validation
   validation_command:
   - ${WORLDFOUNDRY_UNIFIED_PYTHON}
   - worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py

@@ -144,9 +144,12 @@ def _scorecard(
         and len(available_rows) == len(METRIC_ORDER)
     )
     normalization_ok = bool(available_rows)
-    official_verified = official_runtime_executed and normalization_ok
-    integration_evidence = official_verified and full_suite_valid
-    normalizer_only = not official_runtime_executed and not integration_evidence
+    # The adapter can normalize MiraBench output (and supports a CI mock), but
+    # it does not yet establish that the full official checkpoint/runtime
+    # protocol completed.  Do not promote adapter success to official evidence.
+    official_verified = False
+    integration_evidence = False
+    normalizer_only = True
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "official_benchmark_verified": official_verified,
@@ -176,7 +179,7 @@ def _scorecard(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "mirabench_official_in_tree" if official_runtime_executed else "mirabench_result_normalizer",
+            "kind": "mirabench_result_normalizer",
             "blocked_count": len(METRIC_ORDER) - len(available_rows),
         },
         "artifacts": {

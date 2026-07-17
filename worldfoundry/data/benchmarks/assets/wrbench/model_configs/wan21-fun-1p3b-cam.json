@@ -1,0 +1,27 @@
+{
+  "adapter": "wan_fun",
+  "aliases": [
+    "wan21-fun-1p3b-cam"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.8,
+    "rotation_gain": 1.0,
+    "translation_gain": 2.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "image",
+  "key": "wan21-fun-1p3b-cam",
+  "notes": "Wan 2.1 Fun 1.3B CameraCtrl variant; same adapter as 14B.",
+  "payload_type": "wan_fun_pose_txt",
+  "status": "active"
+}

@@ -13,7 +13,7 @@ modalities:
 - video
 status: official_runtime_start_ready
 open_source_status: experimental
-official_benchmark_verified: true
+official_benchmark_verified: false
 integration_evidence: true
 leaderboard_valid: false
 alpha_readiness:
@@ -160,7 +160,7 @@ runner:
       eval_type: close
       generated_video_count: 2
       metrics_available: 1
-      official_benchmark_verified: true
+      official_benchmark_verified: false
       official_component_verified: true
       integration_evidence: true
       leaderboard_valid: false
@@ -181,7 +181,7 @@ integration:
     UMTScore, and official submission protocol.
   - WorldFoundry keeps leaderboard_valid false until those full-result fields are present and non-placeholder.
   evidence:
-    official_benchmark_verified: true
+    official_benchmark_verified: false
     integration_evidence: true
 release_status: experimental
 maturity: contract_ready
@@ -219,7 +219,7 @@ official_gpu_validation:
   eval_type: close
   generated_video_count: 2
   metrics_available: 1
-  official_benchmark_verified: true
+  official_benchmark_verified: false
   official_component_verified: true
   integration_evidence: true
   leaderboard_valid: false

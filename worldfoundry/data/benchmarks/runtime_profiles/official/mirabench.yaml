@@ -2,7 +2,7 @@ benchmark_ids:
 - mirabench
 blocked_reason: AMT, ViCLIP, MUSIQ, FVD/FID/KID, 3D consistency assets, generated videos, and full upstream scorer
   execution remain full-suite blockers.
-environment_id: worldplay-mirabench-contract
+environment_id: worldfoundry-unified-cu128
 id: mirabench
 name: MiraBench
 needs_new_env: false
@@ -24,11 +24,11 @@ required_assets:
   bundled_asset_paths:
   - worldfoundry/data/benchmarks/assets/mirabench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/mirabench.yaml
-required_env:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-- WORLDFOUNDRY_MIRABENCH_RESULTS_PATH
+required_env: []
 optional_env:
 - WORLDFOUNDRY_MIRABENCH_ROOT
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- WORLDFOUNDRY_MIRABENCH_RESULTS_PATH
 required_imports:
 - numpy
 required_packages:
@@ -43,7 +43,7 @@ required_paths:
 - id: bundled_assets
   path: worldfoundry/data/benchmarks/assets/mirabench
 requires_cuda_visibility: false
-status: in_tree_official_runtime_ready_full_upstream_pending
+status: in_tree_result_normalizer_ready_full_upstream_runtime_pending
 base_model_dependencies:
 - video_quality_dino_motion_stack
 base_model_dependency_preflight:

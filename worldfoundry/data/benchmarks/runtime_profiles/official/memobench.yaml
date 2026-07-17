@@ -1,7 +1,7 @@
 benchmark_ids:
 - memobench
 blocked_reason: MemoBench normalizer and Step 1 entrypoint are integrated; full leaderboard parity still requires complete dataset assets, generated frames, SAM-3 for ORS, and Gemini or compatible VLM credentials for VQA.
-environment_id: worldplay-memobench-contract
+environment_id: worldfoundry-unified-cu128
 id: memobench
 name: MemoBench
 needs_new_env: false
@@ -17,10 +17,10 @@ required_assets:
   in_tree_runtime_paths:
   - worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/memobench.yaml
-required_env:
-- WORLDFOUNDRY_MEMOBENCH_RESULTS_PATH
+required_env: []
 optional_env:
 - WORLDFOUNDRY_MEMOBENCH_ROOT
+- WORLDFOUNDRY_MEMOBENCH_RESULTS_PATH
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_MEMOBENCH_GENERATED_SYNTHETIC_DIR
 - WORLDFOUNDRY_MEMOBENCH_GENERATED_REAL_DIR
@@ -39,7 +39,7 @@ required_paths:
 - id: in_tree_runtime_root
   path: worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench
 requires_cuda_visibility: false
-status: in_tree_official_runtime_ready_full_upstream_pending
+status: in_tree_step1_metric_runtime_ready_full_protocol_pending
 base_model_dependencies:
 - video_quality_dino_motion_stack
 optional_imports:

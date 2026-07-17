@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
+
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
@@ -17,15 +18,9 @@ def package_root() -> Path:
     return PACKAGE_ROOT
 
 
-def _ensure_mid() -> None:
-    root = str(PACKAGE_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
 @lru_cache(maxsize=1)
 def _compute_pmi_fn() -> Any:
-    _ensure_mid()
+    prepend_import_path(PACKAGE_ROOT)
     from mid_core import _compute_pmi
 
     return _compute_pmi

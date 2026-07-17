@@ -5,7 +5,7 @@ benchmark_kind:
 - action-control
 - camera-control
 - memory
-status: bounded_official_memory_metric_unified_verified_full_suite_pending
+status: official_runtime_ready_real_data_validation_pending
 official_sources:
   project_page: https://iworld-bench.com/
   github:
@@ -111,7 +111,7 @@ runner:
     worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py --run-official
     --generated-videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --metric
     "${WORLDFOUNDRY_IWORLD_BENCH_METRIC:-memory}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
-  verification_status: verified
+  verification_status: official_runtime_ready_real_data_validation_pending
   runtime:
     kind: in_tree_official_runner
     root_env: WORLDFOUNDRY_IWORLD_BENCH_ROOT
@@ -126,8 +126,8 @@ runner:
   - upstream_command.json
   notes:
   - Official runner wrapper normalizes iWorld-Bench report CSV/JSON outputs into WorldFoundry scorecards.
-  - Full official execution requires generated videos, bundled or user-supplied dataset metadata, and the WorldFoundry
-    VBench/VIPe checkpoint assets.
+  - Full official execution requires generated videos, dataset metadata, VBench assets, and a compatible compiled VIPe
+    runtime; the bounded pixel-only `memory` component does not require VIPe.
 integration:
   status: integrated
   limitations:
@@ -138,7 +138,7 @@ release_status: experimental
 maturity: verified_runner
 open_source_status: experimental
 official_benchmark_verified: false
-integration_evidence: false
+integration_evidence: true
 leaderboard_valid: false
 requires:
 - In-tree iWorld-Bench metric runtime, or optional WORLDFOUNDRY_IWORLD_BENCH_ROOT override
@@ -146,7 +146,8 @@ requires:
 - Generated videos for the requested task split
 - WorldFoundry VBench and VIPe runtime assets for full official execution beyond bounded memory metric
 blockers:
-- Full official GPU execution beyond the bounded memory metric requires the WorldFoundry VIPe and VBench checkpoint assets.
+- Full official GPU execution beyond the bounded memory metric requires VBench assets and a CUDA/Torch-compatible
+  VIPe extension build; the current vendored VIPe tree does not contain the native extension sources.
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/iworld-bench.yaml
   official_repo: https://github.com/EmbodiedCity/iWorld-Bench
@@ -158,15 +159,15 @@ runner_availability:
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
-  surface: bounded_official_memory_metric
+  surface: bounded_official_memory_component
   normalizer_verified: false
 official_gpu_validation:
-  status: verified
-  scope: bounded_official_memory_metric
+  status: passed_real_data_bounded
+  scope: official_memory_component_one_real_video
   metric: memory
-  generated_video_count: 2
+  generated_video_count: 1
   metrics_available: 2
-  official_benchmark_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false

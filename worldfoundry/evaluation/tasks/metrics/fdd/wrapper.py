@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import os
-import sys
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
@@ -12,6 +11,8 @@ from typing import Any
 
 import numpy as np
 from scipy.linalg import sqrtm
+
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 VENDOR_ROOT = PACKAGE_ROOT / "vendor"
@@ -21,15 +22,9 @@ def package_root() -> Path:
     return PACKAGE_ROOT
 
 
-def _ensure_fdd_vendor() -> None:
-    root = str(VENDOR_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
 @lru_cache(maxsize=1)
 def _dae_classes() -> tuple[Any, Any]:
-    _ensure_fdd_vendor()
+    prepend_import_path(VENDOR_ROOT)
     from DAE.model import AutoEncoder, AutoEncoderConfig
 
     return AutoEncoder, AutoEncoderConfig

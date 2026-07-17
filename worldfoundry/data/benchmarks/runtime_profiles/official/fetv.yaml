@@ -1,8 +1,8 @@
 benchmark_ids:
 - fetv
-blocked_reason: FETV-EVAL source is vendored in tree; full leaderboard recomputation still requires generated artifacts,
-  reference frame assets, and metric model packages.
-environment_id: worldplay-video-normalizer
+blocked_reason: The bounded official CLIPScore path is verified; full leaderboard recomputation still requires all 619
+  generated artifacts, reference frame assets, and BLIP/FID/FVD metric packages.
+environment_id: worldfoundry-unified-cu128
 id: fetv
 name: FETV
 needs_new_env: false
@@ -10,6 +10,8 @@ notes:
 - In-tree official runtime vendors the FETV-EVAL CLIP/FID scorer glue; BLIP retrieval and StyleGAN-V FVD source are
   reused from worldfoundry/base_models.
 - The runner can also normalize caller-provided CSV/JSON/JSONL/TSV outputs and FETV-EVAL result directories.
+- The standard video artifact bridge and the official CLIPScore component were executed on one real sample; this is
+  integration evidence, not a full-suite or leaderboard claim.
 - This profile does not claim leaderboard validity until the full upstream scorer is executed on official generated
   artifacts.
 base_model_dependency_preflight:
@@ -21,10 +23,10 @@ base_model_dependencies:
 - video_quality_motion_stack
 - fetv_blip_retrieval_source
 - fetv_stylegan_v_fvd_source
-preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python -m
+preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile fetv --manifest
   worldfoundry/data/benchmarks/runtime_profiles/official/fetv.yaml --output-dir tmp/worldfoundry_preflight/fetv --json
-python_path: ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 required_assets:
   local_dataset_paths:
   - cache/worldfoundry/data/hfd_datasets/lyx97__FETV
@@ -44,6 +46,14 @@ optional_env:
 - WORLDFOUNDRY_FETV_RESULTS_PATH
 - WORLDFOUNDRY_FETV_FID_REAL_VIDEO_DIR
 - WORLDFOUNDRY_FETV_FVD_REAL_VIDEO_DIR
+required_imports:
+- torch
+- torchvision
+- PIL
+- numpy
+- tqdm
+- clip
+- torchmetrics
 required_paths:
 - id: official_runner_script
   path: worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py
@@ -61,16 +71,11 @@ required_paths:
   path: worldfoundry/base_models/perception_core/video_quality/fetv_stylegan_v/src/scripts/calc_metrics_for_dataset.py
 - id: fetv_blip_retrieval
   path: worldfoundry/base_models/perception_core/video_text/fetv_blip/models/blip_retrieval.py
-requires_cuda_visibility: false
-status: in_tree_official_source_integrated_full_metric_assets_pending
+requires_cuda_visibility: true
+status: bounded_official_clipscore_verified
 optional_imports:
-- numpy
 - cv2
 - decord
-- torch
-- torchvision
-- clip
-- torchmetrics
 - cleanfid
 - omegaconf
 - scipy

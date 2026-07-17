@@ -1,13 +1,13 @@
-import os
-import sys
-import json
 import argparse
 import importlib
-import time
-from pathlib import Path
-from typing import Dict, List, Any
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import os
+import sys
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Any, Dict, List
 
 AdaptiveQAGenerator = None
 
@@ -232,6 +232,31 @@ def create_single_video_item(model_name: str, video_path: str, prompt: str = "")
     }
 
 
+def validate_video_inputs(model_items: List[Dict[str, Any]]) -> None:
+    """Fail closed when a declared benchmark video cannot yield one frame."""
+    import cv2
+
+    video_paths = [
+        str(video_path)
+        for item in model_items
+        for video_path in (item.get("video_list", []) or [])
+    ]
+    if not video_paths:
+        raise ValueError("4DWorldBench input contains no generated videos")
+    for video_path in video_paths:
+        path = Path(video_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"4DWorldBench video not found: {path}")
+        capture = cv2.VideoCapture(str(path))
+        try:
+            opened = capture.isOpened()
+            readable, _ = capture.read() if opened else (False, None)
+        finally:
+            capture.release()
+        if not opened or not readable:
+            raise ValueError(f"4DWorldBench could not decode a frame from video: {path}")
+
+
 def ensure_questions_for_dimension(dimension: str, qa_dir: str, source_caption_json: str) -> str:
     os.makedirs(qa_dir, exist_ok=True)
     out_path = os.path.join(qa_dir, f"{dimension}.json")
@@ -264,7 +289,7 @@ def auto_generate_questions_if_needed(json_file_path: str, dimension: str) -> bo
 
     try:
         generator_cls = _load_adaptive_qa_generator()
-    except ImportError as exc:
+    except ImportError:
         print("Question generator unavailable, skipping automatic question generation")
         return False
 
@@ -444,7 +469,7 @@ def main():
             return 2
         
         model_items = [create_single_video_item(args.model, args.video_path, args.prompt)]
-        print(f"[4dworldbench] Single video evaluation mode")
+        print("[4dworldbench] Single video evaluation mode")
         print(f"  - Model: {args.model}")
         print(f"  - Video: {args.video_path}")
         print(f"  - Dimension: {args.dimension}")
@@ -466,6 +491,10 @@ def main():
         if args.prompt:
             for it in model_items:
                 it["prompt"] = args.prompt
+
+    # A corrupt/unreadable input previously reached several metric scripts as
+    # an empty frame list and was silently normalized to 0.0.
+    validate_video_inputs(model_items)
 
     # Use the canonical metric id for module dispatch and normalized outputs.
     requested_dimension = args.dimension

@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
-from worldfoundry.runtime import resolve_hf_cache_dir
+from worldfoundry.runtime.env import resolve_hf_cache_dir
 from worldfoundry.runtime.assets import (
     expand_worldfoundry_path,
     iter_manifest_asset_items,

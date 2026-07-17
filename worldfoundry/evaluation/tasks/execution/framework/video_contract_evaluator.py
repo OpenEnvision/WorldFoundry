@@ -19,6 +19,7 @@ from worldfoundry.core.io.serialization import write_json, write_jsonl
 from worldfoundry.core.time import utc_now_iso
 from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION
 
+from worldfoundry.evaluation.tasks.execution.framework.io import optional_float
 from worldfoundry.evaluation.tasks.execution.framework.official_result_scoring import OfficialMetricScore
 
 
@@ -498,7 +499,7 @@ def _ffprobe_metadata(payload: str) -> dict[str, JsonValue]:
     streams = data.get("streams") if isinstance(data, Mapping) else None
     stream = streams[0] if isinstance(streams, list) and streams and isinstance(streams[0], Mapping) else {}
     fps = _rate_value(stream.get("avg_frame_rate"))
-    duration = _float_value(stream.get("duration"))
+    duration = optional_float(stream.get("duration"))
     frame_count = _int_value(stream.get("nb_frames"))
     if duration is None and frame_count is not None and fps not in (None, 0):
         duration = frame_count / fps
@@ -528,16 +529,6 @@ def _rate_value(value: JsonValue) -> float | None:
     return float(text)
 
 
-def _float_value(value: JsonValue) -> float | None:
-    """Convert numeric metadata to float when present.
-
-    Args:
-        value: Raw numeric value.
-    """
-
-    return None if value in (None, "") else float(value)
-
-
 def _int_value(value: JsonValue) -> int | None:
     """Convert numeric metadata to int when present.
 
@@ -545,7 +536,8 @@ def _int_value(value: JsonValue) -> int | None:
         value: Raw numeric value.
     """
 
-    return None if value in (None, "") else int(float(value))
+    numeric = optional_float(value)
+    return None if numeric is None else int(numeric)
 
 
 def _readability_row(samples: list[Mapping[str, JsonValue]], probes: list[Mapping[str, JsonValue]]) -> dict[str, JsonValue]:
@@ -639,10 +631,12 @@ def _value_in_bounds(value: float, constraints: Mapping[str, JsonValue], field: 
         field: Base field name such as fps or width.
     """
 
-    expected = _float_value(constraints.get(f"expected_{field}", constraints.get(field)))
-    tolerance = _float_value(constraints.get(f"{field}_tolerance", constraints.get(f"{field}_tolerance_seconds", 0.0))) or 0.0
-    minimum = _float_value(constraints.get(f"min_{field}"))
-    maximum = _float_value(constraints.get(f"max_{field}"))
+    expected = optional_float(constraints.get(f"expected_{field}", constraints.get(field)))
+    tolerance = optional_float(
+        constraints.get(f"{field}_tolerance", constraints.get(f"{field}_tolerance_seconds", 0.0))
+    ) or 0.0
+    minimum = optional_float(constraints.get(f"min_{field}"))
+    maximum = optional_float(constraints.get(f"max_{field}"))
     expected_ok = True if expected is None else abs(value - expected) <= tolerance
     minimum_ok = True if minimum is None else value >= minimum
     maximum_ok = True if maximum is None else value <= maximum

@@ -29,23 +29,31 @@ def _normalized_preference_label(value: str | None) -> str | None:
     if value is None:
         return None
     text = re.sub(r"\s+", "", value.strip().lower())
+    if text.startswith("[[") and text.endswith("]]"):
+        text = text[2:-2]
+    text = text.replace(">>", ">")
     return {
         "a>b": "a>b",
+        "leftvote": "a>b",
         "left>right": "a>b",
         "leftisbetter": "a>b",
         "a": "a>b",
         "left": "a>b",
         "b>a": "b>a",
+        "rightvote": "b>a",
         "right>left": "b>a",
         "rightisbetter": "b>a",
         "b": "b>a",
         "right": "b>a",
         "a=b=good": "a=b=good",
+        "tievote": "a=b=good",
         "tiegood": "a=b=good",
         "bothgood": "a=b=good",
         "a=b=bad": "a=b=bad",
+        "bothbad_vote": "a=b=bad",
         "tiebad": "a=b=bad",
         "bothbad": "a=b=bad",
+        "a=b": "tie",
         "tie": "tie",
         "equal": "tie",
     }.get(text)
@@ -68,23 +76,65 @@ def _normalized_task(value: str | None) -> str | None:
     }.get(text, text or None)
 
 
-def evaluate_genai_preference_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    pairs: list[dict[str, str]] = []
+def evaluate_genai_preference_rows(
+    rows: list[dict[str, Any]],
+    *,
+    default_task: str | None = None,
+) -> dict[str, Any]:
+    pairs: list[dict[str, Any]] = []
     for row in rows:
         label = _normalized_preference_label(
-            _first_text(row, ("human_label", "human_preference", "label", "preference", "winner", "answer", "ground_truth"))
+            _first_text(
+                row,
+                (
+                    "human_label",
+                    "human_preference",
+                    "human_vote",
+                    "label",
+                    "preference",
+                    "winner",
+                    "answer",
+                    "ground_truth",
+                ),
+            )
         )
         prediction = _normalized_preference_label(
-            _first_text(row, ("prediction", "model_prediction", "judge_prediction", "predicted_label", "output", "response"))
+            _first_text(
+                row,
+                (
+                    "prediction",
+                    "model_prediction",
+                    "model_vote",
+                    "judge_prediction",
+                    "predicted_label",
+                    "output",
+                    "response",
+                ),
+            )
         )
-        task = _normalized_task(_first_text(row, ("task", "task_name", "split", "modality", "category")))
+        task = _normalized_task(
+            _first_text(row, ("task", "task_name", "split", "modality", "category")) or default_task
+        )
         if label is not None and prediction is not None:
-            pairs.append({"label": label, "prediction": prediction, "task": task or "unknown"})
-    correct = sum(1 for row in pairs if row["label"] == row["prediction"])
+            official_correct = row.get("correct")
+            is_correct = (
+                official_correct
+                if isinstance(official_correct, bool)
+                else label == prediction or (prediction == "tie" and label in {"a=b=good", "a=b=bad"})
+            )
+            pairs.append(
+                {
+                    "label": label,
+                    "prediction": prediction,
+                    "task": task or "unknown",
+                    "correct": is_correct,
+                }
+            )
+    correct = sum(1 for row in pairs if row["correct"])
     per_task: dict[str, dict[str, float | int]] = {}
     for task in sorted({row["task"] for row in pairs}):
         task_rows = [row for row in pairs if row["task"] == task]
-        task_correct = sum(1 for row in task_rows if row["label"] == row["prediction"])
+        task_correct = sum(1 for row in task_rows if row["correct"])
         per_task[task] = {
             "accuracy": task_correct / len(task_rows) if task_rows else 0.0,
             "num_correct": task_correct,

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -34,9 +33,21 @@ class WorkspaceRunnerSpec:
     generated_arg: str | None = "--generated-video-dir"
     dataset_root_arg: str | None = None
     dataset_manifest_arg: str | None = None
+    prompt_manifest_arg: str | None = None
+    answer_manifest_arg: str | None = None
     metric_arg: str | None = None
     dimension_arg: str | None = None
+    limit_arg: str | None = None
+    split_arg: str | None = None
+    phase_arg: str | None = None
+    benchmark_id_arg: str | None = None
+    model_arg: str | None = None
+    # Parser shape and actual capability are intentionally separate.  Some
+    # result importers expose a historical --run-official flag without having
+    # an evaluator that consumes caller-generated media.
     supports_run_official: bool = True
+    supports_official_runtime: bool = False
+    accepts_generated_artifacts: bool = False
     default_run_official: bool = False
     supports_fixture: bool = False
     default_metrics: tuple[str, ...] = ()
@@ -51,11 +62,14 @@ CLI_RUNNERS: dict[str, WorkspaceRunnerSpec] = {
         dimension_arg="--dimension",
         dataset_manifest_arg="--dataset-json",
         default_metrics=("perceptual_clip_iqa_metrics",),
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "aigcbench": WorkspaceRunnerSpec(
         "aigcbench",
         "worldfoundry.evaluation.tasks.execution.runners.aigcbench.run_aigcbench_official_runner",
-        generated_arg="--generated-artifact-dir",
+        generated_arg=None,
+        limit_arg="--limit",
     ),
     "camerabench": WorkspaceRunnerSpec(
         "camerabench",
@@ -71,55 +85,89 @@ CLI_RUNNERS: dict[str, WorkspaceRunnerSpec] = {
         generated_arg="--generated-video-dir",
         dataset_root_arg="--dataset-root",
         supports_run_official=False,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
         default_metrics=("chscore",),
     ),
     "devil-dynamics": WorkspaceRunnerSpec(
         "devil-dynamics",
         "worldfoundry.evaluation.tasks.execution.runners.devil_dynamics.run_devil_dynamics_official_runner",
         generated_arg="--generated-video-dir",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "evalcrafter": WorkspaceRunnerSpec(
         "evalcrafter",
         "worldfoundry.evaluation.tasks.execution.runners.evalcrafter.run_evalcrafter_official_runner",
-        generated_arg="--videos-dir",
+        generated_arg="--generated-video-dir",
+        prompt_manifest_arg="--prompt-manifest",
+        metric_arg="--metrics",
+        limit_arg="--limit",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
         supports_fixture=True,
-        default_metrics=("evalcrafter_total",),
+        default_metrics=("clip_score", "clip_temp_score", "face_consistency_score"),
     ),
     "ewmbench": WorkspaceRunnerSpec(
         "ewmbench",
         "worldfoundry.evaluation.tasks.execution.runners.ewmbench.run_ewmbench_official_runner",
-        generated_arg="--generated-video-dir",
+        generated_arg=None,
+        limit_arg="--limit",
         supports_fixture=True,
     ),
     "fetv": WorkspaceRunnerSpec(
         "fetv",
         "worldfoundry.evaluation.tasks.execution.runners.fetv.run_fetv_official_runner",
         generated_arg="--generated-video-dir",
+        metric_arg="--fetv-metrics",
+        limit_arg="--fetv-limit",
+        model_arg="--fetv-model-name",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
+        default_metrics=("clip_score",),
     ),
     "genai-bench": WorkspaceRunnerSpec(
         "genai-bench",
         "worldfoundry.evaluation.tasks.execution.runners.genai_bench.run_genai_bench_official_runner",
-        generated_arg="--generated-artifact-dir",
+        generated_arg=None,
+        limit_arg="--limit",
         supports_fixture=True,
         default_metrics=("genai_bench_average",),
     ),
     "ipv-bench": WorkspaceRunnerSpec(
         "ipv-bench",
         "worldfoundry.evaluation.tasks.execution.runners.ipv_bench.run_ipv_bench_official_runner",
-        generated_arg="--generated-video-dir",
+        generated_arg=None,
+        limit_arg="--limit",
         supports_fixture=True,
     ),
     "iworld-bench": WorkspaceRunnerSpec(
         "iworld-bench",
         "worldfoundry.evaluation.tasks.execution.runners.iworldbench.run_iworldbench_official_runner",
         generated_arg="--generated-video-dir",
+        dataset_root_arg="--dataset-root",
+        limit_arg="--limit",
+        split_arg="--split",
         metric_arg="--metric",
         supports_fixture=True,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
+    ),
+    "larybench": WorkspaceRunnerSpec(
+        "larybench",
+        "worldfoundry.evaluation.tasks.execution.runners.larybench.run_larybench_official_runner",
+        generated_arg=None,
+        dataset_root_arg="--dataset-root",
+        split_arg="--split",
+        model_arg="--model",
+        supports_official_runtime=True,
+        default_metrics=("top1_accuracy",),
+        input_kind="dataset_root_or_official_results",
     ),
     "mirabench": WorkspaceRunnerSpec(
         "mirabench",
         "worldfoundry.evaluation.tasks.execution.runners.mirabench.run_mirabench_official_runner",
-        generated_arg="--generated-video-dir",
+        generated_arg=None,
         supports_fixture=True,
     ),
     "memobench": WorkspaceRunnerSpec(
@@ -127,85 +175,150 @@ CLI_RUNNERS: dict[str, WorkspaceRunnerSpec] = {
         "worldfoundry.evaluation.tasks.execution.runners.memobench.run_memobench_official_runner",
         generated_arg="--generated-video-dir",
         supports_fixture=True,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "phyeduvideo": WorkspaceRunnerSpec(
         "phyeduvideo",
         "worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.run_phyeduvideo_official_runner",
-        generated_arg="--generated-artifact-dir",
+        generated_arg=None,
+        limit_arg="--limit",
     ),
     "phyfps-bench-gen": WorkspaceRunnerSpec(
         "phyfps-bench-gen",
         "worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.run_phyfps_bench_gen_official_runner",
         generated_arg="--generated-artifact-dir",
+        limit_arg="--limit",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "visual-chronometer": WorkspaceRunnerSpec(
         "visual-chronometer",
         "worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.run_visual_chronometer_official_runner",
         generated_arg="--generated-artifact-dir",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "phygenbench": WorkspaceRunnerSpec(
         "phygenbench",
         "worldfoundry.evaluation.tasks.execution.runners.phygenbench.run_phygenbench_official_runner",
-        generated_arg="--generated-video-dir",
+        generated_arg=None,
+        limit_arg="--limit",
         supports_fixture=True,
     ),
     "phyground": WorkspaceRunnerSpec(
         "phyground",
         "worldfoundry.evaluation.tasks.execution.runners.phyground.run_phyground_official_runner",
-        generated_arg="--generated-video-dir",
+        generated_arg=None,
+        limit_arg="--limit",
         supports_fixture=True,
     ),
     "physics-iq": WorkspaceRunnerSpec(
         "physics-iq",
         "worldfoundry.evaluation.tasks.execution.runners.physics_iq.run_physics_iq_official_runner",
         generated_arg="--generated-artifact-dir",
+        dataset_root_arg="--dataset-root",
+        limit_arg="--limit",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
+    ),
+    "physics-iq-verified": WorkspaceRunnerSpec(
+        "physics-iq-verified",
+        "worldfoundry.evaluation.tasks.execution.runners.physics_iq.run_physics_iq_official_runner",
+        generated_arg="--generated-artifact-dir",
+        dataset_root_arg="--dataset-root",
+        limit_arg="--limit",
+        benchmark_id_arg="--benchmark-id",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
+    ),
+    "physical-ai-bench": WorkspaceRunnerSpec(
+        "physical-ai-bench",
+        "worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner",
+        generated_arg="--generated-video-dir",
+        dataset_root_arg="--dataset-root",
+        prompt_manifest_arg="--prompt-file",
+        answer_manifest_arg="--prediction-manifest",
+        metric_arg="--metrics",
+        phase_arg="--track",
+        limit_arg="--limit",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
+        default_metrics=(
+            "aesthetic_quality",
+            "background_consistency",
+            "imaging_quality",
+            "motion_smoothness",
+            "overall_consistency",
+            "subject_consistency",
+        ),
     ),
     "physvidbench": WorkspaceRunnerSpec(
         "physvidbench",
         "worldfoundry.evaluation.tasks.execution.runners.physvidbench.run_physvidbench_official_runner",
-        generated_arg="--generated-artifact-dir",
+        generated_arg=None,
+        limit_arg="--limit",
     ),
     "t2v-compbench": WorkspaceRunnerSpec(
         "t2v-compbench",
         "worldfoundry.evaluation.tasks.execution.runners.t2v_compbench.run_t2v_compbench_official_runner",
-        generated_arg="--video-root",
+        generated_arg="--generated-video-dir",
         dataset_root_arg="--dataset-root",
         metric_arg="--category",
+        model_arg="--model-name",
         supports_run_official=False,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
         input_kind="generated_video_root_or_official_results",
     ),
     "t2v-safety-bench": WorkspaceRunnerSpec(
         "t2v-safety-bench",
         "worldfoundry.evaluation.tasks.execution.runners.t2v_safety_bench.run_t2v_safety_bench_official_runner",
-        generated_arg=None,
+        generated_arg="--generated-video-dir",
+        limit_arg="--limit",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "t2vworldbench": WorkspaceRunnerSpec(
         "t2vworldbench",
         "worldfoundry.evaluation.tasks.execution.runners.t2vworldbench.run_t2vworldbench_official_runner",
         generated_arg="--generated-video-dir",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "video-bench": WorkspaceRunnerSpec(
         "video-bench",
         "worldfoundry.evaluation.tasks.execution.runners.videobench.run_videobench_official_runner",
         generated_arg="--generated-video-dir",
         dimension_arg="--dimension",
+        supports_run_official=False,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "videophy": WorkspaceRunnerSpec(
         "videophy",
         "worldfoundry.evaluation.tasks.execution.runners.videophy.run_videophy_official_runner",
         generated_arg="--generated-video-dir",
+        limit_arg="--limit",
         supports_fixture=True,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "videophy2": WorkspaceRunnerSpec(
         "videophy2",
         "worldfoundry.evaluation.tasks.execution.runners.videophy2.run_videophy2_official_runner",
         generated_arg="--generated-video-dir",
+        limit_arg="--limit",
         supports_fixture=True,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "videoscience-bench": WorkspaceRunnerSpec(
         "videoscience-bench",
         "worldfoundry.evaluation.tasks.execution.runners.videoscience_bench.run_videoscience_bench_official_runner",
         generated_arg="--generated-video-dir",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "videoscore": WorkspaceRunnerSpec(
         "videoscore",
@@ -213,12 +326,17 @@ CLI_RUNNERS: dict[str, WorkspaceRunnerSpec] = {
         generated_arg="--frames-dir",
         dataset_root_arg="--dataset-root",
         supports_run_official=False,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
         input_kind="generated_frames_dir_or_official_results",
     ),
     "videoverse": WorkspaceRunnerSpec(
         "videoverse",
         "worldfoundry.evaluation.tasks.execution.runners.videoverse.run_videoverse_official_runner",
         generated_arg="--generated-artifact-dir",
+        limit_arg="--limit",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "vmbench": WorkspaceRunnerSpec(
         "vmbench",
@@ -226,29 +344,44 @@ CLI_RUNNERS: dict[str, WorkspaceRunnerSpec] = {
         generated_arg="--generated-video-dir",
         supports_fixture=True,
         default_metrics=("vmbench_average",),
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "wbench": WorkspaceRunnerSpec(
         "wbench",
         "worldfoundry.evaluation.tasks.execution.runners.wbench.run_wbench_official_runner",
         generated_arg="--generated-video-dir",
+        dataset_root_arg="--dataset-root",
         metric_arg="--metrics",
+        phase_arg="--phase",
+        model_arg="--model-name",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "world-in-world": WorkspaceRunnerSpec(
         "world-in-world",
         "worldfoundry.evaluation.tasks.execution.runners.world_in_world.run_world_in_world_official_runner",
-        generated_arg="--generated-video-dir",
+        generated_arg=None,
+        limit_arg="--limit",
         supports_fixture=True,
     ),
     "worldarena": WorkspaceRunnerSpec(
         "worldarena",
         "worldfoundry.evaluation.tasks.execution.runners.worldarena.run_worldarena_official_runner",
-        generated_arg="--generated-video-dir",
+        generated_arg=None,
         dimension_arg="--dimension",
     ),
     "worldbench": WorkspaceRunnerSpec(
         "worldbench",
         "worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner",
         generated_arg="--generated-video-dir",
+        dataset_root_arg="--dataset-root",
+        dataset_manifest_arg="--video-manifest",
+        answer_manifest_arg="--answer-manifest",
+        limit_arg="--limit",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
+        default_metrics=("foreground_miou", "background_rmse"),
     ),
     "worldmodelbench": WorkspaceRunnerSpec(
         "worldmodelbench",
@@ -257,14 +390,37 @@ CLI_RUNNERS: dict[str, WorkspaceRunnerSpec] = {
         dataset_root_arg="--data-root",
         supports_run_official=False,
         input_kind="generated_video_dir_or_official_results",
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
     "worldscore": WorkspaceRunnerSpec(
         "worldscore",
         "worldfoundry.evaluation.tasks.execution.runners.worldscore.run_worldscore_official_runner",
-        generated_arg="--worldscore-output-dir",
+        generated_arg="--stage-dynamic-source",
         dataset_root_arg="--data-path",
+        model_arg="--model-name",
         supports_run_official=False,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
         input_kind="worldscore_output_dir_or_official_results",
+    ),
+    "worldreasonbench": WorkspaceRunnerSpec(
+        "worldreasonbench",
+        "worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.run_worldreasonbench_official_runner",
+        generated_arg="--generated-artifact-dir",
+        limit_arg="--limit",
+        supports_fixture=True,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
+    ),
+    "wrbench": WorkspaceRunnerSpec(
+        "wrbench",
+        "worldfoundry.evaluation.tasks.execution.runners.wrbench.run_wrbench_official_runner",
+        generated_arg="--generated-artifact-dir",
+        limit_arg="--limit",
+        supports_fixture=True,
+        supports_official_runtime=True,
+        accepts_generated_artifacts=True,
     ),
 }
 
@@ -353,13 +509,14 @@ def _selected_metrics(payload: Any, config: Mapping[str, Any], fallback: Sequenc
 
 
 def _result_and_video_inputs(payload: Any, config: Mapping[str, Any]) -> tuple[str | None, str | None]:
-    results_path = _first_non_empty(_payload_get(payload, "results_path"), config.get("from_upstream_results"), config.get("official_results_path"))
+    results_path = _first_non_empty(
+        _payload_get(payload, "results_path"), config.get("from_upstream_results"), config.get("official_results_path")
+    )
     generated_path = _first_non_empty(
         config.get("videos_path"),
         config.get("generated_video_dir"),
         config.get("generated_artifact_dir"),
         config.get("videos_dir"),
-        _payload_get(payload, "dataset_root"),
     )
     if results_path and not _path_looks_like_results(results_path) and generated_path is None:
         generated_path = results_path
@@ -382,6 +539,8 @@ def workspace_benchmark_has_input(payload: Any) -> bool:
             _payload_get(payload, "dataset_manifest"),
             config.get("dataset_json"),
             config.get("prompt_file"),
+            _payload_get(payload, "answer_manifest"),
+            config.get("answer_manifest"),
             config.get("run_fixture"),
         )
     )
@@ -431,7 +590,9 @@ def _vbench_plus_plus_dimensions() -> dict[str, list[str]]:
 def workspace_benchmark_runtime_hints() -> dict[str, dict[str, Any]]:
     hints: dict[str, dict[str, Any]] = {}
     try:
-        from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import vbench_dimensions_payload
+        from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
+            vbench_dimensions_payload,
+        )
 
         vbench = vbench_dimensions_payload()
         vbench_metrics = _catalog_metric_ids("vbench")
@@ -442,6 +603,7 @@ def workspace_benchmark_runtime_hints() -> dict[str, dict[str, Any]]:
             "input_kind": "generated_video_dir_or_official_results",
             "supports_existing_results": True,
             "supports_official_runtime": True,
+            "accepts_generated_artifacts": True,
             "runner_module": "worldfoundry.evaluation.tasks.execution.runners.vbench.run_vbench_official_runner",
         }
     except Exception:
@@ -464,6 +626,7 @@ def workspace_benchmark_runtime_hints() -> dict[str, dict[str, Any]]:
             "input_kind": "generated_video_dir_or_official_results",
             "supports_existing_results": True,
             "supports_official_runtime": True,
+            "accepts_generated_artifacts": True,
             "runner_module": "worldfoundry.evaluation.tasks.execution.runners.vbench_2_0.run_vbench_2_0_official_runner",
         }
     except Exception:
@@ -487,6 +650,7 @@ def workspace_benchmark_runtime_hints() -> dict[str, dict[str, Any]]:
         "input_kind": "generated_video_dir_or_official_results",
         "supports_existing_results": True,
         "supports_official_runtime": True,
+        "accepts_generated_artifacts": True,
         "runner_module": "worldfoundry.evaluation.tasks.execution.runners.vbench_plus_plus.run_vbench_plus_plus_official_runner",
     }
 
@@ -502,7 +666,8 @@ def workspace_benchmark_runtime_hints() -> dict[str, dict[str, Any]]:
             "primary_presets": {"default": defaults},
             "input_kind": spec.input_kind,
             "supports_existing_results": True,
-            "supports_official_runtime": bool(spec.supports_run_official or spec.generated_arg),
+            "supports_official_runtime": spec.supports_official_runtime,
+            "accepts_generated_artifacts": spec.accepts_generated_artifacts,
             "supports_fixture": spec.supports_fixture,
             "runner_module": spec.module,
         }
@@ -549,10 +714,7 @@ def _scorecard_to_workspace_result(
         ),
         "upstream_results_path": str(artifacts.get("upstream_results") or ""),
         "sample_count": int(
-            summary.get("sample_count")
-            or dataset.get("generated_file_count")
-            or generation.get("successful")
-            or 0
+            summary.get("sample_count") or dataset.get("generated_file_count") or generation.get("successful") or 0
         ),
         "successful_sample_count": int(generation.get("successful") or 0),
         "failed_sample_count": int(generation.get("failed") or 0),
@@ -575,12 +737,21 @@ def _scorecard_to_workspace_result(
     }
 
 
-def _run_classic_vbench(payload: Any, output_dir: str | Path, log_callback: Callable[[str, str], None] | None) -> dict[str, Any]:
-    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import VBenchRunRequest, run_vbench, split_dimensions
+def _run_classic_vbench(
+    payload: Any, output_dir: str | Path, log_callback: Callable[[str, str], None] | None
+) -> dict[str, Any]:
+    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
+        VBenchRunRequest,
+        run_vbench,
+        split_dimensions,
+    )
 
     config = _runtime_config(payload)
     results_path, generated_path = _result_and_video_inputs(payload, config)
-    dimensions = split_dimensions(_selected_metrics(payload, config, ("aesthetic_quality",)), _string_list(config.get("presets") or config.get("preset")))
+    dimensions = split_dimensions(
+        _selected_metrics(payload, config, ("aesthetic_quality",)),
+        _string_list(config.get("presets") or config.get("preset")),
+    )
     if not dimensions:
         dimensions = split_dimensions(["aesthetic_quality"])
     mode = _first_non_empty(config.get("mode"), config.get("vbench_mode"))
@@ -602,7 +773,9 @@ def _run_classic_vbench(payload: Any, output_dir: str | Path, log_callback: Call
             config.get("imaging_preprocessing_mode"),
         )
         or "longer",
-        full_json_dir=_first_non_empty(config.get("full_json_dir"), config.get("prompt_suite_json"), _payload_get(payload, "dataset_manifest")),
+        full_json_dir=_first_non_empty(
+            config.get("full_json_dir"), config.get("prompt_suite_json"), _payload_get(payload, "dataset_manifest")
+        ),
         python=_first_non_empty(config.get("python"), config.get("python_bin")) or sys.executable,
         timeout=_int_config_value(config.get("timeout"), default=1800),
         load_ckpt_from_local=_truthy_config_value(config.get("load_ckpt_from_local"), default=False),
@@ -611,7 +784,9 @@ def _run_classic_vbench(payload: Any, output_dir: str | Path, log_callback: Call
     )
     if log_callback is not None:
         source = request.from_upstream_results or request.videos_path or "missing-input"
-        log_callback("system", f"vbench mode={request.mode} source={source} dimensions={','.join(request.dimensions)}\n")
+        log_callback(
+            "system", f"vbench mode={request.mode} source={source} dimensions={','.join(request.dimensions)}\n"
+        )
     scorecard = run_vbench(request)
     return _scorecard_to_workspace_result(
         scorecard,
@@ -622,7 +797,9 @@ def _run_classic_vbench(payload: Any, output_dir: str | Path, log_callback: Call
     )
 
 
-def _series_variant_and_mode(benchmark_id: str, config: Mapping[str, Any], generated_path: str | None) -> tuple[str, str]:
+def _series_variant_and_mode(
+    benchmark_id: str, config: Mapping[str, Any], generated_path: str | None
+) -> tuple[str, str]:
     if benchmark_id == "vbench-2.0":
         variant = "vbench2"
         default_mode = "custom_input" if generated_path else "vbench_standard"
@@ -630,12 +807,20 @@ def _series_variant_and_mode(benchmark_id: str, config: Mapping[str, Any], gener
         variant = str(config.get("variant") or config.get("vbench_variant") or "long").strip() or "long"
         if variant not in {"i2v", "long", "trustworthiness"}:
             variant = "long"
-        default_mode = "long_custom_input" if variant == "long" and generated_path else "custom_input" if generated_path else "vbench_standard"
+        default_mode = (
+            "long_custom_input"
+            if variant == "long" and generated_path
+            else "custom_input"
+            if generated_path
+            else "vbench_standard"
+        )
     mode = str(config.get("mode") or config.get("vbench_mode") or default_mode)
     return variant, mode
 
 
-def _run_vbench_series(payload: Any, output_dir: str | Path, log_callback: Callable[[str, str], None] | None) -> dict[str, Any]:
+def _run_vbench_series(
+    payload: Any, output_dir: str | Path, log_callback: Callable[[str, str], None] | None
+) -> dict[str, Any]:
     benchmark_id = benchmark_key(_payload_get(payload, "benchmark_id")) or "vbench-plus-plus"
     config = _runtime_config(payload)
     results_path, generated_path = _result_and_video_inputs(payload, config)
@@ -673,7 +858,9 @@ def _run_vbench_series(payload: Any, output_dir: str | Path, log_callback: Calla
     dataset_root = _first_non_empty(_payload_get(payload, "dataset_root"), config.get("vbench2_dataset_root"))
     if benchmark_id == "vbench-2.0" and dataset_root and Path(dataset_root).exists():
         command.extend(["--vbench2-dataset-root", dataset_root])
-    full_json_dir = _first_non_empty(config.get("full_json_dir"), config.get("prompt_suite_json"), _payload_get(payload, "dataset_manifest"))
+    full_json_dir = _first_non_empty(
+        config.get("full_json_dir"), config.get("prompt_suite_json"), _payload_get(payload, "dataset_manifest")
+    )
     if full_json_dir:
         command.extend(["--full-json-dir", full_json_dir])
     if config.get("prompt") or _payload_get(payload, "prompt"):
@@ -704,8 +891,16 @@ def _extra_args(value: Any) -> list[str]:
     return [str(value)]
 
 
-def _run_cli_benchmark(payload: Any, output_dir: str | Path, log_callback: Callable[[str, str], None] | None) -> dict[str, Any]:
+def build_workspace_benchmark_command(payload: Any, output_dir: str | Path) -> list[str]:
+    """Build the canonical CLI invocation for an in-tree benchmark runner.
+
+    The same builder is used by Studio/Workspace and the public benchmark-zoo
+    ``official-run`` path.  Keeping argument routing here prevents catalog YAML
+    commands from drifting away from the actual runner parsers.
+    """
     benchmark_id = benchmark_key(_payload_get(payload, "benchmark_id"))
+    if benchmark_id not in CLI_RUNNERS:
+        raise KeyError(f"unsupported CLI benchmark runner: {benchmark_id}")
     spec = CLI_RUNNERS[benchmark_id]
     config = _runtime_config(payload)
     results_path, generated_path = _result_and_video_inputs(payload, config)
@@ -717,16 +912,42 @@ def _run_cli_benchmark(payload: Any, output_dir: str | Path, log_callback: Calla
         str(output_dir),
         "--json",
     ]
+    if spec.benchmark_id_arg:
+        command.extend([spec.benchmark_id_arg, benchmark_id])
     if results_path:
         command.extend([spec.results_arg, results_path])
+    if generated_path and not spec.accepts_generated_artifacts:
+        raise ValueError(
+            f"{benchmark_id} does not currently accept generic generated artifacts; "
+            "use official result import or a benchmark-specific prepared layout documented by its runner"
+        )
     if generated_path and spec.generated_arg:
         command.extend([spec.generated_arg, generated_path])
+    model_id = _first_non_empty(
+        _payload_get(payload, "model_id"),
+        config.get("model_id"),
+        config.get("model_name"),
+    )
+    if model_id and spec.model_arg:
+        command.extend([spec.model_arg, model_id])
     dataset_root = _first_non_empty(_payload_get(payload, "dataset_root"), config.get("dataset_root"))
     if dataset_root and spec.dataset_root_arg:
         command.extend([spec.dataset_root_arg, dataset_root])
-    dataset_manifest = _first_non_empty(_payload_get(payload, "dataset_manifest"), config.get("dataset_manifest"), config.get("dataset_json"))
+    dataset_manifest = _first_non_empty(
+        _payload_get(payload, "dataset_manifest"), config.get("dataset_manifest"), config.get("dataset_json")
+    )
     if dataset_manifest and spec.dataset_manifest_arg:
         command.extend([spec.dataset_manifest_arg, dataset_manifest])
+    prompt_manifest = _first_non_empty(_payload_get(payload, "prompt_manifest"), config.get("prompt_manifest"))
+    if prompt_manifest and spec.prompt_manifest_arg:
+        command.extend([spec.prompt_manifest_arg, prompt_manifest])
+    answer_manifest = _first_non_empty(
+        _payload_get(payload, "answer_manifest"),
+        config.get("answer_manifest"),
+        config.get("prediction_manifest"),
+    )
+    if answer_manifest and spec.answer_manifest_arg:
+        command.extend([spec.answer_manifest_arg, answer_manifest])
     selected = _selected_metrics(payload, config, spec.default_metrics)
     if selected and spec.dimension_arg:
         if benchmark_id == "worldarena":
@@ -737,7 +958,7 @@ def _run_cli_benchmark(payload: Any, output_dir: str | Path, log_callback: Calla
         else:
             command.extend([spec.dimension_arg, selected[0]])
     if selected and spec.metric_arg:
-        if benchmark_id == "wbench":
+        if benchmark_id in {"evalcrafter", "physical-ai-bench", "wbench"}:
             command.extend([spec.metric_arg, ",".join(selected)])
         else:
             command.extend([spec.metric_arg, selected[0]])
@@ -748,17 +969,43 @@ def _run_cli_benchmark(payload: Any, output_dir: str | Path, log_callback: Calla
         config.get("run_official"),
         default=spec.default_run_official or bool(generated_path and not results_path),
     )
-    if run_official and spec.supports_run_official:
+    if run_official and spec.supports_run_official and spec.supports_official_runtime:
         command.append("--run-official")
+    limit = config.get("limit", config.get("num_samples"))
+    if limit not in (None, "") and spec.limit_arg:
+        command.extend([spec.limit_arg, str(_int_config_value(limit, default=1))])
+    if config.get("split") not in (None, "") and spec.split_arg:
+        command.extend([spec.split_arg, str(config["split"])])
+    phase = config.get("phase", config.get("track"))
+    if phase not in (None, "") and spec.phase_arg:
+        command.extend([spec.phase_arg, str(phase)])
     if config.get("timeout"):
         command.extend(["--timeout", str(_int_config_value(config.get("timeout"), default=7200))])
     command.extend(_extra_args(config.get("extra_args") or config.get("runner_args")))
+    return command
+
+
+def _run_cli_benchmark(
+    payload: Any, output_dir: str | Path, log_callback: Callable[[str, str], None] | None
+) -> dict[str, Any]:
+    benchmark_id = benchmark_key(_payload_get(payload, "benchmark_id"))
+    spec = CLI_RUNNERS[benchmark_id]
+    config = _runtime_config(payload)
+    command = build_workspace_benchmark_command(payload, output_dir)
+    selected = _selected_metrics(payload, config, spec.default_metrics)
+    run_fixture = "--run-fixture" in command
+    run_official = "--run-official" in command
     return _run_cli_command(
         command,
         output_dir=output_dir,
         benchmark_id=benchmark_id,
         delegate_runner=f"benchmark_zoo_{benchmark_id.replace('-', '_')}_official_runner",
-        request={"command": command, "selected_metrics": selected, "run_official": run_official, "run_fixture": run_fixture},
+        request={
+            "command": command,
+            "selected_metrics": selected,
+            "run_official": run_official,
+            "run_fixture": run_fixture,
+        },
         log_callback=log_callback,
     )
 
@@ -791,7 +1038,9 @@ def _run_cli_command(
     scorecard_path = output_dir_path / "scorecard.json"
     if not scorecard_path.is_file():
         tail = "\n".join((completed.stderr or completed.stdout).splitlines()[-40:])
-        raise RuntimeError(f"{benchmark_id} runner did not write scorecard.json; exit={completed.returncode}; tail={tail}")
+        raise RuntimeError(
+            f"{benchmark_id} runner did not write scorecard.json; exit={completed.returncode}; tail={tail}"
+        )
     scorecard = json.loads(scorecard_path.read_text(encoding="utf-8"))
     if isinstance(scorecard, dict):
         scorecard.setdefault("run", {})["workspace_runner_returncode"] = completed.returncode

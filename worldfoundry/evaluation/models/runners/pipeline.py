@@ -8,7 +8,7 @@ handling per-sample failure isolation and runtime profile resolution.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, WorldModelConfig
 
@@ -17,13 +17,13 @@ from ..pipelines.lifecycle import (
     PipelineRuntimeProfile,
     WorldFoundryPipelineLifecycle,
 )
-from ..pipelines.results import (
-    PipelineResultContext,
-    failed_generation_result,
-)
 from ..pipelines.loading import (
     build_pipeline_runner_spec,
     load_pipeline_from_config,
+)
+from ..pipelines.results import (
+    PipelineResultContext,
+    failed_generation_result,
 )
 
 
@@ -57,6 +57,7 @@ class WorldFoundryPipelineRunner:
         pipeline_target: ``module:Class`` path identifying the pipeline.
         runtime_profile_id: Profile identifier used to resolve runtime settings.
         output_dir: Optional directory where generated artifacts are written.
+        generation_defaults: Defaults merged below per-request generation kwargs.
         cleaned: Flag indicating whether :meth:`cleanup` has been called.
     """
 
@@ -70,6 +71,7 @@ class WorldFoundryPipelineRunner:
         pipeline_target: str,
         runtime_profile_id: str | None = None,
         output_dir: Path | None = None,
+        generation_defaults: Mapping[str, Any] | None = None,
     ) -> None:
         """Initialize the pipeline runner with a loaded pipeline and configuration.
 
@@ -80,12 +82,14 @@ class WorldFoundryPipelineRunner:
             runtime_profile_id: Overrides the profile used for runtime settings;
                 defaults to ``model_id`` when ``None``.
             output_dir: Optional directory for generated artifacts.
+            generation_defaults: Defaults applied to each generation request.
         """
         self.model_id = model_id
         self.pipeline = pipeline
         self.pipeline_target = pipeline_target
         self.runtime_profile_id = runtime_profile_id or model_id
         self.output_dir = output_dir
+        self.generation_defaults = dict(generation_defaults or {})
         self.cleaned = False
 
     @classmethod
@@ -106,6 +110,7 @@ class WorldFoundryPipelineRunner:
             pipeline_target=spec.pipeline_target,
             runtime_profile_id=spec.runtime_profile_id,
             output_dir=spec.output_dir,
+            generation_defaults=spec.generation_defaults,
         )
 
     def _runtime_profile(self) -> PipelineRuntimeProfile:
@@ -175,6 +180,17 @@ class WorldFoundryPipelineRunner:
         except Exception as exc:  # noqa: BLE001 - evaluation records per-sample failures.
             return failed_generation_result(request, self.model_id, exc)
 
+    def _apply_generation_defaults(self, request: GenerationRequest) -> GenerationRequest:
+        """Merge model defaults below request-local generation kwargs."""
+        if not self.generation_defaults:
+            return request
+        payload = request.to_dict()
+        payload["generation_kwargs"] = {
+            **self.generation_defaults,
+            **dict(request.generation_kwargs or {}),
+        }
+        return GenerationRequest.from_dict(payload)
+
     def generate(self, requests: Sequence[GenerationRequest]) -> list[GenerationResult]:
         """Generate results for a batch of requests through the pipeline lifecycle.
 
@@ -188,7 +204,10 @@ class WorldFoundryPipelineRunner:
             A list of :class:`GenerationResult` objects, one per request.
         """
         lifecycle = self._lifecycle(self._runtime_profile())
-        return [self._generate_one(request, lifecycle) for request in requests]
+        return [
+            self._generate_one(self._apply_generation_defaults(request), lifecycle)
+            for request in requests
+        ]
 
     def cleanup(self) -> None:
         """Mark the runner as cleaned up after evaluation completes."""

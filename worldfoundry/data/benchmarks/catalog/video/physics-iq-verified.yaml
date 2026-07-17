@@ -1,0 +1,98 @@
+id: physics-iq-verified
+name: Physics-IQ Verified
+benchmark_kind: [image-to-video, physical-understanding, video-generation-quality]
+domains: [physics, solid-mechanics, fluid-dynamics, optics, thermodynamics, magnetism]
+modalities: [image, video]
+status: confirmed_official_code
+official_sources:
+  github:
+    url: https://github.com/google-deepmind/physics-IQ-benchmark
+    head_sha: b02cf26dc15d559d0ca4f63a6917070312dde185
+  paper_url: https://arxiv.org/abs/2606.18943
+  project_page: https://physics-iq-verified.anates.ai/
+  dataset_url: https://huggingface.co/datasets/Anates-Labs-Research/Physics-IQ-Verified
+benchmark_assets:
+  prompt_suite:
+    status: bundled_in_tree
+    path: worldfoundry/data/benchmarks/assets/physics-iq-verified/descriptions/descriptions_base.csv
+    setting: bpp-base
+  dataset:
+    status: external_official_media
+    directory_name: physics-IQ-benchmark-verified
+evaluation_surface:
+  purpose: Recommended Physics-IQ protocol with verified prompts, masks, and per-view scoring.
+  raw_metrics: [spatial_iou, weighted_spatial_iou, spatiotemporal_iou, mse]
+  score_protocol: verified_scenario_view_aggregation
+metrics:
+- id: physics_iq_verified_score
+  name: Physics-IQ Verified Score
+  description: Arithmetic mean after per-scenario, per-view physical-variance normalization.
+  higher_is_better: true
+  leaderboard_key: physics_iq_verified_score
+  aggregator: mean
+  output_unit: rate
+  primary: true
+- id: physics_iq_verified_spatiotemporal
+  name: Verified Spatiotemporal Score
+  higher_is_better: true
+  aggregator: mean
+- id: physics_iq_verified_spatial
+  name: Verified Spatial Score
+  higher_is_better: true
+  aggregator: mean
+- id: physics_iq_verified_weighted_spatial
+  name: Verified Weighted Spatial Score
+  higher_is_better: true
+  aggregator: mean
+- id: physics_iq_verified_mse
+  name: Verified MSE Score
+  higher_is_better: true
+  aggregator: mean
+runner:
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQVerifiedContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
+  run_command: >-
+    PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
+    worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
+    --benchmark-id physics-iq-verified --protocol verified --run-official
+    --dataset-root "${WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT}"
+    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}"
+    --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
+  runtime:
+    kind: in_tree_official_runtime
+    upstream_revision: b02cf26dc15d559d0ca4f63a6917070312dde185
+    root: worldfoundry/evaluation/tasks/execution/runners/physics_iq
+    source_checkout_required: false
+    bundled_descriptions: worldfoundry/data/benchmarks/assets/physics-iq-verified/descriptions/descriptions_base.csv
+  expected_artifacts: [scorecard.json, benchmark_contract.json, raw_metrics.csv, official_metrics.json, results_summary.csv, raw_metric_table.jsonl, per_sample_scores.jsonl]
+  verification_status: in_tree_raw_video_evaluator
+  required_env: [WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT, WORLDFOUNDRY_GENERATED_ARTIFACT_DIR]
+integration:
+  status: integrated
+  notes:
+  - Shares the official mask/raw-metric engine with Original and selects only the Verified score adapter.
+  - The bundled default is the upstream base best-practice prompt; model-specific prompt files may override it.
+  - End-to-end execution evidence is pending a complete authorized download of the Verified media and masks.
+release_status: experimental
+maturity: official_runtime_integrated_data_required
+open_source_status: in_tree_runtime
+official_benchmark_verified: false
+integration_evidence: false
+leaderboard_valid: false
+requires:
+- Official Physics-IQ-Verified media directory from Hugging Face
+- 198 generated five-second videos per run; four runs are recommended for leaderboard claims
+blockers:
+- The official Verified dataset must contain all 396 reference videos and 396 masks; partial or gated downloads fail preflight.
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/physics-iq-verified.yaml
+  bundled_assets: worldfoundry/data/benchmarks/assets/physics-iq-verified
+official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQVerifiedContract
+  runtime_verified: false
+dataset:
+  hf_dataset_id: Anates-Labs-Research/Physics-IQ-Verified
+validation_command: [worldfoundry-eval, zoo, benchmark-run, --benchmark-id, physics-iq-verified, --mode, official-validation, --official-results-path, <raw_metrics.csv>, --output-dir, <out>, --json]
+checkpoint_refs: []

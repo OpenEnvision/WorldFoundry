@@ -10,46 +10,56 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
-from worldfoundry.evaluation.utils import REPO_ROOT
-
 from worldfoundry.evaluation.tasks.execution.framework.artifact_score_runtime import materialize_artifact_scores
 from worldfoundry.evaluation.tasks.execution.framework.io import env_path, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.utils import REPO_ROOT
 
 SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 SUPPORTED_SUFFIXES = {".json", ".jsonl", ".csv", ".tsv"}
 METRIC_ORDER = (
-    "video_based_accuracy",
+    "foreground_miou",
+    "foreground_dice",
+    "background_rmse",
     "text_based_accuracy",
     "multiple_choice_accuracy",
     "binary_accuracy",
-    "worldbench_average",
 )
 METRIC_SPECS: dict[str, dict[str, Any]] = {
-    "video_based_accuracy": {
-        "name": "Video-Based Accuracy",
+    "foreground_miou": {
+        "name": "Foreground mIoU",
         "group": "video_based",
-        "description": "Accuracy on WorldBench video-based physical prediction tasks.",
+        "description": "Conventional per-object foreground intersection-over-union.",
+        "higher_is_better": True,
+    },
+    "foreground_dice": {
+        "name": "Foreground Dice (release compatibility)",
+        "group": "diagnostic",
+        "description": "Dice overlap computed by the public release while naming it mIoU.",
+        "higher_is_better": True,
+    },
+    "background_rmse": {
+        "name": "Background RMSE",
+        "group": "video_based",
+        "description": "Normalized-pixel RMSE on ground-truth background pixels.",
+        "higher_is_better": False,
     },
     "text_based_accuracy": {
         "name": "Text-Based Accuracy",
         "group": "text_based",
         "description": "Accuracy on WorldBench text-question tasks.",
+        "higher_is_better": True,
     },
     "multiple_choice_accuracy": {
         "name": "Multiple-Choice Accuracy",
         "group": "text_based",
         "description": "Accuracy on WorldBench multiple-choice text questions.",
+        "higher_is_better": True,
     },
     "binary_accuracy": {
         "name": "Binary Accuracy",
         "group": "text_based",
         "description": "Accuracy on WorldBench binary text questions.",
-    },
-    "worldbench_average": {
-        "name": "WorldBench Average",
-        "group": "aggregate",
-        "description": "Mean normalized WorldBench score across available official result components.",
+        "higher_is_better": True,
     },
 }
 
@@ -176,14 +186,22 @@ def normalize_accuracy(raw_score: float | None) -> float | None:
 
 
 METRIC_ALIASES = {
-    "video_based": "video_based_accuracy",
-    "video_based_accuracy": "video_based_accuracy",
-    "video_accuracy": "video_based_accuracy",
-    "v2v_accuracy": "video_based_accuracy",
-    "video_to_video_accuracy": "video_based_accuracy",
-    "video_physical_accuracy": "video_based_accuracy",
-    "physical_prediction_accuracy": "video_based_accuracy",
-    "world_model_accuracy": "video_based_accuracy",
+    "foreground_miou": "foreground_miou",
+    "foreground_iou": "foreground_miou",
+    "mean_iou": "foreground_miou",
+    "video_based": "foreground_miou",
+    "video_based_accuracy": "foreground_miou",
+    "video_accuracy": "foreground_miou",
+    "v2v_accuracy": "foreground_miou",
+    "foreground_dice": "foreground_dice",
+    "dice": "foreground_dice",
+    "dice_score": "foreground_dice",
+    # The public release's value named mIoU is mathematically Dice.
+    "miou": "foreground_dice",
+    "m_iou": "foreground_dice",
+    "background_rmse": "background_rmse",
+    "bg_rmse": "background_rmse",
+    "background_error": "background_rmse",
     "text_based": "text_based_accuracy",
     "text_based_accuracy": "text_based_accuracy",
     "text_accuracy": "text_based_accuracy",
@@ -200,15 +218,6 @@ METRIC_ALIASES = {
     "binary_accuracy": "binary_accuracy",
     "yes_no_accuracy": "binary_accuracy",
     "true_false_accuracy": "binary_accuracy",
-    "worldbench": "worldbench_average",
-    "worldbench_average": "worldbench_average",
-    "overall": "worldbench_average",
-    "overall_score": "worldbench_average",
-    "overall_accuracy": "worldbench_average",
-    "average_score": "worldbench_average",
-    "average_accuracy": "worldbench_average",
-    "mean_score": "worldbench_average",
-    "mean_accuracy": "worldbench_average",
 }
 
 
@@ -221,7 +230,7 @@ def context_metric_id(context_key: Any) -> str | None:
     if "binary" in key or "yes_no" in key or "true_false" in key:
         return "binary_accuracy"
     if "video" in key or "v2v" in key or "physical_prediction" in key:
-        return "video_based_accuracy"
+        return "foreground_miou"
     if "text" in key or "question" in key or "vqa" in key or "qa" in key:
         return "text_based_accuracy"
     return None
@@ -233,7 +242,7 @@ def metric_id_for_key(raw_key: Any, context_key: Any = None) -> str | None:
     if metric_id:
         return metric_id
     if key in GENERIC_SCORE_KEYS:
-        return context_metric_id(context_key) or "worldbench_average"
+        return context_metric_id(context_key)
     return None
 
 
@@ -323,7 +332,9 @@ def load_upstream_results(path: Path) -> list[dict[str, Any]]:
     if path.is_file():
         return [load_result_file(path)]
     if path.is_dir():
-        files = [item for item in sorted(path.rglob("*")) if item.is_file() and item.suffix.lower() in SUPPORTED_SUFFIXES]
+        files = [
+            item for item in sorted(path.rglob("*")) if item.is_file() and item.suffix.lower() in SUPPORTED_SUFFIXES
+        ]
         if not files:
             raise FileNotFoundError(f"no WorldBench result files found under: {path}")
         return [load_result_file(item) for item in files]
@@ -394,7 +405,13 @@ def infer_component(row: dict[str, Any], context_key: Any = None, question_type:
             return "video_based"
         if "text" in key or "question" in key or "vqa" in key or "qa" in key:
             return "text_based"
-        if "multiple_choice" in key or key.startswith("mc") or "binary" in key or "yes_no" in key or "true_false" in key:
+        if (
+            "multiple_choice" in key
+            or key.startswith("mc")
+            or "binary" in key
+            or "yes_no" in key
+            or "true_false" in key
+        ):
             return "text_based"
     if question_type in {"multiple_choice", "binary"}:
         return "text_based"
@@ -570,7 +587,7 @@ def extract_scores_from_payloads(loaded_results: list[dict[str, Any]]) -> dict[s
 
 def sample_scores(sample_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     groups: dict[str, list[float | None]] = {
-        "video_based_accuracy": [],
+        "foreground_miou": [],
         "text_based_accuracy": [],
         "multiple_choice_accuracy": [],
         "binary_accuracy": [],
@@ -582,7 +599,7 @@ def sample_scores(sample_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]
         component = row.get("component")
         question_type = row.get("question_type")
         if component == "video_based":
-            groups["video_based_accuracy"].append(float(score))
+            groups["foreground_miou"].append(float(score))
         if component == "text_based" or question_type in {"multiple_choice", "binary"}:
             groups["text_based_accuracy"].append(float(score))
         if question_type == "multiple_choice":
@@ -630,28 +647,6 @@ def add_computed_scores(extracted: dict[str, dict[str, Any]]) -> None:
                 "score_scale": "normalized",
             }
 
-    if "worldbench_average" not in extracted:
-        component_scores = [
-            normalized_metric_score(extracted.get("video_based_accuracy")),
-            normalized_metric_score(extracted.get("text_based_accuracy")),
-        ]
-        average = mean(component_scores)
-        if average is None:
-            average = mean(
-                [
-                    normalized_metric_score(extracted.get("video_based_accuracy")),
-                    normalized_metric_score(extracted.get("multiple_choice_accuracy")),
-                    normalized_metric_score(extracted.get("binary_accuracy")),
-                ]
-            )
-        if average is not None:
-            extracted["worldbench_average"] = {
-                "raw_score": average,
-                "normalized_score": average,
-                "source": "computed_from_available_normalized_scores",
-                "score_scale": "normalized",
-            }
-
 
 def normalize_worldbench_results(
     loaded_results: list[dict[str, Any]],
@@ -659,7 +654,7 @@ def normalize_worldbench_results(
     benchmark_id: str,
     output_dir: Path,
     results_path: Path,
-    official_runtime_executed: bool = False,
+    artifact_score_imported: bool = False,
     command: list[str] | None = None,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -687,8 +682,8 @@ def normalize_worldbench_results(
             "available": normalized_score is not None,
             "raw_score": raw_score,
             "normalized_score": normalized_score,
-            "higher_is_better": True,
-            "normalizer": "percent_or_fraction_to_unit",
+            "higher_is_better": spec.get("higher_is_better", True),
+            "normalizer": "identity" if metric_id == "background_rmse" else "percent_or_fraction_to_unit",
             "source": item.get("source"),
             "score_scale": item.get("score_scale"),
             "sample_count": item.get("sample_count"),
@@ -720,7 +715,13 @@ def normalize_worldbench_results(
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_runtime" if official_runtime_executed and normalization_ok else "official_result_normalization" if normalization_ok else "failed",
+            "status": (
+                "artifact_score_normalization"
+                if artifact_score_imported and normalization_ok
+                else "official_result_normalization"
+                if normalization_ok
+                else "failed"
+            ),
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_worldbench_official_runner",
             "command": command,
@@ -732,7 +733,7 @@ def normalize_worldbench_results(
             "name": "WorldBench",
             "contract_only": False,
             "requires_upstream_runtime": False,
-            "official_runtime_available": official_runtime_executed,
+            "official_runtime_available": True,
         },
         "dataset": {
             "upstream_results": str(results_path.resolve()),
@@ -752,9 +753,9 @@ def normalize_worldbench_results(
         "metrics": {
             "leaderboard": leaderboard,
             "groups": {
-                "video_based": ["video_based_accuracy"],
+                "video_based": ["foreground_miou", "background_rmse"],
                 "text_based": ["text_based_accuracy", "multiple_choice_accuracy", "binary_accuracy"],
-                "aggregate": ["worldbench_average"],
+                "diagnostic": ["foreground_dice"],
             },
             "per_metric": per_metric,
             "summary": {
@@ -766,15 +767,20 @@ def normalize_worldbench_results(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "worldbench_official_in_tree" if official_runtime_executed else "official_worldbench_result_normalizer",
+            "kind": (
+                "worldfoundry_artifact_score_normalizer"
+                if artifact_score_imported
+                else "official_worldbench_result_normalizer"
+            ),
             "upstream_results": str(results_path.resolve()),
             "num_results": len(per_sample_rows),
             "leaderboard_metrics": leaderboard,
             "skip_count": len(metric_rows) - available_count,
         },
         "validation": {
-            "normalizer_only": not official_runtime_executed,
-            "official_runtime_executed": official_runtime_executed,
+            "normalizer_only": True,
+            "official_runtime_executed": False,
+            "artifact_score_imported": artifact_score_imported,
             "official_result_shape": official_result_shape,
         },
         "artifacts": {
@@ -785,10 +791,13 @@ def normalize_worldbench_results(
             "upstream_stdout": None,
             "upstream_stderr": None,
         },
-        "official_benchmark_verified": official_runtime_executed and normalization_ok,
-        "integration_evidence": official_runtime_executed and normalization_ok,
+        # This branch imports existing results. Raw-artifact evaluation is
+        # available through the same CLI with --run-official, but importing a
+        # score file alone is intentionally not integration evidence.
+        "official_benchmark_verified": False,
+        "integration_evidence": False,
         "normalization_ok": normalization_ok,
-        "official_results_imported": (not official_runtime_executed) and normalization_ok,
+        "official_results_imported": (not artifact_score_imported) and normalization_ok,
     }
     write_json(scorecard_path, scorecard)
     return scorecard
@@ -796,7 +805,10 @@ def normalize_worldbench_results(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Normalize existing official WorldBench result files to a WorldFoundry scorecard."
+        description=(
+            "Run the in-tree WorldBench IntuitivePhysics evaluator on generated artifacts, "
+            "or normalize an existing result file."
+        )
     )
     parser.add_argument("--benchmark-id", default=os.environ.get("WORLDFOUNDRY_BENCHMARK_ID", "worldbench"))
     parser.add_argument(
@@ -807,8 +819,77 @@ def build_parser() -> argparse.ArgumentParser:
         default=env_path("WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH"),
     )
     parser.add_argument("--from-upstream-results", dest="results_path", type=Path, help=argparse.SUPPRESS)
-    parser.add_argument("--run-official", action="store_true", help="Materialize WorldBench scores from in-tree metric artifacts.")
-    parser.add_argument("--generated-video-dir", type=Path, default=env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR"))
+    parser.add_argument(
+        "--run-official",
+        action="store_true",
+        help="Evaluate raw generated continuations and/or answer predictions with the in-tree runtime.",
+    )
+    parser.add_argument(
+        "--dataset-root",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT"),
+        help="WorldBench IntuitivePhysics dataset root containing scenes/ and textual_questions/.",
+    )
+    parser.add_argument(
+        "--generated-video-dir",
+        "--generated-artifact-dir",
+        dest="generated_video_dir",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR"),
+        help="Generated continuation videos arranged by WorldBench sample ID.",
+    )
+    parser.add_argument(
+        "--video-manifest",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_WORLDBENCH_VIDEO_MANIFEST"),
+        help="Optional JSON/JSONL/CSV/TSV sample_id-to-video mapping.",
+    )
+    parser.add_argument(
+        "--answer-manifest",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_WORLDBENCH_ANSWER_MANIFEST"),
+        help="Optional WorldBench question predictions in JSON/JSONL/CSV/TSV format.",
+    )
+    parser.add_argument(
+        "--predicted-mask-dir",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_WORLDBENCH_PREDICTED_MASK_DIR"),
+        help="Use precomputed label masks instead of running SAM2 (testing/reproducibility path).",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=REPO_ROOT / "worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml",
+        help="In-tree WorldBench evaluator configuration.",
+    )
+    parser.add_argument("--sample-id", action="append", default=[], help="Evaluate one scene ID; repeatable.")
+    parser.add_argument("--limit", type=int, help="Bound the number of matched video scenes.")
+    parser.add_argument("--max-frames", type=int, help="Maximum continuation frames per video; 0 means all.")
+    parser.add_argument("--ground-truth-start-frame", type=int, help="Ground-truth frame aligned to generated frame 0.")
+    parser.add_argument("--generated-skip-frames", type=int, help="Conditioning frames to skip in each artifact.")
+    parser.add_argument(
+        "--sam2-model-id",
+        default=os.environ.get("WORLDFOUNDRY_WORLDBENCH_SAM2_MODEL_ID"),
+        help="SAM2 Hugging Face model ID (defaults to the data config).",
+    )
+    parser.add_argument(
+        "--sam2-checkpoint",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT"),
+    )
+    parser.add_argument("--sam2-config", default=os.environ.get("WORLDFOUNDRY_WORLDBENCH_SAM2_CONFIG"))
+    parser.add_argument("--device", default=os.environ.get("WORLDFOUNDRY_DEVICE", "auto"))
+    component_group = parser.add_mutually_exclusive_group()
+    component_group.add_argument("--video-only", action="store_true")
+    component_group.add_argument("--text-only", action="store_true")
+    parser.add_argument("--continue-on-error", action="store_true")
+    parser.add_argument("--keep-staged-frames", action="store_true")
+    parser.add_argument("--save-predicted-masks", type=Path)
+    parser.add_argument(
+        "--from-artifact-scores",
+        action="store_true",
+        help="Normalize existing WorldFoundry metric artifacts (diagnostic; not an official benchmark run).",
+    )
     parser.add_argument(
         "--artifact-score-dir",
         type=Path,
@@ -825,26 +906,97 @@ def main(argv: list[str] | None = None) -> int:
     if args.output_dir is None:
         print("error: --output-dir or WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR is required", file=sys.stderr)
         return 2
-    if args.results_path is None and not args.run_official:
-        print("error: --official-results-path, WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH, or --run-official is required", file=sys.stderr)
+    if args.results_path is None and not args.from_artifact_scores and not args.run_official:
+        print(
+            "error: --official-results-path, WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH, "
+            "or --from-artifact-scores is required",
+            file=sys.stderr,
+        )
         return 2
 
     try:
-        command = None
         if args.run_official:
-            score_dir = args.artifact_score_dir or args.generated_video_dir
-            if score_dir is None:
+            if args.dataset_root is None:
                 raise ValueError(
-                    "--artifact-score-dir, WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR, or --generated-video-dir is required for --run-official"
+                    "--dataset-root or WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT is required for --run-official"
                 )
+            if not any((args.generated_video_dir, args.video_manifest, args.answer_manifest)):
+                raise ValueError("--run-official needs --generated-video-dir/--video-manifest and/or --answer-manifest")
+            if args.text_only and args.answer_manifest is None:
+                raise ValueError("--text-only requires --answer-manifest")
+            from worldfoundry.evaluation.tasks.execution.runners.worldbench.runtime.worldbench import (
+                WorldBenchEvaluationRequest,
+                evaluate_worldbench,
+            )
+            from worldfoundry.evaluation.tasks.execution.runners.worldbench.runtime.worldbench.reporting import (
+                write_evaluation_scorecard,
+            )
+
+            evaluation = evaluate_worldbench(
+                WorldBenchEvaluationRequest(
+                    dataset_root=args.dataset_root,
+                    work_dir=args.output_dir / "work",
+                    generated_video_dir=args.generated_video_dir,
+                    video_manifest=args.video_manifest,
+                    answer_manifest=args.answer_manifest,
+                    predicted_mask_dir=args.predicted_mask_dir,
+                    config_path=args.config,
+                    sample_ids=tuple(args.sample_id),
+                    limit=args.limit,
+                    max_frames=args.max_frames,
+                    ground_truth_start_frame=args.ground_truth_start_frame,
+                    generated_skip_frames=args.generated_skip_frames,
+                    sam2_model_id=args.sam2_model_id,
+                    sam2_checkpoint=args.sam2_checkpoint,
+                    sam2_config=args.sam2_config,
+                    device=args.device,
+                    evaluate_video=not args.text_only,
+                    evaluate_text=not args.video_only,
+                    continue_on_error=args.continue_on_error,
+                    keep_staged_frames=args.keep_staged_frames,
+                    save_predicted_masks=args.save_predicted_masks,
+                )
+            )
+            scorecard = write_evaluation_scorecard(
+                evaluation,
+                benchmark_id=args.benchmark_id,
+                output_dir=args.output_dir,
+                command=[sys.executable, *sys.argv],
+            )
+            result = {
+                "ok": bool(scorecard["integration_evidence"]),
+                "benchmark_id": args.benchmark_id,
+                "output_dir": str(args.output_dir),
+                "scorecard": scorecard["artifacts"]["scorecard"],
+                "raw_metric_table": scorecard["artifacts"]["raw_metric_table"],
+                "per_sample_scores": scorecard["artifacts"]["per_sample_scores"],
+                "worldbench_evaluation": scorecard["artifacts"]["worldbench_evaluation"],
+                "official_benchmark_verified": scorecard["official_benchmark_verified"],
+                "integration_evidence": scorecard["integration_evidence"],
+                "normalization_ok": scorecard["normalization_ok"],
+                "official_results_imported": False,
+            }
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+            else:
+                print(f"{args.benchmark_id}: in-tree WorldBench evaluation completed")
+                print(f"scorecard: {result['scorecard']}")
+            return 0 if result["ok"] else 1
+        command = None
+        artifact_score_imported = False
+        if args.from_artifact_scores:
+            score_dir = args.artifact_score_dir
+            if score_dir is None:
+                raise ValueError("--artifact-score-dir or WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR is required")
             args.output_dir.mkdir(parents=True, exist_ok=True)
             args.results_path = args.output_dir / "upstream" / "worldbench_results.json"
             materialize_artifact_scores(
                 benchmark_id=args.benchmark_id,
                 score_dir=score_dir,
-                generated_video_dir=args.generated_video_dir,
+                generated_video_dir=None,
                 output_path=args.results_path,
             )
+            artifact_score_imported = True
             command = [
                 "worldfoundry.evaluation.tasks.execution.framework.artifact_score_runtime",
                 "--benchmark-id",
@@ -860,10 +1012,10 @@ def main(argv: list[str] | None = None) -> int:
             benchmark_id=args.benchmark_id,
             output_dir=args.output_dir,
             results_path=args.results_path,
-            official_runtime_executed=args.run_official,
+            artifact_score_imported=artifact_score_imported,
             command=command,
         )
-    except (OSError, ValueError, json.JSONDecodeError, csv.Error) as exc:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError, csv.Error) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

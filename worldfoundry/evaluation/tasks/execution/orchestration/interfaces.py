@@ -113,13 +113,41 @@ class OfficialRunResult:
         return self.official_benchmark_verified and self.integration_evidence
 
     @property
+    def execution_ok(self) -> bool:
+        """Return whether the official runner produced valid integration evidence."""
+        return self.integration_evidence
+
+    @property
+    def operation_ok(self) -> bool:
+        """Return whether the operation selected by ``metadata.mode`` succeeded.
+
+        Official execution remains evidence-gated.  Result-import modes may
+        succeed without becoming integration evidence when their normalizer
+        produced usable metrics.  Contract mode is likewise an internal
+        operation outcome, not an official benchmark claim.
+        """
+        if self.execution_ok:
+            return True
+        mode = str(self.metadata.get("mode") or "")
+        if mode in {"normalizer", "official-validation"}:
+            return (
+                self.metadata.get("normalization_ok") is True
+                and self.metadata.get("returncode") in {None, 0}
+            )
+        if mode == "contract":
+            return self.metadata.get("contract_only") is True
+        return False
+
+    @property
     def ok(self) -> bool:
-        """Return whether the run is release-facing official evidence."""
-        return self.full_official_ok
+        """Return whether execution succeeded, independently of full-suite eligibility."""
+        return self.operation_ok
 
     def to_dict(self) -> dict[str, JsonValue]:
         """Converts the official run result into a plain JSON-compatible dictionary, including properties."""
         payload = _plain(asdict(self))
+        payload["execution_ok"] = self.execution_ok
+        payload["operation_ok"] = self.operation_ok
         payload["full_official_ok"] = self.full_official_ok
         payload["ok"] = self.ok
         return payload

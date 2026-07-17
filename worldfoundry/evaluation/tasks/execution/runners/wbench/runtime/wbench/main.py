@@ -40,6 +40,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.environ.get("WBENCH_DATA_DIR", os.path.join(PROJECT_ROOT, "data"))
 sys.path.insert(0, PROJECT_ROOT)
 
 
@@ -88,7 +89,7 @@ def is_navi_case(case_data):
 
 def run_phase_precompute(model, video_dir, gpus, skip_sam2=False, skip_da3=False, skip_megasam=False):
     model_dir = os.path.dirname(video_dir)
-    data_dir = os.path.join(PROJECT_ROOT, "data")
+    data_dir = DATA_DIR
     gpu_str = ",".join(str(g) for g in gpus)
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = gpu_str
@@ -541,7 +542,7 @@ def run_phase_gpu(model, video_dir, gpus, metrics=None):
     import multiprocessing as mp
 
     model_dir = os.path.dirname(video_dir)
-    data_dir = os.path.join(PROJECT_ROOT, "data")
+    data_dir = DATA_DIR
     cases_dir = os.path.join(data_dir, "cases")
     eval_dir = os.path.join(model_dir, "evaluation")
     os.makedirs(eval_dir, exist_ok=True)
@@ -733,7 +734,7 @@ def run_phase_vlm(model, video_dir, vlm_workers=8, metrics=None):
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     model_dir = os.path.dirname(video_dir)
-    data_dir = os.path.join(PROJECT_ROOT, "data")
+    data_dir = DATA_DIR
     cases_dir = os.path.join(data_dir, "cases")
     eval_dir = os.path.join(model_dir, "evaluation")
     os.makedirs(eval_dir, exist_ok=True)
@@ -1033,7 +1034,7 @@ def main():
     if args.phase in ("all", "report"):
         model_dir = os.path.dirname(video_dir)
         eval_dir = os.path.join(model_dir, "evaluation")
-        cases_dir = os.path.join(PROJECT_ROOT, "data", "cases")
+        cases_dir = os.path.join(DATA_DIR, "cases")
         report = generate_report(args.model, eval_dir, video_dir, cases_dir)
 
         # Print summary

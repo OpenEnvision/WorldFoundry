@@ -170,7 +170,7 @@ release_status: experimental
 maturity: contract_ready
 open_source_status: experimental
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
 - In-tree WorldArena video-quality runtime under worldfoundry/evaluation/tasks/execution/runners/worldarena
@@ -192,7 +192,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldArenaContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   surface: official_runner
   normalizer_verified: true
 dataset:

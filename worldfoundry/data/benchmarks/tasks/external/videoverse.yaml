@@ -49,7 +49,7 @@ metadata:
   release_status: experimental
   maturity: contract_ready
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   base_model_dependencies:
   - videoverse_dataset_assets
@@ -79,7 +79,7 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoVerseContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
+    runtime_verified: false
     credential_gated: true
     framework_ready: true
     surface: videoverse_official_in_tree
@@ -175,7 +175,7 @@ tasks:
       source_kind: benchmark_zoo
       benchmark_id: videoverse
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       hf_dataset_id: NNaptmn/VideoVerse

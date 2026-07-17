@@ -6,16 +6,17 @@ bounded_official_validation:
   metric_family: camera_motion_binary_classification
   score_file_count: 1
   evaluated_splits: 1
-  official_benchmark_verified: true
-  integration_evidence: true
+  official_benchmark_verified: false
+  integration_evidence: false
   leaderboard_valid: false
   full_suite_verified: false
   verified: true
-  scope: bounded_official_validation
+  scope: bounded_score_normalization_validation
+  normalizer_verified: true
   scorecard: tmp/local_open_eval/camerabench_binary_official_validation_after_readiness_layers_20260525/scorecard.json
 credential_gated_reason: CameraBench framework validation is wired; formal runs require user-provided official 
   CameraBench result JSON or a prepared CameraBench score_dir, plus optional API credentials for caption GPT judging.
-environment_id: worldplay-video-metrics
+environment_id: worldfoundry-unified-cu128
 id: camerabench
 name: CameraBench
 needs_new_env: false
@@ -40,11 +41,11 @@ base_model_dependency_preflight:
   - DROID-SLAM remains available through slam_stack for hard-env official metric paths, but is not required for the 
     driver-compatible CameraBench validation path.
   missing: []
-preflight_command: ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python -m 
+preflight_command: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile camerabench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/camerabench.yaml --output-dir 
   tmp/worldfoundry_preflight/camerabench --json
-python_path: ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots: []
 required_assets:
   local_dataset_paths:
@@ -53,10 +54,10 @@ required_assets:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/camerabench.yaml
   scorecard_paths:
   - tmp/local_open_eval/camerabench_binary_official_validation_after_readiness_layers_20260525/scorecard.json
-required_env:
-- WORLDFOUNDRY_CAMERABENCH_DATA_ROOT or --benchmark-data-root
-- WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH, --official-results-path, WORLDFOUNDRY_CAMERABENCH_SCORE_DIR, or --score-dir
+required_env: []
 optional_env:
+- WORLDFOUNDRY_CAMERABENCH_DATA_ROOT
+- WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH
 - WORLDFOUNDRY_CAMERABENCH_STRICT
 - WORLDFOUNDRY_BENCHMARK_DATA_ROOT
 - WORLDFOUNDRY_CAMERABENCH_SCORE_DIR
@@ -77,10 +78,12 @@ required_paths:
 - id: local_dataset_1
   env: WORLDFOUNDRY_CAMERABENCH_DATA_ROOT
   path: ${WORLDFOUNDRY_CAMERABENCH_DATA_ROOT}
+  required: false
 - id: local_dataset_cache
   path: cache/worldfoundry/data/hfd_datasets/syCen/CameraBench
+  required: false
 requires_cuda_visibility: false
-status: credential_gated_framework_ready
+status: in_tree_score_normalizer_ready_raw_video_evaluator_pending
 validation_command:
 - worldfoundry-eval
 - zoo

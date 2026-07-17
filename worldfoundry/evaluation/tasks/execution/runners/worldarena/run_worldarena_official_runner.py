@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -15,13 +16,15 @@ REPO_ROOT = Path(__file__).resolve().parents[6]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from worldfoundry.core.time import utc_now_iso
-from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION
-from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
-from worldfoundry.evaluation.tasks.execution.framework.io import env_path, write_json
-from worldfoundry.base_models.capabilities import vbench_asset_path
-from worldfoundry.evaluation.tasks.execution.framework.result_normalizer import OfficialResultsNormalizer
-from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR
+from worldfoundry.base_models.capabilities import vbench_asset_path  # noqa: E402
+from worldfoundry.core.time import utc_now_iso  # noqa: E402
+from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION  # noqa: E402
+from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry  # noqa: E402
+from worldfoundry.evaluation.tasks.execution.framework.io import env_path, write_json  # noqa: E402
+from worldfoundry.evaluation.tasks.execution.framework.result_normalizer import (  # noqa: E402
+    OfficialResultsNormalizer,
+)
+from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR  # noqa: E402
 
 RUNNER_ROOT = Path(__file__).resolve().parent
 DEFAULT_WORLDARENA_ROOT = RUNNER_ROOT / "runtime" / "video_quality"
@@ -39,6 +42,7 @@ DEFAULT_DIMENSIONS = (
     "image_quality",
     "subject_consistency",
 )
+OFFICIAL_COMPONENT_DIMENSIONS = frozenset((*DEFAULT_DIMENSIONS, "psnr", "ssim"))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -97,18 +101,23 @@ def _path_or_fallback(resolver, fallback: Path | str) -> str:
 
 
 def _generated_config(args: argparse.Namespace, runtime_root: Path, output_dir: Path) -> Path:
-    from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba import checkpoint_path as vfimamba_checkpoint_path
+    from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba import (
+        checkpoint_path as vfimamba_checkpoint_path,
+    )
     from worldfoundry.base_models.perception_core.optical_flow.raft import checkpoint_path as raft_checkpoint_path
     from worldfoundry.base_models.perception_core.optical_flow.sea_raft import (
         checkpoint_path as sea_raft_checkpoint_path,
+    )
+    from worldfoundry.base_models.perception_core.optical_flow.sea_raft import (
         config_path as sea_raft_config_path,
     )
 
     run_root = output_dir / "worldarena_runtime"
     prepared_base = run_root / "prepared"
+    generated_input = args.generated_dataset_dir or args.generated_video_dir
     generated_dataset = (
-        args.generated_dataset_dir.expanduser().resolve()
-        if args.generated_dataset_dir is not None
+        generated_input.expanduser().resolve()
+        if generated_input is not None
         else prepared_base / "generated_dataset"
     )
     gt_dataset = (
@@ -116,9 +125,10 @@ def _generated_config(args: argparse.Namespace, runtime_root: Path, output_dir: 
         if args.gt_data_dir is not None
         else prepared_base / "gt_dataset"
     )
+    action_generated_input = args.action_generated_dataset_dir or args.generated_video_dir
     action_generated = (
-        args.action_generated_dataset_dir.expanduser().resolve()
-        if args.action_generated_dataset_dir is not None
+        action_generated_input.expanduser().resolve()
+        if action_generated_input is not None
         else prepared_base / "generated_dataset_action_following"
     )
     action_gt = (
@@ -205,13 +215,42 @@ def _latest_result_file(config_path: Path, dimensions: list[str]) -> Path:
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
+def _require_prepared_dataset_layout(config_path: Path, dimensions: list[str]) -> None:
+    """Reject flat output folders that the upstream task hierarchy cannot identify."""
+    import yaml
+
+    cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    data = cfg.get("data") or {}
+    action_data = cfg.get("data_action_following") or {}
+    checks: list[tuple[str, Path, str]] = []
+    if any(dimension != "action_following" for dimension in dimensions):
+        value = data.get("val_base")
+        if not value:
+            raise ValueError("WorldArena config is missing data.val_base")
+        checks.append(("video-quality", Path(value).expanduser(), "*/*/*/video"))
+    if "action_following" in dimensions:
+        value = action_data.get("val_base")
+        if not value:
+            raise ValueError("WorldArena config is missing data_action_following.val_base")
+        checks.append(("action-following", Path(value).expanduser(), "*/*/video"))
+    for label, root, pattern in checks:
+        resolved = root.resolve()
+        if not resolved.is_dir() or next(resolved.glob(pattern), None) is None:
+            raise ValueError(
+                f"WorldArena {label} input is not a prepared official dataset: {resolved}. "
+                f"Expected at least one {pattern} directory; pass --generated-dataset-dir, "
+                "--action-generated-dataset-dir, or a complete --config-path."
+            )
+
+
 def run_official_worldarena(args: argparse.Namespace, output_dir: Path) -> Path:
     runtime_root = _runtime_root(args)
     eval_script = runtime_root / "evaluate.py"
     if not eval_script.is_file():
         raise FileNotFoundError(f"missing in-tree WorldArena runtime: {eval_script}")
-    config_path = args.config_path.expanduser().resolve() if args.config_path else _generated_config(args, runtime_root, output_dir)
     dimensions = args.dimension or list(DEFAULT_DIMENSIONS)
+    config_path = args.config_path.expanduser().resolve() if args.config_path else _generated_config(args, runtime_root, output_dir)
+    _require_prepared_dataset_layout(config_path, list(dimensions))
     command = [sys.executable, str(eval_script), "--dimension", *dimensions, "--config_path", str(config_path)]
     if args.overwrite:
         command.append("--overwrite")
@@ -246,38 +285,151 @@ def resolve_results_path(args: argparse.Namespace) -> Path | None:
     return matches[-1].resolve() if matches else None
 
 
+def _finite_float(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) else None
+
+
+def _numeric_leaves(value: Any) -> list[float]:
+    scalar = _finite_float(value)
+    if scalar is not None:
+        return [scalar]
+    if isinstance(value, dict):
+        leaves: list[float] = []
+        for child in value.values():
+            leaves.extend(_numeric_leaves(child))
+        return leaves
+    if isinstance(value, (list, tuple)):
+        leaves = []
+        for child in value:
+            leaves.extend(_numeric_leaves(child))
+        return leaves
+    return []
+
+
+def _official_component_score(payload: Any) -> tuple[float, int] | None:
+    """Read the two output shapes emitted by the checked-in WorldArena runtime."""
+    if isinstance(payload, (list, tuple)) and payload:
+        aggregate = _finite_float(payload[0])
+        if aggregate is not None:
+            details = payload[1] if len(payload) > 1 else None
+            sample_count = len(details) if isinstance(details, list) else 0
+            return aggregate, sample_count
+    if isinstance(payload, dict):
+        values = _numeric_leaves(payload)
+        if values:
+            return sum(values) / len(values), len(values)
+    scalar = _finite_float(payload)
+    return (scalar, 1) if scalar is not None else None
+
+
+def _official_component_metrics(results_path: Path) -> dict[str, dict[str, Any]]:
+    payload = json.loads(results_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return {}
+    metrics: dict[str, dict[str, Any]] = {}
+    for metric_id in sorted(OFFICIAL_COMPONENT_DIMENSIONS.intersection(payload)):
+        scored = _official_component_score(payload[metric_id])
+        if scored is None:
+            continue
+        raw_score, sample_count = scored
+        metrics[metric_id] = {
+            "available": True,
+            "raw_score": raw_score,
+            # The upstream runtime preserves raw component scales.  Do not
+            # pretend they are mutually comparable normalized scores.
+            "normalized_score": None,
+            "coverage": 1.0,
+            "components": {"sample_count": sample_count},
+            "diagnostics": {
+                "source": "worldarena_official_component_results",
+                "evidence_scope": "video_quality_component",
+            },
+        }
+    return metrics
+
+
 def normalize_worldarena_results(args: argparse.Namespace, results_path: Path, output_dir: Path) -> dict[str, Any]:
     entry = load_benchmark_zoo_registry(BENCHMARK_ZOO_DIR).get(args.benchmark_id)
     normalization = OfficialResultsNormalizer.from_benchmark_entry(entry).normalize_file(str(results_path))
     per_metric = normalization.scorecard_metrics()
+    component_metrics = _official_component_metrics(results_path)
+    per_metric.update(component_metrics)
     available_count = sum(1 for item in per_metric.values() if item.get("available") is True)
+    raw_rows = normalization.raw_metric_rows()
+    raw_rows.extend(
+        {
+            "benchmark_id": args.benchmark_id,
+            "metric_id": metric_id,
+            "sample_id": "__aggregate__",
+            "raw_value": item["raw_score"],
+            "normalized_value": None,
+            "valid": True,
+            "available": True,
+            "coverage": item["coverage"],
+            "components": item["components"],
+            "diagnostics": item["diagnostics"],
+        }
+        for metric_id, item in component_metrics.items()
+    )
     raw_metric_path = output_dir / "raw_metric_table.jsonl"
     raw_metric_path.write_text(
-        "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in normalization.raw_metric_rows()),
+        "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in raw_rows),
         encoding="utf-8",
     )
     scorecard_path = output_dir / "scorecard.json"
     official_runtime_executed = bool(getattr(args, "run_official", False))
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
-        "official_benchmark_verified": official_runtime_executed and available_count > 0,
-        "integration_evidence": False,
+        # This in-tree runtime covers WorldArena's video-quality component.  A
+        # successful run is execution evidence, not proof of the embodied tracks.
+        "official_benchmark_verified": False,
+        "integration_evidence": official_runtime_executed and bool(component_metrics),
         "leaderboard_valid": False,
         "normalizer_only": not official_runtime_executed,
         "normalization_ok": available_count > 0,
+        "eligibility": {
+            "full_suite_valid": False,
+            "official_video_quality_component_verified": (
+                official_runtime_executed and bool(component_metrics)
+            ),
+            "embodied_tracks_executed": False,
+        },
         "run": {
-            "status": "official_results_imported" if available_count > 0 else "official_results_missing_scores",
+            "status": (
+                "official_video_quality_runtime"
+                if official_runtime_executed and component_metrics
+                else "official_results_imported"
+                if available_count > 0
+                else "official_results_missing_scores"
+            ),
             "started_at": utc_now_iso(),
             "runner": "worldarena_official_runner",
         },
         "benchmark": {
             "benchmark_id": args.benchmark_id,
             "contract_only": False,
-            "evidence_level": "official_results_normalized",
+            "evidence_level": (
+                "official_video_quality_runtime"
+                if official_runtime_executed
+                else "official_results_normalized"
+            ),
+            "evidence_scope": (
+                "bounded_video_quality_component"
+                if official_runtime_executed and component_metrics
+                else "result_import"
+            ),
         },
         "dataset": {
             "official_results_path": str(results_path.resolve()),
             "generated_video_dir": None if args.generated_video_dir is None else str(args.generated_video_dir),
+            "generated_dataset_dir": (
+                None
+                if getattr(args, "generated_dataset_dir", None) is None
+                else str(args.generated_dataset_dir)
+            ),
         },
         "metrics": {
             "leaderboard": {
@@ -286,6 +438,11 @@ def normalize_worldarena_results(args: argparse.Namespace, results_path: Path, o
                 if item.get("available") and item.get("raw_score") is not None
             },
             "per_metric": per_metric,
+            "summary": {
+                "available_metric_count": available_count,
+                "official_component_metric_count": len(component_metrics),
+                "scope": "video_quality_components",
+            },
         },
         "artifacts": {
             "scorecard": str(scorecard_path.resolve()),
@@ -321,7 +478,26 @@ def main(argv: list[str] | None = None) -> int:
                     "error": str(exc),
                 },
                 "benchmark": {"benchmark_id": args.benchmark_id},
-                "metrics": {"leaderboard": {}, "per_metric": {}},
+                "dataset": {
+                    "official_results_path": None,
+                    "generated_video_dir": (
+                        None if args.generated_video_dir is None else str(args.generated_video_dir)
+                    ),
+                },
+                "metrics": {
+                    "leaderboard": {},
+                    "per_metric": {},
+                    "summary": {
+                        "available_metric_count": 0,
+                        "official_component_metric_count": 0,
+                        "scope": "video_quality_components",
+                    },
+                },
+                "eligibility": {
+                    "full_suite_valid": False,
+                    "official_video_quality_component_verified": False,
+                    "embodied_tracks_executed": False,
+                },
                 "artifacts": {"scorecard": str((output_dir / "scorecard.json").resolve())},
             }
             write_json(output_dir / "scorecard.json", failure)

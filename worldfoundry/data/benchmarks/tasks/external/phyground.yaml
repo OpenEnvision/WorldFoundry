@@ -43,9 +43,9 @@ metadata:
   integration_status: integrated
   maturity: contract_ready
   release_status: experimental
-  open_source_status: in_tree_artifact_scores_ready
+  open_source_status: in_tree_result_importer
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   base_model_dependencies:
   - phyground_dataset_assets
@@ -80,16 +80,13 @@ metadata:
     dimensions.
   - Treat official repo and HF dataset refs as provenance; evaluator supplies materialized assets.
   requires:
-  - --benchmark-data-root <phyground_data_root> or WORLDFOUNDRY_PHYGROUND_DATA_ROOT
-  - prompts/phyground.json under the data root, or --prompt-manifest <path>
   - annotations/ under the data root, or --official-results-path <path>
-  - --generated-artifact-dir <generated_videos>
+  - prompts/phyground.json or --prompt-manifest <path> only when coverage checks are requested
   - --result-model-id <model_id> when annotations contain multiple model ids
   blockers:
   - WorldFoundry imports PhyGround judge outputs; provide official PhyGround annotations/results through 
     --official-results-path or annotations/ under --benchmark-data-root.
-  - Full leaderboard validation still requires generated videos and complete scorer/judge outputs for the official
-    prompt suite.
+  - The in-tree path does not execute PhyJudge or a cloud judge over candidate videos.
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/phyground.yaml
     dataset_refs:
@@ -105,8 +102,8 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
-    surface: official_in_tree_runtime
+    runtime_verified: false
+    surface: in_tree_artifact_score_importer
     normalizer_verified: false
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py
@@ -137,7 +134,7 @@ metadata:
     output_artifact: benchmark_scorecard
     filename_template: scorecard.json
   runtime:
-    kind: in_tree_official_source
+    kind: in_tree_result_importer
     root: worldfoundry/evaluation/tasks/execution/runners/phyground/runtime/phyground
     root_env: WORLDFOUNDRY_PHYGROUND_ROOT
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
@@ -176,15 +173,11 @@ metadata:
   - --output-dir
   - <out>
   - --json
-  run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py --run-official 
-    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir 
-    "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   checkpoint_refs: []
 tasks:
   phyground_standard:
     benchmark_name: phyground
-    protocol: external_official_benchmark
+    protocol: official_result_import
     capability_track: text_image_to_video
     schema_type: generated_artifact_set
     input_keys:
@@ -223,9 +216,9 @@ tasks:
           generated_video:
             kind: video
       evaluation_requirements:
-      - Apply official PhyGround physical reasoning metrics to generated videos.
+      - Normalize caller-supplied PhyGround judge outputs; judge execution is not provided.
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       status: official_hf_dataset_required
@@ -237,7 +230,7 @@ tasks:
         generated_video:
           kind: video
     evaluation_protocol:
-    - name: in_tree_phyground_evaluator
+    - name: result_normalizer
       metric_ids:
       - semantic_adherence
       - physical_temporal_validity
@@ -248,7 +241,7 @@ tasks:
       - phyground_overall
       evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
       status: implemented
-    - name: external_official_runner
+    - name: result_importer
       metric_ids:
       - semantic_adherence
       - physical_temporal_validity

@@ -1,0 +1,110 @@
+{
+  "adapter": "matrix_game_2",
+  "aliases": [
+    "matrix-game-2",
+    "matrix_game_2"
+  ],
+  "amplitude": {
+    "calibration_status": "model_limitation_20260616",
+    "max_amount": 0.6,
+    "metadata": {
+      "candidate_payload_unit": "matrix_keyboard_mouse_action_conditions",
+      "target_c2w_is_model_effective": false
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 25,
+  "default_frames": 597,
+  "default_height": 352,
+  "default_width": 640,
+  "execution_contract": {
+    "cli_flag_parameters": [],
+    "cli_parameter_order": [
+      [
+        "--config_path",
+        "config_path"
+      ],
+      [
+        "--checkpoint_path",
+        "checkpoint_path"
+      ],
+      [
+        "--img_path",
+        "img_path"
+      ],
+      [
+        "--output_folder",
+        "output_folder"
+      ],
+      [
+        "--num_output_frames",
+        "num_output_frames"
+      ],
+      [
+        "--seed",
+        "seed"
+      ],
+      [
+        "--pretrained_model_path",
+        "pretrained_model_path"
+      ]
+    ],
+    "command_prefix": [
+      "python"
+    ],
+    "entrypoint": "inference.py",
+    "official_inference_profile": {
+      "fps": 25,
+      "mode": "universal",
+      "num_output_frames": 150,
+      "resolution": [
+        352,
+        640
+      ],
+      "seed": 0,
+      "video_length": 597
+    },
+    "official_runtime": {
+      "python": ">=3.10",
+      "source": "Matrix-Game-2 inference.py official defaults",
+      "torch": "CUDA-enabled torch"
+    },
+    "runtime_parameters": {
+      "camera_value": 0.1,
+      "checkpoint_path": "<MODEL_PATH>",
+      "config_path": "configs/inference_yaml/inference_universal.yaml",
+      "mode": "universal",
+      "num_output_frames": 150,
+      "pretrained_model_path": "<MODEL_PATH>",
+      "seed": 0
+    },
+    "wrbench_benchmark_profile": {
+      "dimensions": [
+        352,
+        640
+      ],
+      "duration_seconds": 23.88,
+      "fps": 25,
+      "num_output_frames": 150,
+      "video_length": 597
+    },
+    "wrbench_policy": {
+      "record_materialized_script_for_non_dry_run": true,
+      "requires_first_frame_image": true,
+      "requires_prompt": true,
+      "target_c2w_is_model_effective": false,
+      "uses_native_keyboard_mouse_actions": true
+    }
+  },
+  "input_kind": "image",
+  "key": "matrix-game-2",
+  "payload_type": "matrix_game2_action_conditions",
+  "status": "active"
+}

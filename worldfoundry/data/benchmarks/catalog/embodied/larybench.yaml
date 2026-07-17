@@ -1,0 +1,153 @@
+id: larybench
+name: LARYBench
+aliases:
+- LARY
+- latent-action-representation-yielding-benchmark
+benchmark_kind:
+- latent-action
+- representation-evaluation
+- vision-to-action
+- embodied-action
+domains:
+- vla
+- embodied-action
+- robot-manipulation
+- action-recognition
+modalities:
+- image
+- video
+- action
+- state
+tags:
+- benchmark-zoo
+- external-official
+- in-tree-runtime
+- latent-action
+status: confirmed_official_code_and_hf_data
+official_sources:
+  github:
+    url: https://github.com/meituan-longcat/LARYBench
+    head_sha: e7feaf1b72921ee2c34e489adb0f45faf356ecee
+  project_page: https://meituan-longcat.github.io/LARYBench/
+  paper_url: https://arxiv.org/abs/2604.11689
+  license: mit
+  huggingface_datasets:
+  - repo_id: meituan-longcat/LARYBench
+dataset:
+  hf_dataset_id: meituan-longcat/LARYBench
+  split: benchmark_defined
+  requires_auth: false
+  notes:
+  - Large classification videos, robot image pairs, trajectories, and metadata are staged outside the package through DATA_DIR.
+metrics:
+- id: extraction_coverage
+  name: Latent-action extraction coverage
+  higher_is_better: true
+  primary: true
+  stage: extract
+- id: top1_accuracy
+  name: Action-semantic top-1 accuracy
+  higher_is_better: true
+  primary: true
+  stage: classify
+- id: macro_f1
+  name: Action-semantic macro F1
+  higher_is_better: true
+  stage: classify
+- id: weighted_f1
+  name: Action-semantic weighted F1
+  higher_is_better: true
+  stage: classify
+- id: val_seen_mse
+  name: Seen-split robot-action MSE
+  higher_is_better: false
+  primary: true
+  stage: regress
+- id: val_unseen_mse
+  name: Unseen-split robot-action MSE
+  higher_is_better: false
+  stage: regress
+runner:
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - larybench
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <classification_summary.json_or_best_result.json>
+  - --stage
+  - <classify_or_regress>
+  - --output-dir
+  - <out>
+  - --json
+  run_command: >-
+    ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
+    worldfoundry.evaluation.tasks.execution.runners.larybench.run_larybench_official_runner
+    --benchmark-id larybench --run-official --stage classify
+    --dataset "$LARY_DATASET" --model "$LARY_MODEL" --dim "$LARY_DIM"
+    --classes "$LARY_CLASSES" --dataset-root "$DATA_DIR"
+    --metadata-root "$LARY_METADATA_DIR" --latent-action-root "$LARY_LA_DIR"
+    --gpus "${CUDA_VISIBLE_DEVICES:-0}" --output-dir "$WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR" --json
+  runtime:
+    kind: in_tree_official_source
+    root: worldfoundry/evaluation/tasks/execution/runners/larybench
+    repo_url: https://github.com/meituan-longcat/LARYBench.git
+    repo_revision: e7feaf1b72921ee2c34e489adb0f45faf356ecee
+    results_path_env: WORLDFOUNDRY_LARYBENCH_RESULTS_PATH
+    dataset_root_env: DATA_DIR
+    metadata_root_env: LARY_METADATA_DIR
+    latent_action_root_env: LARY_LA_DIR
+    model_root_env: MODEL_DIR
+  expected_artifacts:
+  - scorecard.json
+  - benchmark_contract.json
+  - raw_metric_table.jsonl
+  verification_status: pending_checkpoint_and_dataset_run
+  notes:
+  - Extraction partitions one metadata table across the selected GPUs and merges the resulting CSVs.
+  - Classification uses one local process per selected GPU; regression uses Accelerate across CUDA_VISIBLE_DEVICES.
+  - Existing official outputs can be normalized without loading datasets or checkpoints.
+integration:
+  status: integrated
+  evidence:
+    runtime_surface: larybench_official_in_tree
+    normalizer_verified: true
+    runtime_smoke_verified: true
+    full_suite_verified: false
+open_source_status: in_tree_runtime
+release_status: experimental
+maturity: contract_ready
+official_benchmark_verified: false
+integration_evidence: true
+leaderboard_valid: false
+requires:
+- selected LARYBench dataset shards
+- checkpoint assets for the selected representation model
+- extracted latent actions before classification or regression
+blockers:
+- Full leaderboard parity requires the complete official split, exact checkpoint, probe configuration, and retained run artifacts.
+data_refs:
+  hf_dataset_id: meituan-longcat/LARYBench
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/larybench.yaml
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/larybench/cli.py
+  - worldfoundry/evaluation/tasks/execution/runners/larybench/extract.py
+  - worldfoundry/evaluation/tasks/execution/runners/larybench/classification.py
+  - worldfoundry/evaluation/tasks/execution/runners/larybench/regression.py
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: true
+  normalizer_verified: true
+  surface: larybench_official_in_tree
+optional_base_model_dependencies:
+- spatial_perception_core_stack
+artifact_layout:
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json

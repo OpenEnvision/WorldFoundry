@@ -1,0 +1,39 @@
+benchmark: physical-ai-bench
+description: In-tree Physical AI Bench generation and conditional-generation evaluation.
+tags: [benchmark-zoo, external-official, physical-ai-bench]
+splits: [generation, conditional-generation]
+
+metrics:
+  generation: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy]
+  conditional-generation: [dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+
+metadata:
+  source_kind: benchmark_zoo
+  benchmark_id: physical-ai-bench
+  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
+  runtime:
+    kind: in_tree_multi_track_evaluator
+    implementation: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
+    config: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml
+  integration_status: integrated
+  status: in_tree_runtime_ready
+  shared_base_models: [vbench, vbench-plus-plus, qwen-vl, dover, lpips, video-depth-anything, grounding-dino, sam2]
+
+tasks:
+  physical_ai_bench_generation:
+    benchmark_name: physical-ai-bench
+    protocol: pai_bench_g
+    capability_track: video_generation
+    input_keys: [prompt, condition_image, generated_video]
+    output_keys: [scorecard, per_sample_scores]
+    metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy]
+    dataset: {hf_dataset_id: shi-labs/physical-ai-bench-generation}
+  physical_ai_bench_conditional_generation:
+    benchmark_name: physical-ai-bench
+    protocol: pai_bench_c
+    capability_track: conditional_video_generation
+    input_keys: [control_video, generated_video, captions]
+    output_keys: [scorecard, per_sample_scores]
+    metric_ids: [dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+    dataset: {hf_dataset_id: shi-labs/physical-ai-bench-conditional-generation}

@@ -1,0 +1,29 @@
+{
+  "adapter": "hydra",
+  "aliases": [
+    "hydra"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.6,
+    "metadata": {
+      "translation_divisor": 100
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "hydra_c2w_pre_div100"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": false,
+    "translation": true
+  },
+  "default_fps": 15,
+  "default_frames": 77,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "source_video",
+  "key": "hydra",
+  "payload_type": "hydra_split_camera_json",
+  "status": "active"
+}

@@ -248,7 +248,12 @@ def extend_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--fetv-fvd-gpus", default=os.environ.get("WORLDFOUNDRY_FETV_FVD_GPUS"))
     parser.add_argument("--fetv-fvd-resolution", default=os.environ.get("WORLDFOUNDRY_FETV_FVD_RESOLUTION"))
     parser.add_argument("--fetv-max-frame-num", default=os.environ.get("WORLDFOUNDRY_FETV_MAX_FRAME_NUM"))
-    parser.add_argument("--fetv-limit", default=os.environ.get("WORLDFOUNDRY_FETV_LIMIT"))
+    parser.add_argument(
+        "--fetv-limit",
+        type=int,
+        default=os.environ.get("WORLDFOUNDRY_FETV_LIMIT"),
+        help="Evaluate an exact zero-based prompt prefix; bounded runs are never leaderboard-valid.",
+    )
     parser.add_argument(
         "--artifact-score-dir",
         type=Path,
@@ -304,7 +309,7 @@ def build_official_command(*, config, repo_root: Path, generated_video_dir: Path
             command.extend(["--fvd-resolution", str(args.fetv_fvd_resolution)])
         if args.fetv_max_frame_num:
             command.extend(["--max-frame-num", str(args.fetv_max_frame_num)])
-        if args.fetv_limit:
+        if args.fetv_limit is not None:
             command.extend(["--limit", str(args.fetv_limit)])
         return command
 

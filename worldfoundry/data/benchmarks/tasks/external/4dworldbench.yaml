@@ -64,7 +64,7 @@ metadata:
   release_status: experimental
   open_source_status: in_tree_official_runtime
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   source_provenance:
     official_repo:
@@ -101,7 +101,7 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
+    runtime_verified: false
     surface: official_runner
     normalizer_verified: true
   artifact_layout:
@@ -189,7 +189,7 @@ tasks:
       source_kind: benchmark_zoo
       benchmark_id: 4dworldbench
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     runtime_requirements:
       results_path_env: WORLDFOUNDRY_4DWORLDBENCH_RESULTS_PATH

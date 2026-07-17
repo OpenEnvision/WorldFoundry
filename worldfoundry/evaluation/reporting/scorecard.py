@@ -13,6 +13,8 @@ from typing import Any, Mapping
 
 from worldfoundry.evaluation.utils import write_json
 
+from .comparison_identity import build_comparison_identity
+
 SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 _MISSING_EVIDENCE_REASON = "missing official/full-suite leaderboard evidence gate"
 _EVIDENCE_CONTAINER_KEYS = frozenset(
@@ -137,7 +139,9 @@ def build_scorecard(
     artifacts: Mapping[str, Any],
     skipped: Mapping[str, Any] | None = None,
     leaderboard_evidence: Mapping[str, Any] | None = None,
+    provenance: Mapping[str, Any] | None = None,
     evaluation_kind: str = "existing_results",
+    comparison_identity: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the normalized scorecard for in-process scoring runs."""
 
@@ -152,6 +156,14 @@ def build_scorecard(
     generation_payload = dict(generation)
     failed_samples = int(metrics_summary_payload.get("failed_samples") or 0)
     skip_payload = dict(skipped or {})
+    provenance_payload = dict(provenance or {})
+    provenance_claim = provenance_payload.get("claim")
+    provenance_claim = provenance_claim if isinstance(provenance_claim, Mapping) else {}
+    provenance_candidate = (
+        provenance_claim.get("leaderboard_candidate") is True
+        if provenance_payload
+        else True
+    )
     evidence_gate = _leaderboard_evidence_gate(
         leaderboard_evidence=leaderboard_evidence,
         run=run_payload,
@@ -165,8 +177,26 @@ def build_scorecard(
         eligibility_reasons.append(f"{failed_samples} sample(s) failed")
     if not evidence_gate["present"]:
         eligibility_reasons.append(_MISSING_EVIDENCE_REASON)
+    if not provenance_candidate:
+        eligibility_reasons.append("evaluation provenance is not leaderboard-comparable")
     score_valid = failed_samples == 0
-    leaderboard_valid = score_valid and bool(evidence_gate["present"])
+    leaderboard_valid = score_valid and bool(evidence_gate["present"]) and provenance_candidate
+    resolved_comparison_identity = build_comparison_identity(
+        benchmark=benchmark_payload,
+        dataset=dataset_payload,
+        metrics={
+            "leaderboard": leaderboard,
+            "per_metric": per_metric,
+            **{
+                key: metrics_summary_payload[key]
+                for key in ("metric_revision", "metrics_revision", "metric_config_hash", "config_hash")
+                if key in metrics_summary_payload
+            },
+        },
+        provenance=provenance_payload,
+        evaluation_kind=evaluation_kind,
+        explicit=comparison_identity,
+    )
 
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
@@ -174,6 +204,8 @@ def build_scorecard(
         "benchmark": benchmark_payload,
         "model": dict(model),
         "dataset": dataset_payload,
+        "provenance": provenance_payload,
+        "comparison_identity": resolved_comparison_identity,
         "eligibility": {
             "leaderboard_valid": leaderboard_valid,
             "leaderboard_eligible": leaderboard_valid,
@@ -197,6 +229,7 @@ def build_scorecard(
         "evaluation": {
             "available": True,
             "kind": evaluation_kind,
+            "mode": resolved_comparison_identity["evaluation_mode"],
             "num_results": int(metrics_summary_payload.get("sample_count") or 0),
             "successful_samples": int(metrics_summary_payload.get("successful_samples") or 0),
             "errored_samples": failed_samples,

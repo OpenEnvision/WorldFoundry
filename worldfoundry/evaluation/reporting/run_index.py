@@ -56,6 +56,8 @@ def _index_summary_from_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> d
             for metric_id in (row.get("metric_ids") or _mapping(row.get("metrics")).keys())
         }
     )
+    comparison_keys = sorted({str(row["comparison_key"]) for row in rows if row.get("comparison_key")})
+    comparison_identity_statuses = _comparison_identity_statuses(rows)
     return {
         "schema_version": RUN_INDEX_SCHEMA_VERSION,
         "roots": [],
@@ -64,6 +66,8 @@ def _index_summary_from_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> d
         "benchmarks": benchmarks,
         "datasets": datasets,
         "metric_ids": metric_ids,
+        "comparison_keys": comparison_keys,
+        "comparison_identity_statuses": comparison_identity_statuses,
         "runs": list(rows),
         "rows": list(rows),
         "issues": [],
@@ -308,6 +312,16 @@ def _duplicate_run_id_issues(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         if len(labels) > 1
     ]
 
+
+def _comparison_identity_statuses(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Count complete, incomplete, and unavailable comparison identities."""
+
+    counts: dict[str, int] = {}
+    for row in rows:
+        status = str(row.get("comparison_identity_status") or "unavailable")
+        counts[status] = counts.get(status, 0) + 1
+    return dict(sorted(counts.items()))
+
 def build_run_index(
     roots: str | Path | Sequence[str | Path],
     *,
@@ -356,6 +370,7 @@ def build_run_index(
             for metric_id in (row.get("metric_ids") or _mapping(row.get("metrics")).keys())
         }
     )
+    comparison_keys = sorted({str(row["comparison_key"]) for row in rows if row.get("comparison_key")})
     root_paths = [str(root.resolve()) for root in _normalise_roots(roots)]
     return {
         "schema_version": RUN_INDEX_SCHEMA_VERSION,
@@ -365,6 +380,8 @@ def build_run_index(
         "benchmarks": benchmarks,
         "datasets": datasets,
         "metric_ids": metric_ids,
+        "comparison_keys": comparison_keys,
+        "comparison_identity_statuses": _comparison_identity_statuses(rows),
         "runs": rows,
         "rows": rows,
         "issues": issues,
@@ -382,6 +399,7 @@ def build_markdown_run_index(index: Mapping[str, Any]) -> str:
         f"- Roots: {_format_value(index.get('roots') or [])}",
         f"- Benchmarks: {_format_value(index.get('benchmarks') or [])}",
         f"- Metrics: {_format_value(index.get('metric_ids') or [])}",
+        f"- Comparison identities: {_format_value(index.get('comparison_identity_statuses') or {})}",
         "",
     ]
 
@@ -391,6 +409,8 @@ def build_markdown_run_index(index: Mapping[str, Any]) -> str:
         "Benchmark",
         "Model",
         "Dataset",
+        "Evaluation",
+        "Protocol",
         "Samples",
         "Failed",
         "Score Valid",
@@ -406,6 +426,8 @@ def build_markdown_run_index(index: Mapping[str, Any]) -> str:
             row.get("benchmark"),
             row.get("model_id") or row.get("model_name"),
             row.get("dataset_id"),
+            row.get("evaluation_mode"),
+            row.get("protocol_id"),
             row.get("sample_count"),
             row.get("failed_samples"),
             row.get("score_valid"),

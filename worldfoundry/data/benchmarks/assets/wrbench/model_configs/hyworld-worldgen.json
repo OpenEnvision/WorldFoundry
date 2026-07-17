@@ -1,0 +1,110 @@
+{
+  "adapter": "hyworld_worldgen",
+  "aliases": [
+    "hyworld-worldgen",
+    "hyworld_worldgen",
+    "hy-world",
+    "hyworld",
+    "hy-pano"
+  ],
+  "amplitude": {
+    "calibration_status": "blocked_upstream_20260616",
+    "max_amount": 0.8,
+    "metadata": {
+      "candidate_payload_unit": "hyworld_camera_json_w2c",
+      "target_c2w_is_model_effective": true
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "w2c_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "execution_contract": {
+    "cli_flag_parameters": [],
+    "cli_parameter_order": [
+      [
+        "--target_path",
+        "target_path"
+      ],
+      [
+        "--seed",
+        "seed"
+      ]
+    ],
+    "command_prefix": [
+      "python",
+      "-m",
+      "torch.distributed.run",
+      "--nproc_per_node=1"
+    ],
+    "entrypoint": "hyworld2/worldgen/traj_render.py",
+    "official_inference_profile": {
+      "fps": 16,
+      "panogen_entrypoint": "hyworld2/panogen/pipeline.py",
+      "render_stage": "point_splat_worldgen",
+      "seed": 1024,
+      "traj_generate_entrypoint": "hyworld2/worldgen/traj_generate.py",
+      "traj_render_entrypoint": "hyworld2/worldgen/traj_render.py",
+      "video_length": 81
+    },
+    "official_runtime": {
+      "python": ">=3.10",
+      "source": "HY-World-2.0 hyworld2/worldgen/traj_render.py",
+      "torch": "CUDA-enabled torch distributed"
+    },
+    "runtime_parameters": {
+      "hy_pano_model_path": "<MODEL_PATH>",
+      "hy_pano_subfolder": "HY-Pano-2.0",
+      "panogen_entrypoint": "hyworld2/panogen/pipeline.py",
+      "render_fps": 16,
+      "seed": 1024,
+      "traj_generate_entrypoint": "hyworld2/worldgen/traj_generate.py",
+      "wrbench_traj_id": "traj_wrbench",
+      "wrbench_view_id": "view0"
+    },
+    "wrbench_benchmark_profile": {
+      "dimensions": [
+        480,
+        832
+      ],
+      "duration_seconds": 5.0625,
+      "fps": 16,
+      "video_length": 81
+    },
+    "wrbench_policy": {
+      "allows_payload_local_scene_materialization": false,
+      "allows_shared_scene_materialization": true,
+      "existing_panorama_env": "HYWORLD_PANORAMA_PATH",
+      "existing_scene_env": "HYWORLD_SCENE_PATH",
+      "explicit_scene_type_env": "HYWORLD_SCENE_TYPE",
+      "hy_pano_only_is_not_video_acceptance": true,
+      "optional_panogen_official_cli_env": [
+        "HYWORLD_PANOGEN_BOT_TASK",
+        "HYWORLD_PANOGEN_MAX_NEW_TOKENS",
+        "HYWORLD_PANOGEN_DIFF_INFER_STEPS",
+        "HYWORLD_PANOGEN_HEIGHT",
+        "HYWORLD_PANOGEN_WIDTH",
+        "HYWORLD_PANOGEN_ATTN_IMPL",
+        "HYWORLD_PANOGEN_MOE_IMPL",
+        "HYWORLD_PANOGEN_USE_TAYLOR_CACHE"
+      ],
+      "requires_camera_json": true,
+      "requires_hyworld_scene": true,
+      "shared_scene_root_env": "HYWORLD_SCENE_ROOT",
+      "target_c2w_is_model_effective": true,
+      "wrbench_traj_path": "render_results/view0/traj_wrbench"
+    }
+  },
+  "input_kind": "image",
+  "key": "hyworld-worldgen",
+  "payload_type": "hyworld_worldgen_camera_json",
+  "status": "active"
+}

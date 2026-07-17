@@ -149,7 +149,9 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
-    surface: official_runner
+    runtime_verification_scope: bounded_single_metric
+    full_suite_verified: false
+    surface: bounded_single_metric_runtime
     normalizer_verified: true
   artifact_layout:
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR

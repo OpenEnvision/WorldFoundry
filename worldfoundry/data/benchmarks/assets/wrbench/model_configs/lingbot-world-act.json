@@ -1,0 +1,28 @@
+{
+  "adapter": "lingbot",
+  "aliases": [
+    "lingbot-world-act"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.6,
+    "rotation_gain": 3.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "image",
+  "key": "lingbot-world-act",
+  "notes": "Uses the official public robbyant/lingbot-world-base-act-preview checkpoint and its native pose plus 4D action condition.",
+  "payload_type": "lingbot_pose_arrays",
+  "status": "active",
+  "worldfoundry_model_id": "lingbot-world-act"
+}

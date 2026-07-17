@@ -2,28 +2,11 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
-from typing import Any
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export, package_root_export
 
-
-def package_root() -> Path:
-    return Path(__file__).resolve().parent
-
-
-@lru_cache(maxsize=1)
-def _wrapper() -> Any:
-    from worldfoundry.evaluation.tasks.metrics.facescore import wrapper as _wrapper_module
-
-    return _wrapper_module
-
-
-def FaceScoreModel(*args: Any, **kwargs: Any) -> Any:
-    return _wrapper().FaceScoreModel(*args, **kwargs)
-
-
-def compute_facescore(*args: Any, **kwargs: Any) -> float:
-    return _wrapper().compute_facescore(*args, **kwargs)
+FaceScoreModel = lazy_export(f"{__name__}.wrapper", "FaceScoreModel", owner=__name__)
+compute_facescore = lazy_export(f"{__name__}.wrapper", "compute_facescore", owner=__name__)
+package_root = package_root_export(__file__, owner=__name__)
 
 
 __all__ = ["FaceScoreModel", "compute_facescore", "package_root"]

@@ -1,0 +1,22 @@
+{
+  "profile_id": "t2v_layout_anchor",
+  "banned_style_tokens": [
+    "realistic photography",
+    "medium-wide shot",
+    "camera height",
+    "camera at waist height",
+    "camera at ground level",
+    "straight-ahead",
+    "eye-level",
+    "zero downward tilt",
+    "wide-angle",
+    "wide-angle lens",
+    "deep focus",
+    "lighting",
+    "palette",
+    "tones",
+    "sharp",
+    "spacious composition"
+  ],
+  "generation_rules_summary": "Use only factual first-frame layout anchors from Natural-25 family metadata: subject starts on the left, interactor stays far right, the open surface between them remains explicit, and listed anchors stay visible in the background. Do not add photography, lens, lighting, palette, or model-specific prompt language."
+}

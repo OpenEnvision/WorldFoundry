@@ -4,23 +4,36 @@ benchmark_kind:
 - text-to-video
 - compositionality
 - prompt-suite
-status: confirmed_official_code_and_hf_data
-open_source_status: in_tree_runtime
+status: bounded_official_generative_numeracy_verified
+open_source_status: in_tree_runtime_bounded_official_component_verified
 official_benchmark_verified: false
+official_component_verified: true
+full_suite_verified: false
 integration_evidence: true
 leaderboard_valid: false
 requires:
-- WORLDFOUNDRY_T2V_COMPBENCH_CSV_DIR or WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT
-- WORLDFOUNDRY_T2V_COMPBENCH_ROOT optional override for the bundled code-only runtime
-- WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT
-- WorldFoundry base-model env for Depth-Anything, GroundingDINO, SAM v1, and SAM2
-- MLLM and DOT/tracking runtime for full official metrics
+- A generated-video directory with the persisted T2V-CompBench generation manifest, or an exact official
+  category/NNNN.mp4 layout
+- A local GroundingDINO checkpoint and a local BERT-compatible text encoder for generative_numeracy execution
+- LLaVA-compatible MLLM weights, Depth-Anything, SAM, and DOT/tracking assets for the remaining official categories
 blockers:
-- Default branch is V2; runner pins the expected prompt schema/version through the manifest revision.
-- Depth/GroundingDINO/SAM are modeled as reusable WorldFoundry base-model dependencies; MLLM and DOT/tracking runtime 
-  remain pending.
-- Official CSV normalization and local dataset/video discovery are wired; full heavy metric execution still requires 
-  generated videos plus prepared upstream MLLM/tracking runtime.
+- Full-suite verification requires all 1,400 generated videos (200 for each of seven categories), not the bounded
+  one-video component run.
+- The four MLLM categories still require a compatible LLaVA runtime and checkpoint; motion_binding still requires DOT,
+  and the other detection paths require their category-specific depth/SAM assets.
+- Full official benchmark and leaderboard parity have not been executed.
+official_validation:
+  verified: true
+  scope: bounded_official_generative_numeracy
+  category: generative_numeracy
+  sample_count: 1
+  score: 1.0
+  official_component_verified: true
+  official_benchmark_verified: false
+  full_suite_verified: false
+  integration_evidence: true
+  leaderboard_valid: false
+  scorecard: tmp/eval_chain_smoke/t2v_compbench_numeracy_official/scorecard.json
 official_sources:
   github:
     url: https://github.com/KaiyueSun98/T2V-CompBench
@@ -117,7 +130,7 @@ metrics:
   output_unit: score
 - id: t2v_compbench_average
   name: T2V-CompBench Average
-  description: Mean over available official T2V-CompBench category scores.
+  description: Mean emitted only when all seven official T2V-CompBench category scores are available.
   higher_is_better: true
   leaderboard_key: t2v_compbench_average
   aggregator: mean
@@ -143,14 +156,16 @@ runner:
   run_command:
   - ${WORLDFOUNDRY_UNIFIED_PYTHON}
   - worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
+  - --generated-video-dir
+  - <generated_videos_with_t2v_compbench_generation_manifest.jsonl>
   - --category
-  - all
+  - generative_numeracy
+  - --output-dir
+  - <out>
   - --json
   required_env:
-  - WORLDFOUNDRY_T2V_COMPBENCH_ROOT optional override for the bundled code-only runtime
-  - WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT
-  - WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT
-  - WORLDFOUNDRY_T2V_COMPBENCH_RESULTS_PATH
+  - A candidate generated-video root supplied through --generated-video-dir or --video-root
+  - GroundingDINO checkpoint/text-encoder assets for generative_numeracy
   expected_artifacts:
   - scorecard.json
   - per_sample_scores.jsonl
@@ -160,15 +175,14 @@ runner:
   - dataset_manifest.json
   - upstream_stdout.log
   - upstream_stderr.log
-  verification_status: pending
+  verification_status: bounded_official_generative_numeracy_verified
   notes:
-  - Contract runner maps the seven official compositional categories into WorldFoundry scorecard.
-  - Real-data discovery records Kaiyue/T2V-CompBench-Videos default/train with 25200 rows and generated video coverage 
-    under WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT.
-  - Official wrapper can normalize upstream CSV outputs and can launch individual official category scripts when their 
-    isolated environments and checkpoints are prepared.
-  - Full leaderboard validation still requires complete generated videos plus separate LLaVA, GroundingDINO/SAM, 
-    Depth-Anything, and DOT runtimes.
+  - The strict model-artifact manifest bridge and the in-tree official generative_numeracy evaluator were executed on
+    one real MP4; the resulting scorecard records official_component_verified=true and integration_evidence=true.
+  - The runner can also normalize official CSV outputs and execute other categories when their metric assets are
+    prepared.
+  - Full benchmark and leaderboard validation still require 1,400 videos plus compatible LLaVA, depth/SAM, and DOT
+    runtimes.
   runtime:
     kind: in_tree_official_source
     root: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
@@ -177,12 +191,10 @@ runner:
 integration:
   status: integrated
   blocked_reasons:
-  - Default branch is V2; runner must pin expected prompt schema/version.
-  - Requires separate handling for MLLM, detection, and tracking metric dependencies.
-  - Official CSV normalization and local dataset/video discovery are wired; full heavy metric execution still requires 
-    prepared upstream runtimes and checkpoints.
+  - Full-suite execution requires separate compatible MLLM, detection/depth, and tracking metric assets.
+  - The bounded generative_numeracy execution does not establish full-suite or leaderboard parity.
 release_status: experimental
-maturity: contract_ready
+maturity: bounded_official_component_verified
 data_refs:
   local_dataset_paths:
   - cache/worldfoundry/data/hfd_datasets/Kaiyue/T2V-CompBench-Videos
@@ -196,30 +208,22 @@ runner_availability:
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
-  surface: t2v_compbench_official_in_tree
+  surface: strict_video_manifest_bridge_and_bounded_official_generative_numeracy
   normalizer_verified: true
 base_model_dependencies:
 - grounded_depth_segmentation_stack
 base_model_dependency_preflight:
   status: ready
-  python: ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python
+  python: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
   verified_at: '2026-05-25T07:21:22+00:00'
   in_tree_capabilities:
-  - depth_anything_v3
   - grounding_dino
-  - sam_v1
-  - sam2
   ready_env:
-    WORLDFOUNDRY_DEPTH_ANYTHING_MODEL_DIR: cache/hfd/depth-anything--DA3-LARGE-1.1
-    WORLDFOUNDRY_GROUNDING_DINO_CKPT: cache/hfd/ShilongLiu--GroundingDINO/groundingdino_swint_ogc.pth
-    WORLDFOUNDRY_SAM_VIT_H_CKPT: cache/worldfoundry/assets/worldscore_official/metrics/checkpoints/sam_vit_h_4b8939.pth
-    WORLDFOUNDRY_SAM2_CKPT: cache/hfd/facebook--sam2.1-hiera-base-plus/sam2.1_hiera_base_plus.pt
+    WORLDFOUNDRY_GROUNDING_DINO_CKPT: ${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}
   runtime_env:
     WORLDFOUNDRY_T2V_COMPBENCH_ROOT: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
-    WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT: cache/worldfoundry/data/hfd_datasets/Kaiyue/T2V-CompBench-Videos
   profile_blockers:
-  - WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT
-  - generated_artifact_example_1
+  - Full suite requires 1,400 generated videos and the LLaVA, depth/SAM, and DOT evaluator assets.
   missing: []
 validation_command:
 - worldfoundry-eval
@@ -238,6 +242,6 @@ validation_command:
 - --json
 checkpoint_refs: []
 artifact_layout:
-  generated_artifact_dir_env: WORLDFOUNDRY_T2V_COMPBENCH_RESULTS_PATH
+  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json

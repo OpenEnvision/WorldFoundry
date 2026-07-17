@@ -205,19 +205,67 @@ VideoBenchContract = ExternalBenchmarkContract(
 WorldBenchContract = ExternalBenchmarkContract(
     benchmark_id="worldbench",
     display_name="WorldBench",
-    input_keys=("official_results_path", "worldbench_dataset_root", "generated_video_dir"),
-    output_keys=("scorecard", "raw_metric_table", "per_sample_scores"),
+    input_keys=(
+        "official_results_path",
+        "worldbench_dataset_root",
+        "generated_video_dir",
+        "answer_manifest",
+    ),
+    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "worldbench_evaluation"),
     metric_ids=(
-        "video_based_accuracy",
+        "foreground_miou",
+        "foreground_dice",
+        "background_rmse",
         "text_based_accuracy",
         "multiple_choice_accuracy",
         "binary_accuracy",
-        "worldbench_average",
     ),
-    requires_upstream_runtime=True,
+    requires_upstream_runtime=False,
     notes=(
-        "Contract maps existing WorldBench official result files to WorldFoundry scorecard.",
-        "The public runner is normalizer-first because source-verified official runtime code has not been confirmed.",
+        "In-tree runtime evaluates raw generated continuations with the shared WorldFoundry SAM2 base model.",
+        "Existing WorldBench result files remain supported through the compatibility normalizer.",
+        "The public release computes Dice while naming it mIoU, so the contract reports conventional IoU and release-compatible Dice separately.",
+    ),
+)
+
+PhysicalAIBenchContract = ExternalBenchmarkContract(
+    benchmark_id="physical-ai-bench",
+    display_name="Physical AI Bench (PAI-Bench)",
+    input_keys=(
+        "official_results_path",
+        "dataset_root",
+        "generated_video_dir",
+        "prediction_manifest",
+        "reference_image_dir",
+        "precomputed_depth_dir",
+        "precomputed_segmentation_dir",
+    ),
+    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "official_results"),
+    metric_ids=(
+        "aesthetic_quality",
+        "background_consistency",
+        "imaging_quality",
+        "motion_smoothness",
+        "overall_consistency",
+        "subject_consistency",
+        "i2v_background",
+        "i2v_subject",
+        "vqa_accuracy",
+        "dover_tech_score",
+        "blur_ssim",
+        "canny_f1_score",
+        "canny_precision",
+        "canny_recall",
+        "depth_si_rmse",
+        "seg_m_iou",
+        "seg_recall",
+        "lpips_diversity",
+    ),
+    requires_upstream_runtime=False,
+    notes=(
+        "Generation and conditional-generation evaluation are integrated independently in tree.",
+        "VBench, VBench++ I2V, Qwen-VL, DOVER, LPIPS, Video-Depth-Anything, GroundingDINO, and SAM2 are reused from WorldFoundry base/runtime modules.",
+        "No upstream checkout or third_party directory is executed at runtime.",
     ),
 )
 
@@ -798,8 +846,7 @@ VideoPhy2Contract = ExternalBenchmarkContract(
         "semantic_adherence",
         "physical_commonsense",
         "joint_score",
-        "rule_classification_accuracy",
-        "videophy2_average",
+        "rule_followed_rate",
     ),
     requires_upstream_runtime=True,
     notes=(
@@ -810,22 +857,40 @@ VideoPhy2Contract = ExternalBenchmarkContract(
 
 PhysicsIQContract = ExternalBenchmarkContract(
     benchmark_id="physics-iq",
-    display_name="Physics-IQ",
+    display_name="Physics-IQ Original",
     input_keys=("reference_video_or_frames", "generated_video_dir", "physics_iq_metadata", "official_results_path"),
     output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
     metric_ids=(
         "physics_iq_score",
-        "solid_mechanics",
-        "fluid_dynamics",
-        "optics",
-        "thermodynamics",
-        "magnetism",
-        "physics_iq_average",
+        "physics_iq_stable_score",
+        "physics_iq_spatiotemporal",
+        "physics_iq_spatial",
+        "physics_iq_weighted_spatial",
+        "physics_iq_mse_penalty",
     ),
-    requires_upstream_runtime=True,
+    requires_upstream_runtime=False,
     notes=(
-        "Contract maps Physics-IQ generated-video physical-understanding scores to WorldFoundry scorecard.",
-        "Official dataset/scorer execution remains an upstream runtime stage.",
+        "Contract maps the original Physics-IQ protocol to the in-tree raw-video evaluator.",
+        "Official dataset media remain external assets; no upstream source checkout is used at runtime.",
+    ),
+)
+
+PhysicsIQVerifiedContract = ExternalBenchmarkContract(
+    benchmark_id="physics-iq-verified",
+    display_name="Physics-IQ Verified",
+    input_keys=("reference_video_or_frames", "generated_video_dir", "physics_iq_metadata", "official_results_path"),
+    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
+    metric_ids=(
+        "physics_iq_verified_score",
+        "physics_iq_verified_spatiotemporal",
+        "physics_iq_verified_spatial",
+        "physics_iq_verified_weighted_spatial",
+        "physics_iq_verified_mse",
+    ),
+    requires_upstream_runtime=False,
+    notes=(
+        "Contract maps Physics-IQ Verified to the shared in-tree raw-video evaluator and verified score protocol.",
+        "Official verified dataset media remain external assets; no upstream source checkout is used at runtime.",
     ),
 )
 
@@ -874,6 +939,37 @@ IPVBenchContract = ExternalBenchmarkContract(
     notes=(
         "Contract records IPV-Bench impossible-video generation and understanding metrics.",
         "Human annotation or official judge outputs remain required for leaderboard-grade scores.",
+    ),
+)
+
+WorldReasonBenchContract = ExternalBenchmarkContract(
+    benchmark_id="worldreasonbench",
+    display_name="WorldReasonBench",
+    input_keys=("qa_manifest", "generated_video_dir", "reward_pairs", "official_results_path"),
+    output_keys=("scorecard", "raw_metric_table", "protocol_results", "benchmark_contract"),
+    metric_ids=(
+        "score_pr",
+        "qa_accuracy",
+        "state_score",
+        "process_score",
+        "fidelity_score",
+        "mechanism_score",
+        "static_outcome_score",
+        "dynamic_reasoning_score",
+        "reasoning_gap",
+        "pointwise_score",
+        "reasoning_correctness",
+        "content_fidelity",
+        "visual_aesthetics",
+        "pointwise_spearman",
+        "induced_pairwise_accuracy",
+        "pairwise_accuracy_with_ties",
+        "pairwise_accuracy_without_ties",
+    ),
+    requires_upstream_runtime=True,
+    notes=(
+        "All three official protocol families are normalized by an in-tree runner.",
+        "Official restricted data and judge prompts remain caller-provided external assets.",
     ),
 )
 
@@ -1000,6 +1096,42 @@ EWMBenchContract = ExternalBenchmarkContract(
     notes=(
         "Contract covers EWMBench scene, motion, and semantic quality evaluation for embodied world models.",
         "Official execution requires the upstream evaluator, generated frames/videos, and benchmark assets.",
+    ),
+)
+
+WRBenchContract = ExternalBenchmarkContract(
+    benchmark_id="wrbench",
+    display_name="WRBench",
+    input_keys=(
+        "natural25_manifest",
+        "generated_video_dir",
+        "video_manifest",
+        "camera_sidecars",
+        "official_results_path",
+    ),
+    output_keys=(
+        "scorecard",
+        "benchmark_contract",
+        "raw_metric_table",
+        "per_sample_scores",
+        "main_table",
+    ),
+    metric_ids=(
+        "d1_cam_prec",
+        "d1_cam_align_common_yaw",
+        "d1_cam_align_static_hold",
+        "d2_visual_integrity",
+        "d3_visible_spatial_consistency",
+        "d4_visible_state_consistency",
+        "d5_reobservation_spatial_consistency",
+        "d6_reobservation_state_consistency",
+        "wrbench_average",
+    ),
+    requires_upstream_runtime=False,
+    notes=(
+        "The complete WRBench Python package and Natural-25 assets are vendored in-tree at revision 629595dc60ec08a29711af0377280c4ac9dd40bc.",
+        "D1-CamPrec and D1-CamAlign are separate metrics; D5/D6 use the official re-observation applicability gate.",
+        "Full scoring requires explicitly configured VGGT-Omega, DINOv2, Qwen3.5, and Qwen3-VL model assets.",
     ),
 )
 
@@ -1276,6 +1408,47 @@ VLABenchContract = _embodied_action_contract(
     metric_ids=("success_rate", "task_success", "episode_success", "reward", "normalized_return"),
 )
 
+LARYBenchContract = ExternalBenchmarkContract(
+    benchmark_id="larybench",
+    display_name="LARYBench",
+    input_keys=(
+        "dataset_root",
+        "metadata_root",
+        "latent_action_root",
+        "model_root",
+        "official_results_path",
+    ),
+    output_keys=("scorecard", "raw_metric_table", "benchmark_contract", "runtime_logs"),
+    metric_ids=(
+        "extraction_coverage",
+        "extracted_samples",
+        "input_samples",
+        "top1_accuracy",
+        "macro_precision",
+        "macro_recall",
+        "macro_f1",
+        "weighted_f1",
+        "sample_count",
+        "train_loss",
+        "val_seen_loss",
+        "val_seen_mse",
+        "val_seen_mse_position",
+        "val_seen_mse_orientation",
+        "val_seen_mse_gripper",
+        "val_unseen_loss",
+        "val_unseen_mse",
+        "val_unseen_mse_position",
+        "val_unseen_mse_orientation",
+        "val_unseen_mse_gripper",
+    ),
+    requires_upstream_runtime=False,
+    notes=(
+        "The LARYBench extraction, classification, and regression runtime is integrated in tree.",
+        "Datasets and model checkpoints remain explicit assets; no external source checkout is imported or executed.",
+        "Per-action-dimension MSE fields may be added to scorecards according to the selected robot embodiment.",
+    ),
+)
+
 RoboTwinContract = ExternalBenchmarkContract(
     benchmark_id=ROBOTWIN_BENCHMARK_ID,
     display_name=ROBOTWIN_BENCHMARK_NAME,
@@ -1296,6 +1469,7 @@ _BUILTIN_CONTRACT_ITEMS = (
     ChronoMagicBenchContract,
     DevilDynamicsContract,
     EWMBenchContract,
+    WRBenchContract,
     EvalCrafterContract,
     FETVContract,
     FourDWorldBenchContract,
@@ -1303,6 +1477,7 @@ _BUILTIN_CONTRACT_ITEMS = (
     IPVBenchContract,
     IWorldBenchContract,
     KinetixContract,
+    LARYBenchContract,
     LIBEROContract,
     LIBEROMemContract,
     LIBEROParaContract,
@@ -1320,6 +1495,8 @@ _BUILTIN_CONTRACT_ITEMS = (
     PhyGenBenchContract,
     PhyGroundContract,
     PhysicsIQContract,
+    PhysicsIQVerifiedContract,
+    PhysicalAIBenchContract,
     RoboCasaContract,
     RoboCerebraContract,
     RoboMMEContract,
@@ -1347,6 +1524,7 @@ _BUILTIN_CONTRACT_ITEMS = (
     WorldBenchContract,
     WorldInWorldContract,
     WorldModelBenchContract,
+    WorldReasonBenchContract,
     WorldScoreContract,
 )
 for _contract in _BUILTIN_CONTRACT_ITEMS:

@@ -2,28 +2,11 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
-from typing import Any
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export, package_root_export
 
-
-def package_root() -> Path:
-    return Path(__file__).resolve().parent
-
-
-@lru_cache(maxsize=1)
-def _wrapper() -> Any:
-    from worldfoundry.evaluation.tasks.metrics.trend import wrapper as _wrapper_module
-
-    return _wrapper_module
-
-
-def compute_trend(*args: Any, **kwargs: Any) -> float:
-    return _wrapper().compute_trend(*args, **kwargs)
-
-
-def compute_trend_jsd(*args: Any, **kwargs: Any) -> float:
-    return _wrapper().compute_trend_jsd(*args, **kwargs)
+compute_trend = lazy_export(f"{__name__}.wrapper", "compute_trend", owner=__name__)
+compute_trend_jsd = lazy_export(f"{__name__}.wrapper", "compute_trend_jsd", owner=__name__)
+package_root = package_root_export(__file__, owner=__name__)
 
 
 __all__ = ["compute_trend", "compute_trend_jsd", "package_root"]

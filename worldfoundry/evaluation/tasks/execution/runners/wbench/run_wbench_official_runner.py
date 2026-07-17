@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -15,13 +18,24 @@ REPO_ROOT = Path(__file__).resolve().parents[6]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from worldfoundry.core.time import utc_now_iso
-from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION
-from worldfoundry.evaluation.tasks.execution.framework.io import env_path, write_json
+from worldfoundry.core.time import utc_now_iso  # noqa: E402
+from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION  # noqa: E402
+from worldfoundry.evaluation.tasks.execution.framework.io import env_path, write_json  # noqa: E402
 
 RUNNER_ROOT = Path(__file__).resolve().parent
 DEFAULT_WBENCH_ROOT = RUNNER_ROOT / "runtime" / "wbench"
 VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
+OFFICIAL_VIDEO_RE = re.compile(r"^case_(?P<case_id>\d+)_combined\.mp4$", re.IGNORECASE)
+MATERIALIZED_VIDEO_RE = re.compile(
+    r"^case_(?P<case_id>\d+)(?:__generated_video)?\.mp4$",
+    re.IGNORECASE,
+)
+SUBMISSION_PROTOCOLS = (
+    "unverified",
+    "text_multi_turn",
+    "camera_conditioned",
+    "action_conditioned",
+)
 
 METRIC_GROUPS: dict[str, tuple[str, ...]] = {
     "quality": (
@@ -106,7 +120,8 @@ def scalar(value: Any) -> float | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        number = float(value)
+        return number if math.isfinite(number) else None
     if isinstance(value, str):
         text = value.strip()
         if not text:
@@ -117,6 +132,8 @@ def scalar(value: Any) -> float | None:
         try:
             number = float(text)
         except ValueError:
+            return None
+        if not math.isfinite(number):
             return None
         return number / 100.0 if is_percent else number
     if isinstance(value, Mapping):
@@ -193,17 +210,13 @@ def extract_scores_from_eval_dir(eval_dir: Path) -> dict[str, float]:
 def add_aggregate_scores(scores: Mapping[str, float]) -> dict[str, float]:
     merged = dict(scores)
     for group, metric_ids in METRIC_GROUPS.items():
-        values = [merged[metric_id] for metric_id in metric_ids if metric_id in merged]
-        group_score = mean(values)
-        if group_score is not None:
-            merged[f"{group}_score"] = group_score
-    dimension_values = [merged[metric_id] for metric_id in DIMENSION_METRICS if metric_id in merged]
-    average = mean(dimension_values)
-    if average is None:
-        component_values = [merged[metric_id] for metric_id in METRIC_ORDER if metric_id in merged and metric_id not in DIMENSION_METRICS and metric_id != "wbench_average"]
-        average = mean(component_values)
-    if average is not None:
-        merged["wbench_average"] = average
+        if all(metric_id in merged for metric_id in metric_ids):
+            merged.setdefault(f"{group}_score", sum(merged[metric_id] for metric_id in metric_ids) / len(metric_ids))
+    if all(metric_id in merged for metric_id in DIMENSION_METRICS):
+        merged.setdefault(
+            "wbench_average",
+            sum(merged[metric_id] for metric_id in DIMENSION_METRICS) / len(DIMENSION_METRICS),
+        )
     return merged
 
 
@@ -233,6 +246,188 @@ def resolve_wbench_root(args: argparse.Namespace) -> Path:
     return (explicit or DEFAULT_WBENCH_ROOT).expanduser().resolve()
 
 
+def resolve_model_id(args: argparse.Namespace) -> str:
+    """Resolve the submitted model id without coupling WBench to a model registry."""
+
+    value = (
+        args.model_name
+        or os.environ.get("WORLDFOUNDRY_MODEL_ID")
+        or os.environ.get("WORLDFOUNDRY_WBENCH_MODEL_NAME")
+    )
+    if not value:
+        raise ValueError(
+            "--model-name, WORLDFOUNDRY_MODEL_ID, or "
+            "WORLDFOUNDRY_WBENCH_MODEL_NAME is required for --run-official"
+        )
+    return str(value)
+
+
+def runtime_model_name(model_id: str) -> str:
+    """Return a safe WBench work-directory segment for an arbitrary model id."""
+
+    value = re.sub(r"[^A-Za-z0-9._-]+", "_", model_id).strip("._-")
+    if not value:
+        raise ValueError(f"model id does not contain a safe path component: {model_id!r}")
+    return value
+
+
+def resolve_dataset_root(args: argparse.Namespace, *, wbench_root: Path) -> Path:
+    """Resolve the official dataset separately from the checked-in runtime source."""
+
+    candidates = (
+        args.dataset_root,
+        env_path("WORLDFOUNDRY_WBENCH_DATASET_ROOT"),
+        wbench_root / "data",
+    )
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        root = Path(candidate).expanduser().resolve()
+        if (root / "cases").is_dir():
+            return root
+    raise FileNotFoundError(
+        "WBench dataset is missing. Pass --dataset-root or set "
+        "WORLDFOUNDRY_WBENCH_DATASET_ROOT to a directory containing cases/."
+    )
+
+
+def expected_video_count(dataset_root: Path, submission_protocol: str) -> int:
+    """Count the official cases applicable to the declared model interface."""
+
+    cases = tuple(sorted((dataset_root / "cases").glob("case_*.json")))
+    if submission_protocol not in {"camera_conditioned", "action_conditioned"}:
+        return len(cases)
+    return sum(
+        1
+        for case_path in cases
+        if any(
+            isinstance(interaction, Mapping) and interaction.get("type") == "navigation"
+            for interaction in (read_json(case_path).get("interactions") or ())
+        )
+    )
+
+
+def resolve_isolated_work_dir(
+    args: argparse.Namespace,
+    *,
+    output_dir: Path,
+    wbench_root: Path,
+) -> Path:
+    """Keep all mutable WBench runtime state under the requested output directory."""
+
+    work_dir = (args.work_dir or (output_dir / "wbench_work")).expanduser().resolve()
+    if work_dir != output_dir and output_dir not in work_dir.parents:
+        raise ValueError(f"--work-dir must be inside --output-dir: {work_dir}")
+    if work_dir == wbench_root or wbench_root in work_dir.parents:
+        raise ValueError(f"WBench work directory must not modify the in-tree runtime: {work_dir}")
+    work_dir.mkdir(parents=True, exist_ok=True)
+    return work_dir
+
+
+def _official_video_name(path: Path) -> tuple[str, str] | None:
+    for pattern in (OFFICIAL_VIDEO_RE, MATERIALIZED_VIDEO_RE):
+        match = pattern.fullmatch(path.name)
+        if match is not None:
+            case_id = match.group("case_id")
+            return case_id, f"case_{case_id}_combined.mp4"
+    return None
+
+
+def stage_generated_videos(
+    *,
+    generated_artifact_dir: Path,
+    videos_dir: Path,
+    dataset_root: Path,
+    staging_manifest_path: Path,
+) -> list[dict[str, Any]]:
+    """Link generated WBench clips into the official isolated work layout.
+
+    Only filenames that identify an official case are accepted. Arbitrarily
+    assigning unnamed videos to cases would silently invalidate evaluation.
+    """
+
+    source_root = generated_artifact_dir.expanduser().resolve()
+    if not source_root.is_dir():
+        raise FileNotFoundError(f"generated artifact directory is missing: {source_root}")
+    candidates: list[tuple[str, Path, str, int, int]] = []
+    staged_case_ids: set[str] = set()
+    for source in sorted(source_root.rglob("*.mp4")):
+        if not source.is_file() or videos_dir == source.parent or videos_dir in source.parents:
+            continue
+        resolved_name = _official_video_name(source)
+        if resolved_name is None:
+            continue
+        case_id, target_name = resolved_name
+        case_path = dataset_root / "cases" / f"case_{case_id}.json"
+        if not case_path.is_file():
+            raise FileNotFoundError(
+                f"generated video {source.name!r} does not match a case in {dataset_root / 'cases'}"
+            )
+        if case_id in staged_case_ids:
+            raise ValueError(f"multiple generated videos resolve to WBench case {case_id}")
+        staged_case_ids.add(case_id)
+        source_stat = source.stat()
+        candidates.append((case_id, source, target_name, source_stat.st_size, source_stat.st_mtime_ns))
+    if not candidates:
+        raise ValueError(
+            "generated artifact directory contains no identifiable WBench videos; "
+            "expected case_<id>_combined.mp4, case_<id>.mp4, or "
+            "case_<id>__generated_video.mp4"
+        )
+
+    candidate_signature = sorted(
+        (case_id, str(source.resolve()), size, mtime_ns)
+        for case_id, source, _target_name, size, mtime_ns in candidates
+    )
+    if staging_manifest_path.is_file() and (videos_dir.parent / "evaluation").exists():
+        previous = read_json(staging_manifest_path)
+        previous_rows = previous.get("videos") if isinstance(previous, Mapping) else None
+        if isinstance(previous_rows, list):
+            previous_signature = sorted(
+                (
+                    str(row.get("case_id")),
+                    str(row.get("source")),
+                    row.get("size"),
+                    row.get("mtime_ns"),
+                )
+                for row in previous_rows
+                if isinstance(row, Mapping)
+            )
+            if previous_signature != candidate_signature:
+                raise ValueError(
+                    "generated WBench inputs changed while cached evaluation results exist; "
+                    "use a new --output-dir to avoid mixing scores from different videos"
+                )
+
+    videos_dir.mkdir(parents=True, exist_ok=True)
+    for stale in videos_dir.glob("case_*_combined.mp4"):
+        if stale.is_file() or stale.is_symlink():
+            stale.unlink()
+    rows: list[dict[str, Any]] = []
+    for case_id, source, target_name, size, mtime_ns in candidates:
+        target = videos_dir / target_name
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        try:
+            target.symlink_to(source.resolve())
+            method = "symlink"
+        except OSError:
+            shutil.copy2(source, target)
+            method = "copy"
+        rows.append(
+            {
+                "case_id": case_id,
+                "source": str(source.resolve()),
+                "destination": str(target),
+                "method": method,
+                "size": size,
+                "mtime_ns": mtime_ns,
+            }
+        )
+    write_json(staging_manifest_path, {"videos": rows, "video_count": len(rows)})
+    return rows
+
+
 def generated_video_count(path: Path | None) -> int:
     if path is None or not path.exists():
         return 0
@@ -248,6 +443,8 @@ def scorecard_from_scores(
     official_runtime_executed: bool,
     runtime_summary: Mapping[str, Any] | None = None,
     generated_artifact_dir: Path | None = None,
+    model_id: str | None = None,
+    submission_protocol: str = "unverified",
 ) -> dict[str, Any]:
     per_metric: dict[str, dict[str, Any]] = {}
     for metric_id in METRIC_ORDER:
@@ -273,12 +470,45 @@ def scorecard_from_scores(
         encoding="utf-8",
     )
     scorecard_path = output_dir / "scorecard.json"
-    official_verified = official_runtime_executed and bool(available)
+    component_metric_ids = tuple(metric for metric_ids in METRIC_GROUPS.values() for metric in metric_ids)
+    missing_component_metrics = [metric for metric in component_metric_ids if metric not in scores]
+    interaction_protocol_declared = submission_protocol != "unverified"
+    comparability_blockers: list[str] = []
+    if not official_runtime_executed:
+        comparability_blockers.append("official WBench runtime was not executed by this run")
+    if not interaction_protocol_declared:
+        comparability_blockers.append(
+            "the submitted model did not declare a WBench multi-turn interaction protocol"
+        )
+    else:
+        comparability_blockers.append(
+            "the declared WBench multi-turn generation provenance was not mechanically verified"
+        )
+    if missing_component_metrics:
+        comparability_blockers.append(
+            f"official metric coverage is partial ({len(missing_component_metrics)} component metrics missing)"
+        )
+    expected_video_count = (runtime_summary or {}).get("expected_video_count")
+    evaluated_video_count = (runtime_summary or {}).get("evaluated_video_count")
+    if (
+        isinstance(expected_video_count, int)
+        and isinstance(evaluated_video_count, int)
+        and evaluated_video_count < expected_video_count
+    ):
+        comparability_blockers.append(
+            f"official case coverage is partial ({evaluated_video_count}/{expected_video_count} videos)"
+        )
+    official_verified = not comparability_blockers and bool(available)
+    leaderboard_blockers = list(comparability_blockers)
+    leaderboard_blockers.append(
+        "leaderboard submission coverage, turns.json boundaries, and official packaging were not validated"
+    )
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "official_benchmark_verified": official_verified,
-        "integration_evidence": False,
+        "integration_evidence": official_runtime_executed and bool(available),
         "leaderboard_valid": False,
+        "leaderboard_blockers": leaderboard_blockers,
         "normalizer_only": not official_runtime_executed,
         "normalization_ok": bool(available),
         "run": {
@@ -289,6 +519,10 @@ def scorecard_from_scores(
             "runtime_summary": dict(runtime_summary or {}),
         },
         "benchmark": {"benchmark_id": benchmark_id, "name": "WBench"},
+        "model": {
+            "model_id": model_id,
+            "submission_protocol": submission_protocol,
+        },
         "metrics": {
             "leaderboard": {
                 metric_id: row["normalized_score"]
@@ -297,11 +531,25 @@ def scorecard_from_scores(
             },
             "per_metric": per_metric,
             "groups": {group: list(metric_ids) for group, metric_ids in METRIC_GROUPS.items()},
+            "summary": {
+                "sample_count": evaluated_video_count
+                if isinstance(evaluated_video_count, int)
+                else generated_video_count(generated_artifact_dir),
+                "metric_count": len(METRIC_ORDER),
+                "available_metrics": len(available),
+                "failed_metrics": len(METRIC_ORDER) - len(available),
+            },
         },
         "evaluation": {
             "kind": "wbench_official_in_tree" if official_runtime_executed else "wbench_result_normalizer",
             "available_metric_count": len(available),
             "declared_metric_count": len(METRIC_ORDER),
+            "official_runtime_executed": official_runtime_executed,
+            "benchmark_comparable": official_verified,
+            "interaction_protocol_declared": interaction_protocol_declared,
+            "interaction_protocol_verified": False,
+            "comparability_blockers": comparability_blockers,
+            "missing_component_metrics": missing_component_metrics,
         },
         "dataset": {
             "generated_artifact_dir": None if generated_artifact_dir is None else str(generated_artifact_dir),
@@ -338,6 +586,9 @@ def normalize_wbench_results(
         scores = extract_scores_from_report(read_json(results_path))
         source_path = results_path
     generated_dir = args.generated_artifact_dir or env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    model_id = args.model_name or os.environ.get("WORLDFOUNDRY_MODEL_ID") or os.environ.get(
+        "WORLDFOUNDRY_WBENCH_MODEL_NAME"
+    )
     return scorecard_from_scores(
         benchmark_id=args.benchmark_id,
         output_dir=output_dir,
@@ -346,6 +597,8 @@ def normalize_wbench_results(
         official_runtime_executed=official_runtime_executed,
         runtime_summary=runtime_summary,
         generated_artifact_dir=generated_dir,
+        model_id=model_id,
+        submission_protocol=args.submission_protocol,
     )
 
 
@@ -353,14 +606,43 @@ def run_official_wbench(args: argparse.Namespace) -> dict[str, Any]:
     root = resolve_wbench_root(args)
     if not (root / "main.py").is_file():
         raise FileNotFoundError(f"missing in-tree WBench runtime: {root / 'main.py'}")
-    model = args.model_name or os.environ.get("WORLDFOUNDRY_WBENCH_MODEL_NAME")
-    if not model:
-        raise ValueError("--model-name or WORLDFOUNDRY_WBENCH_MODEL_NAME is required for --run-official")
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    work_dir = args.work_dir or env_path("WORLDFOUNDRY_WBENCH_WORK_DIR") or (root / "work_dirs")
+    model_id = resolve_model_id(args)
+    model = runtime_model_name(model_id)
+    args.model_name = model_id
+    dataset_root = resolve_dataset_root(args, wbench_root=root)
+    work_dir = resolve_isolated_work_dir(args, output_dir=output_dir, wbench_root=root)
+    videos_dir = work_dir / model / "videos"
+    generated_dir = args.generated_artifact_dir or env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    staging_manifest_path = output_dir / "wbench_staging.json"
+    if generated_dir is not None:
+        generated_dir = generated_dir.expanduser().resolve()
+        args.generated_artifact_dir = generated_dir
+        staged_rows = stage_generated_videos(
+            generated_artifact_dir=generated_dir,
+            videos_dir=videos_dir,
+            dataset_root=dataset_root,
+            staging_manifest_path=staging_manifest_path,
+        )
+    else:
+        staged_rows = []
+        if not any(videos_dir.glob("case_*_combined.mp4")):
+            raise ValueError(
+                "--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required "
+                "unless the isolated work directory already contains WBench videos"
+            )
     gpus = args.gpus or os.environ.get("CUDA_VISIBLE_DEVICES")
-    command = [sys.executable, str(root / "main.py"), "--model", model, "--phase", args.phase, "--work_dir", str(work_dir)]
+    command = [
+        sys.executable,
+        str(root / "main.py"),
+        "--model",
+        model,
+        "--phase",
+        args.phase,
+        "--work_dir",
+        str(work_dir),
+    ]
     if args.metrics:
         command.extend(["--metrics", args.metrics])
     if gpus:
@@ -376,7 +658,10 @@ def run_official_wbench(args: argparse.Namespace) -> dict[str, Any]:
     if args.vlm_workers is not None:
         command.extend(["--vlm_workers", str(args.vlm_workers)])
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join(path for path in (str(REPO_ROOT), str(root), env.get("PYTHONPATH", "")) if path)
+    env["PYTHONPATH"] = os.pathsep.join(
+        path for path in (str(REPO_ROOT), str(root), env.get("PYTHONPATH", "")) if path
+    )
+    env["WBENCH_DATA_DIR"] = str(dataset_root)
     if args.weights_dir is not None:
         env["WBENCH_WEIGHTS_DIR"] = str(args.weights_dir.expanduser().resolve())
     started = utc_now_iso()
@@ -391,6 +676,16 @@ def run_official_wbench(args: argparse.Namespace) -> dict[str, Any]:
         "returncode": proc.returncode,
         "started_at": started,
         "log_path": str(log_path.resolve()),
+        "model_id": model_id,
+        "runtime_model_name": model,
+        "phase": args.phase,
+        "metrics": args.metrics,
+        "dataset_root": str(dataset_root),
+        "work_dir": str(work_dir),
+        "staged_video_count": len(staged_rows),
+        "evaluated_video_count": len(tuple(videos_dir.glob("case_*_combined.mp4"))),
+        "expected_video_count": expected_video_count(dataset_root, args.submission_protocol),
+        "staging_manifest": str(staging_manifest_path) if staged_rows else None,
     }
     if proc.returncode != 0:
         raise RuntimeError(f"WBench official runtime failed with code {proc.returncode}; see {log_path}")
@@ -405,10 +700,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generated-artifact-dir", "--generated-video-dir", dest="generated_artifact_dir", type=Path)
     parser.add_argument("--run-official", action="store_true")
     parser.add_argument("--wbench-root", type=Path)
+    parser.add_argument("--dataset-root", type=Path)
     parser.add_argument("--work-dir", type=Path)
     parser.add_argument("--weights-dir", type=Path)
     parser.add_argument("--model-name")
-    parser.add_argument("--phase", choices=("all", "precompute", "gpu", "vlm", "report"), default="report")
+    parser.add_argument(
+        "--submission-protocol",
+        choices=SUBMISSION_PROTOCOLS,
+        default=os.environ.get("WORLDFOUNDRY_WBENCH_SUBMISSION_PROTOCOL", "unverified"),
+        help=(
+            "Generation protocol used to create the combined clips. The default is deliberately "
+            "non-comparable until a WBench multi-turn protocol is declared."
+        ),
+    )
+    parser.add_argument("--phase", choices=("all", "precompute", "gpu", "vlm", "report"), default="all")
     parser.add_argument("--metrics", help="Comma-separated WBench metric or dimension filter.")
     parser.add_argument("--gpus", help="Comma-separated GPU ids passed to the in-tree runtime.")
     parser.add_argument("--vlm-workers", type=int)
@@ -434,6 +739,7 @@ def main(argv: list[str] | None = None) -> int:
             "official_benchmark_verified": False,
             "integration_evidence": False,
             "leaderboard_valid": False,
+            "leaderboard_blockers": [str(exc)],
             "normalization_ok": False,
             "run": {
                 "status": "failed",
@@ -442,7 +748,20 @@ def main(argv: list[str] | None = None) -> int:
                 "error": str(exc),
             },
             "benchmark": {"benchmark_id": args.benchmark_id, "name": "WBench"},
-            "metrics": {"leaderboard": {}, "per_metric": {}},
+            "model": {
+                "model_id": args.model_name or os.environ.get("WORLDFOUNDRY_MODEL_ID"),
+                "submission_protocol": args.submission_protocol,
+            },
+            "metrics": {
+                "leaderboard": {},
+                "per_metric": {},
+                "summary": {
+                    "sample_count": 0,
+                    "metric_count": len(METRIC_ORDER),
+                    "available_metrics": 0,
+                    "failed_metrics": len(METRIC_ORDER),
+                },
+            },
             "artifacts": {"scorecard": str((args.output_dir / "scorecard.json").resolve())},
         }
         write_json(args.output_dir / "scorecard.json", failure)

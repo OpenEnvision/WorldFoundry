@@ -2,5 +2,4 @@ metric_id,score
 semantic_adherence,0.75
 physical_commonsense,0.75
 joint_score,0.75
-rule_classification_accuracy,0.75
-videophy2_average,0.75
+rule_followed_rate,0.75

@@ -72,8 +72,8 @@ metrics:
   aggregator: mean
   output_unit: score
 - id: videoscience_average
-  name: Videoscience Average
-  description: videoscience_average normalized benchmark score.
+  name: VideoScience Weighted Overall
+  description: Official weighted overall score normalized from the 1-4 rubric to the unit interval.
   higher_is_better: true
   leaderboard_key: videoscience_average
   aggregator: mean
@@ -127,7 +127,7 @@ release_status: experimental
 maturity: contract_ready
 open_source_status: in_tree_runtime
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -149,7 +149,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoScienceBenchContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   surface: videoscience_bench_official_in_tree
   normalizer_verified: true
 dataset:

@@ -19,9 +19,9 @@ from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_metrics
 )
 from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_prompts import (
     CANONICAL_PROMPT_COUNT,
+    load_prompt_records,
     resolve_prompts_json_path,
     unique_generation_records,
-    load_prompt_records,
 )
 from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_runtime import (
     judge_config_from_env,
@@ -67,7 +67,7 @@ def _metric_rows(
     *,
     computed: Mapping[str, Any],
     source_path: Path,
-    official_runtime_executed: bool,
+    imported_via_run_official: bool,
 ) -> list[dict[str, Any]]:
     direct_metrics = computed.get("metrics") if isinstance(computed.get("metrics"), Mapping) else {}
     components = computed.get("components") if isinstance(computed.get("components"), Mapping) else {}
@@ -85,8 +85,10 @@ def _metric_rows(
                 "score": score,
                 "higher_is_better": spec["higher_is_better"],
                 "group": spec["group"],
-                "source": "phyground_official_runtime" if official_runtime_executed else "phyground_results_json",
+                "source": "phyground_imported_results",
                 "source_path": str(source_path),
+                "evidence_scope": "result_artifact_import_only",
+                "imported_via_run_official": imported_via_run_official,
                 "components": components,
                 "reason": None if score is not None else "score_not_available_in_phyground_results",
             }
@@ -124,7 +126,7 @@ def _scorecard(
     metric_rows: list[dict[str, Any]],
     video_coverage: Mapping[str, Any],
     judge_summary: Mapping[str, Any] | None,
-    official_runtime_executed: bool,
+    imported_via_run_official: bool,
     prompt_count: int,
 ) -> dict[str, Any]:
     available_rows = [row for row in metric_rows if row.get("available") is True]
@@ -138,24 +140,26 @@ def _scorecard(
         video_coverage.get("expected_count", 0) > 0
         and video_coverage.get("complete") is True
     )
-    full_suite_valid = (
+    reported_artifact_coverage_complete = (
         prompt_count >= CANONICAL_PROMPT_COUNT
         and video_complete
         and len(available_rows) == len(METRIC_ORDER)
     )
     normalization_ok = bool(available_rows)
-    official_verified = official_runtime_executed and normalization_ok
-    integration_evidence = official_verified and full_suite_valid
-    normalizer_only = not official_runtime_executed
+    evidence_scope = "result_artifact_import_only"
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
-        "official_benchmark_verified": official_verified,
-        "integration_evidence": integration_evidence,
+        "official_benchmark_verified": False,
+        "integration_evidence": False,
         "leaderboard_valid": False,
-        "normalizer_only": normalizer_only,
+        "normalizer_only": True,
         "normalization_ok": normalization_ok,
+        "official_results_imported": normalization_ok,
+        "evidence_scope": evidence_scope,
         "eligibility": {
-            "full_suite_valid": full_suite_valid,
+            "full_suite_valid": False,
+            "leaderboard_valid": False,
+            "reported_artifact_coverage_complete": reported_artifact_coverage_complete,
             "video_coverage_complete": video_complete,
         },
         "run": {
@@ -163,9 +167,14 @@ def _scorecard(
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_phyground_official_runner",
             "returncode": 0 if normalization_ok else 1,
+            "imported_via_run_official": imported_via_run_official,
             "judge_summary": dict(judge_summary or {}),
         },
         "benchmark": {"benchmark_id": benchmark_id, "name": "PhyGround"},
+        "dataset": {
+            "prompt_manifest": None if prompt_manifest_path is None else str(prompt_manifest_path),
+            "upstream_results": str(official_results_path.resolve()),
+        },
         "metrics": {
             "leaderboard": leaderboard,
             "per_metric": per_metric,
@@ -176,8 +185,18 @@ def _scorecard(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "phyground_official_in_tree" if official_runtime_executed else "phyground_result_normalizer",
+            "kind": "phyground_result_importer",
+            "evidence_scope": evidence_scope,
+            "importer_only": True,
             "blocked_count": len(METRIC_ORDER) - len(available_rows),
+        },
+        "validation": {
+            "normalizer_only": True,
+            "official_runtime_executed": False,
+            "official_runtime_succeeded": False,
+            "official_results_imported": normalization_ok,
+            "full_suite_complete": False,
+            "scope": evidence_scope,
         },
         "artifacts": {
             "scorecard": str((output_dir / "scorecard.json").resolve()),
@@ -185,8 +204,8 @@ def _scorecard(
         },
         "coverage": {"videos": dict(video_coverage)},
         "notes": [
-            "PhyGround in-tree runtime materializes prompts/phyground.json ti2v requests and normalizes official scores.json.",
-            "Judging runs through WorldFoundry/base-model infrastructure; this runner does not launch shell scripts.",
+            "This runner imports and normalizes a supplied PhyGround scores.json artifact.",
+            "It does not execute PhyJudge, so imported results are not official-run, full-suite, or leaderboard evidence.",
         ],
         "prompt_manifest": None if prompt_manifest_path is None else str(prompt_manifest_path),
         "prompt_count": prompt_count,
@@ -226,7 +245,7 @@ def normalize_phyground_results(
     metric_rows = _metric_rows(
         computed=computed,
         source_path=Path(official_results_path),
-        official_runtime_executed=official_runtime_executed,
+        imported_via_run_official=official_runtime_executed,
     )
     video_coverage = _coverage({record["prompt_id"] for record in prompt_records}, generated_dir)
     scorecard = _scorecard(
@@ -237,7 +256,7 @@ def normalize_phyground_results(
         metric_rows=metric_rows,
         video_coverage=video_coverage,
         judge_summary=judge_summary,
-        official_runtime_executed=official_runtime_executed,
+        imported_via_run_official=official_runtime_executed,
         prompt_count=len(prompt_records),
     )
     strict = args.strict or os.environ.get("WORLDFOUNDRY_PHYGROUND_STRICT", "").lower() in {
@@ -337,6 +356,8 @@ def main(argv: list[str] | None = None) -> int:
             "leaderboard_valid": False,
             "normalizer_only": True,
             "normalization_ok": False,
+            "official_results_imported": False,
+            "evidence_scope": "result_artifact_import_only",
             "run": {
                 "status": "failed",
                 "started_at": utc_now_iso(),
@@ -345,11 +366,23 @@ def main(argv: list[str] | None = None) -> int:
                 "error": f"{type(exc).__name__}: {exc}",
             },
             "benchmark": {"benchmark_id": args.benchmark_id, "name": "PhyGround"},
+            "dataset": {},
+            "eligibility": {"full_suite_valid": False, "leaderboard_valid": False},
             "metrics": {"leaderboard": {}, "per_metric": {}, "summary": {"available_metric_count": 0}},
             "evaluation": {
                 "available": False,
-                "kind": "phyground_result_normalizer",
+                "kind": "phyground_result_importer",
+                "evidence_scope": "result_artifact_import_only",
+                "importer_only": True,
                 "blocked_count": len(METRIC_ORDER),
+            },
+            "validation": {
+                "normalizer_only": True,
+                "official_runtime_executed": False,
+                "official_runtime_succeeded": False,
+                "official_results_imported": False,
+                "full_suite_complete": False,
+                "scope": "result_artifact_import_only",
             },
             "artifacts": {"scorecard": str((args.output_dir / "scorecard.json").resolve())},
         }

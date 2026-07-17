@@ -269,7 +269,9 @@ if "__main__" == __name__:
     parser.add_argument('--save_results', default=True, type=str2bool)
     parser.add_argument('--result_path', default='auto_eval_results', help='path to save the evaluation results.')        
     parser.add_argument('--gen_path', default=None, help='path to the generated videos, processed into frames')      
-    parser.add_argument('--t2v_model', choices=['cogvideo', 'text2video-zero', 'modelscope-t2v', 'zeroscope', 'ground-truth'], required=True, help="Name of the text2video generation model")
+    # The value only names the output file.  Keeping the upstream paper-model
+    # choices here prevents the official metric from evaluating a new model.
+    parser.add_argument('--t2v_model', required=True, help="Name of the text2video generation model")
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--max_frm_num', default=64, type=int)
     parser.add_argument('--limit', default=1000, type=int, help='number of sampels to evaluate')
@@ -312,7 +314,17 @@ if "__main__" == __name__:
         dot_sims, _ = blipscore(args.blip_config, args)
         results.update({'BLIPScore': dot_sims})
 
-    results_per_sent_id = {metric:{i:score.cpu().item() for i,score in enumerate(result) if i not in remove_ids} for metric,result in results.items()}
+    # TorchMetrics may squeeze a one-sample state to a scalar.  Preserve the
+    # official sent-index mapping for bounded validation instead of failing on
+    # iteration over a 0-d tensor.
+    results_per_sent_id = {
+        metric: {
+            i: score.cpu().item()
+            for i, score in enumerate(torch.atleast_1d(result))
+            if i not in remove_ids
+        }
+        for metric, result in results.items()
+    }
 
     if args.save_results:
         for metric in results_per_sent_id:

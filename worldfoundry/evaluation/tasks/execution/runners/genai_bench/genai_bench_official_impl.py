@@ -13,9 +13,10 @@ from typing import Any
 
 from worldfoundry.evaluation.tasks.execution.framework import official_runner as ors
 from worldfoundry.evaluation.tasks.execution.framework.io import mean_numeric, utc_now_iso, write_json
-from worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_metrics import evaluate_genai_preference_rows
+from worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_metrics import (
+    evaluate_genai_preference_rows,
+)
 from worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_prompts import (
-    load_preference_pair_rows,
     resolve_genai_bench_assets_root,
     resolve_preference_pairs_path,
 )
@@ -23,7 +24,9 @@ from worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_run
     run_genai_bench_scorer,
     scorer_config_from_env,
 )
-from worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract import GENAI_TASK_METRICS
+from worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract import (
+    GENAI_TASK_METRICS,
+)
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
 BENCHMARK_ID = "genai-bench"
@@ -76,7 +79,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def extract_metrics(payload: Any, results_path: Path) -> dict[str, dict[str, Any]]:
     rows = [row for row in payload if isinstance(row, dict)] if isinstance(payload, list) else []
-    preference_metrics = evaluate_genai_preference_rows(rows)
+    default_task = next(
+        (
+            part
+            for part in results_path.parts
+            if part in {"image_generation", "image_edition", "image_editing", "video_generation"}
+        ),
+        None,
+    )
+    preference_metrics = evaluate_genai_preference_rows(rows, default_task=default_task)
     if preference_metrics["num_total"] <= 0:
         return ors.extract_tabular_official_metrics(payload, results_path, CONFIG)
 

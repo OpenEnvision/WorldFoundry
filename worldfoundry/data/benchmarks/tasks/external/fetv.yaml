@@ -2,7 +2,7 @@ benchmark: fetv
 description: FETV external benchmark task manifest for fine-grained text-to-video evaluation.
 id: fetv
 name: FETV
-status: contract_ready
+status: bounded_official_clipscore_verified
 domain:
 - fine-grained-alignment
 - text-video-generation
@@ -62,8 +62,7 @@ metrics:
     aggregation: mean
     evaluator:
       target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
-      status: blocked
-      blocked_reason: asset_required
+      status: bounded_official_runtime_verified
   blip_score:
     aggregation: mean
     evaluator:
@@ -120,13 +119,13 @@ metadata:
     adapter: worldfoundry/evaluation/tasks/execution/runners/fetv/fetv_official_runtime.py
     artifact_score_dir_env: WORLDFOUNDRY_FETV_ARTIFACT_SCORE_DIR
   release_status: experimental
-  maturity: contract_ready
+  maturity: bounded_official_component_verified
   official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   requires:
-  - Official FETV result file, official_results rows, or FETV-EVAL auto/manual result directory
-  - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR with generated frame directories for in-tree official scorer execution
+  - A generated-video directory plus the persisted FETV generation manifest, or an exact official sent-index frame layout
+  - A local CLIP checkpoint resolved through the shared VBench base-model assets for the default CLIPScore component
   - Reference frame directories for FID/FVD when those metric families are requested
   - FETV metric model packages/assets for full scorer recomputation and leaderboard validation
   blockers:
@@ -153,7 +152,7 @@ metadata:
     task_yaml_available: true
     runtime_verified: true
     normalizer_verified: true
-    surface: fetv_official_in_tree
+    surface: strict_video_bridge_and_bounded_official_clipscore
   local_evaluator:
     target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
     status: implemented
@@ -185,7 +184,7 @@ metadata:
       - FETV-EVAL result directory
       provenance: normalizes caller-provided official outputs or FETV-EVAL result directories without executing upstream
         repos
-  open_source_status: in_tree_runtime
+  open_source_status: bounded_official_clipscore_and_result_normalizer
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
   runner:
     validation_command:

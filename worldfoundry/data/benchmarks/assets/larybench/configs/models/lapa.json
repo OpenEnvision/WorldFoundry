@@ -1,0 +1,14 @@
+{
+  "type": "LAPALaryWrap",
+  "name": "lapa",
+  "dim": 1024,
+  "quant_dim": 32,
+  "codebook_size": 8,
+  "image_size": 224,
+  "patch_size": 32,
+  "spatial_depth": 8,
+  "temporal_depth": 8,
+  "dim_head": 64,
+  "heads": 16,
+  "code_seq_len": 4
+}

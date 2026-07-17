@@ -1,0 +1,57 @@
+benchmark_ids:
+- worldreasonbench
+id: worldreasonbench
+name: WorldReasonBench
+environment_id: worldfoundry-unified-cu128
+needs_new_env: false
+status: in_tree_qa_component_runtime_ready_full_protocol_pending
+notes:
+- Result normalization uses the unified WorldFoundry environment and has no GPU dependency.
+- Real evaluation reuses the unified environment when it provides openai, opencv-python, numpy, Pillow, and tqdm.
+- The judge model server is an external OpenAI-compatible service and may use its own serving environment.
+- Set HF_ENDPOINT=https://hf-mirror.com when downloading the optional Hugging Face dataset.
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots:
+- .
+required_assets:
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/worldreasonbench
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml
+optional_env:
+- WORLDFOUNDRY_WORLDREASONBENCH_ROOT
+- WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH
+- WORLDFOUNDRY_WORLDREASONBENCH_PROTOCOL
+- WORLDFOUNDRY_WORLDREASONBENCH_QA_JSON
+- WORLDFOUNDRY_WORLDREASONBENCH_PAIRS_JSON
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- OPENAI_BASE_URL
+- OPENAI_API_KEY
+- OPENAI_MODEL
+- HF_ENDPOINT
+required_paths:
+- id: official_runner_script
+  path: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
+- id: metrics_runtime
+  path: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/worldreasonbench_metrics.py
+- id: task_yaml
+  path: worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml
+requires_cuda_visibility: false
+optional_imports:
+- openai
+- cv2
+- numpy
+- PIL
+- tqdm
+validation_command:
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- worldreasonbench
+- --mode
+- official-validation
+- --official-results-path
+- <official_results_dir>
+- --output-dir
+- <out>
+- --json

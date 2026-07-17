@@ -16,11 +16,11 @@ base_model_dependency_preflight:
   - RAFT, SEA-RAFT, and GMFlow reusable motion assets are tracked through the WorldFoundry base-model registry.
   - VMBench-specific checkpoint assets remain required for full metric recomputation.
   status: integrated
-preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python -m
+preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile vmbench --manifest
   worldfoundry/data/benchmarks/runtime_profiles/official/vmbench.yaml --output-dir tmp/worldfoundry_preflight/vmbench
   --json
-python_path: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - .
 required_assets:

@@ -1,0 +1,4 @@
+{"pair_id":"task-1::model-a::model-b","category":"World-Knowledge","parsed_verdict":"A>B","expected_verdict":"A>B"}
+{"pair_id":"task-2::model-a::model-b","category":"Logic-Reasoning","parsed_verdict":"B>A","expected_verdict":"A>B"}
+{"pair_id":"task-3::model-a::model-b","category":"Human-Centric","parsed_verdict":"A=B=Good","expected_verdict":"A=B"}
+{"pair_id":"task-4::model-a::model-b","category":"Information-based-reasoning","parsed_verdict":"A=B=Bad","expected_verdict":"A=B"}

@@ -1,6 +1,7 @@
 metric_id,score
-video_based_accuracy,0.75
+foreground_miou,0.75
+foreground_dice,0.85
+background_rmse,0.10
 text_based_accuracy,0.75
 multiple_choice_accuracy,0.75
 binary_accuracy,0.75
-worldbench_average,0.75

@@ -63,7 +63,7 @@ metadata:
   release_status: experimental
   open_source_status: in_tree_runtime
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   base_model_dependencies:
   - video_quality_dino_motion_stack

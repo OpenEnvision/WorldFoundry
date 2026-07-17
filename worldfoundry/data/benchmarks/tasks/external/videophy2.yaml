@@ -66,11 +66,9 @@ metrics:
     aggregation: mean
   joint_score:
     aggregation: mean
-  rule_classification_accuracy:
-    aggregation: mean
-  videophy2_average:
-    aggregation: mean
     primary: true
+  rule_followed_rate:
+    aggregation: mean
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: videophy2
@@ -87,8 +85,7 @@ metadata:
     - semantic_adherence
     - physical_commonsense
     - joint_score
-    - rule_classification_accuracy
-    - videophy2_average
+    - rule_followed_rate
     accepted_aliases:
       semantic_adherence:
       - sa
@@ -98,7 +95,7 @@ metadata:
       - PC
       joint_score:
       - joint
-      rule_classification_accuracy:
+      rule_followed_rate:
       - physics_rules_followed
       - physics_rules_unfollowed
     required_artifacts:
@@ -139,7 +136,7 @@ metadata:
   open_source_status: experimental
   maturity: contract_ready
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   base_model_dependencies:
   - videophy2_dataset_assets
@@ -164,7 +161,7 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoPhy2Contract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
+    runtime_verified: false
     surface: videophy2_official_in_tree
     normalizer_verified: false
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
@@ -220,8 +217,7 @@ tasks:
     - semantic_adherence
     - physical_commonsense
     - joint_score
-    - rule_classification_accuracy
-    - videophy2_average
+    - rule_followed_rate
     metric_groups:
     - videophy2_metrics
     tags:
@@ -234,7 +230,7 @@ tasks:
       source_kind: benchmark_zoo
       benchmark_id: videophy2
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       hf_dataset_id: videophysics/videophy2_test
@@ -253,8 +249,7 @@ tasks:
       - semantic_adherence
       - physical_commonsense
       - joint_score
-      - rule_classification_accuracy
-      - videophy2_average
+      - rule_followed_rate
       evaluator_target: worldfoundry.evaluation.tasks.execution.runners.videophy2.videophy2_contract_evaluator:write_videophy2_evaluation
       status: implemented
     - name: external_official_runner
@@ -262,8 +257,7 @@ tasks:
       - semantic_adherence
       - physical_commonsense
       - joint_score
-      - rule_classification_accuracy
-      - videophy2_average
+      - rule_followed_rate
       runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoPhy2Contract
       evaluator_target: worldfoundry.evaluation.tasks.execution.runners.videophy2.videophy2_contract_evaluator:write_videophy2_evaluation
       runner_script: worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py

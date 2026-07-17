@@ -1,0 +1,66 @@
+benchmark_ids:
+- wrbench
+environment_id: worldfoundry-unified-cu128
+id: wrbench
+name: WRBench
+needs_new_env: false
+status: in_tree_official_runtime_ready_heavy_metrics_need_assets
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots:
+- .
+preflight_command: >-
+  PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+  worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+  --run-fixture --output-dir tmp/worldfoundry_preflight/wrbench --json
+required_assets:
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
+  natural25_assets: worldfoundry/data/benchmarks/assets/wrbench/natural25
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/wrbench.yaml
+required_imports:
+- numpy
+required_packages:
+- numpy
+required_paths:
+- id: official_runner_script
+  path: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+- id: task_yaml
+  path: worldfoundry/data/benchmarks/tasks/external/wrbench.yaml
+- id: in_tree_runtime
+  path: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
+- id: natural25_variants
+  path: worldfoundry/data/benchmarks/assets/wrbench/natural25/variants.jsonl
+- id: metric_contract
+  path: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench/eval/contract/latest_d1_d6_metric_contract.json
+required_env: []
+optional_env:
+- WORLDFOUNDRY_WRBENCH_ROOT
+- WORLDFOUNDRY_WRBENCH_ASSETS_ROOT
+- WORLDFOUNDRY_WRBENCH_RESULTS_PATH
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- WORLDFOUNDRY_WRBENCH_VIDEO_MANIFEST
+- WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG
+requires_cuda_visibility: true
+base_model_dependencies:
+- vggt_omega
+- dinov2
+- qwen3_5_vl
+- qwen3_vl
+notes:
+- Contract, Natural-25 request materialization, published-result normalization, and WRBench source are available in-tree.
+- Full D1-D6 execution requires external checkpoint paths in WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG.
+validation_command:
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- wrbench
+- --mode
+- official-validation
+- --official-results-path
+- <official_results.json_or_csv>
+- --generated-artifact-dir
+- <generated_videos>
+- --output-dir
+- <out>
+- --json

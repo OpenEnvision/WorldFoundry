@@ -3,27 +3,13 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
-from typing import Union
-
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PIL import Image
 
-ImageInput = Union[str, Path, Image.Image, np.ndarray]
+from .images import ImageInput, load_rgb_image
+
 DEFAULT_CLIP_MODEL = "openai:ViT-B-32"
-
-
-def _load_rgb(image: ImageInput) -> Image.Image:
-    if isinstance(image, Image.Image):
-        return image.convert("RGB")
-    if isinstance(image, (str, Path)):
-        return Image.open(image).convert("RGB")
-    arr = np.asarray(image)
-    if arr.ndim == 2:
-        arr = np.stack([arr, arr, arr], axis=-1)
-    return Image.fromarray(arr.astype(np.uint8)).convert("RGB")
 
 
 @lru_cache(maxsize=4)
@@ -67,7 +53,7 @@ def encode_clip_images(
     """Return L2-normalized CLIP image embeddings."""
     device_t = device or ("cuda" if torch.cuda.is_available() else "cpu")
     clip_model, preprocess, _ = _open_clip_bundle(model, device_t)
-    batch = torch.stack([preprocess(_load_rgb(image)) for image in images], dim=0).to(device_t)
+    batch = torch.stack([preprocess(load_rgb_image(image)) for image in images], dim=0).to(device_t)
     feats = clip_model.encode_image(batch)
     feats = F.normalize(feats, dim=-1)
     return feats.detach().cpu().numpy()

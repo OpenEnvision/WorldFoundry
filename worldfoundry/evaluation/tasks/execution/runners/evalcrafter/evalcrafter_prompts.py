@@ -9,18 +9,17 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
-from worldfoundry.evaluation.utils import write_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
+from worldfoundry.evaluation.utils import write_jsonl
 
 BENCHMARK_ID = "evalcrafter"
 PROMPT700_REL = Path("prompt700.txt")
 METADATA_REL = Path("metadata.json")
 CANONICAL_PROMPT_COUNT = 700
 EXPECTED_VIDEO_COUNT = 700
-IN_TREE_EVALCRAFTER_ROOT = Path(__file__).resolve().parent / "runtime" / "evalcrafter"
 
 VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
@@ -34,7 +33,6 @@ def resolve_evalcrafter_root(explicit: Path | None = None) -> Path | None:
     for candidate in (
         explicit,
         _env_path("WORLDFOUNDRY_EVALCRAFTER_ROOT"),
-        IN_TREE_EVALCRAFTER_ROOT,
         bundled_benchmark_assets_root(BENCHMARK_ID),
     ):
         if candidate is not None and candidate.is_dir():
@@ -84,6 +82,22 @@ def resolve_metadata_path(*, repo_root: Path | None = None) -> Path | None:
         return None
     candidate = root / METADATA_REL
     return candidate if candidate.is_file() else None
+
+
+def resolve_official_metric_prompt_path(prompt_id: str, *, repo_root: Path | None = None) -> Path:
+    """Resolve the per-id prompt files read by EvalCrafter's official metric scripts."""
+
+    filename = f"{prompt_id}.txt"
+    candidates = (
+        repo_root / "prompts" / filename if repo_root is not None else None,
+        bundled_benchmark_assets_root(BENCHMARK_ID) / "prompts" / filename,
+    )
+    for candidate in candidates:
+        if candidate is not None and candidate.is_file():
+            return candidate.resolve()
+    raise FileNotFoundError(
+        f"EvalCrafter official metric prompt is missing for {prompt_id}; expected prompts/{filename}"
+    )
 
 
 def load_prompt_lines(*, prompt700_path: Path | None = None) -> list[str]:

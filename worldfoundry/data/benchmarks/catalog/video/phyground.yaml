@@ -91,10 +91,6 @@ metrics:
 runner:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py
-  run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py --run-official 
-    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir 
-    "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   validation_command:
   - worldfoundry-eval
   - zoo
@@ -113,7 +109,7 @@ runner:
   - <out>
   - --json
   runtime:
-    kind: in_tree_official_source
+    kind: in_tree_result_importer
     root: worldfoundry/evaluation/tasks/execution/runners/phyground/runtime/phyground
     root_env: WORLDFOUNDRY_PHYGROUND_ROOT
     results_path_env: WORLDFOUNDRY_PHYGROUND_RESULTS_PATH
@@ -122,32 +118,29 @@ runner:
   - scorecard.json
   - benchmark_contract.json
   - raw_metric_table.jsonl
-  verification_status: official_runtime_ready
+  verification_status: result_importer_ready
   notes:
   - PhyGround in-tree runner imports scores.json produced by WorldFoundry/base-model judge infrastructure.
   - Standard PhyGround data roots auto-discover prompts/phyground.json, first_images/, and generated videos.
-  - Full leaderboard parity still requires PhyJudge/vLLM or cloud API judge execution on all 250 prompts.
+  - PhyJudge/vLLM or cloud API judge execution is outside this runner; imported scores are not official benchmark evidence.
 integration:
   status: integrated
   blocked_reasons:
   - Full leaderboard parity still requires complete PhyJudge/vLLM or cloud API judge scores for all 250 official prompts.
 release_status: experimental
 maturity: contract_ready
-open_source_status: in_tree_artifact_scores_ready
+open_source_status: in_tree_result_importer
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
-- --benchmark-data-root <phyground_data_root> or WORLDFOUNDRY_PHYGROUND_DATA_ROOT
-- prompts/phyground.json under the data root, or --prompt-manifest <path>
-- annotations/ under the data root, or --official-results-path <path>
-- --generated-artifact-dir <generated_videos>
+- annotations/ under a PhyGround data root, or --official-results-path <path>
+- prompts/phyground.json or --prompt-manifest <path> when coverage validation is requested
 - --result-model-id <model_id> when annotations contain multiple model ids
 blockers:
 - WorldFoundry imports PhyGround judge outputs; provide official PhyGround annotations/results through 
   --official-results-path or annotations/ under --benchmark-data-root.
-- Full leaderboard validation still requires generated videos and complete scorer/judge outputs for the official 
-  prompt suite.
+- The in-tree path does not execute PhyJudge or any cloud judge over candidate videos.
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/phyground.yaml
   dataset_refs:
@@ -164,8 +157,8 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
-  surface: official_in_tree_runtime
+  runtime_verified: false
+  surface: in_tree_result_importer
   normalizer_verified: false
 base_model_dependencies:
 - phyground_dataset_assets

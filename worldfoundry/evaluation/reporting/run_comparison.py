@@ -17,6 +17,7 @@ from worldfoundry.evaluation.utils import (
     write_text,
 )
 
+from .comparison_identity import compare_identities, comparison_identity_from_summary
 from .run_report import _dedupe_labels, _mapping, _number_or_none, _row_from_summary, _run_summary_path, load_run_summary
 
 RUN_COMPARISON_SCHEMA_VERSION = "worldfoundry-run-comparison"
@@ -32,6 +33,7 @@ def build_markdown_comparison(comparison: Mapping[str, Any]) -> str:
         f"- Runs: {_format_value(comparison.get('run_count'))}",
         f"- Benchmarks: {_format_value(comparison.get('benchmarks') or [])}",
         f"- Metrics: {_format_value(metric_ids)}",
+        f"- Compatibility: {_format_value(_mapping(comparison.get('compatibility')).get('status'))}",
         "",
     ]
 
@@ -94,6 +96,13 @@ def build_markdown_comparison(comparison: Mapping[str, Any]) -> str:
                     )
                     + " |"
                 )
+
+    compatibility_warnings = [
+        str(warning) for warning in _mapping(comparison.get("compatibility")).get("warnings") or ()
+    ]
+    if compatibility_warnings:
+        lines.extend(["", "## Compatibility Warnings", ""])
+        lines.extend(f"- {_format_value(warning)}" for warning in compatibility_warnings)
 
     return "\n".join(lines).rstrip() + "\n"
 
@@ -202,7 +211,7 @@ def build_run_comparison(
         labels: Optional per-run display labels; must match length of *runs*.
         baseline: Baseline identifier (0-based index, run label, run ID, or
             model ID) for delta computation; ``None`` disables deltas.
-        metric_ids: Explicit metric list; ``None`` uses all metrics found.
+        metric_ids: Explicit metric list; ``None`` uses metrics present in every run.
 
     Returns:
         A comparison payload dict conforming to
@@ -230,17 +239,23 @@ def build_run_comparison(
             for index, (summary, source_path) in enumerate(loaded)
         ]
     )
-    available_metric_ids = {
-        str(metric_id)
-        for row in rows
-        for metric_id in _mapping(row.get("metrics"))
-    }
+    identities = [comparison_identity_from_summary(summary) for summary in summaries]
+    incompatibilities, compatibility_warnings = compare_identities(identities)
+    if incompatibilities:
+        raise ValueError("runs are not comparable: " + "; ".join(incompatibilities))
+
+    metric_ids_by_run = [set(map(str, _mapping(row.get("metrics")))) for row in rows]
+    available_metric_ids = set().union(*metric_ids_by_run)
+    common_metric_ids = set.intersection(*metric_ids_by_run) if metric_ids_by_run else set()
     selected_metric_ids = (
         [str(metric_id) for metric_id in metric_ids]
         if metric_ids is not None
-        else sorted(available_metric_ids)
+        else sorted(common_metric_ids)
     )
     unknown_metric_ids = sorted(set(selected_metric_ids).difference(available_metric_ids))
+    partially_available_metric_ids = sorted(
+        set(selected_metric_ids).intersection(available_metric_ids).difference(common_metric_ids)
+    )
     baseline_label = _resolve_baseline_label(rows, baseline)
     metric_matrix = _metric_matrix(rows=rows, metric_ids=selected_metric_ids, baseline_label=baseline_label)
     if baseline_label is not None:
@@ -253,6 +268,9 @@ def build_run_comparison(
             }
     benchmarks = sorted({str(row["benchmark"]) for row in rows if row.get("benchmark")})
     datasets = sorted({str(row["dataset_id"]) for row in rows if row.get("dataset_id")})
+    comparison_keys = sorted(
+        {str(identity["comparison_key"]) for identity in identities if identity.get("comparison_key")}
+    )
 
     return {
         "schema_version": RUN_COMPARISON_SCHEMA_VERSION,
@@ -262,11 +280,24 @@ def build_run_comparison(
         "datasets": datasets,
         "metric_ids": selected_metric_ids,
         "available_metric_ids": sorted(available_metric_ids),
+        "common_metric_ids": sorted(common_metric_ids),
+        "compatibility": {
+            "status": "compatible_with_incomplete_identity" if compatibility_warnings else "compatible",
+            "comparison_key": comparison_keys[0] if len(comparison_keys) == 1 else None,
+            "comparison_keys": comparison_keys,
+            "warnings": compatibility_warnings,
+        },
         "runs": rows,
         "rows": rows,
         "metrics": metric_matrix,
         "best_by_metric": _best_by_metric(rows=rows, summaries=summaries, metric_ids=selected_metric_ids),
-        "issues": [f"metric not found in any run: {metric_id}" for metric_id in unknown_metric_ids],
+        "issues": [
+            *[f"metric not found in any run: {metric_id}" for metric_id in unknown_metric_ids],
+            *[
+                f"metric not found in every run: {metric_id}"
+                for metric_id in partially_available_metric_ids
+            ],
+        ],
         "artifacts": {},
     }
 

@@ -1,0 +1,43 @@
+resume_checkpoint: true
+experiment:
+  classifier:
+    dim: 1024
+    num_heads: 16
+    num_probe_blocks: 4
+  data:
+    num_classes: 0
+  optimization:
+    batch_size: 64
+    num_epochs: 20
+    use_bfloat16: true
+    multihead_kwargs:
+      - lr: 0.005
+        start_lr: 0.005
+        final_lr: 0.0
+        warmup: 0.0
+        weight_decay: 0.01
+        final_weight_decay: 0.01
+      - lr: 0.003
+        start_lr: 0.003
+        final_lr: 0.0
+        warmup: 0.0
+        weight_decay: 0.1
+        final_weight_decay: 0.1
+      - lr: 0.001
+        start_lr: 0.001
+        final_lr: 0.0
+        warmup: 0.0
+        weight_decay: 0.4
+        final_weight_decay: 0.4
+      - lr: 0.0003
+        start_lr: 0.0003
+        final_lr: 0.0
+        warmup: 0.0
+        weight_decay: 0.8
+        final_weight_decay: 0.8
+      - lr: 0.0001
+        start_lr: 0.0001
+        final_lr: 0.0
+        warmup: 0.0
+        weight_decay: 0.01
+        final_weight_decay: 0.01

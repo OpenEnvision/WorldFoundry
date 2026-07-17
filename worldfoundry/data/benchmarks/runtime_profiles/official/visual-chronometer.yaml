@@ -2,7 +2,7 @@ benchmark_ids:
 - visual-chronometer
 credential_gated_reason: Visual Chronometer official-run requires checkpoint access and generated videos; no external 
   VLM/API judge is required.
-environment_id: worldplay-video-judge
+environment_id: worldfoundry-unified-cu128
 id: visual-chronometer
 name: Visual Chronometer
 needs_new_env: false
@@ -19,9 +19,9 @@ required_assets:
   in_tree_runtime_paths:
   - worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer
   task_yaml: worldfoundry/data/benchmarks/tasks/external/visual-chronometer.yaml
-required_env:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+required_env: []
 optional_env:
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT
 - WORLDFOUNDRY_VISUAL_CHRONOMETER_PREDICT_BACKEND
 - WORLDFOUNDRY_VISUAL_CHRONOMETER_RESULTS_PATH

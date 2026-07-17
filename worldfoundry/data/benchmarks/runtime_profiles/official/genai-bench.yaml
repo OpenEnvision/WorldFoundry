@@ -1,8 +1,8 @@
 benchmark_ids:
 - genai-bench
-blocked_reason: in-tree official scorer path is integrated; full leaderboard validation still 
+blocked_reason: in-tree result normalization is integrated; raw-video scorer execution still
   requires official human labels, GPU VQAScore checkpoints, and generated artifacts
-environment_id: worldplay-genai-bench-contract
+environment_id: worldfoundry-unified-cu128
 id: genai-bench
 name: GenAI-Bench
 needs_new_env: false
@@ -10,15 +10,16 @@ notes:
 - In-tree official result import is available for caller-provided CSV/JSON/JSONL/TSV outputs.
 - Use `--run-official` with `WORLDFOUNDRY_GENAI_BENCH_SCORER_BACKEND` to select the scorer backend.
 - Full GPU VQAScore execution requires staged clip-flant5-xxl checkpoints via `t2v_metrics_clip_flant5_xxl`.
-preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python -m 
+preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile genai-bench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/genai-bench.yaml --output-dir 
   tmp/worldfoundry_preflight/genai-bench --json
-python_path: ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots: []
 required_assets:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml
-required_env:
+required_env: []
+optional_env:
 - WORLDFOUNDRY_GENAI_BENCH_RESULTS_PATH
 required_paths:
 - id: official_runner_script
@@ -26,7 +27,7 @@ required_paths:
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml
 requires_cuda_visibility: false
-status: in_tree_official_runtime_ready
+status: in_tree_result_normalizer_ready_raw_video_runtime_pending
 optional_imports:
 - numpy
 base_model_dependencies:

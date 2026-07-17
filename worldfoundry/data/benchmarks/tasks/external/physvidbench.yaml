@@ -40,7 +40,7 @@ metadata:
     output_artifact: benchmark_scorecard
     filename_template: scorecard.json
   runtime:
-    kind: in_tree_official_runtime
+    kind: in_tree_result_importer_and_bounded_caption_qa
     repo_url: https://github.com/ensanli/PhysVidBenchCode.git
     revision: b1d20f121ed3ebe5d18337d884fdecfad065096b
     root_env: WORLDFOUNDRY_PHYSVIDBENCH_ROOT
@@ -52,11 +52,8 @@ metadata:
   release_status: experimental
   status: integrated
   maturity: contract_ready
-  full_test_harness_ready: true
-  full_suite_testable: true
-  full_suite_execution_recorded: false
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   base_model_dependencies:
   - physvidbench_dataset_assets
@@ -65,12 +62,10 @@ metadata:
   - video_quality_motion_stack
   requires:
   - Bundled PhysVidBench prompts_questions.csv and captions, or explicit WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST/WORLDFOUNDRY_PHYSVIDBENCH_CAPTIONS_DIR overrides
-  - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   - official_results_path or WORLDFOUNDRY_PHYSVIDBENCH_RESULTS_PATH for normalization-only runs
   framework_acceptance:
-  - WorldFoundry PhysVidBench integration is OK when in-tree Gemini QA or caller-supplied output.csv,
-    prompts_questions.csv, captions, and generated videos pass strict coverage checks and all declared metrics are
-    normalized.
+  - Prepared output.csv import is supported; real Gemini is a bounded QA component over supplied caption tracks.
+  - Candidate-video caption generation and caption provenance are not validated.
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/physvidbench.yaml
     local_dataset_paths:
@@ -87,19 +82,15 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysVidBenchContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
-    surface: physvidbench_official_in_tree
+    runtime_verified: false
+    surface: in_tree_result_normalizer
     normalizer_verified: false
-  open_source_status: in_tree_runtime
+  open_source_status: in_tree_result_normalizer
   local_evaluator:
     target: worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
     status: implemented
-    protocol: physvidbench_official_in_tree
+    protocol: result_import_and_bounded_caption_qa
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
-  run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-    worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py --run-official
-    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir
-    "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   integration_status: integrated
   validation_command:
   - worldfoundry-eval
@@ -117,13 +108,13 @@ metadata:
   - <out>
   - --json
   blockers:
-  - Leaderboard parity requires generated videos for the full prompt suite, complete AuroraCap caption tracks,
-    Gemini/API credentials for full official run, and normalized upstream evidence.
+  - Candidate-video AuroraCap caption generation/provenance is not implemented in tree.
+  - Gemini over supplied captions and every mock run are bounded components, not official benchmark evidence.
   checkpoint_refs: []
 tasks:
   physvidbench_commonsense_standard:
     benchmark_name: physvidbench
-    protocol: external_official_benchmark
+    protocol: official_result_import_and_bounded_caption_qa
     capability_track: physical_commonsense_video_generation
     input_keys:
     - prompt
@@ -148,7 +139,7 @@ tasks:
       source_kind: benchmark_zoo
       benchmark_id: physvidbench
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       hf_dataset_id: Anonymousny/PhysVidBench
@@ -164,7 +155,7 @@ tasks:
         generated_video:
           kind: video
     evaluation_protocol:
-    - name: external_official_runner
+    - name: result_importer_and_bounded_caption_qa
       metric_ids:
       - physical_commonsense_accuracy
       - affordance_understanding

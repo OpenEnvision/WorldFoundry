@@ -21,7 +21,8 @@ official_gpu_validation:
   verified: true
   bench_name: video_feedback
   sample_count: 1
-  official_benchmark_verified: true
+  official_component_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false
@@ -167,7 +168,8 @@ runner:
       status: verified
       bench_name: video_feedback
       sample_count: 1
-      official_benchmark_verified: true
+      official_component_verified: true
+      official_benchmark_verified: false
       integration_evidence: true
       leaderboard_valid: false
       full_suite_verified: false
@@ -211,8 +213,10 @@ runner_availability:
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
+  runtime_verification_scope: bounded_one_sample_frame_tree
+  full_suite_verified: false
   normalizer_verified: false
-  surface: official_runner
+  surface: bounded_official_gpu_validation
 base_model_dependencies:
 - videoscore_reward_metric_stack
 base_model_dependency_preflight:

@@ -1,0 +1,30 @@
+{
+  "adapter": "ac3d",
+  "aliases": [
+    "ac3d",
+    "ac3d-2b",
+    "ac3d-cogvideox"
+  ],
+  "amplitude": {
+    "calibration_status": "official_pose_conversion_pending_gpu_parity",
+    "max_amount": 0.6,
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 8,
+  "default_frames": 49,
+  "default_height": 480,
+  "default_width": 720,
+  "input_kind": "source_video",
+  "key": "ac3d",
+  "notes": "Uses direct source video plus official RealEstate10K W2C pose rows; runtime stages a temporary one-sample dataset and keeps the official AC3D inference path unchanged.",
+  "payload_type": "ac3d_realestate10k_pose_rows",
+  "status": "active",
+  "worldfoundry_model_id": "ac3d"
+}

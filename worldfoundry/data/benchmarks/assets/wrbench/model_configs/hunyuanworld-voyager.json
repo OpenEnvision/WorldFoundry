@@ -1,0 +1,152 @@
+{
+  "adapter": "hunyuanworld_voyager",
+  "aliases": [
+    "hunyuanworld-voyager",
+    "hunyuanworld_voyager",
+    "voyager"
+  ],
+  "amplitude": {
+    "calibration_status": "blocked_upstream_20260616",
+    "max_amount": 0.6,
+    "metadata": {
+      "candidate_payload_unit": "voyager_wrbench_rendered_rgbd_mask_partial_conditions",
+      "effective_path": "wrbench_target_c2w_rendered_to_official_voyager_partial_condition_files",
+      "supports_static": false,
+      "target_c2w_is_model_effective": true
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": false,
+    "translation": true
+  },
+  "default_fps": 24,
+  "default_frames": 49,
+  "default_height": 720,
+  "default_width": 1280,
+  "execution_contract": {
+    "cli_flag_parameters": [
+      {
+        "flag": "--i2v-stability",
+        "parameter": "i2v_stability",
+        "required_value": true
+      },
+      {
+        "flag": "--flow-reverse",
+        "parameter": "flow_reverse",
+        "required_value": true
+      }
+    ],
+    "cli_parameter_order": [
+      [
+        "--model",
+        "model"
+      ],
+      [
+        "--model-base",
+        "model_base"
+      ],
+      [
+        "--i2v-dit-weight",
+        "i2v_dit_weight"
+      ],
+      [
+        "--input-path",
+        "input_path"
+      ],
+      [
+        "--prompt",
+        "prompt"
+      ],
+      [
+        "--infer-steps",
+        "infer_steps"
+      ],
+      [
+        "--flow-shift",
+        "flow_shift"
+      ],
+      [
+        "--seed",
+        "seed"
+      ],
+      [
+        "--embedded-cfg-scale",
+        "embedded_cfg_scale"
+      ],
+      [
+        "--save-path",
+        "save_path"
+      ],
+      [
+        "--ulysses-degree",
+        "ulysses_degree"
+      ],
+      [
+        "--ring-degree",
+        "ring_degree"
+      ]
+    ],
+    "command_prefix": [
+      "python",
+      "-m",
+      "torch.distributed.run",
+      "--nproc_per_node=8"
+    ],
+    "entrypoint": "sample_image2video.py",
+    "official_inference_profile": {
+      "embedded_cfg_scale": 6.0,
+      "flow_shift": 7.0,
+      "fps": 24,
+      "infer_steps": 50,
+      "ring_degree": 1,
+      "seed": 0,
+      "ulysses_degree": 8,
+      "video_length": 49
+    },
+    "official_runtime": {
+      "distributed": "8 GPU torch.distributed.run",
+      "python": "3.10",
+      "source": "HunyuanWorld-Voyager sample_image2video.py",
+      "torch": "2.4.0+cu118 or compatible"
+    },
+    "runtime_parameters": {
+      "embedded_cfg_scale": 6.0,
+      "flow_reverse": true,
+      "flow_shift": 7.0,
+      "i2v_dit_weight": "<MODEL_PATH>",
+      "i2v_stability": true,
+      "infer_steps": 50,
+      "model": "HYVideo-T/2",
+      "model_base": "<MODEL_PATH>",
+      "ring_degree": 1,
+      "seed": 0,
+      "ulysses_degree": 8
+    },
+    "wrbench_benchmark_profile": {
+      "dimensions": [
+        720,
+        1280
+      ],
+      "duration_seconds": 2.0416666666666665,
+      "fps": 24,
+      "video_length": 49
+    },
+    "wrbench_policy": {
+      "requires_data_engine_partial_condition_render": true,
+      "requires_first_frame_image": true,
+      "requires_prompt": true,
+      "requires_wrbench_camera_json": true,
+      "supports_static": false,
+      "target_c2w_effective_via_rendered_rgbd_mask_partial_conditions": true,
+      "target_c2w_is_model_effective": true
+    }
+  },
+  "input_kind": "image",
+  "key": "hunyuanworld-voyager",
+  "payload_type": "voyager_wrbench_rendered_camera_condition",
+  "status": "active"
+}

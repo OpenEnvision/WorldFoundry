@@ -1,0 +1,158 @@
+{
+  "adapter": "minwm_hy_action2v",
+  "aliases": [
+    "minwm-hy-action2v",
+    "minwm",
+    "minwm_hy_action2v"
+  ],
+  "amplitude": {
+    "calibration_status": "model_limitation_20260616",
+    "max_amount": 0.6,
+    "metadata": {
+      "candidate_payload_unit": "native_minwm_motion_tokens",
+      "official_fps": 16,
+      "official_video_length": 77,
+      "target_c2w_is_model_effective": false
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 77,
+  "default_height": 480,
+  "default_width": 832,
+  "execution_contract": {
+    "cli_flag_parameters": [
+      {
+        "flag": "--use_camera",
+        "parameter": "use_camera",
+        "required_value": true
+      }
+    ],
+    "cli_parameter_order": [
+      [
+        "--mode",
+        "mode"
+      ],
+      [
+        "--transformer_dir",
+        "transformer_dir"
+      ],
+      [
+        "--model_path",
+        "model_path"
+      ],
+      [
+        "--example_json",
+        "example_json"
+      ],
+      [
+        "--output_dir",
+        "output_dir"
+      ],
+      [
+        "--num_inference_steps",
+        "num_inference_steps"
+      ],
+      [
+        "--shift",
+        "shift"
+      ],
+      [
+        "--guidance_scale",
+        "guidance_scale"
+      ],
+      [
+        "--fps",
+        "fps"
+      ],
+      [
+        "--height",
+        "height"
+      ],
+      [
+        "--width",
+        "width"
+      ],
+      [
+        "--video_length",
+        "video_length"
+      ],
+      [
+        "--chunk_latent_frames",
+        "chunk_latent_frames"
+      ],
+      [
+        "--stabilization_level",
+        "stabilization_level"
+      ]
+    ],
+    "command_prefix": [
+      "python",
+      "-m",
+      "torch.distributed.run",
+      "--nproc_per_node=1"
+    ],
+    "entrypoint": "HY15/hy15_inference.py",
+    "official_inference_profile": {
+      "checkpoint": "HY15/Action2V/dmd",
+      "chunk_latent_frames": 4,
+      "duration_seconds": 4.8125,
+      "fps": 16,
+      "guidance_scale": 1.0,
+      "mode": "ar_rollout",
+      "note": "The 4-step DMD path is the published HY Action2V camera inference profile, not a low-step benchmark workaround.",
+      "num_inference_steps": 4,
+      "shift": 5.0,
+      "stabilization_level": 1,
+      "use_camera": true,
+      "video_length": 77
+    },
+    "official_runtime": {
+      "entry_mode": "torch.distributed.run --nproc_per_node=1",
+      "python": ">=3.10",
+      "source": "shengshu-ai/minWM HY15/scripts/inference/run_infer_causal_camera.sh",
+      "torch": "CUDA-enabled torch with HY15 dependencies"
+    },
+    "runtime_parameters": {
+      "base_model": "HunyuanVideo-1.5",
+      "chunk_latent_frames": 4,
+      "guidance_scale": 1.0,
+      "hf_revision": "21bd74da43b5a061c0b8ff277515088ccd2c798b",
+      "mode": "ar_rollout",
+      "model": "MIN-Lab/minWM",
+      "model_path": "<MODEL_PATH>",
+      "num_inference_steps": 4,
+      "shift": 5.0,
+      "stabilization_level": 1,
+      "transformer_dir": "<MODEL_PATH>",
+      "transformer_subdir": "HY15/Action2V/dmd",
+      "use_camera": true
+    },
+    "wrbench_benchmark_profile": {
+      "duration_seconds": 4.8125,
+      "fps": 16,
+      "reason": "Use the published HY Action2V DMD profile length for main benchmark unless a separate calibrated long-context profile is requested.",
+      "video_length": 77
+    },
+    "wrbench_policy": {
+      "camera_control_is_native_motion_tokens": true,
+      "no_weight_download_in_dry_run": true,
+      "record_materialized_example_json_for_non_dry_run": true,
+      "requires_first_frame_image": true,
+      "requires_prompt": true,
+      "requires_use_camera": true,
+      "target_c2w_is_model_effective": false
+    }
+  },
+  "input_kind": "image",
+  "key": "minwm-hy-action2v",
+  "payload_type": "minwm_hy_action2v_trajectory_json",
+  "status": "active"
+}

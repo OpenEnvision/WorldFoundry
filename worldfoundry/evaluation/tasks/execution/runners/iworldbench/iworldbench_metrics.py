@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-METRIC_ORDER = (
+COMPONENT_METRIC_ORDER = (
     "image_quality",
     "brightness_consistency",
     "color_temperature_constraint",
@@ -18,6 +18,10 @@ METRIC_ORDER = (
     "trajectory_tolerance",
     "memory_symmetry",
     "trajectory_alignment",
+)
+
+METRIC_ORDER = (
+    *COMPONENT_METRIC_ORDER,
     "iworldbench_average",
 )
 
@@ -268,12 +272,18 @@ def compute_iworldbench_metrics(
             sample_counts[metric_id] = len(values)
         parsed_rows = collected
 
-    component_scores = [
-        value for key, value in per_metric.items() if key != "iworldbench_average" and value is not None
-    ]
-    if component_scores and per_metric.get("iworldbench_average") is None:
-        per_metric["iworldbench_average"] = sum(component_scores) / len(component_scores)
-        sample_counts["iworldbench_average"] = len(component_scores)
+    component_scores = [per_metric[metric_id] for metric_id in COMPONENT_METRIC_ORDER]
+    components_complete = all(value is not None for value in component_scores)
+    if not components_complete:
+        # A component-level report may contain an upstream "average" column,
+        # but that value is not the aggregate for the complete iWorld-Bench
+        # metric suite.
+        per_metric["iworldbench_average"] = None
+        sample_counts.pop("iworldbench_average", None)
+    elif per_metric.get("iworldbench_average") is None:
+        complete_scores = [float(value) for value in component_scores if value is not None]
+        per_metric["iworldbench_average"] = sum(complete_scores) / len(complete_scores)
+        sample_counts["iworldbench_average"] = len(complete_scores)
 
     return {
         "metrics": {key: value for key, value in per_metric.items() if value is not None},

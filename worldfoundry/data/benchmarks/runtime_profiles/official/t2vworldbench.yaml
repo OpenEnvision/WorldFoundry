@@ -2,7 +2,7 @@ benchmark_ids:
 - t2vworldbench
 blocked_reason: T2VWorldBench official-result normalization is wired; full generated artifacts, staged Drive data, 
   upstream VLM runtime, and leaderboard parity remain pending.
-environment_id: worldplay-core
+environment_id: worldfoundry-unified-cu128
 id: t2vworldbench
 name: T2VWorldBench
 needs_new_env: false
@@ -25,10 +25,10 @@ required_assets:
   - worldfoundry/data/benchmarks/assets/t2vworldbench/prompt/prompt.csv
   - worldfoundry/data/benchmarks/assets/t2vworldbench/data/meta_data/meta_data.json
   task_yaml: worldfoundry/data/benchmarks/tasks/external/t2vworldbench.yaml
-required_env:
-- WORLDFOUNDRY_T2VWORLDBENCH_RESULTS_PATH
+required_env: []
 optional_env:
 - WORLDFOUNDRY_T2VWORLDBENCH_ROOT
+- WORLDFOUNDRY_T2VWORLDBENCH_RESULTS_PATH
 - WORLDFOUNDRY_T2VWORLDBENCH_PROMPT_FILE
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 required_imports:

@@ -11,4 +11,4 @@ defaults:
       packages into isolated or compatible envs. Do not upgrade torch, torchvision,
       CUDA, or nvidia wheels during benchmark env repair unless the profile explicitly
       requires it.
-  recommended_python_env: worldplay
+  recommended_python_env: worldfoundry-unified-cu128

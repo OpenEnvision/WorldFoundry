@@ -235,6 +235,10 @@ def resolve_model_zoo_config(
 
     # ── Load zoo entry and resolve variant ───────────────────────────────
     entry = load_model_zoo_registry(manifest_dir).get(model_id)
+    if not variant_id and model_id != entry.model_id and any(
+        item.variant_id == model_id for item in entry.variants
+    ):
+        variant_id = model_id
     selected_variant = None
     runner_target = entry.runner_target
     pipeline_target = entry.pipeline_target

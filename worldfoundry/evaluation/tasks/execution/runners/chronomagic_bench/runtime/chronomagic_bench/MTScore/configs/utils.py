@@ -5,7 +5,7 @@ import torch
 from worldfoundry.base_models.llm_mllm_core.mllm.internvideo2.multi_modality.models import (
     InternVideo2_Stage2,
 )
-from worldfoundry.base_models.llm_mllm_core.mllm.internvideo2.multi_modality.models.backbones.bert.tokenization_bert import (
+from worldfoundry.base_models.llm_mllm_core.mllm.umt.models.backbones.bert.tokenization_bert import (
     BertTokenizer,
 )
 from worldfoundry.base_models.llm_mllm_core.mllm.internvideo2.multi_modality.models.backbones.internvideo2.pos_embed import (
@@ -117,5 +117,4 @@ def setup_internvideo2(config: dict):
         model_without_ddp = model_without_ddp.to(torch.float32)
     model_without_ddp.eval()
     return (model_without_ddp, tokenizer,)
-
 

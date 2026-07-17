@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 VENDOR_ROOT = PACKAGE_ROOT / "vendor"
@@ -17,15 +18,9 @@ def package_root() -> Path:
     return PACKAGE_ROOT
 
 
-def _ensure_rke() -> None:
-    root = str(VENDOR_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
 @lru_cache(maxsize=1)
 def _rke_class() -> Any:
-    _ensure_rke()
+    prepend_import_path(VENDOR_ROOT)
     from rke_score import RKE
 
     return RKE

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 import sys
+from importlib import import_module
 from types import ModuleType
-
 
 _ALIASES = (
     "benchmark_runner",
@@ -13,12 +12,15 @@ _ALIASES = (
     "contract",
     "existing_results",
     "evaluate",
+    "fidelity",
     "interfaces",
     "materialize",
     "model_benchmark",
     "model_benchmark_suite",
     "plan",
+    "runtime_preflight",
     "run_mode",
+    "service",
 )
 
 def __getattr__(name: str) -> ModuleType:

@@ -1,0 +1,4 @@
+{"video_id":"task-1::model-a","category":"World-Knowledge","parsed_scores":[5,5,5],"score_weighted":5.0,"human_score":4.0}
+{"video_id":"task-1::model-b","category":"World-Knowledge","parsed_scores":[4,4,4],"score_weighted":4.0,"human_score":3.0}
+{"video_id":"task-2::model-a","category":"Logic-Reasoning","parsed_scores":[3,3,3],"score_weighted":3.0,"human_score":2.0}
+{"video_id":"task-2::model-b","category":"Logic-Reasoning","parsed_scores":[2,2,2],"score_weighted":2.0,"human_score":1.0}

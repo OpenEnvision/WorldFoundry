@@ -125,7 +125,15 @@ class VBench(object):
             '''
 
             video_names = os.listdir(videos_path)
-            postfix = Path(video_names[0]).suffix
+            video_files = [
+                filename
+                for filename in video_names
+                if Path(filename).suffix.lower() in {'.mp4', '.gif', '.jpg', '.jpeg', '.png'}
+                and os.path.isfile(os.path.join(videos_path, filename))
+            ]
+            if not video_files:
+                raise ValueError(f'No supported videos found in {videos_path}')
+            postfix = Path(video_files[0]).suffix
 
             with open(category_dir / f"{category}.txt", 'r') as f:
                 video_prompts = [line.strip() for line in f.readlines()]
@@ -149,7 +157,15 @@ class VBench(object):
         else:
             full_info_list = load_json(self.full_info_dir)
             video_names = os.listdir(videos_path)
-            postfix = Path(video_names[0]).suffix
+            video_files = [
+                filename
+                for filename in video_names
+                if Path(filename).suffix.lower() in {'.mp4', '.gif'}
+                and os.path.isfile(os.path.join(videos_path, filename))
+            ]
+            if not video_files:
+                raise ValueError(f'No supported videos found in {videos_path}')
+            postfix = Path(video_files[0]).suffix
             for prompt_dict in full_info_list:
                 # if the prompt belongs to any dimension we want to evaluate
                 if set(dimension_list) & set(prompt_dict["dimension"]): 

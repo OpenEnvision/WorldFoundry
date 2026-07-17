@@ -1,0 +1,182 @@
+{
+  "adapter": "sana_wm",
+  "aliases": [
+    "sana-wm",
+    "sana_wm"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.6,
+    "metadata": {
+      "benchmark_fps": 16,
+      "benchmark_frame_count": 129,
+      "candidate_payload_unit": "opencv_c2w_npy",
+      "official_quality_frame_count": 321
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 129,
+  "default_height": 704,
+  "default_width": 1280,
+  "execution_contract": {
+    "cli_flag_parameters": [
+      {
+        "flag": "--no_action_overlay",
+        "parameter": "no_action_overlay",
+        "required_value": true
+      }
+    ],
+    "cli_parameter_order": [
+      [
+        "--image",
+        "image"
+      ],
+      [
+        "--prompt",
+        "prompt"
+      ],
+      [
+        "--output_dir",
+        "output_dir"
+      ],
+      [
+        "--name",
+        "name"
+      ],
+      [
+        "--camera",
+        "camera"
+      ],
+      [
+        "--intrinsics",
+        "intrinsics"
+      ],
+      [
+        "--num_frames",
+        "num_frames"
+      ],
+      [
+        "--fps",
+        "fps"
+      ],
+      [
+        "--config",
+        "config"
+      ],
+      [
+        "--model_path",
+        "model_path"
+      ],
+      [
+        "--refiner_root",
+        "refiner_root"
+      ],
+      [
+        "--refiner_gemma_root",
+        "refiner_gemma_root"
+      ],
+      [
+        "--sampling_algo",
+        "sampling_algo"
+      ],
+      [
+        "--step",
+        "step"
+      ],
+      [
+        "--cfg_scale",
+        "cfg_scale"
+      ],
+      [
+        "--flow_shift",
+        "flow_shift"
+      ],
+      [
+        "--seed",
+        "seed"
+      ]
+    ],
+    "command_prefix": [
+      "python"
+    ],
+    "entrypoint": "inference_video_scripts/inference_sana_wm.py",
+    "forbidden_workarounds": {
+      "model.softmax_every_n": {
+        "forbid_values": [
+          0,
+          1
+        ],
+        "reason": "SANA-WM hybrid attention must stay on the upstream config; softmax_every_n=1 was only a failed Triton workaround and produced invalid line artifacts."
+      }
+    },
+    "official_config_constraints": {
+      "camera_format": "OpenCV camera-to-world npy, shape (F, 4, 4)",
+      "intrinsics_format": "(3,3), (F,3,3), or (4,) npy",
+      "model.softmax_every_n": 4,
+      "output_resolution": [
+        704,
+        1280
+      ],
+      "refiner": "enabled_by_default"
+    },
+    "official_quality_profile": {
+      "cfg_scale": 5.0,
+      "duration_seconds": 20.0625,
+      "flow_shift": 8.0,
+      "fps": 16,
+      "num_frames": 321,
+      "refiner_enabled": true,
+      "source": "inference_video_scripts/run_sana_wm.sh",
+      "step": 60
+    },
+    "official_runtime": {
+      "cuda_wheel": "cu128",
+      "diffusers": ">=0.37.0",
+      "python": ">=3.11",
+      "source": "NVlabs/Sana environment_setup.sh",
+      "torch": "2.9.1",
+      "transformers": "4.57.3",
+      "triton": "3.5.1"
+    },
+    "runtime_parameters": {
+      "cfg_scale": 5.0,
+      "config": "<MODEL_PATH>",
+      "flow_shift": 8.0,
+      "model_path": "<MODEL_PATH>",
+      "no_action_overlay": true,
+      "refiner_enabled": true,
+      "refiner_gemma_root": "<MODEL_PATH>",
+      "refiner_root": "<MODEL_PATH>",
+      "sampling_algo": "flow_euler_ltx",
+      "seed": 42,
+      "step": 60
+    },
+    "wrbench_benchmark_profile": {
+      "duration_seconds": 8.0625,
+      "fps": 16,
+      "num_frames": 129,
+      "reason": "Main benchmark uses an 8-second 8k+1 frame budget; official long-context quality checks remain separate."
+    },
+    "wrbench_policy": {
+      "no_weight_download_in_dry_run": true,
+      "record_materialized_command_for_non_dry_run": true,
+      "reject_implicit_pi3x_intrinsics": true,
+      "requires_first_frame_image": true,
+      "requires_intrinsics_npy": true,
+      "requires_official_runtime_for_benchmark": true,
+      "requires_prompt_file": true
+    }
+  },
+  "input_kind": "image",
+  "key": "sana-wm",
+  "payload_type": "sana_wm_camera_npy",
+  "status": "active"
+}

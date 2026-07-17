@@ -4,175 +4,205 @@ benchmark_kind:
 - physical-understanding
 - video-to-video
 - visual-question-answering
-status: confirmed_public_hf_dataset
+status: in_tree_runtime_ready
+
 official_sources:
   project_page: https://world-bench.github.io/
+  paper_url: https://arxiv.org/abs/2601.21282
   huggingface_datasets:
-  - repo_id: worldbenchmark/WorldBench
-    verified_by: GET https://huggingface.co/api/datasets/worldbenchmark/WorldBench redirects to 
-      worldbenchmark/IntuitivePhysics
+  - repo_id: worldbenchmark/IntuitivePhysics
+    alias: worldbenchmark/WorldBench
     sha: c72084cfc4500035032450b812bfd6b2956ed3e9
     private: false
     gated: false
-    path: cache/worldfoundry/data/hfd_datasets/worldbenchmark__WorldBench
-    task_categories:
-    - visual-question-answering
-    - text-to-video
-  paper_url: https://arxiv.org/abs/2601.21282
-  github_status: unknown_pending_review
-  license: unknown_pending_review
-  access_notes: Public HF dataset metadata is confirmed but license is null; worldbenchmark/WorldBench redirects to 
-    worldbenchmark/IntuitivePhysics; official evaluation code points outside GitHub/HF and remains pending review.
+    path: cache/worldfoundry/data/hfd_datasets/worldbenchmark__IntuitivePhysics
+    task_categories: [visual-question-answering, text-to-video]
+  evaluator:
+    repository: https://github.com/WorldBenchmark/worldbench_eval
+    commit: 4575a164225341b5a87de7235cd50216b4b204d8
+    distributed_bundle_sha256: cb48d4458f9c2cb80bde70ca8b8396613dfb85709f855d0413f8583c22cd50a3
+    license: not_provided
+    integration_policy: clean_in_tree_reimplementation
+  dataset_license: not_provided
+  access_notes:
+  - worldbenchmark/WorldBench redirects to worldbenchmark/IntuitivePhysics.
+  - The evaluator bundle contains Git metadata for the official repository but no license file.
+  - WorldFoundry therefore keeps an independently implemented inference/evaluation runtime rather than copying source files.
+
 benchmark_assets:
   video_based:
-    status: confirmed_by_hf_card_metadata
-    num_scenes: 425
-    modalities:
-    - rgb
-    - normals
-    - depth
-    - flow
-    - segmentation
+    status: confirmed_public_dataset
+    declared_num_scenes: 425
+    current_hf_scene_directories: 375
+    conditioning_frames: 9
+    continuation_frames_default: 24
+    modalities: [rgb, normals, depth, flow, segmentation]
+    notes:
+    - The public project reports 425 scenes, while the inspected current HF tree contains 15 scenarios x 25 scenes.
   text_based:
-    status: confirmed_by_hf_card_metadata
-    num_videos: 181
-    question_types:
-    - multiple_choice
-    - binary
-  evaluation_code:
-    status: blocked_external_drive_only
-    notes: HF card points to Google Drive for evaluation code; no official GitHub/HF code repo was confirmed.
+    status: confirmed_public_dataset
+    num_questions: 181
+    multiple_choice_questions: 61
+    binary_questions: 120
+  evaluator_config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
+
 metrics:
-- id: video_based_accuracy
-  name: Video-Based Accuracy
-  description: Normalized accuracy from official WorldBench video-based result summaries or per-sample rows.
+- id: foreground_miou
+  name: Foreground mIoU
+  description: Conventional per-object IoU averaged across objects, frames, and scenes.
   higher_is_better: true
-  leaderboard_key: video_based_accuracy
-  normalizer: percent_or_fraction_to_unit
+  leaderboard_key: foreground_miou
+  normalizer: identity
   aggregator: mean
-  output_unit: accuracy
+  output_unit: overlap
+  primary: true
+- id: foreground_dice
+  name: Foreground Dice (release compatibility)
+  description: Compatibility value computed by the public release while naming it mIoU.
+  higher_is_better: true
+  leaderboard_key: foreground_dice
+  normalizer: identity
+  aggregator: mean
+  output_unit: overlap
+  diagnostic: true
+- id: background_rmse
+  name: Background RMSE
+  description: RGBA RMSE over pixels labeled as background in the ground-truth segmentation.
+  higher_is_better: false
+  leaderboard_key: background_rmse
+  normalizer: identity
+  aggregator: mean
+  output_unit: normalized_pixel_rmse
 - id: text_based_accuracy
   name: Text-Based Accuracy
-  description: Normalized accuracy from official WorldBench text-question result summaries or per-sample rows.
+  description: Exact normalized answer accuracy over available WorldBench textual questions.
   higher_is_better: true
   leaderboard_key: text_based_accuracy
-  normalizer: percent_or_fraction_to_unit
+  normalizer: identity
   aggregator: mean
   output_unit: accuracy
 - id: multiple_choice_accuracy
   name: Multiple-Choice Accuracy
-  description: Normalized accuracy for WorldBench multiple-choice text questions when available.
+  description: Accuracy over questions containing an explicit Options list.
   higher_is_better: true
   leaderboard_key: multiple_choice_accuracy
-  normalizer: percent_or_fraction_to_unit
+  normalizer: identity
   aggregator: mean
   output_unit: accuracy
 - id: binary_accuracy
   name: Binary Accuracy
-  description: Normalized accuracy for WorldBench binary text questions when available.
+  description: Accuracy over WorldBench yes/no questions.
   higher_is_better: true
   leaderboard_key: binary_accuracy
-  normalizer: percent_or_fraction_to_unit
-  aggregator: mean
-  output_unit: accuracy
-- id: worldbench_average
-  name: WorldBench Average
-  description: Mean normalized WorldBench score across available official result components.
-  higher_is_better: true
-  leaderboard_key: worldbench_average
   normalizer: identity
   aggregator: mean
   output_unit: accuracy
-  primary: true
+
 runner:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
-  validation_command:
+  run_command:
   - worldfoundry-eval
   - zoo
   - benchmark-run
   - --benchmark-id
   - worldbench
   - --mode
-  - official-validation
-  - --official-results-path
-  - <official_results.json>
+  - official-run
+  - --dataset-root
+  - <worldbench_dataset>
   - --generated-artifact-dir
-  - <generated_videos>
+  - <generated_continuations>
   - --output-dir
   - <out>
   - --json
-  required_env:
-  - WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH
+  validation_command:
+  - python
+  - -m
+  - worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+  - --run-official
+  - --dataset-root
+  - <worldbench_dataset>
+  - --generated-video-dir
+  - <generated_continuations>
+  - --output-dir
+  - <out>
+  - --json
   expected_artifacts:
   - scorecard.json
   - per_sample_scores.jsonl
   - raw_metric_table.jsonl
-  verification_status: pending
-  notes:
-  - WorldFoundry provides a strict in-tree artifact-score runtime and still reads existing WorldBench JSON/JSONL/CSV/TSV
-    outputs from WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH.
-  - Leaderboard parity remains false until complete official task coverage and submission protocol are audited.
+  - worldbench_evaluation.json
+  verification_status: bounded_fixture_verified
   runtime:
-    kind: in_tree_official_runtime
+    kind: in_tree_model_backed_evaluator
     root: worldfoundry/evaluation/tasks/execution/runners/worldbench
-    artifact_score_dir_env: WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR
-    results_path_env: WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH
+    implementation: worldfoundry/evaluation/tasks/execution/runners/worldbench/runtime/worldbench
+    config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
+    dataset_root_env: WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    answer_manifest_env: WORLDFOUNDRY_WORLDBENCH_ANSWER_MANIFEST
+    sam2_checkpoint_env: WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT
+    compatibility_results_env: WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH
+
 integration:
   status: integrated
-  blocked_reasons:
-  - In-tree runtime is wired; source-verified upstream official evaluation code was not confirmed from official GitHub
-    or Hugging Face sources.
-  - Dataset license is null in HF API response.
-  - Requires video-to-video and VQA task split mapping.
+  tier: in_tree
+  implementation_scope: inference_and_evaluation_only
+  source_files_copied: false
+  shared_base_models: [sam2]
+  bounded_fixture_verified: true
+  full_dataset_verified: false
+  notes:
+  - Raw generated videos are decoded, segmented with the shared in-tree SAM2 implementation, and scored locally.
+  - Precomputed masks are accepted for deterministic metric regression and reproducibility.
+  - Existing JSON/JSONL/CSV/TSV result normalization remains available as a compatibility path.
+
 release_status: experimental
-maturity: contract_ready
-open_source_status: in_tree_runtime
+maturity: runtime_ready
+open_source_status: in_tree_clean_reimplementation
 official_benchmark_verified: false
 integration_evidence: true
 leaderboard_valid: false
 requires:
-- WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR or --artifact-score-dir for in-tree runtime execution
-- official_results_path or WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH for result import
+- WorldBench IntuitivePhysics dataset for raw video or text evaluation
+- Generated continuations and/or a textual answer manifest
+- facebook/sam2.1-hiera-large checkpoint for raw video evaluation, unless precomputed masks are supplied
 blockers:
-- In-tree runtime is wired; source-verified upstream official evaluation code was not confirmed from official GitHub
-  or Hugging Face sources.
-- Dataset license is null in HF API response.
-- Requires video-to-video and VQA task split mapping.
+- Dataset and evaluator bundle do not declare a redistribution license.
+- Full-dataset numerical parity and an official submission protocol have not been audited.
+- The public evaluator calls Dice mIoU and contains unresolved runtime defects; both overlap definitions are reported separately.
+
 data_refs:
   local_dataset_paths:
-  - cache/worldfoundry/data/hfd_datasets/worldbenchmark/WorldBench
-  - cache/worldfoundry/data/hfd_datasets/worldbenchmark__WorldBench
+  - cache/worldfoundry/data/hfd_datasets/worldbenchmark/IntuitivePhysics
+  - cache/worldfoundry/data/hfd_datasets/worldbenchmark__IntuitivePhysics
   task_yaml: worldfoundry/data/benchmarks/tasks/external/worldbench.yaml
+  evaluator_config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
+
 runner_availability:
   available: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
-  surface: worldbench_official_in_tree
+  surface: raw_generated_artifact_evaluator_and_result_normalizer
   normalizer_verified: true
+
 base_model_dependencies:
 - worldbench_dataset_assets
+- sam2
 optional_base_model_dependencies:
 - video_world_perception_stack
-validation_command:
-- worldfoundry-eval
-- zoo
-- benchmark-run
-- --benchmark-id
-- worldbench
-- --mode
-- official-validation
-- --official-results-path
-- <official_results.json>
-- --generated-artifact-dir
-- <generated_videos>
-- --output-dir
-- <out>
-- --json
-checkpoint_refs: []
+
+checkpoint_refs:
+- id: worldbench_sam2_1_hiera_large
+  repo_id: facebook/sam2.1-hiera-large
+  filename: sam2.1_hiera_large.pt
+  env: WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT
+  shared_implementation: worldfoundry.base_models.perception_core.segment.sam2
+
 artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  answer_manifest_env: WORLDFOUNDRY_WORLDBENCH_ANSWER_MANIFEST
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json

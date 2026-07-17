@@ -1,0 +1,282 @@
+{
+  "evidence_status": {
+    "D1": {
+      "benchmark_auxiliary_metrics": [
+        "D1-CamAlign common-yaw for local/API prompt-camera alignment",
+        "D1-CamAlign API static-hold sanity metric"
+      ],
+      "blocking_caveat": null,
+      "current_run_tag": "wrbench_paper_v1",
+      "current_source": "vggt_omega_d1_camprec_20260608",
+      "promotion_status": "paper_facing_current",
+      "raw_scored_rows": "7600/7600 ok",
+      "reporting_denominator": 7500,
+      "reporting_exclusions": [
+        {
+          "camera": "static",
+          "kept_rows_for_model": 400,
+          "model": "hunyuan_game_craft",
+          "reason": "unsupported_static_hold_upstream_gamecraft",
+          "rows": 100
+        }
+      ],
+      "reporting_score": 0.7021636320348326
+    },
+    "D1-CamAlign": {
+      "blocking_caveat": null,
+      "current_run_tag": "wrbench_paper_v1",
+      "current_source": "d1_camalign_common_yaw_static_hold_v1",
+      "promotion_status": "paper_facing_current"
+    },
+    "D2": {
+      "blocking_caveat": null,
+      "current_run_tag": "d2_lg_v2_candidate_e_as_selected_visual_integrity",
+      "current_source": "d2_fullfov_dinov2_v2_20260605",
+      "promotion_status": "paper_facing_current"
+    },
+    "D3": {
+      "blocking_caveat": null,
+      "coverage": "9600/9600",
+      "current_run_tag": "wrbench_paper_v1",
+      "current_source": "p25_d3d4_slot_parse_latest_20260608",
+      "promotion_status": "benchmark_default_current",
+      "prompt_mode": "visible_probe_logprob_slot_parse"
+    },
+    "D4": {
+      "blocking_caveat": null,
+      "coverage": "9600/9600",
+      "current_run_tag": "wrbench_paper_v1",
+      "current_source": "p25_d3d4_slot_parse_latest_20260608",
+      "promotion_status": "benchmark_default_current",
+      "prompt_mode": "visible_probe_logprob_slot_parse"
+    },
+    "D5": {
+      "blocking_caveat": null,
+      "current_run_tag": "wrbench_paper_v1",
+      "current_source": "p22_d5d6_score_with_shared_e14_gate_20260608",
+      "gate_field": "runtime_v2_evidence_shared_oov_applicable",
+      "gate_name": "reobservation_judgeability_gate",
+      "post_gate_denominator": "2073/9600",
+      "promotion_status": "benchmark_default_current",
+      "prompt_mode": "returned_probe_logprob_native_d5d6"
+    },
+    "D6": {
+      "blocking_caveat": null,
+      "current_run_tag": "wrbench_paper_v1",
+      "current_source": "p22_d5d6_score_with_shared_e14_gate_20260608",
+      "gate_field": "runtime_v2_evidence_shared_oov_applicable",
+      "gate_name": "reobservation_judgeability_gate",
+      "post_gate_denominator": "2073/9600",
+      "promotion_status": "benchmark_default_current",
+      "prompt_mode": "returned_probe_logprob_native_d5d6"
+    }
+  },
+  "metrics": [
+    {
+      "allow_null_score": false,
+      "dimension_id": "D1",
+      "display_name": "Requested-camera precision (D1-CamPrec)",
+      "fallback_score_fields": [],
+      "forbidden_fallback_fields": [],
+      "hyperparameters": {
+        "api_prompt_camera_policy": "separate_D1_CamAlign_metric_not_merged",
+        "eligible_camera_policy": "exclude_uncontrolled",
+        "metric_name": "D1-CamPrec",
+        "pose_backend": "vggt_omega",
+        "reporting_exclusion_policy": "exclude unsupported static-hold rows from D1-CamPrec reporting denominator",
+        "reporting_exclusions": [
+          {
+            "camera": "static",
+            "model": "hunyuan_game_craft",
+            "reason": "unsupported_static_hold_upstream_gamecraft",
+            "rows": 100
+          }
+        ],
+        "score_range": [
+          0.0,
+          1.0
+        ],
+        "target_coordinate_convention": "opencv_c2w",
+        "target_policy": "requested_control_latest_benchmark_local_deployed_20260608"
+      },
+      "output_column": "D1_camera_pose",
+      "owner": "wrbench.eval.d1.d1_camera",
+      "required_status_field": "d1_status",
+      "required_status_value": "ok",
+      "scale": "0_to_1",
+      "score_field": "d1_camera_accuracy",
+      "source_artifact_role": "d1_requested_control_rows_jsonl"
+    },
+    {
+      "allow_null_score": false,
+      "dimension_id": "D1-CamAlign",
+      "display_name": "Prompt-camera alignment (D1-CamAlign)",
+      "fallback_score_fields": [],
+      "forbidden_fallback_fields": [],
+      "hyperparameters": {
+        "common_yaw_intents": [
+          "yaw_LR",
+          "yaw_RL"
+        ],
+        "metric_name": "D1-CamAlign",
+        "never_merge_with": "D1_camera_pose",
+        "pose_backend": "vggt_omega",
+        "score_range": [
+          0.0,
+          1.0
+        ],
+        "static_hold_intent": "static",
+        "viewpoint_condition_policy": "prompt_only_rows_for_main_table"
+      },
+      "output_column": "D1_camalign",
+      "owner": "wrbench.eval.d1.d1_camalign",
+      "required_status_field": "d1_camalign_status",
+      "required_status_value": "ok",
+      "scale": "0_to_1",
+      "score_field": "d1_camalign_score",
+      "source_artifact_role": "d1_camalign_rows_jsonl"
+    },
+    {
+      "allow_null_score": false,
+      "dimension_id": "D2",
+      "display_name": "Visual integrity (D2)",
+      "fallback_score_fields": [],
+      "forbidden_fallback_fields": [
+        "d2_dinov2_temporal_consistency"
+      ],
+      "hyperparameters": {
+        "combine_rule": "min(cls_first_last_cosine, local_patch_token_low_p20)",
+        "legacy_display_label": "D2_dinov2_temporal_consistency",
+        "method": "fixed_nonlearned_dinov2_fullfov_v2_candidate_e",
+        "preprocessing": "full_fov_resize_pad_no_center_crop",
+        "sampling": "time_fps_3_max24",
+        "score_range": [
+          0.0,
+          1.0
+        ]
+      },
+      "output_column": "D2_visual_integrity",
+      "owner": "wrbench.eval.d2.extract_d2_dinov2_local_global_candidate",
+      "required_status_field": null,
+      "required_status_value": null,
+      "scale": "0_to_1",
+      "score_field": "d2_selected_visual_integrity_score",
+      "source_artifact_role": "d2_selected_visual_integrity_scores_json"
+    },
+    {
+      "allow_null_score": false,
+      "dimension_id": "D3",
+      "display_name": "Visible spatial consistency (D3)",
+      "fallback_score_fields": [],
+      "forbidden_fallback_fields": [],
+      "hyperparameters": {
+        "applicability": "always_in_view_dimension",
+        "prompt_mode": "visible_probe_logprob_slot_parse",
+        "score_range": [
+          0.0,
+          1.0
+        ],
+        "task_context_mode": "none"
+      },
+      "output_column": "D3_spatial_in",
+      "owner": "wrbench.eval.scoring.run_local_qwen35_probe_logprob_scorer",
+      "required_status_field": null,
+      "required_status_value": null,
+      "scale": "0_to_1",
+      "score_field": "vlm_spatial_fidelity",
+      "source_artifact_role": "runtime_v2_score_probe_or_gate_masked_export"
+    },
+    {
+      "allow_null_score": false,
+      "dimension_id": "D4",
+      "display_name": "Visible state consistency (D4)",
+      "fallback_score_fields": [],
+      "forbidden_fallback_fields": [],
+      "hyperparameters": {
+        "applicability": "always_in_view_dimension",
+        "prompt_mode": "visible_probe_logprob_slot_parse",
+        "score_range": [
+          0.0,
+          1.0
+        ],
+        "task_context_mode": "none"
+      },
+      "output_column": "D4_state_in",
+      "owner": "wrbench.eval.scoring.run_local_qwen35_probe_logprob_scorer",
+      "required_status_field": null,
+      "required_status_value": null,
+      "scale": "0_to_1",
+      "score_field": "vlm_state_fidelity",
+      "source_artifact_role": "runtime_v2_score_probe_or_gate_masked_export"
+    },
+    {
+      "allow_null_score": true,
+      "dimension_id": "D5",
+      "display_name": "Re-observation spatial consistency (D5)",
+      "fallback_score_fields": [],
+      "forbidden_fallback_fields": [],
+      "hyperparameters": {
+        "applicability_gate": "reobservation_judgeability_gate",
+        "applicability_gate_field": "runtime_v2_evidence_shared_oov_applicable",
+        "null_policy": "null_only_when_not_applicable",
+        "prompt_mode": "returned_probe_logprob_native_d5d6",
+        "score_range": [
+          0.0,
+          1.0
+        ],
+        "task_context_mode": "none",
+        "wrapper_prompt_mode": "visible_probe_logprob_slot_parse"
+      },
+      "output_column": "D5_spatial_oov",
+      "owner": "wrbench.eval.scoring.export_runtime_v2_evidence_first",
+      "required_status_field": null,
+      "required_status_value": null,
+      "scale": "0_to_1_or_null_when_not_applicable",
+      "score_field": "vlm_spatial_reasoning",
+      "source_artifact_role": "runtime_v2_gate_masked_export"
+    },
+    {
+      "allow_null_score": true,
+      "dimension_id": "D6",
+      "display_name": "Re-observation event-state consistency (D6)",
+      "fallback_score_fields": [],
+      "forbidden_fallback_fields": [],
+      "hyperparameters": {
+        "applicability_gate": "reobservation_judgeability_gate",
+        "applicability_gate_field": "runtime_v2_evidence_shared_oov_applicable",
+        "null_policy": "null_only_when_not_applicable",
+        "prompt_mode": "returned_probe_logprob_native_d5d6",
+        "score_range": [
+          0.0,
+          1.0
+        ],
+        "task_context_mode": "none",
+        "wrapper_prompt_mode": "visible_probe_logprob_slot_parse"
+      },
+      "output_column": "D6_state_oov",
+      "owner": "wrbench.eval.scoring.export_runtime_v2_evidence_first",
+      "required_status_field": null,
+      "required_status_value": null,
+      "scale": "0_to_1_or_null_when_not_applicable",
+      "score_field": "vlm_state_reasoning",
+      "source_artifact_role": "runtime_v2_gate_masked_export"
+    }
+  ],
+  "pending_evidence_dimensions": [],
+  "policy": {
+    "d1_camera_metric_policy": "requested-camera precision and prompt-camera alignment are separate metrics",
+    "d3_d6_default_scorer": "visible + re-observation probe logprob with shared re-observation gate",
+    "fallback_score_fields_allowed": false,
+    "missing_required_metric_field": "raise",
+    "oov_gate_update_policy": "shared re-observation judgeability gate for D5/D6",
+    "oov_null_scores": "allowed only for declared D5/D6 not-applicable rows",
+    "paper_facing_ready_requires_no_pending_correction": true,
+    "paper_reference": "WRBench: Current World Models Lack a Persistent State Core (preprint)"
+  },
+  "schema_version": "wrbench_latest_d1_d6_metrics_v3",
+  "table_hyperparameters": {
+    "excluded_main_table_models": [
+      "hunyuanworld_voyager"
+    ]
+  }
+}

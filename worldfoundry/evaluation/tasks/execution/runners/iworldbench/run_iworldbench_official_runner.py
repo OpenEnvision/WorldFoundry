@@ -20,19 +20,25 @@ from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_met
 from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_prompts import (
     CANONICAL_PROMPT_COUNT,
     load_prompt_records,
+    official_video_filename_for_record,
     resolve_iworldbench_root,
     resolve_metadata_csv_path,
     unique_prompt_records,
 )
 from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_runtime import (
     discover_report_results,
-    runtime_config_from_env,
     run_iworldbench_evaluator,
+    runtime_config_from_env,
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
 SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
+SPLIT_DEFAULT_METRICS = {
+    "diff": "action_control",
+    "mem": "memory_ability",
+    "camera_following": "camera_following",
+}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -47,7 +53,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--run-official",
         action="store_true",
-        help="Execute in-tree iWorld-Bench evaluator (mock or upstream run_iworldbench_evaluation.py dispatch).",
+        help="Execute the in-tree iWorld-Bench evaluator.",
     )
     parser.add_argument(
         "--run-fixture",
@@ -63,12 +69,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
     )
     parser.add_argument("--iworld-root", "--iworldbench-root", dest="iworld_root", type=Path)
+    parser.add_argument(
+        "--dataset-root",
+        type=Path,
+        help="Root containing dataset/all_pack metadata and first frames; independent of --iworld-root.",
+    )
     parser.add_argument("--prompt-manifest", "--meta-csv", dest="prompt_manifest", type=Path)
     parser.add_argument("--split", default="diff", choices=("diff", "mem", "camera_following"))
     parser.add_argument(
         "--metric",
         default=None,
-        help="Upstream metric selector for --run-official (defaults to memory or WORLDFOUNDRY_IWORLD_BENCH_METRIC).",
+        help="Upstream metric selector for --run-official (defaults from --split or WORLDFOUNDRY_IWORLD_BENCH_METRIC).",
     )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--strict", action="store_true")
@@ -144,6 +155,7 @@ def _scorecard(
     runtime_summary: Mapping[str, Any] | None,
     official_runtime_executed: bool,
     prompt_count: int,
+    split: str,
 ) -> dict[str, Any]:
     available_rows = [row for row in metric_rows if row.get("available") is True]
     per_metric = {str(row["metric_id"]): row for row in metric_rows}
@@ -152,18 +164,17 @@ def _scorecard(
         for row in available_rows
         if row.get("normalized_score") is not None
     }
-    video_complete = (
-        video_coverage.get("expected_count", 0) > 0
-        and video_coverage.get("complete") is True
-    )
+    video_complete = video_coverage.get("expected_count", 0) > 0 and video_coverage.get("complete") is True
     full_suite_valid = (
-        prompt_count >= CANONICAL_PROMPT_COUNT
-        and video_complete
-        and len(available_rows) == len(METRIC_ORDER)
+        prompt_count >= CANONICAL_PROMPT_COUNT and video_complete and len(available_rows) == len(METRIC_ORDER)
     )
     normalization_ok = bool(available_rows)
-    official_verified = official_runtime_executed and normalization_ok
-    integration_evidence = official_verified and full_suite_valid
+    runtime_backend = str((runtime_summary or {}).get("backend") or "")
+    official_component_verified = (
+        official_runtime_executed and runtime_backend == "official" and normalization_ok
+    )
+    official_verified = official_component_verified and full_suite_valid
+    integration_evidence = official_component_verified
     normalizer_only = not official_runtime_executed and not integration_evidence
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
@@ -175,6 +186,7 @@ def _scorecard(
         "eligibility": {
             "full_suite_valid": full_suite_valid,
             "video_coverage_complete": video_complete,
+            "official_component_verified": official_component_verified,
         },
         "run": {
             "status": "succeeded" if normalization_ok else "failed",
@@ -184,6 +196,15 @@ def _scorecard(
             "runtime_summary": dict(runtime_summary or {}),
         },
         "benchmark": {"benchmark_id": benchmark_id, "name": "iWorld-Bench"},
+        "dataset": {
+            "dataset_id": benchmark_id,
+            "split": split,
+            "prompt_manifest": None if prompt_manifest_path is None else str(prompt_manifest_path),
+            "sample_count": prompt_count,
+            "canonical_sample_count": CANONICAL_PROMPT_COUNT,
+            "generated_video_count": int(video_coverage.get("actual_count", 0)),
+            "coverage_complete": video_complete,
+        },
         "metrics": {
             "leaderboard": leaderboard,
             "per_metric": per_metric,
@@ -204,7 +225,7 @@ def _scorecard(
         "coverage": {"videos": dict(video_coverage)},
         "notes": [
             "iWorld-Bench in-tree runtime materializes dataset/all_pack metadata prompts and normalizes reports/*.csv exports.",
-            "Use WORLDFOUNDRY_IWORLD_BENCH_RUNTIME_BACKEND=mock for CI fixture validation.",
+            "The mock backend is available only when explicitly selected for CI contract validation and never counts as official evidence.",
             "Full trajectory/VBench metrics use the WorldFoundry VIPe and VBench integrations with their checkpoint assets.",
         ],
         "prompt_manifest": None if prompt_manifest_path is None else str(prompt_manifest_path),
@@ -220,7 +241,11 @@ def normalize_iworldbench_results(
 ) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_IWORLD_BENCH_GENERATED_VIDEO_DIR") or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = (
+        args.generated_artifact_dir
+        or _env_path("WORLDFOUNDRY_IWORLD_BENCH_GENERATED_VIDEO_DIR")
+        or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    )
     official_results_path = args.official_results_path or _env_path("WORLDFOUNDRY_IWORLD_BENCH_RESULTS_PATH")
     if official_results_path is None:
         repo_root = args.iworld_root or resolve_iworldbench_root()
@@ -236,6 +261,7 @@ def normalize_iworldbench_results(
     try:
         prompt_manifest_path = resolve_metadata_csv_path(
             explicit=args.prompt_manifest,
+            dataset_root=getattr(args, "dataset_root", None),
             repo_root=args.iworld_root,
             split=args.split,
         )
@@ -255,7 +281,10 @@ def normalize_iworldbench_results(
         source_path=Path(official_results_path),
         official_runtime_executed=official_runtime_executed,
     )
-    video_coverage = _coverage({record["prompt_id"] for record in prompt_records}, generated_dir)
+    video_coverage = _coverage(
+        {Path(official_video_filename_for_record(record)).stem for record in prompt_records},
+        generated_dir,
+    )
     scorecard = _scorecard(
         benchmark_id=args.benchmark_id,
         output_dir=output_dir,
@@ -266,6 +295,7 @@ def normalize_iworldbench_results(
         runtime_summary=runtime_summary,
         official_runtime_executed=official_runtime_executed,
         prompt_count=len(prompt_records),
+        split=args.split,
     )
     strict = args.strict or os.environ.get("WORLDFOUNDRY_IWORLD_BENCH_STRICT", "").strip().lower() in {
         "1",
@@ -296,12 +326,16 @@ def normalize_iworldbench_results(
 def run_official_iworldbench(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_IWORLD_BENCH_GENERATED_VIDEO_DIR") or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = (
+        args.generated_artifact_dir
+        or _env_path("WORLDFOUNDRY_IWORLD_BENCH_GENERATED_VIDEO_DIR")
+        or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    )
     if generated_dir is None:
         raise ValueError(
             "--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official"
         )
-    metric = args.metric or os.environ.get("WORLDFOUNDRY_IWORLD_BENCH_METRIC", "memory")
+    metric = args.metric or os.environ.get("WORLDFOUNDRY_IWORLD_BENCH_METRIC") or SPLIT_DEFAULT_METRICS[args.split]
     runtime_summary = run_iworldbench_evaluator(
         generated_artifact_dir=Path(generated_dir),
         output_dir=output_dir,
@@ -314,6 +348,7 @@ def run_official_iworldbench(args: argparse.Namespace) -> dict[str, Any]:
         output_dir=output_dir,
         generated_artifact_dir=generated_dir,
         iworld_root=args.iworld_root,
+        dataset_root=getattr(args, "dataset_root", None),
         prompt_manifest=args.prompt_manifest,
         split=args.split,
         metric=metric,
@@ -358,6 +393,17 @@ def main(argv: list[str] | None = None) -> int:
                 "error": f"{type(exc).__name__}: {exc}",
             },
             "benchmark": {"benchmark_id": args.benchmark_id, "name": "iWorld-Bench"},
+            "dataset": {
+                "dataset_id": args.benchmark_id,
+                "split": getattr(args, "split", None),
+                "prompt_manifest": None
+                if getattr(args, "prompt_manifest", None) is None
+                else str(args.prompt_manifest),
+                "sample_count": 0,
+                "canonical_sample_count": CANONICAL_PROMPT_COUNT,
+                "generated_video_count": 0,
+                "coverage_complete": False,
+            },
             "metrics": {"leaderboard": {}, "per_metric": {}, "summary": {"available_metric_count": 0}},
             "evaluation": {
                 "available": False,

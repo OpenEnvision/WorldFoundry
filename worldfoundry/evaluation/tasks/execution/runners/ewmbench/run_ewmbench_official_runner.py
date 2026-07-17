@@ -141,9 +141,11 @@ def _scorecard(
     )
     full_suite_valid = prompt_count > 0 and video_complete and len(available_rows) == len(METRIC_ORDER)
     normalization_ok = bool(available_rows)
-    official_verified = official_runtime_executed and normalization_ok
-    integration_evidence = official_verified and full_suite_valid
-    normalizer_only = not official_runtime_executed and not integration_evidence
+    # The in-tree path currently validates/normalizes adapter output (and may
+    # use a mock backend); it is not the complete upstream EWMBench runtime.
+    official_verified = False
+    integration_evidence = False
+    normalizer_only = True
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "official_benchmark_verified": official_verified,
@@ -173,7 +175,7 @@ def _scorecard(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "ewmbench_official_in_tree" if official_runtime_executed else "ewmbench_result_normalizer",
+            "kind": "ewmbench_result_normalizer",
             "blocked_count": len(METRIC_ORDER) - len(available_rows),
         },
         "artifacts": {

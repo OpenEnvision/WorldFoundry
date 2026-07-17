@@ -1,0 +1,52 @@
+{
+  "adapter": "spatia",
+  "aliases": [
+    "spatia"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.6,
+    "rotation_gain": 3.0,
+    "translation_gain": 1.0,
+    "translation_unit": "w2c_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 24,
+  "default_frames": 121,
+  "default_height": 704,
+  "default_width": 1248,
+  "execution_contract": {
+    "cli_flag_parameters": [],
+    "cli_parameter_order": [],
+    "command_prefix": [
+      "python"
+    ],
+    "entrypoint": "inference.py",
+    "official_inference_profile": {
+      "cfg_scale": 3.5,
+      "fps": 24,
+      "max_frames": 121,
+      "num_inference_steps": 40,
+      "seed": 20917,
+      "sigma_shift": 5.0
+    },
+    "official_runtime": {
+      "python": "3.10",
+      "source": "Spatia inference.py benchmark worker"
+    },
+    "runtime_parameters": {},
+    "wrbench_policy": {
+      "requires_first_frame_from_source_video": true,
+      "requires_prompt": true,
+      "requires_w2c_trajectory_file": true
+    }
+  },
+  "input_kind": "source_video",
+  "key": "spatia",
+  "payload_type": "spatia_w2c_trajectory_files",
+  "status": "active"
+}

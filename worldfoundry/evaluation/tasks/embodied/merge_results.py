@@ -8,11 +8,11 @@ from typing import Any, Mapping, Sequence
 
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, MetricResult
 from worldfoundry.evaluation.tasks.embodied.metrics import metric_suite
-from worldfoundry.evaluation.tasks.execution.evaluate import (
+from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import (
     EVALUATE_RUN_RESULT_SCHEMA_VERSION,
     EvaluateRunResult,
 )
-from worldfoundry.evaluation.tasks.execution.existing_results import run_existing_results
+from worldfoundry.evaluation.tasks.execution.orchestration.existing_results import run_existing_results
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:

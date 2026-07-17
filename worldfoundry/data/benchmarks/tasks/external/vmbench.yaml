@@ -51,7 +51,7 @@ metadata:
   maturity: contract_ready
   open_source_status: in_tree_runtime
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   requires:
   - official released evaluation uses local metric runtimes and checkpoints; no hosted judge API is required
@@ -73,7 +73,7 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:VMBenchContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
+    runtime_verified: false
     surface: vmbench_official_in_tree
     normalizer_verified: true
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
@@ -159,7 +159,7 @@ tasks:
       source_kind: benchmark_zoo
       benchmark_id: vmbench
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       manifest: worldfoundry/data/benchmarks/assets/vmbench/prompts/prompts.json

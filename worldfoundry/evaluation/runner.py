@@ -3,10 +3,14 @@
 Provides lazy loading for embodied run symbols to optimize lean CLI entry paths.
 """
 
+# ruff: noqa: F822 - embodied symbols listed in __all__ are provided lazily by __getattr__.
+
+from worldfoundry.evaluation.api import GenerationRequest
+
 from .tasks.execution.orchestration.cache import (
-    CacheKey,
     GENERATION_CACHE_MODES,
     GENERATION_RESULT_CACHE_SCHEMA_VERSION,
+    CacheKey,
     GenerationCacheRecord,
     GenerationCacheStats,
     GenerationResultCache,
@@ -20,25 +24,17 @@ from .tasks.execution.orchestration.cache import (
     json_sha256,
     make_cache_key,
     make_generation_cache_key,
-    normalize_json,
     normalize_generation_cache_mode,
+    normalize_json,
     run_generation_with_cache,
     sha256_hex,
 )
 from .tasks.execution.orchestration.contract import (
+    ContractRunner,
     ContractRunRequest,
     ContractRunResult,
-    ContractRunner,
     execute_contract_run,
     run_contract,
-)
-from worldfoundry.evaluation.api import GenerationRequest
-from .tasks.execution.orchestration.existing_results import (
-    ExistingResultsRunRequest,
-    ExistingResultsRunResult,
-    ExistingResultsRunner,
-    execute_existing_results,
-    run_existing_results,
 )
 from .tasks.execution.orchestration.evaluate import (
     EVALUATE_RUN_REQUEST_SCHEMA_VERSION,
@@ -49,9 +45,20 @@ from .tasks.execution.orchestration.evaluate import (
     execute_evaluate_run,
     run_evaluate,
 )
+from .tasks.execution.orchestration.existing_results import (
+    ExistingResultsRunner,
+    ExistingResultsRunRequest,
+    ExistingResultsRunResult,
+    execute_existing_results,
+    run_existing_results,
+)
+from .tasks.execution.orchestration.fidelity import (
+    EVALUATION_PROVENANCE_SCHEMA_VERSION,
+    EvaluationFidelity,
+)
 from .tasks.execution.orchestration.materialize import (
-    MATERIALIZED_REQUESTS_SCHEMA_VERSION,
     DEFAULT_CONTROL_KEYS,
+    MATERIALIZED_REQUESTS_SCHEMA_VERSION,
     MaterializedRequests,
     materialize_generation_requests,
     materialize_requests,
@@ -68,10 +75,10 @@ from .tasks.execution.orchestration.model_benchmark import (
 from .tasks.execution.orchestration.model_benchmark_suite import (
     MODEL_BENCHMARK_SUITE_RESULT_SCHEMA_VERSION,
     MODEL_BENCHMARK_SUITE_SCHEMA_VERSION,
-    get_model_benchmark_suite_preset,
-    list_model_benchmark_suite_presets,
     ModelBenchmarkSuiteRequest,
     ModelBenchmarkSuiteResult,
+    get_model_benchmark_suite_preset,
+    list_model_benchmark_suite_presets,
     run_model_benchmark_suite,
 )
 from .tasks.execution.orchestration.plan import (
@@ -83,6 +90,18 @@ from .tasks.execution.orchestration.plan import (
     load_run_plan,
     validate_run_plan,
     write_run_plan,
+)
+from .tasks.execution.orchestration.service import (
+    GenerateAndScoreIntent,
+    ModelBenchmarkIntent,
+    PreparedEvaluation,
+    ReproduceIntent,
+    ReproductionRecipe,
+    ScoreArtifactsIntent,
+    ScoreResultsIntent,
+    execute_evaluation,
+    execute_prepared_evaluation,
+    prepare_evaluation,
 )
 
 
@@ -102,6 +121,7 @@ def __getattr__(name: str):
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
 __all__ = [
     "CacheKey",
     "ContractRunRequest",
@@ -109,6 +129,7 @@ __all__ = [
     "ContractRunner",
     "EVALUATE_RUN_REQUEST_SCHEMA_VERSION",
     "EVALUATE_RUN_RESULT_SCHEMA_VERSION",
+    "EVALUATION_PROVENANCE_SCHEMA_VERSION",
     "MATERIALIZED_REQUESTS_SCHEMA_VERSION",
     "MODEL_BENCHMARK_RESULT_SCHEMA_VERSION",
     "MODEL_BENCHMARK_RUN_SCHEMA_VERSION",
@@ -122,6 +143,7 @@ __all__ = [
     "GENERATION_RESULT_CACHE_SCHEMA_VERSION",
     "EvaluateRunRequest",
     "EvaluateRunResult",
+    "EvaluationFidelity",
     "ExistingResultsRunRequest",
     "ExistingResultsRunResult",
     "ExistingResultsRunner",
@@ -129,12 +151,19 @@ __all__ = [
     "GenerationCacheStats",
     "GenerationResultCache",
     "GenerationRequest",
+    "GenerateAndScoreIntent",
     "MaterializedRequests",
     "ModelBenchmarkRunRequest",
     "ModelBenchmarkRunResult",
+    "ModelBenchmarkIntent",
     "ModelBenchmarkSuiteRequest",
     "ModelBenchmarkSuiteResult",
     "RunPlan",
+    "PreparedEvaluation",
+    "ReproduceIntent",
+    "ReproductionRecipe",
+    "ScoreArtifactsIntent",
+    "ScoreResultsIntent",
     "VlaVaWamRunRequest",
     "cache_paths_from_stats",
     "canonical_json_bytes",
@@ -143,6 +172,8 @@ __all__ = [
     "execute_contract_run",
     "execute_evaluate_run",
     "execute_existing_results",
+    "execute_evaluation",
+    "execute_prepared_evaluation",
     "execute_vla_va_wam_run",
     "file_sha256",
     "build_run_plan",
@@ -157,6 +188,7 @@ __all__ = [
     "make_generation_cache_key",
     "normalize_json",
     "normalize_generation_cache_mode",
+    "prepare_evaluation",
     "evaluate_request_from_run_plan",
     "load_run_plan",
     "run_contract",

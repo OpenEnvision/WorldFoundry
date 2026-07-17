@@ -11,7 +11,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.tasks.execution.runners.camerabench.camerabench_metrics import evaluate_camerabench_from_score_dir
 from worldfoundry.evaluation.tasks.execution.framework.io import (  # noqa: E402
     env_path,
     load_json,
@@ -22,6 +21,9 @@ from worldfoundry.evaluation.tasks.execution.framework.io import (  # noqa: E402
     utc_now_iso,
     write_json,
     write_jsonl,
+)
+from worldfoundry.evaluation.tasks.execution.runners.camerabench.camerabench_metrics import (
+    evaluate_camerabench_from_score_dir,
 )
 
 SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
@@ -344,9 +346,13 @@ def normalize_camerabench_results(
     )
     strict_failed = strict and not full_suite_valid
     normalization_ok = returncode == 0 and available_count > 0 and not strict_failed
-    normalizer_only = not full_suite_valid
-    official_verified = command is not None and full_suite_valid
-    integration_evidence = full_suite_valid
+    # Running the score-directory aggregator is not the complete CameraBench
+    # evaluation protocol: the upstream per-sample score generation still has
+    # to happen outside this runner.  Keep all imported/aggregated evidence
+    # fail-closed until that end-to-end path is implemented and audited.
+    normalizer_only = True
+    official_verified = False
+    integration_evidence = False
 
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
@@ -362,8 +368,8 @@ def normalize_camerabench_results(
             "benchmark_id": benchmark_id,
             "name": "CameraBench",
             "contract_only": False,
-            "requires_upstream_runtime": False,
-            "requires_model_weights": False,
+            "requires_upstream_runtime": True,
+            "requires_model_weights": True,
         },
         "dataset": {
             "sample_count": len(camera_rows),
@@ -402,15 +408,16 @@ def normalize_camerabench_results(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "official_camerabench",
+            "kind": "camerabench_result_normalizer",
             "upstream_results": str(upstream_results_path.resolve()),
             "leaderboard_metrics": leaderboard,
             "skip_count": len(metric_rows) - available_count,
         },
         "validation": {
             "normalizer_only": normalizer_only,
-            "official_runtime_executed": command is not None,
-            "in_tree_metric_evaluator_executed": command is not None,
+            "official_runtime_executed": False,
+            "in_tree_metric_evaluator_executed": False,
+            "upstream_aggregation_executed": command is not None,
             "official_results_imported": command is None and available_count > 0,
             "strict": strict,
             "strict_failed": strict_failed,

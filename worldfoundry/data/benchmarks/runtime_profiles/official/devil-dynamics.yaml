@@ -2,7 +2,7 @@ benchmark_ids:
 - devil-dynamics
 blocked_reason: DEVIL Dynamics official-result normalization is wired; complete generated artifacts and 
   leaderboard parity remain pending.
-environment_id: worldplay-devil-dynamics-contract
+environment_id: worldfoundry-unified-cu128
 id: devil-dynamics
 name: DEVIL Dynamics
 needs_new_env: false
@@ -18,9 +18,9 @@ pythonpath_roots:
 - .
 required_assets:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/devil-dynamics.yaml
-required_env:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+required_env: []
 optional_env:
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR
 - WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH
 required_imports:

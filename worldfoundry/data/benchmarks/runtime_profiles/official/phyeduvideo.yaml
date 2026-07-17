@@ -1,16 +1,15 @@
 benchmark_ids:
 - phyeduvideo
-blocked_reason: PhyEduVideo in-tree scorer runtime is wired; full upstream judge/checkpoint 
+blocked_reason: PhyEduVideo result import is wired; the raw-video upstream judge/checkpoint
   runtime and leaderboard parity remain pending.
-environment_id: worldplay-phyeduvideo-contract
+environment_id: worldfoundry-unified-cu128
 id: phyeduvideo
 name: PhyEduVideo
 needs_new_env: false
 notes:
 - WorldFoundry materializes Prompts/Prompts.json teaching-point T2V prompts and normalizes PhyEduVideo official result 
   files.
-- Use WORLDFOUNDRY_PHYEDUVIDEO_SCORER_BACKEND to select the local scorer backend.
-- Full validation requires 205 generated videos plus upstream InternVL/CLIP/VQA judge assets for leaderboard parity.
+- This profile does not execute raw-video InternVL/CLIP/VQA judging; imported results are not official benchmark evidence.
 preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile phyeduvideo --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/phyeduvideo.yaml --output-dir 
@@ -20,20 +19,18 @@ pythonpath_roots:
 - .
 required_assets:
   bundled_assets: worldfoundry/data/benchmarks/assets/phyeduvideo
-  in_tree_runtime_paths:
+  result_importer_paths:
   - worldfoundry/evaluation/tasks/execution/runners/phyeduvideo
   task_yaml: worldfoundry/data/benchmarks/tasks/external/phyeduvideo.yaml
-required_env:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+required_env: []
 optional_env:
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_PHYEDUVIDEO_ROOT
 - WORLDFOUNDRY_PHYEDUVIDEO_PROMPTS_FILE
 - WORLDFOUNDRY_PHYEDUVIDEO_CAP_FILE
 - WORLDFOUNDRY_PHYEDUVIDEO_SA_FILE
-- WORLDFOUNDRY_PHYEDUVIDEO_SCORER_BACKEND
 - WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH
 - WORLDFOUNDRY_PHYEDUVIDEO_STRICT
-- WORLDFOUNDRY_PHYEDUVIDEO_OFFICIAL_SCRIPT
 required_imports:
 - json
 required_packages:
@@ -46,7 +43,7 @@ required_paths:
 - id: bundled_prompts
   path: worldfoundry/data/benchmarks/assets/phyeduvideo/Prompts/Prompts.json
 requires_cuda_visibility: false
-status: in_tree_official_runtime_ready
+status: in_tree_result_importer_ready_raw_video_judge_pending
 optional_imports:
 - numpy
 optional_base_model_dependencies:

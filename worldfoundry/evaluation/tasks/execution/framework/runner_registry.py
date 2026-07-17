@@ -76,6 +76,10 @@ VIDEO_RUNNER_REGISTRY: dict[str, VideoRunnerSpec] = {
         "--official-results-path",
         pass_benchmark_id=False,
     ),
+    "larybench": VideoRunnerSpec(
+        "worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py",
+        "--official-results-path",
+    ),
     "mirabench": VideoRunnerSpec(
         "worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py",
         "--official-results-path",
@@ -108,6 +112,14 @@ VIDEO_RUNNER_REGISTRY: dict[str, VideoRunnerSpec] = {
     ),
     "physics-iq": VideoRunnerSpec(
         "worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py",
+        "--official-results-path",
+    ),
+    "physics-iq-verified": VideoRunnerSpec(
+        "worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py",
+        "--official-results-path",
+    ),
+    "physical-ai-bench": VideoRunnerSpec(
+        "worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py",
         "--official-results-path",
     ),
     "physvidbench": VideoRunnerSpec(
@@ -188,8 +200,16 @@ VIDEO_RUNNER_REGISTRY: dict[str, VideoRunnerSpec] = {
         "worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py",
         "--official-results-path",
     ),
+    "worldreasonbench": VideoRunnerSpec(
+        "worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py",
+        "--official-results-path",
+    ),
     "worldscore": VideoRunnerSpec(
         "worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py",
+        "--official-results-path",
+    ),
+    "wrbench": VideoRunnerSpec(
+        "worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py",
         "--official-results-path",
     ),
 }

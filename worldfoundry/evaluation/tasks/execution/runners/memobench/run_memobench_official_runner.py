@@ -176,7 +176,10 @@ def _scorecard(
     normalization_ok = bool(available_rows)
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
-        "official_benchmark_verified": official_runtime_executed and normalization_ok,
+        # ``--run-official`` executes only MemoBench Step 1.  The official
+        # benchmark also requires ORS, VQA, and leaderboard aggregation, so a
+        # successful Step-1 run must not be reported as full-benchmark proof.
+        "official_benchmark_verified": False,
         "integration_evidence": normalization_ok,
         "leaderboard_valid": False,
         "normalizer_only": not official_runtime_executed,
@@ -209,6 +212,8 @@ def _scorecard(
         "evaluation": {
             "available": normalization_ok,
             "kind": "memobench_official_step1" if official_runtime_executed else "memobench_result_normalizer",
+            "step1_runtime_verified": official_runtime_executed and normalization_ok,
+            "full_benchmark_verified": False,
         },
         "artifacts": {
             "scorecard": str(scorecard_path.resolve()),
@@ -283,4 +288,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,0 +1,113 @@
+{
+  "adapter": "easyanimate_v51_camera",
+  "aliases": [
+    "easyanimate-v51-camera",
+    "easyanimate_v51_camera",
+    "easyanimate"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.8,
+    "metadata": {
+      "benchmark_fps": 8,
+      "benchmark_frame_count": 49,
+      "candidate_payload_unit": "easyanimate_cameractrl_19col_w2c",
+      "control_pose_fps": 24,
+      "target_c2w_is_model_effective": true
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "cameractrl_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 8,
+  "default_frames": 49,
+  "default_height": 384,
+  "default_width": 672,
+  "execution_contract": {
+    "cli_flag_parameters": [],
+    "cli_parameter_order": [],
+    "command_prefix": [
+      "python"
+    ],
+    "entrypoint": "predict_v2v_control.py",
+    "official_inference_profile": {
+      "control_pose_fps": 24,
+      "duration_seconds": 6.125,
+      "enable_teacache": true,
+      "fps": 8,
+      "guidance_scale": 6.0,
+      "note": "Generation quality parameters follow the official V5.1 control-camera example; WRBench uses landscape sample_size [384,672] and a generated control_camera_txt.",
+      "num_inference_steps": 50,
+      "official_fps_downsample_stride": 3,
+      "sampler_name": "Flow",
+      "seed": 43,
+      "teacache_threshold": 0.08,
+      "video_length": 49
+    },
+    "official_runtime": {
+      "cuda": "12.8",
+      "diffusers": "0.31.0",
+      "python": "3.10",
+      "source": "EasyAnimate predict_v2v_control.py V5.1 control-camera example",
+      "torch": "2.9.1+cu128",
+      "transformers": "4.46.2"
+    },
+    "official_script_defaults": {
+      "config_path": "config/easyanimate_video_v5.1_magvit_qwen.yaml",
+      "enable_teacache": true,
+      "fps": 8,
+      "gpu_memory_mode": "model_cpu_offload_and_qfloat8",
+      "guidance_scale": 6.0,
+      "num_inference_steps": 50,
+      "sample_size": [
+        672,
+        384
+      ],
+      "sample_size_order": "height_width",
+      "sampler_name": "Flow",
+      "seed": 43,
+      "teacache_threshold": 0.08,
+      "video_length": 49,
+      "weight_dtype": "torch.bfloat16"
+    },
+    "runtime_parameters": {
+      "config_path": "config/easyanimate_video_v5.1_magvit_qwen.yaml",
+      "gpu_memory_mode": "model_cpu_offload",
+      "manual_cuda_offload_patch": true,
+      "model_path": "<MODEL_PATH>",
+      "weight_dtype": "torch.float16"
+    },
+    "wrbench_benchmark_profile": {
+      "control_pose_fps": 24,
+      "duration_seconds": 6.125,
+      "fps": 8,
+      "reason": "Natural-25 first frames are landscape; EasyAnimate passes height=sample_size[0], width=sample_size[1], so [384,672] produces 672x384 output.",
+      "sample_size": [
+        384,
+        672
+      ],
+      "sample_size_order": "height_width",
+      "video_length": 49
+    },
+    "wrbench_policy": {
+      "camera_txt_first_row_is_skipped_by_official_loader": true,
+      "no_weight_download_in_dry_run": true,
+      "record_materialized_script_for_non_dry_run": true,
+      "requires_control_camera_txt": true,
+      "requires_first_frame_image": true,
+      "requires_landscape_sample_size_for_natural25": true,
+      "requires_prompt": true,
+      "write_24fps_pose_rows_for_effective_per_frame_control": true
+    }
+  },
+  "input_kind": "image",
+  "key": "easyanimate-v51-camera",
+  "worldfoundry_model_id": "easyanimate-i2v",
+  "payload_type": "easyanimate_camera_txt",
+  "status": "active"
+}

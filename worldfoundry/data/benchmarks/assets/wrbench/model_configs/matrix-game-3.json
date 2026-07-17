@@ -1,0 +1,187 @@
+{
+  "adapter": "matrix_game_3",
+  "aliases": [
+    "matrix-game-3",
+    "matrix_game_3",
+    "matrix"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.6,
+    "metadata": {
+      "candidate_payload_unit": "matrix_game3_interactive_keyboard_mouse_actions",
+      "control_granularity": "57_then_40_frame_rollout_segments",
+      "target_c2w_is_model_effective": false
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 17,
+  "default_frames": 497,
+  "default_height": 704,
+  "default_width": 1280,
+  "execution_contract": {
+    "cli_flag_parameters": [
+      {
+        "flag": "--dit_fsdp",
+        "parameter": "dit_fsdp"
+      },
+      {
+        "flag": "--t5_fsdp",
+        "parameter": "t5_fsdp"
+      },
+      {
+        "flag": "--use_int8",
+        "parameter": "use_int8"
+      },
+      {
+        "flag": "--compile_vae",
+        "parameter": "compile_vae"
+      },
+      {
+        "flag": "--interactive",
+        "parameter": "interactive"
+      }
+    ],
+    "cli_parameter_order": [
+      [
+        "--size",
+        "size"
+      ],
+      [
+        "--ckpt_dir",
+        "ckpt_dir"
+      ],
+      [
+        "--output_dir",
+        "output_dir"
+      ],
+      [
+        "--fa_version",
+        "fa_version"
+      ],
+      [
+        "--num_iterations",
+        "num_iterations"
+      ],
+      [
+        "--num_inference_steps",
+        "num_inference_steps"
+      ],
+      [
+        "--image",
+        "image"
+      ],
+      [
+        "--prompt",
+        "prompt"
+      ],
+      [
+        "--save_name",
+        "save_name"
+      ],
+      [
+        "--seed",
+        "seed"
+      ],
+      [
+        "--lightvae_pruning_rate",
+        "lightvae_pruning_rate"
+      ],
+      [
+        "--vae_type",
+        "vae_type"
+      ],
+      [
+        "--ulysses_size",
+        "ulysses_size"
+      ]
+    ],
+    "command_prefix": [
+      "python",
+      "-m",
+      "torch.distributed.run",
+      "--nproc_per_node=8"
+    ],
+    "entrypoint": "generate.py",
+    "official_inference_profile": {
+      "fps": 17,
+      "lightvae_pruning_rate": 0.5,
+      "num_inference_steps": 50,
+      "num_iterations": 12,
+      "resolution": [
+        704,
+        1280
+      ],
+      "seed": 42,
+      "size": "704*1280",
+      "ulysses_size": 8,
+      "use_int8": true,
+      "vae_type": "mg_lightvae",
+      "video_length": 497
+    },
+    "official_runtime": {
+      "python": "matrix_game_3_env",
+      "source": "Matrix-Game-3 official generate.py interactive path with deployment-quality sampling parameters; the 3-step test.sh path is interface-smoke only",
+      "torch": "CUDA-enabled torch"
+    },
+    "runtime_parameters": {
+      "camera_value": 0.1,
+      "ckpt_dir": "<MODEL_PATH>",
+      "compile_vae": true,
+      "dit_fsdp": true,
+      "fa_version": "0",
+      "interactive": true,
+      "lightvae_pruning_rate": 0.5,
+      "num_inference_steps": 50,
+      "num_iterations": 12,
+      "seed": 42,
+      "size": "704*1280",
+      "t5_fsdp": true,
+      "ulysses_size": 8,
+      "use_int8": true,
+      "vae_type": "mg_lightvae"
+    },
+    "wrbench_benchmark_profile": {
+      "control_segment_frames": [
+        57,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+      ],
+      "dimensions": [
+        704,
+        1280
+      ],
+      "duration_seconds": 29.235294117647058,
+      "fps": 17,
+      "num_iterations": 12,
+      "video_length": 497
+    },
+    "wrbench_policy": {
+      "record_materialized_script_for_non_dry_run": true,
+      "requires_first_frame_image": true,
+      "requires_prompt": true,
+      "target_c2w_is_model_effective": false,
+      "uses_native_keyboard_mouse_actions": true
+    }
+  },
+  "input_kind": "image",
+  "key": "matrix-game-3",
+  "payload_type": "matrix_game3_action_conditions",
+  "status": "active"
+}

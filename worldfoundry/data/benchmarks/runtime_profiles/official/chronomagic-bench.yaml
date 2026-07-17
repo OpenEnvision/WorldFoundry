@@ -12,9 +12,10 @@ notes:
   (CHScore/GPT4o-MTScore/MTScore) when user assets are supplied.
 - Leaderboard parity still requires full prompt coverage, UMT-FVD, UMTScore, and the official submission protocol.
 - 'Historical MTScore validation note: one worldscore-env attempt missed flash_attn/dropout_layer_norm for InternVideo2.'
-python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON}
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - .
+- worldfoundry/base_models/perception_core/tracking
 - worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
 - worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench/CHScore
 required_assets:
@@ -31,8 +32,8 @@ leaderboard_parity_required_assets:
   - cache/worldfoundry/data/hfd_datasets/BestWishYsh/ChronoMagic-ProH
 required_env:
 - WORLDFOUNDRY_CHRONOMAGIC_CHSCORE_CKPT
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 optional_env:
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_CHRONOMAGIC_ROOT
 - WORLDFOUNDRY_CHRONOMAGIC_DATASET_ROOT
 - WORLDFOUNDRY_CHRONOMAGIC_MTSCORE_CKPT
@@ -59,6 +60,7 @@ required_paths:
 - id: in_tree_runtime
   path: worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
 - id: chscore_checkpoint
+  env: WORLDFOUNDRY_CHRONOMAGIC_CHSCORE_CKPT
   path: ${WORLDFOUNDRY_HFD_ROOT}/BestWishYsh--ChronoMagic-Bench/CHScore/cotracker2.pth
 optional_paths:
 - id: bounded_chscore_input_folder
@@ -86,7 +88,7 @@ bounded_official_gpu_validation:
   eval_type: close
   generated_video_count: 2
   metrics_available: 1
-  official_benchmark_verified: true
+  official_benchmark_verified: false
   official_component_verified: true
   integration_evidence: true
   leaderboard_valid: false

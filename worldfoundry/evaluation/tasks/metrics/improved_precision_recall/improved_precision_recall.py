@@ -369,6 +369,12 @@ def realism(manifold_real, feat_subject):
     return max_realism
 
 
+def _load_dataset_image(image_path, transform):
+    image = Image.open(image_path).convert('RGB')
+    image = image.resize((224, 224), Image.BICUBIC)
+    return transform(image) if transform is not None else image
+
+
 class ImageFolder(Dataset):
     def __init__(self, root, transform=None):
         # self.fnames = list(map(lambda x: os.path.join(root, x), os.listdir(root)))
@@ -378,13 +384,7 @@ class ImageFolder(Dataset):
         self.transform = transform
 
     def __getitem__(self, index):
-        image_path = self.fnames[index]
-        image = Image.open(image_path).convert('RGB')
-        image = image.resize((224,224), Image.BICUBIC)# for PIL bicubic resize.
-
-        if self.transform is not None:
-            image = self.transform(image)
-        return image
+        return _load_dataset_image(self.fnames[index], self.transform)
 
     def __len__(self):
         return len(self.fnames)
@@ -396,13 +396,7 @@ class FileNames(Dataset):
         self.transform = transform
 
     def __getitem__(self, index):
-        image_path = self.fnames[index]
-        image = Image.open(image_path).convert('RGB')
-        image = image.resize((224,224), Image.BICUBIC) # for PIL bicubic resize.
-
-        if self.transform is not None:
-            image = self.transform(image)
-        return image
+        return _load_dataset_image(self.fnames[index], self.transform)
 
     def __len__(self):
         return len(self.fnames)

@@ -16,6 +16,13 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from .comparison_identity import (
+    COMPARISON_IDENTITY_SCHEMA_VERSION,
+    build_comparison_identity,
+    compare_identities,
+    comparison_identity_from_summary,
+)
+
 from .run_comparison import (
     RUN_COMPARISON_SCHEMA_VERSION,
     build_markdown_comparison,
@@ -117,6 +124,7 @@ def has_official_runtime_evidence(flags: Mapping[str, Any]) -> bool:
 __all__ = [
     "CONTRACT_VALIDATION_SCHEMA_VERSION",
     "CONTRACT_ARTIFACT_KIND_CHOICES",
+    "COMPARISON_IDENTITY_SCHEMA_VERSION",
     "ENVIRONMENT_SCHEMA_VERSION",
     "ENV_REQUIREMENTS_SCHEMA_VERSION",
     "RUNTIME_EVIDENCE_KEYS",
@@ -127,6 +135,7 @@ __all__ = [
     "RUN_SUMMARY_SCHEMA_VERSION",
     "SCORECARD_SCHEMA_VERSION",
     "build_env_requirements",
+    "build_comparison_identity",
     "build_environment",
     "build_markdown_contract_validation",
     "build_markdown_comparison",
@@ -152,6 +161,8 @@ __all__ = [
     "write_run_browser",
     "write_run_index",
     "build_scorecard",
+    "compare_identities",
+    "comparison_identity_from_summary",
     "write_run_manifest_artifacts",
     "write_run_report_artifacts",
     "write_scorecard",

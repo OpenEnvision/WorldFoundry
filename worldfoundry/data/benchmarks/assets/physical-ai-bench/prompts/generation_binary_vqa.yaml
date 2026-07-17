@@ -1,0 +1,12 @@
+schema_version: worldfoundry-prompt-template-v1
+id: physical_ai_bench_generation_binary_vqa
+track: generation
+system_prompt: You are a helpful AI assistant that answers questions about videos. Answer with just YES or NO.
+template: |-
+  I'll show you a video with several frames. Please look carefully at all frames to understand what's happening in the video, then answer the question about the video with either YES or NO.
+
+  Question: {question}
+
+  Please answer with YES or NO.
+answer_space: [yes, no]
+aggregation: seed_then_question_then_video_mean

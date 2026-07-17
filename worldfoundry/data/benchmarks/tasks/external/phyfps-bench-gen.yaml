@@ -51,7 +51,7 @@ metadata:
   release_status: experimental
   maturity: contract_ready
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   requires:
   - In-tree PhyFPS prompt manifest or WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST override
@@ -71,7 +71,7 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyFPSBenchGenContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
+    runtime_verified: false
     credential_gated: false
     framework_ready: true
     surface: phyfps_bench_gen_official_in_tree
@@ -135,7 +135,7 @@ tasks:
       source_kind: benchmark_zoo
       benchmark_id: phyfps-bench-gen
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       split: standard

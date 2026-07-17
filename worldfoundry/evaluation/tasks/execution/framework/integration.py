@@ -157,6 +157,18 @@ BENCHMARK_INTEGRATION_REGISTRY: dict[str, BenchmarkIntegrationSpec] = {
         IntegrationTier.IN_TREE,
         _runner_path("physics-iq"),
     ),
+    "physics-iq-verified": BenchmarkIntegrationSpec(
+        "physics-iq-verified",
+        IntegrationTier.IN_TREE,
+        _runner_path("physics-iq"),
+    ),
+    "physical-ai-bench": BenchmarkIntegrationSpec(
+        "physical-ai-bench",
+        IntegrationTier.IN_TREE,
+        _runner_path("physical-ai-bench"),
+        hf_dataset_id="shi-labs/physical-ai-bench-generation",
+        judge_model_id="Qwen/Qwen2.5-VL-72B-Instruct+GroundingDINO+SAM2+Video-Depth-Anything",
+    ),
     "physvidbench": BenchmarkIntegrationSpec(
         "physvidbench",
         IntegrationTier.MODEL_BACKED,
@@ -164,7 +176,7 @@ BENCHMARK_INTEGRATION_REGISTRY: dict[str, BenchmarkIntegrationSpec] = {
         judge_model_id="models/gemini-2.0-flash",
     ),
     "t2v-compbench": BenchmarkIntegrationSpec(
-        "t2v-compbench", IntegrationTier.NORMALIZER_ONLY, _runner_path("t2v-compbench"),
+        "t2v-compbench", IntegrationTier.IN_TREE, _runner_path("t2v-compbench"),
     ),
     "t2v-safety-bench": BenchmarkIntegrationSpec(
         "t2v-safety-bench",
@@ -242,9 +254,10 @@ BENCHMARK_INTEGRATION_REGISTRY: dict[str, BenchmarkIntegrationSpec] = {
     ),
     "worldbench": BenchmarkIntegrationSpec(
         "worldbench",
-        IntegrationTier.NORMALIZER_ONLY,
+        IntegrationTier.IN_TREE,
         _runner_path("worldbench"),
         hf_dataset_id="worldbenchmark/IntuitivePhysics",
+        judge_model_id="facebook/sam2.1-hiera-large",
     ),
     "worldmodelbench": BenchmarkIntegrationSpec(
         "worldmodelbench", IntegrationTier.MODEL_BACKED, _runner_path("worldmodelbench"),
@@ -254,5 +267,12 @@ BENCHMARK_INTEGRATION_REGISTRY: dict[str, BenchmarkIntegrationSpec] = {
         IntegrationTier.IN_TREE,
         _runner_path("worldscore"),
         hf_dataset_id="Howieeeee/WorldScore",
+    ),
+    "wrbench": BenchmarkIntegrationSpec(
+        "wrbench",
+        IntegrationTier.IN_TREE,
+        _runner_path("wrbench"),
+        hf_dataset_id="WRBench/wrbench-natural25",
+        judge_model_id="VGGT-Omega+DINOv2+Qwen3.5+Qwen3-VL",
     ),
 }

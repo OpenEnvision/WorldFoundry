@@ -1,0 +1,113 @@
+id: physical-ai-bench
+name: Physical AI Bench (PAI-Bench)
+benchmark_kind: [video-generation, conditional-video-generation, video-question-answering]
+status: in_tree_runtime_ready
+
+official_sources:
+  github:
+    url: https://github.com/SHI-Labs/physical-ai-bench
+    head_sha: 2f3b687410029b98397fbc51fa4de36bfd45627d
+  paper_url: https://arxiv.org/abs/2512.01989
+  evaluator_commit: 2f3b687410029b98397fbc51fa4de36bfd45627d
+  evaluator_license: MIT
+  huggingface_datasets:
+  - repo_id: shi-labs/physical-ai-bench-generation
+    track: generation
+  - repo_id: shi-labs/physical-ai-bench-conditional-generation
+    track: conditional-generation
+
+tracks:
+  generation:
+    metrics: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy]
+  conditional-generation:
+    metrics: [dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+
+metrics:
+- {id: aesthetic_quality, higher_is_better: true, aggregator: mean}
+- {id: background_consistency, higher_is_better: true, aggregator: mean}
+- {id: imaging_quality, higher_is_better: true, aggregator: mean}
+- {id: motion_smoothness, higher_is_better: true, aggregator: mean}
+- {id: overall_consistency, higher_is_better: true, aggregator: mean}
+- {id: subject_consistency, higher_is_better: true, aggregator: mean}
+- {id: i2v_background, higher_is_better: true, aggregator: mean}
+- {id: i2v_subject, higher_is_better: true, aggregator: mean}
+- {id: vqa_accuracy, higher_is_better: true, aggregator: official_hierarchical_mean}
+- {id: dover_tech_score, higher_is_better: true, aggregator: mean}
+- {id: blur_ssim, higher_is_better: true, aggregator: mean}
+- {id: canny_f1_score, higher_is_better: true, aggregator: mean}
+- {id: canny_precision, higher_is_better: true, aggregator: mean}
+- {id: canny_recall, higher_is_better: true, aggregator: mean}
+- {id: depth_si_rmse, higher_is_better: false, aggregator: mean}
+- {id: seg_m_iou, higher_is_better: true, aggregator: mean}
+- {id: seg_recall, higher_is_better: true, aggregator: mean}
+- {id: lpips_diversity, higher_is_better: true, aggregator: mean}
+
+runner:
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
+  runner_script: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
+  run_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - physical-ai-bench
+  - --mode
+  - official-run
+  - --dataset-root
+  - <dataset>
+  - --generated-artifact-dir
+  - <generated_videos>
+  - --output-dir
+  - <out>
+  - --json
+  expected_artifacts: [scorecard.json, raw_metric_table.jsonl, per_sample_scores.jsonl, official_results.json]
+  verification_status: verified
+  runtime:
+    kind: in_tree_multi_track_evaluator
+    implementation: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
+    config: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml
+
+integration:
+  status: integrated
+  tier: in_tree
+  implementation_scope: inference_and_evaluation_only
+  upstream_checkout_required: false
+  shared_base_models: [vbench, vbench-plus-plus, qwen-vl, dover, lpips, video-depth-anything, grounding-dino, sam2]
+  source_json_used: false
+  bounded_fixture_verified: true
+  full_dataset_verified: false
+
+release_status: experimental
+maturity: verified_runner
+official_benchmark_verified: false
+integration_evidence: true
+leaderboard_valid: false
+requires:
+- One official Hugging Face dataset for the selected track
+- Generated videos for generation or conditional-generation
+- A prediction manifest or configured Qwen-compatible judge for generation VQA
+- Model checkpoints for selected model-backed conditional metrics
+blockers:
+- Full-dataset numerical parity has not been audited on the roughly 273 GB conditional-generation dataset.
+- Local scorecards are not official SHI-Labs leaderboard submissions.
+
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/physical-ai-bench.yaml
+  evaluator_config: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml
+  provenance: worldfoundry/data/benchmarks/assets/physical-ai-bench/provenance.yaml
+
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: true
+  surface: raw_generated_artifact_evaluator_and_result_normalizer
+  normalizer_verified: true
+
+base_model_dependencies: [vbench, vbench-plus-plus, qwen-vl, dover, lpips, video-depth-anything, grounding-dino, sam2]
+artifact_layout:
+  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  dataset_root_env: WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json

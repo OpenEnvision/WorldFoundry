@@ -12,7 +12,7 @@ from typing import Any
 
 from worldfoundry.evaluation.utils import REPO_ROOT
 
-from worldfoundry.runtime import (  # type: ignore[reportMissingImports]  # noqa: E402
+from worldfoundry.runtime.env import (  # type: ignore[reportMissingImports]  # noqa: E402
     resolve_data_dir,
     resolve_hf_cache_dir,
 )

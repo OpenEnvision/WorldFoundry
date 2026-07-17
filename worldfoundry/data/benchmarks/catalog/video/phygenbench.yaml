@@ -61,10 +61,6 @@ metrics:
 runner:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
-  run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-    worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py --run-official
-    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir
-    "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   validation_command:
   - worldfoundry-eval
   - zoo
@@ -81,7 +77,7 @@ runner:
   - <out>
   - --json
   runtime:
-    kind: in_tree_official_source
+    kind: in_tree_result_importer_and_bounded_overall_aggregator
     root: worldfoundry/evaluation/tasks/execution/runners/phygenbench/runtime/phygenbench
     repo_url: https://github.com/OpenGVLab/PhyGenBench.git
     repo_revision: f8642cb796f3bcb01f0b7c1b2ec53b75d357c739
@@ -93,13 +89,13 @@ runner:
   - scorecard.json
   - benchmark_contract.json
   - raw_metric_table.jsonl
-  verification_status: official_runtime_ready
+  verification_status: bounded_component_ready
   notes:
-  - In-tree runner supports PhyGenEval judging via WORLDFOUNDRY_PHYGENBENCH_JUDGE_BACKEND.
-  - Full upstream runtime still requires VQAScore, GPT-4o/LLaVA, and InternVideo2 stage execution.
+  - The in-tree official backend runs only PhyGenEval overall.py over already-prepared stage outputs.
+  - It does not execute the VQAScore, GPT-4o/LLaVA, or InternVideo2 stage judges.
+  - The mock backend is wiring-only and is never benchmark evidence.
   - WorldFoundry normalizes caller-provided official result files through the dedicated runner.
-  required_env:
-  - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  required_env: []
   optional_env:
   - WORLDFOUNDRY_PHYGENBENCH_ROOT
   - WORLDFOUNDRY_PHYGENBENCH_PROMPT_MANIFEST
@@ -110,28 +106,19 @@ runner:
 integration:
   status: integrated
   blocked_reasons:
-  - Full leaderboard parity requires upstream PhyGenEval stage execution (VQAScore, GPT-4o, InternVideo2) on all 160
-    prompts.
+  - Only result import and the bounded overall aggregation component are available; stage judge execution is absent.
 release_status: experimental
 maturity: contract_ready
-open_source_status: experimental
+open_source_status: in_tree_result_importer_and_bounded_aggregator
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
-- In-tree PhyGenBench prompts and PhyGenEval aggregator, or optional WORLDFOUNDRY_PHYGENBENCH_ROOT override
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-- Official generated artifacts and PhyGenEval stage judge outputs for full leaderboard parity
-- WORLDFOUNDRY_PHYGENBENCH_RESULTS_PATH
-- Official result JSON/JSONL/CSV exported by the upstream scorer or judge
+- An official result file for import, or fully prepared PhyGenEval stage outputs for bounded overall aggregation
+- In-tree prompts/overall.py or an optional WORLDFOUNDRY_PHYGENBENCH_ROOT override
 blockers:
-- Official repository/source metadata is verified, but the official benchmark runtime has not been executed in
-  WorldFoundry.
-- Full validation requires generated videos or rollouts for the official prompt/task suite.
-- Leaderboard parity requires official judge/checkpoint/API assets and normalized upstream result files.
-- Official repository/source metadata and in-tree official-result normalizer are integrated.
-- Full leaderboard validation still requires generated videos and full upstream scorer/judge execution on the official
-  prompt suite.
+- WorldFoundry does not run the PhyGenEval stage judges, so overall aggregation alone is not official benchmark evidence.
+- Mock output is deterministic wiring data and must not be reported as benchmark evidence.
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/phygenbench.yaml
   in_tree_runtime_paths:
@@ -143,13 +130,12 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
-  surface: phygenbench_official_in_tree
+  runtime_verified: false
+  surface: in_tree_result_importer_and_bounded_overall_aggregator
   normalizer_verified: true
 dataset:
   not_applicable: true
-  reason: Official benchmark assets are supplied by the source repository or caller-provided generated artifacts; no
-    Hugging Face dataset is required for this contract entry.
+  reason: Prompt assets are bundled; result import and prepared-stage aggregation do not require a Hugging Face dataset.
 optional_base_model_dependencies:
 - grounded_depth_segmentation_stack
 validation_command:

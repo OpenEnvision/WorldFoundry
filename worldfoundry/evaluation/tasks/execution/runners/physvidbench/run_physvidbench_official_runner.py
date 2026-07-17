@@ -7,13 +7,15 @@ import argparse
 import csv
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_captions import (
+    resolve_caption_base,
+    resolve_captions_dir,
+)
 from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_judge import (
-    PhysVidBenchJudgeConfig,
     judge_config_from_env,
     run_physvidbench_qa,
 )
@@ -22,15 +24,11 @@ from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_m
     METRIC_SPECS,
     compute_physvidbench_metrics,
 )
-from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_captions import (
-    resolve_caption_base,
-    resolve_captions_dir,
-)
 from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_prompts import (
+    load_prompt_rows,
     resolve_physvidbench_root,
     resolve_prompt_manifest_path,
     unique_prompt_records,
-    load_prompt_rows,
 )
 
 SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
@@ -42,7 +40,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--benchmark-id", default="physvidbench")
     parser.add_argument("--official-results-path", dest="official_results_path", type=Path)
     parser.add_argument("--from-upstream-results", dest="official_results_path", type=Path, help=argparse.SUPPRESS)
-    parser.add_argument("--run-official", action="store_true", help="Execute in-tree PhysVidBench Gemini QA over captions.")
+    parser.add_argument(
+        "--run-official",
+        action="store_true",
+        help="Execute the in-tree PhysVidBench caption-QA component; candidate-video captioning is not in-tree.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--generated-artifact-dir", type=Path)
     parser.add_argument("--physvidbench-root", type=Path)
@@ -80,7 +82,7 @@ def _metric_rows(
     *,
     computed: Mapping[str, Any],
     source_path: Path,
-    official_runtime_executed: bool,
+    official_component_executed: bool,
 ) -> list[dict[str, Any]]:
     direct_metrics = computed.get("metrics") if isinstance(computed.get("metrics"), Mapping) else {}
     components = computed.get("components") if isinstance(computed.get("components"), Mapping) else {}
@@ -98,7 +100,11 @@ def _metric_rows(
                 "score": score,
                 "higher_is_better": spec["higher_is_better"],
                 "group": spec["group"],
-                "source": "physvidbench_official_runtime" if official_runtime_executed else "physvidbench_results_csv",
+                "source": (
+                    "physvidbench_official_caption_qa"
+                    if official_component_executed
+                    else "physvidbench_results_csv"
+                ),
                 "source_path": str(source_path),
                 "components": components,
                 "reason": None if score is not None else "score_not_available_in_physvidbench_results",
@@ -153,6 +159,15 @@ def _coverage(expected_prompt_ids: set[str], generated_dir: Path | None) -> dict
     }
 
 
+def _caption_qa_component_executed(
+    *,
+    official_runtime_executed: bool,
+    qa_summary: Mapping[str, Any] | None,
+) -> bool:
+    backend = str((qa_summary or {}).get("backend") or "").strip().lower()
+    return official_runtime_executed and backend in {"gemini", "google"}
+
+
 def _scorecard(
     *,
     benchmark_id: str,
@@ -176,45 +191,79 @@ def _scorecard(
         video_coverage.get("expected_count", 0) > 0
         and video_coverage.get("complete") is True
     )
-    full_suite_valid = (
+    input_coverage_complete = (
         prompt_count > 0
         and video_complete
         and len(available_rows) == len(METRIC_ORDER)
     )
     normalization_ok = bool(available_rows)
-    official_verified = official_runtime_executed and normalization_ok
-    integration_evidence = official_verified and full_suite_valid
-    normalizer_only = not official_runtime_executed and not integration_evidence
+    component_executed = _caption_qa_component_executed(
+        official_runtime_executed=official_runtime_executed,
+        qa_summary=qa_summary,
+    )
+    integration_evidence = component_executed and normalization_ok
+    evidence_scope = (
+        "official_caption_qa_component"
+        if integration_evidence
+        else "mock_or_result_import"
+    )
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
-        "official_benchmark_verified": official_verified,
+        "official_benchmark_verified": False,
         "integration_evidence": integration_evidence,
         "leaderboard_valid": False,
-        "normalizer_only": normalizer_only,
+        "normalizer_only": not integration_evidence,
         "normalization_ok": normalization_ok,
         "eligibility": {
-            "full_suite_valid": full_suite_valid,
+            "full_suite_valid": False,
+            "input_coverage_complete": input_coverage_complete,
             "video_coverage_complete": video_complete,
+            "candidate_video_caption_provenance_verified": False,
         },
         "run": {
-            "status": "succeeded" if normalization_ok else "failed",
+            "status": (
+                "official_caption_qa_component_completed"
+                if integration_evidence
+                else "mock_or_results_normalized"
+                if normalization_ok
+                else "failed"
+            ),
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_physvidbench_official_runner",
             "returncode": 0 if normalization_ok else 1,
             "qa_summary": dict(qa_summary or {}),
         },
-        "benchmark": {"benchmark_id": benchmark_id, "name": "PhysVidBench"},
+        "benchmark": {
+            "benchmark_id": benchmark_id,
+            "name": "PhysVidBench",
+            "evidence_scope": evidence_scope,
+        },
+        "dataset": {
+            "prompt_manifest": None if prompt_manifest_path is None else str(prompt_manifest_path),
+            "prompt_count": prompt_count,
+            "caption_base": (qa_summary or {}).get("caption_base"),
+            "generated_video_coverage": dict(video_coverage),
+        },
         "metrics": {
             "leaderboard": leaderboard,
             "per_metric": per_metric,
             "summary": {
                 "available_metric_count": len(available_rows),
+                "official_component_available_count": (
+                    len(available_rows) if integration_evidence else 0
+                ),
                 "declared_metric_count": len(METRIC_ORDER),
             },
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "physvidbench_official_in_tree" if official_runtime_executed else "physvidbench_result_normalizer",
+            "kind": (
+                "physvidbench_official_caption_qa_component"
+                if integration_evidence
+                else "physvidbench_mock_or_result_normalizer"
+            ),
+            "evidence_scope": evidence_scope,
+            "candidate_video_caption_provenance_verified": False,
             "blocked_count": len(METRIC_ORDER) - len(available_rows),
         },
         "artifacts": {
@@ -224,7 +273,8 @@ def _scorecard(
         "coverage": {"videos": dict(video_coverage)},
         "notes": [
             "PhysVidBench in-tree QA consumes prompts_questions.csv and 8-caption AuroraCap tracks.",
-            "Use WORLDFOUNDRY_PHYSVIDBENCH_JUDGE_BACKEND=mock for CI fixture validation.",
+            "The caption-QA component does not prove that supplied caption tracks came from candidate videos.",
+            "The mock backend is fixture validation and never benchmark evidence.",
         ],
         "prompt_manifest": None if prompt_manifest_path is None else str(prompt_manifest_path),
         "prompt_count": prompt_count,
@@ -250,10 +300,14 @@ def normalize_physvidbench_results(
     prompt_records = unique_prompt_records(load_prompt_rows(prompt_manifest_path=prompt_manifest_path))
     qa_rows = _load_qa_rows(Path(official_results_path))
     computed = compute_physvidbench_metrics(qa_rows=qa_rows)
+    official_component_executed = _caption_qa_component_executed(
+        official_runtime_executed=official_runtime_executed,
+        qa_summary=qa_summary,
+    )
     metric_rows = _metric_rows(
         computed=computed,
         source_path=Path(official_results_path),
-        official_runtime_executed=official_runtime_executed,
+        official_component_executed=official_component_executed,
     )
     video_coverage = _coverage({record["prompt_id"] for record in prompt_records}, generated_dir)
     scorecard = _scorecard(
@@ -365,6 +419,16 @@ def main(argv: list[str] | None = None) -> int:
                 "error": f"{type(exc).__name__}: {exc}",
             },
             "benchmark": {"benchmark_id": args.benchmark_id, "name": "PhysVidBench"},
+            "dataset": {
+                "prompt_manifest": None,
+                "prompt_count": 0,
+                "caption_base": None,
+                "generated_video_coverage": {},
+            },
+            "eligibility": {
+                "full_suite_valid": False,
+                "candidate_video_caption_provenance_verified": False,
+            },
             "metrics": {"leaderboard": {}, "per_metric": {}, "summary": {"available_metric_count": 0}},
             "evaluation": {
                 "available": False,

@@ -13,15 +13,14 @@ Sections:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from uuid import uuid4
 
-from worldfoundry.evaluation.utils import append_jsonl, jsonable, read_json_or_jsonl, reset_jsonl, write_json
 from worldfoundry.evaluation.api import (
     ArtifactRef,
     GenerationRequest,
@@ -31,10 +30,17 @@ from worldfoundry.evaluation.api import (
 )
 from worldfoundry.evaluation.reporting import write_run_manifest_artifacts, write_run_report_artifacts
 from worldfoundry.evaluation.reporting.scorecard import write_scorecard
-from worldfoundry.evaluation.utils import build_run_fingerprint, build_version_context
+from worldfoundry.evaluation.utils import (
+    append_jsonl,
+    build_run_fingerprint,
+    build_version_context,
+    jsonable,
+    read_json_or_jsonl,
+    reset_jsonl,
+    write_json,
+)
 
 from .cache import generation_cache_hit_metadata
-
 
 # ---------------------------------------------------------------------------
 # Types and request DTOs
@@ -749,6 +755,7 @@ def run_existing_results(
         metrics_summary=summary,
         artifacts=artifact_paths,
         skipped=skipped,
+        provenance=(run_request.run_metadata or {}).get("evaluation_provenance"),
     )
     write_run_report_artifacts(
         output_dir=output_dir,

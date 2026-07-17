@@ -2,44 +2,21 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
-import numpy as np
 import torch
-from PIL import Image
+
+from worldfoundry.evaluation.tasks.metrics._shared.images import ImageInput, load_rgb_image
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
+from worldfoundry.evaluation.tasks.metrics._shared.perceptual import resolve_device
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
-ImageInput = Union[str, Path, Image.Image, np.ndarray]
 
 
 def package_root() -> Path:
     return PACKAGE_ROOT
-
-
-def _ensure_dreamsim() -> None:
-    root = str(PACKAGE_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
-def _resolve_device(device: str | None) -> torch.device:
-    if device is not None:
-        return torch.device(device)
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def _load_image(image: ImageInput) -> Image.Image:
-    if isinstance(image, Image.Image):
-        return image.convert("RGB")
-    if isinstance(image, (str, Path)):
-        return Image.open(image).convert("RGB")
-    arr = np.asarray(image)
-    if arr.ndim == 2:
-        arr = np.stack([arr, arr, arr], axis=-1)
-    return Image.fromarray(arr.astype(np.uint8)).convert("RGB")
 
 
 @lru_cache(maxsize=4)
@@ -48,7 +25,7 @@ def _load_dreamsim_model(
     dreamsim_type: str,
     device: str,
 ) -> tuple[Any, Any]:
-    _ensure_dreamsim()
+    prepend_import_path(PACKAGE_ROOT)
     from dreamsim.model import dreamsim
 
     model, preprocess = dreamsim(
@@ -69,15 +46,15 @@ def compute_dreamsim(
     device: str | None = None,
 ) -> float:
     """Compute DreamSim perceptual distance between two images (lower is more similar)."""
-    device_t = _resolve_device(device)
+    device_t = resolve_device(device)
     model_dir = str(
         Path(cache_dir).expanduser()
         if cache_dir is not None
         else Path("cache/hfd") / "dreamsim"
     )
     model, preprocess = _load_dreamsim_model(model_dir, dreamsim_type, str(device_t))
-    ref = preprocess(_load_image(reference)).to(device_t)
-    gen = preprocess(_load_image(generated)).to(device_t)
+    ref = preprocess(load_rgb_image(reference)).to(device_t)
+    gen = preprocess(load_rgb_image(generated)).to(device_t)
     with torch.no_grad():
         return float(model(ref, gen).item())
 

@@ -2,27 +2,21 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
 VENDOR_ROOT = Path(__file__).resolve().parent / "vendor"
 
 
-def _ensure_vendor() -> None:
-    root = str(VENDOR_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
 @lru_cache(maxsize=1)
 def _get_sad_fn() -> Any:
-    _ensure_vendor()
+    prepend_import_path(VENDOR_ROOT)
     from sad import get_SaD
 
     return get_SaD
@@ -30,7 +24,7 @@ def _get_sad_fn() -> Any:
 
 @lru_cache(maxsize=1)
 def _get_pad_fn() -> Any:
-    _ensure_vendor()
+    prepend_import_path(VENDOR_ROOT)
     from pad import get_PaD
 
     return get_PaD

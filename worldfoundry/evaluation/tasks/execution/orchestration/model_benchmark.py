@@ -8,34 +8,37 @@ through official benchmark validation tools on the host system, and writes an in
 from __future__ import annotations
 
 import base64
-from dataclasses import asdict, dataclass
 import json
 import shutil
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.evaluation.utils import write_json, write_jsonl
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.api.artifacts import local_path_for_uri
+from worldfoundry.evaluation.reporting import (
+    RUN_SUMMARY_SCHEMA_VERSION,
+    build_comparison_identity,
+    write_run_manifest_artifacts,
+)
 from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import resolve_benchmark_manifest_path
-from worldfoundry.evaluation.tasks.execution.orchestration.run_mode import normalize_benchmark_run_mode
 from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import run_benchmark_execution
-from worldfoundry.evaluation.utils import BENCHMARK_TASK_ROOT
-from worldfoundry.evaluation.reporting import RUN_SUMMARY_SCHEMA_VERSION, write_run_manifest_artifacts
+from worldfoundry.evaluation.tasks.execution.orchestration.run_mode import normalize_benchmark_run_mode
+from worldfoundry.evaluation.utils import BENCHMARK_TASK_ROOT, stable_hash, write_json, write_jsonl
 
+from .benchmark_generation import get_benchmark_generation_adapter
 from .evaluate import EvaluateRunRequest, EvaluateRunResult, execute_evaluate_run
+from .fidelity import model_benchmark_fidelity
 from .plan import build_run_plan_from_task_registry, evaluate_request_from_run_plan, write_run_plan
-
 
 MODEL_BENCHMARK_RUN_SCHEMA_VERSION = "worldfoundry-model-benchmark-run"
 MODEL_BENCHMARK_RESULT_SCHEMA_VERSION = "worldfoundry-model-benchmark-result"
 DEFAULT_BENCHMARK_TASK_ROOT = BENCHMARK_TASK_ROOT
 CONTRACT_VALIDATION_ID = "contract-validation"
+RESERVED_BENCHMARK_PARAMETERS = frozenset({"output_dir", "manifest_path", "mode", "generated_artifact_dir"})
 
 # Static MP4 video binary encoded in base64 utilized to fill placeholders during contract runs
-_CONTRACT_FIXTURE_MP4_B64 = (
-    "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"
-)
+_CONTRACT_FIXTURE_MP4_B64 = "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"
 _CONTRACT_FIXTURE_VIDEO_SUFFIXES = {".mp4", ".m4v", ".mov"}
 
 
@@ -115,9 +118,13 @@ class ModelBenchmarkRunRequest:
     benchmark_timeout_seconds: float | None = None
     benchmark_workdir: str | Path | None = None
     benchmark_env: Mapping[str, Any] | None = None
+    benchmark_parameters: Mapping[str, Any] | None = None
     materialize_placeholders: bool | None = None
     contract_fixture: bool = False
     fail_on_generation_error: bool = False
+    evaluation_kind: str = "benchmark_model"
+    leaderboard_candidate: bool = True
+    evaluation_provenance: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -136,6 +143,7 @@ class ModelBenchmarkRunResult:
         artifact_manifest_path: Path to serialized manifest indexing generated artifacts.
         artifacts: Map of produced summary and report paths.
     """
+
     schema_version: str
     status: str
     exit_code: int
@@ -243,7 +251,11 @@ def _run_generation_from_task_registry(request: ModelBenchmarkRunRequest, root: 
     if request.dataset_root is None:
         raise ValueError("task-registry model-benchmark runs require dataset_root/data_path to materialize requests")
 
-    task_roots = tuple(Path(path) for path in request.task_roots) if request.task_roots else _default_task_roots(request.benchmark_manifest_path)
+    task_roots = (
+        tuple(Path(path) for path in request.task_roots)
+        if request.task_roots
+        else _default_task_roots(request.benchmark_manifest_path)
+    )
     plan = build_run_plan_from_task_registry(
         task_name=request.task_name,
         task_roots=task_roots,
@@ -257,7 +269,7 @@ def _run_generation_from_task_registry(request: ModelBenchmarkRunRequest, root: 
         split=request.split,
         model_id=request.model_id,
         model_runner=request.model_runner,
-        model_zoo_manifest_dir=request.model_zoo_manifest_dir,
+        model_manifest_dir=request.model_zoo_manifest_dir,
         model_variant_id=request.model_variant_id,
         model_parameters=request.model_parameters,
         model_runtime=request.model_runtime,
@@ -291,10 +303,17 @@ def _materialize_generated_artifacts(
 ) -> tuple[int, int]:
     """Copies physical output files from generation outputs into a unified benchmark input folder."""
     rows: list[dict[str, Any]] = []
-    results = [
-        GenerationResult.from_dict(row)
-        for row in _read_jsonl(generation_output_dir / "results.jsonl")
-    ]
+    official_names: dict[str, str] = {}
+    requests_path = generation_output_dir / "requests.jsonl"
+    if requests_path.is_file():
+        for request_row in _read_jsonl(requests_path):
+            inputs = request_row.get("inputs")
+            official_name = inputs.get("official_video_name") if isinstance(inputs, Mapping) else None
+            sample_id = request_row.get("sample_id")
+            if sample_id is not None and official_name:
+                # Official layouts may choose the basename but never escape the run directory.
+                official_names[str(sample_id)] = Path(str(official_name)).name
+    results = [GenerationResult.from_dict(row) for row in _read_jsonl(generation_output_dir / "results.jsonl")]
     generated_artifact_dir.mkdir(parents=True, exist_ok=True)
 
     for result in results:
@@ -302,7 +321,9 @@ def _materialize_generated_artifacts(
             if output_artifact and name != output_artifact:
                 continue
             suffix = _artifact_suffix(name, artifact.uri)
-            destination = generated_artifact_dir / f"{_safe_name(result.sample_id)}__{_safe_name(name)}{suffix}"
+            official_name = official_names.get(result.sample_id)
+            destination_name = official_name or f"{_safe_name(result.sample_id)}__{_safe_name(name)}{suffix}"
+            destination = generated_artifact_dir / destination_name
             source_path = local_path_for_uri(artifact.uri)
             row = {
                 "sample_id": result.sample_id,
@@ -344,7 +365,9 @@ def _materialize_contract_validation_artifacts(
 ) -> tuple[int, int]:
     """Generates dummy placeholder artifacts directly when contract_fixture is executed in mock mode."""
     artifact_name = output_artifact or "generated_artifact"
-    destination = generated_artifact_dir / f"sample-0000__{_safe_name(artifact_name)}{_artifact_suffix(artifact_name, '')}"
+    destination = (
+        generated_artifact_dir / f"sample-0000__{_safe_name(artifact_name)}{_artifact_suffix(artifact_name, '')}"
+    )
     generated_artifact_dir.mkdir(parents=True, exist_ok=True)
     _write_placeholder_artifact(
         destination,
@@ -373,206 +396,39 @@ def _materialize_contract_validation_artifacts(
 
 
 def _run_generation(request: ModelBenchmarkRunRequest, root: Path) -> EvaluateRunResult | None:
-    """Dispatches generation workloads depending on selected custom request structures or task registries."""
+    """Materialize benchmark requests and run the selected in-tree model."""
     if request.generated_artifact_dir is not None:
         return None
+
     requests = request.requests
     if requests is None and request.requests_path is None:
-        if request.benchmark_id == "videoverse":
-            from worldfoundry.evaluation.tasks.execution.runners.videoverse.videoverse_prompts import (
-                materialize_videoverse_generation_requests,
-            )
-
-            requests = materialize_videoverse_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "VideoVerse prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_VIDEOVERSE_ROOT or WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST."
-                )
-        elif request.benchmark_id == "phyfps-bench-gen":
-            from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_prompts import (
-                materialize_phyfps_generation_requests,
-            )
-
-            requests = materialize_phyfps_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "PhyFPS-Bench-Gen prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_PHYFPS_BENCH_GEN_ROOT or WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST."
-                )
-        elif request.benchmark_id == "physvidbench":
-            from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_prompts import (
-                materialize_physvidbench_generation_requests,
-            )
-
-            requests = materialize_physvidbench_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "PhysVidBench prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_PHYSVIDBENCH_ROOT or WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST."
-                )
-        elif request.benchmark_id == "physics-iq":
-            from worldfoundry.evaluation.tasks.execution.runners.physics_iq.physics_iq_prompts import (
-                materialize_physics_iq_generation_requests,
-            )
-
-            requests = materialize_physics_iq_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "Physics-IQ prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_PHYSICS_IQ_ROOT or WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS."
-                )
-        elif request.benchmark_id == "phygenbench":
-            from worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_prompts import (
-                materialize_phygenbench_generation_requests,
-            )
-
-            requests = materialize_phygenbench_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "PhyGenBench prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_PHYGENBENCH_ROOT or WORLDFOUNDRY_PHYGENBENCH_PROMPT_MANIFEST."
-                )
-        elif request.benchmark_id == "videophy":
-            from worldfoundry.evaluation.tasks.execution.runners.videophy.videophy_prompts import (
-                materialize_videophy_generation_requests,
-            )
-
-            requests = materialize_videophy_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "VideoPhy prompt materialization produced zero requests; bundled assets are missing."
-                )
-        elif request.benchmark_id == "videophy2":
-            from worldfoundry.evaluation.tasks.execution.runners.videophy2.videophy2_prompts import (
-                materialize_videophy2_generation_requests,
-            )
-
-            requests = materialize_videophy2_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "VideoPhy2 prompt materialization produced zero requests; bundled assets are missing."
-                )
-        elif request.benchmark_id == "mirabench":
-            from worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_prompts import (
-                materialize_mirabench_generation_requests,
-            )
-
-            requests = materialize_mirabench_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "MiraBench prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_MIRABENCH_ROOT or WORLDFOUNDRY_MIRABENCH_META_CSV."
-                )
-        elif request.benchmark_id == "phyground":
-            from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_prompts import (
-                materialize_phyground_generation_requests,
-            )
-
-            requests = materialize_phyground_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "PhyGround prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_PHYGROUND_DATA_ROOT or WORLDFOUNDRY_PHYGROUND_PROMPT_MANIFEST."
-                )
-        elif request.benchmark_id == "phyeduvideo":
-            from worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.phyeduvideo_prompts import (
-                materialize_phyeduvideo_generation_requests,
-            )
-
-            requests = materialize_phyeduvideo_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "PhyEduVideo prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_PHYEDUVIDEO_ROOT or WORLDFOUNDRY_PHYEDUVIDEO_PROMPTS_FILE."
-                )
-        elif request.benchmark_id == "aigcbench":
-            from worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_prompts import (
-                materialize_aigcbench_generation_requests,
-            )
-
-            requests = materialize_aigcbench_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "AIGCBench prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT or WORLDFOUNDRY_AIGCBENCH_PROMPT_MANIFEST."
-                )
-        elif request.benchmark_id == "vmbench":
-            from worldfoundry.evaluation.tasks.execution.runners.vmbench.vmbench_prompts import (
-                materialize_vmbench_generation_requests,
-            )
-
-            requests = materialize_vmbench_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "VMBench prompt materialization produced zero requests; bundled prompts should be available "
-                    "under worldfoundry/data/benchmarks/assets/vmbench/prompts/."
-                )
-        elif request.benchmark_id == "world-in-world":
-            from worldfoundry.evaluation.tasks.execution.runners.world_in_world.world_in_world_prompts import (
-                materialize_world_in_world_generation_requests,
-            )
-
-            requests = materialize_world_in_world_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "World-in-World prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT or episode manifest env vars."
-                )
-        elif request.benchmark_id == "iworld-bench":
-            from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_prompts import (
-                materialize_iworldbench_generation_requests,
-            )
-
-            requests = materialize_iworldbench_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "iWorld-Bench prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT or WORLDFOUNDRY_IWORLD_BENCH_PROMPT_MANIFEST."
-                )
-        elif request.benchmark_id == "ipv-bench":
-            from worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_prompts import (
-                materialize_ipv_bench_generation_requests,
-            )
-
-            requests = materialize_ipv_bench_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "IPV-Bench prompt materialization produced zero requests; set "
-                    "WORLDFOUNDRY_IPV_BENCH_ROOT or WORLDFOUNDRY_IPV_BENCH_PROMPT_MANIFEST."
-                )
-        elif request.benchmark_id == "ewmbench":
-            from worldfoundry.evaluation.tasks.execution.runners.ewmbench.ewmbench_prompts import (
-                materialize_ewmbench_generation_requests,
-            )
-
-            requests = materialize_ewmbench_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "EWMBench prompt materialization produced zero requests; bundled task_manifest.json "
-                    "should be available under worldfoundry/data/benchmarks/assets/ewmbench/."
-                )
-        elif request.benchmark_id == "evalcrafter":
-            from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_prompts import (
-                materialize_evalcrafter_generation_requests,
-            )
-
-            requests = materialize_evalcrafter_generation_requests(limit=request.num_samples)
-            if not requests:
-                raise ValueError(
-                    "EvalCrafter prompt materialization produced zero requests; bundled prompt700.txt "
-                    "should be available under worldfoundry/data/benchmarks/assets/evalcrafter/."
-                )
-        if request.task_name and requests is None:
+        if request.task_name:
             return _run_generation_from_task_registry(request, root)
         if request.contract_fixture:
             return None
-        if requests is None:
+        if request.benchmark_mode == "contract":
+            raise ValueError(
+                "model-benchmark contract runs require generated inputs or contract_fixture=True"
+            )
+        adapter = get_benchmark_generation_adapter(request.benchmark_id)
+        if adapter is not None:
+            requests = adapter.materialize_requests(
+                limit=request.num_samples,
+                dataset_root=request.dataset_root,
+                split=request.split,
+            )
+            if not requests:
+                raise ValueError(
+                    f"{request.benchmark_id} prompt materialization produced zero requests; "
+                    f"{adapter.missing_requests_hint}."
+                )
+        else:
             raise ValueError(
                 "model-benchmark runs require generated inputs. Provide task_name+dataset_root, "
-                "requests_path, generated_artifact_dir, or set contract_fixture=True for benchmark "
-                "contract validation placeholders."
+                "requests_path, generated_artifact_dir, or choose a benchmark with a registered "
+                "generation adapter."
             )
+
     return execute_evaluate_run(
         EvaluateRunRequest(
             output_dir=root / "generation",
@@ -624,18 +480,44 @@ def _model_benchmark_run_summary(
     failed_samples = generation_result.failed_sample_count if generation_result is not None else 0
     generation_success_rate = successful_samples / sample_count if sample_count else 0.0
     benchmark_ok = 1.0 if benchmark_payload.get("ok") is True else 0.0
+    provenance = dict(request.evaluation_provenance or {})
+    provenance_claim = provenance.get("claim")
+    provenance_claim = provenance_claim if isinstance(provenance_claim, Mapping) else {}
+    provenance_candidate = (
+        provenance_claim.get("leaderboard_candidate") is True
+        if provenance
+        else request.leaderboard_candidate
+    )
+    effective_candidate = request.leaderboard_candidate and provenance_candidate
     leaderboard_valid = (
         status == "succeeded"
         and benchmark_payload.get("ok") is True
         and not request.contract_fixture
         and placeholder_count == 0
+        and effective_candidate
     )
-    score_valid = leaderboard_valid
+    score_valid = (
+        status == "succeeded"
+        and benchmark_payload.get("ok") is True
+        and not request.contract_fixture
+        and placeholder_count == 0
+    )
     leaderboard_blockers = _model_benchmark_leaderboard_blockers(status, benchmark_payload)
     if request.contract_fixture and "model-benchmark run used contract fixture" not in leaderboard_blockers:
         leaderboard_blockers.append("model-benchmark run used contract fixture")
     if placeholder_count and "generated artifacts include placeholders" not in leaderboard_blockers:
         leaderboard_blockers.append("generated artifacts include placeholders")
+    if not effective_candidate:
+        fidelity = provenance.get("fidelity")
+        fidelity = fidelity if isinstance(fidelity, Mapping) else {}
+        if fidelity.get("data") not in (None, "official"):
+            blocker = "custom data is not leaderboard-comparable"
+        elif fidelity.get("evaluation") not in (None, "official"):
+            blocker = "modified evaluation protocol is not leaderboard-comparable"
+        else:
+            blocker = "evaluation provenance is not leaderboard-comparable"
+        if blocker not in leaderboard_blockers:
+            leaderboard_blockers.append(blocker)
     leaderboard = {
         "materialized_artifact_count": float(materialized_count),
         "placeholder_artifact_count": float(placeholder_count),
@@ -643,6 +525,47 @@ def _model_benchmark_run_summary(
         "generation_success_rate": float(generation_success_rate),
         "benchmark_ok": benchmark_ok,
     }
+    benchmark_parameters = dict(request.benchmark_parameters or {})
+    benchmark_revision = benchmark_parameters.get("revision")
+    protocol_parameters = {
+        key: value for key, value in benchmark_parameters.items() if key != "revision"
+    }
+    benchmark_summary = {
+        "benchmark_id": request.benchmark_id,
+        "benchmark_name": request.benchmark_id,
+        "benchmark_revision": benchmark_revision,
+        "task_type": request.task_name or f"{request.benchmark_id}:model_benchmark",
+        "suite": "benchmark_zoo",
+        "evaluation_protocol": f"model_benchmark:{mode}",
+        "protocol_revision": benchmark_revision,
+        "protocol_config_hash": stable_hash(protocol_parameters),
+        "evaluation_kind": request.evaluation_kind,
+    }
+    dataset_summary = {
+        "dataset_id": request.dataset_id or f"{request.benchmark_id}:generated",
+        "name": request.dataset_id or f"{request.benchmark_id}:generated",
+        "split": request.split,
+        "sample_count": sample_count,
+    }
+    metrics_summary = {
+        "leaderboard": leaderboard,
+        "per_metric": {
+            metric_id: {"mean": value, "higher_is_better": True} for metric_id, value in leaderboard.items()
+        },
+        "summary": {
+            "sample_count": sample_count,
+            "successful_samples": successful_samples,
+            "failed_samples": failed_samples,
+            "failed_sample_ids": [],
+        },
+    }
+    comparison_identity = build_comparison_identity(
+        benchmark=benchmark_summary,
+        dataset=dataset_summary,
+        metrics=metrics_summary,
+        provenance=provenance,
+        evaluation_kind=request.evaluation_kind,
+    )
     return {
         "schema_version": RUN_SUMMARY_SCHEMA_VERSION,
         "source_schema_version": MODEL_BENCHMARK_RUN_SCHEMA_VERSION,
@@ -654,23 +577,13 @@ def _model_benchmark_run_summary(
             "worldfoundry_version": None,
             "run_fingerprint": None,
         },
-        "benchmark": {
-            "benchmark_name": request.benchmark_id,
-            "task_type": request.task_name or f"{request.benchmark_id}:model_benchmark",
-            "suite": "benchmark_zoo",
-            "evaluation_protocol": f"model_benchmark:{mode}",
-        },
+        "benchmark": benchmark_summary,
         "model": {
             "model_id": request.model_id,
             "model_name": request.model_id,
             "model_type": "model_benchmark",
         },
-        "dataset": {
-            "dataset_id": request.dataset_id or f"{request.benchmark_id}:generated",
-            "name": request.dataset_id or f"{request.benchmark_id}:generated",
-            "split": request.split,
-            "sample_count": sample_count,
-        },
+        "dataset": dataset_summary,
         "counts": {
             "sample_count": sample_count,
             "successful_samples": successful_samples,
@@ -684,20 +597,14 @@ def _model_benchmark_run_summary(
             "placeholder_artifact_count": placeholder_count,
             "real_artifact_count": max(materialized_count - placeholder_count, 0),
         },
-        "metrics": {
-            "leaderboard": leaderboard,
-            "per_metric": {
-                metric_id: {"mean": value, "higher_is_better": True}
-                for metric_id, value in leaderboard.items()
-            },
-            "summary": {
-                "sample_count": sample_count,
-                "successful_samples": successful_samples,
-                "failed_samples": failed_samples,
-                "failed_sample_ids": [],
-            },
-        },
+        "metrics": metrics_summary,
         "leaderboard": leaderboard,
+        "evaluation": {
+            "kind": request.evaluation_kind,
+            "mode": comparison_identity["evaluation_mode"],
+        },
+        "provenance": provenance,
+        "comparison_identity": comparison_identity,
         "eligibility": {
             "score_valid": score_valid,
             "leaderboard_valid": leaderboard_valid,
@@ -709,6 +616,8 @@ def _model_benchmark_run_summary(
         "wrapper": {
             "output_dir": str(root),
             "benchmark_mode": mode,
+            "evaluation_kind": request.evaluation_kind,
+            "leaderboard_candidate": effective_candidate,
             "materialized_artifact_count": materialized_count,
             "placeholder_artifact_count": placeholder_count,
             "contract_fixture": request.contract_fixture,
@@ -736,7 +645,9 @@ def _model_benchmark_leaderboard_blockers(status: str, benchmark_payload: Mappin
     return ["benchmark runner did not produce leaderboard-valid evidence"]
 
 
-def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | None = None, **kwargs: Any) -> ModelBenchmarkRunResult:
+def run_model_benchmark(
+    request: ModelBenchmarkRunRequest | Mapping[str, Any] | None = None, **kwargs: Any
+) -> ModelBenchmarkRunResult:
     """Executes a complete 1:1 model generation and benchmark scoring sequence.
 
     First triggers target model generation (unless generated_artifact_dir is supplied directly),
@@ -761,6 +672,32 @@ def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | 
         request = ModelBenchmarkRunRequest(**payload)
 
     mode = normalize_benchmark_run_mode(request.benchmark_mode)
+    if mode != "contract" and request.evaluation_provenance is None:
+        fidelity = model_benchmark_fidelity(
+            benchmark_mode=mode,
+            custom_data=any(
+                value not in (None, "")
+                for value in (
+                    request.requests_path,
+                    request.task_name,
+                    request.dataset_root,
+                    request.dataset_id,
+                    request.generated_artifact_dir,
+                )
+            ),
+            sample_limited=request.num_samples is not None,
+            benchmark_parameters=request.benchmark_parameters,
+            producer=(
+                "catalog_model"
+                if request.model_zoo_manifest_dir is not None
+                else "custom_model"
+            ),
+        )
+        request = replace(
+            request,
+            leaderboard_candidate=request.leaderboard_candidate and fidelity.leaderboard_candidate,
+            evaluation_provenance=fidelity.to_dict(),
+        )
     if not request.model_id and not request.contract_fixture:
         raise ValueError("model-benchmark runs require model_id unless contract_fixture=True is set.")
     root = Path(request.output_dir).resolve()
@@ -773,10 +710,24 @@ def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | 
     artifact_manifest_path = root / "generated_artifacts.jsonl"
 
     generation_result = _run_generation(request, root)
+    if generation_result is not None and generation_result.successful_sample_count == 0:
+        raise RuntimeError(
+            "model generation produced no successful samples; benchmark evaluation was not started. "
+            f"Inspect {generation_result.output_dir / 'results.jsonl'} for per-sample errors."
+        )
+    if generation_result is not None and request.fail_on_generation_error and generation_result.exit_code:
+        raise RuntimeError(
+            "model generation failed and fail_on_generation_error=True; benchmark evaluation was not started. "
+            f"Inspect {generation_result.output_dir / 'results.jsonl'} for per-sample errors."
+        )
     placeholder_count = 0
     if request.generated_artifact_dir is not None:
         generated_artifact_dir = Path(request.generated_artifact_dir).expanduser().resolve()
-        materialized_count = len([path for path in generated_artifact_dir.rglob("*") if path.is_file()]) if generated_artifact_dir.exists() else 0
+        materialized_count = (
+            len([path for path in generated_artifact_dir.rglob("*") if path.is_file()])
+            if generated_artifact_dir.exists()
+            else 0
+        )
         write_jsonl(artifact_manifest_path, [], atomic=False)
     else:
         generated_artifact_dir = root / "generated_artifacts"
@@ -787,151 +738,19 @@ def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | 
                 output_artifact=request.output_artifact,
             )
         else:
-            if request.benchmark_id == "videoverse":
-                from worldfoundry.evaluation.tasks.execution.runners.videoverse.videoverse_prompts import (
-                    copy_videoverse_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_videoverse_generated_videos(
+            adapter = get_benchmark_generation_adapter(request.benchmark_id)
+            materialized = (
+                None
+                if adapter is None
+                else adapter.materialize_artifacts(
                     generation_output_dir=root / "generation",
                     generated_artifact_dir=generated_artifact_dir,
                     artifact_manifest_path=artifact_manifest_path,
                     output_artifact=request.output_artifact,
                 )
-            elif request.benchmark_id == "phyfps-bench-gen":
-                from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_prompts import (
-                    copy_phyfps_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_phyfps_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "physvidbench":
-                from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_prompts import (
-                    copy_physvidbench_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_physvidbench_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "physics-iq":
-                from worldfoundry.evaluation.tasks.execution.runners.physics_iq.physics_iq_prompts import (
-                    copy_physics_iq_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_physics_iq_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "phygenbench":
-                from worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_prompts import (
-                    copy_phygenbench_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_phygenbench_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "videophy":
-                from worldfoundry.evaluation.tasks.execution.runners.videophy.videophy_prompts import (
-                    copy_videophy_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_videophy_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "videophy2":
-                from worldfoundry.evaluation.tasks.execution.runners.videophy2.videophy2_prompts import (
-                    copy_videophy2_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_videophy2_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "mirabench":
-                from worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_prompts import (
-                    copy_mirabench_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_mirabench_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "ewmbench":
-                from worldfoundry.evaluation.tasks.execution.runners.ewmbench.ewmbench_prompts import (
-                    copy_ewmbench_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_ewmbench_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "evalcrafter":
-                from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_prompts import (
-                    copy_evalcrafter_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_evalcrafter_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "phyground":
-                from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_prompts import (
-                    copy_phyground_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_phyground_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "phyeduvideo":
-                from worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.phyeduvideo_prompts import (
-                    copy_phyeduvideo_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_phyeduvideo_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            elif request.benchmark_id == "aigcbench":
-                from worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_prompts import (
-                    copy_aigcbench_generated_videos,
-                )
-
-                materialized_count, placeholder_count = copy_aigcbench_generated_videos(
-                    generation_output_dir=root / "generation",
-                    generated_artifact_dir=generated_artifact_dir,
-                    artifact_manifest_path=artifact_manifest_path,
-                    output_artifact=request.output_artifact,
-                )
-            else:
-                materialized_count, placeholder_count = _materialize_generated_artifacts(
+            )
+            if materialized is None:
+                materialized = _materialize_generated_artifacts(
                     generation_output_dir=root / "generation",
                     generated_artifact_dir=generated_artifact_dir,
                     artifact_manifest_path=artifact_manifest_path,
@@ -942,7 +761,27 @@ def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | 
                         contract_fixture=request.contract_fixture,
                     ),
                 )
+            materialized_count, placeholder_count = materialized
 
+    if materialized_count == 0:
+        raise RuntimeError(
+            "no generated artifacts were available; benchmark evaluation was not started. "
+            f"Expected media under {generated_artifact_dir}."
+        )
+
+    benchmark_parameters = dict(request.benchmark_parameters or {})
+    if request.dataset_root is not None:
+        benchmark_parameters.setdefault("dataset_root", str(request.dataset_root))
+    if request.num_samples is not None and not {"limit", "num_samples"}.intersection(benchmark_parameters):
+        benchmark_parameters["limit"] = request.num_samples
+    if request.model_id is not None:
+        benchmark_parameters.setdefault("model_id", request.model_id)
+    if request.split is not None:
+        benchmark_parameters.setdefault("split", request.split)
+    reserved_benchmark_parameters = RESERVED_BENCHMARK_PARAMETERS.intersection(benchmark_parameters)
+    if reserved_benchmark_parameters:
+        names = ", ".join(sorted(reserved_benchmark_parameters))
+        raise ValueError(f"benchmark_parameters cannot override reserved fields: {names}")
     benchmark_result = run_benchmark_execution(
         request.benchmark_id,
         output_dir=root / "benchmark",
@@ -952,14 +791,13 @@ def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | 
         timeout_seconds=request.benchmark_timeout_seconds,
         workdir=request.benchmark_workdir,
         env_overrides=dict(request.benchmark_env or {}),
+        **benchmark_parameters,
     )
     benchmark_payload = benchmark_result.to_dict()
     generation_exit_code = 0 if generation_result is None else generation_result.exit_code
     artifact_exit_code = (
         1
-        if generation_result is not None
-        and generation_result.successful_sample_count > 0
-        and materialized_count == 0
+        if generation_result is not None and generation_result.successful_sample_count > 0 and materialized_count == 0
         else 0
     )
     official_mode_requires_evidence = mode in {"official-validation", "official-run"}
@@ -993,6 +831,10 @@ def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | 
         "status": status,
         "benchmark_id": request.benchmark_id,
         "benchmark_mode": mode,
+        "evaluation_kind": request.evaluation_kind,
+        "leaderboard_candidate": request.leaderboard_candidate,
+        "provenance": dict(request.evaluation_provenance or {}),
+        "benchmark_parameters": benchmark_parameters,
         "model_id": request.model_id or CONTRACT_VALIDATION_ID,
         "task": {
             "task_name": request.task_name,
@@ -1024,7 +866,9 @@ def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | 
             "benchmark": {
                 "benchmark_id": request.benchmark_id,
                 "benchmark_mode": mode,
-                "manifest_path": str(resolve_benchmark_manifest_path(request.benchmark_manifest_path, request.benchmark_id)),
+                "manifest_path": str(
+                    resolve_benchmark_manifest_path(request.benchmark_manifest_path, request.benchmark_id)
+                ),
             },
             "model": {
                 "model_id": request.model_id or CONTRACT_VALIDATION_ID,
@@ -1040,6 +884,7 @@ def run_model_benchmark(request: ModelBenchmarkRunRequest | Mapping[str, Any] | 
             "successful_sample_count": successful_samples,
             "failed_sample_count": failed_samples,
             "artifacts": dict(artifacts),
+            "provenance": dict(request.evaluation_provenance or {}),
         },
         config={
             "benchmark_mode": mode,

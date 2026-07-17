@@ -36,7 +36,7 @@ metadata:
     --output-dir tmp/benchmark_zoo/benchmark_contract/video-bench --json
   open_source_status: gated
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   base_model_dependencies:
   - video_bench_dataset_assets
@@ -111,7 +111,7 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoBenchContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
+    runtime_verified: false
     credential_gated: true
     surface: videobench_official_in_tree
     normalizer_available: true
@@ -180,7 +180,7 @@ tasks:
       benchmark_id: video-bench
       open_source_status: gated
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
       alpha_readiness:
         status: credential_gated_integrated

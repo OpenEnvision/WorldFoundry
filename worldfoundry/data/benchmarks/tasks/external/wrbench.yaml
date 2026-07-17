@@ -1,0 +1,160 @@
+benchmark: wrbench
+name: WRBench
+description: Natural-25 camera intervention benchmark for persistent visual world state.
+tags:
+- benchmark-zoo
+- external-official
+- wrbench
+- camera-controlled-video
+- persistent-state
+splits:
+- natural25
+metrics:
+  d1_cam_prec:
+    aggregation: mean
+  d1_cam_align_common_yaw:
+    aggregation: mean
+  d1_cam_align_static_hold:
+    aggregation: mean
+  d2_visual_integrity:
+    aggregation: mean
+  d3_visible_spatial_consistency:
+    aggregation: mean
+  d4_visible_state_consistency:
+    aggregation: mean
+  d5_reobservation_spatial_consistency:
+    aggregation: mean
+  d6_reobservation_state_consistency:
+    aggregation: mean
+  wrbench_average:
+    aggregation: mean
+    primary: true
+metadata:
+  source_kind: benchmark_zoo
+  benchmark_id: wrbench
+  name: WRBench
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id wrbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/wrbench --json
+  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  domain:
+  - video-generation
+  - camera-control
+  - persistent-state
+  task_type: camera_controlled_world_state_video_evaluation
+  status: integrated
+  maturity: contract_ready
+  release_status: experimental
+  open_source_status: in_tree_runtime
+  official_benchmark_verified: false
+  integration_evidence: false
+  leaderboard_valid: false
+  source_provenance:
+    official_repo:
+      url: https://github.com/JinPLu/WRBench
+      head_sha: 629595dc60ec08a29711af0377280c4ac9dd40bc
+      role: vendored_in_tree
+    paper:
+      url: https://arxiv.org/abs/2606.20545
+  input_contract:
+  - prompt
+  - first_frame
+  - camera_intent
+  - camera_sidecar
+  - generated_video
+  output_contract:
+  - generated_video
+  - scorecard
+  - raw_metric_table
+  runtime:
+    kind: in_tree_official_source
+    root: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime
+    root_env: WORLDFOUNDRY_WRBENCH_ROOT
+    results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  metric_protocol:
+    schema_version: wrbench_latest_d1_d6_metrics_v3
+    metric_ids:
+    - d1_cam_prec
+    - d1_cam_align_common_yaw
+    - d1_cam_align_static_hold
+    - d2_visual_integrity
+    - d3_visible_spatial_consistency
+    - d4_visible_state_consistency
+    - d5_reobservation_spatial_consistency
+    - d6_reobservation_state_consistency
+    - wrbench_average
+    primary_metric: wrbench_average
+    policies:
+    - D1-CamPrec and D1-CamAlign are separate metrics.
+    - D5/D6 use conditional re-observation denominators.
+  data_refs:
+    task_yaml: worldfoundry/data/benchmarks/tasks/external/wrbench.yaml
+    natural25: worldfoundry/data/benchmarks/assets/wrbench/natural25
+    in_tree_runtime_paths:
+    - worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
+  runner_availability:
+    available: true
+    runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+    runner_script_available: true
+    task_yaml_available: true
+    runtime_verified: false
+    normalizer_verified: true
+    surface: wrbench_official_in_tree
+  integration_status: integrated
+tasks:
+  wrbench_natural25:
+    benchmark_name: wrbench
+    protocol: external_official_benchmark
+    capability_track: camera_controlled_world_model
+    schema_type: generated_video_set
+    input_keys:
+    - prompt
+    - first_frame
+    - family_id
+    - variant_id
+    - reasoning_tier
+    - camera_intent
+    output_keys:
+    - generated_video
+    - camera_sidecar
+    metric_ids:
+    - d1_cam_prec
+    - d1_cam_align_common_yaw
+    - d1_cam_align_static_hold
+    - d2_visual_integrity
+    - d3_visible_spatial_consistency
+    - d4_visible_state_consistency
+    - d5_reobservation_spatial_consistency
+    - d6_reobservation_state_consistency
+    - wrbench_average
+    metric_groups:
+    - camera
+    - visible_consistency
+    - reobservation
+    dataset:
+      hf_dataset_id: WRBench/wrbench-natural25
+      split: train
+      source: bundled_in_tree
+      expected_rows: 500
+    artifact_contract:
+      required:
+        generated_video:
+          kind: video
+        first_frame:
+          kind: image
+      optional:
+        camera_sidecar:
+          kind: json
+        target_camera_poses:
+          kind: array
+    evaluation_protocol:
+    - name: in_tree_wrbench_d1_d6
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id wrbench --mode official-validation --official-results-path <official_results.json_or_csv> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+    runtime_requirements:
+      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
+      generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+      results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
+      runtime_config_env: WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG

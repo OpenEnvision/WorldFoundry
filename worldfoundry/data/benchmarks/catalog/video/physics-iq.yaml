@@ -1,204 +1,103 @@
 id: physics-iq
-name: Physics-IQ
-benchmark_kind:
-- image-to-video
-- physical-understanding
-- video-generation-quality
-domains:
-- physics
-- solid-mechanics
-- fluid-dynamics
-- optics
-- thermodynamics
-- magnetism
-modalities:
-- image
-- video
+name: Physics-IQ Original
+benchmark_kind: [image-to-video, physical-understanding, video-generation-quality]
+domains: [physics, solid-mechanics, fluid-dynamics, optics, thermodynamics, magnetism]
+modalities: [image, video]
 status: confirmed_official_code
 official_sources:
   github:
     url: https://github.com/google-deepmind/physics-IQ-benchmark
-    verified_by: git ls-remote https://github.com/google-deepmind/physics-IQ-benchmark HEAD
-    head_sha: 52e52a14d3a7284ae24d8aff98fe982ac7a60971
+    head_sha: b02cf26dc15d559d0ca4f63a6917070312dde185
   paper_url: https://arxiv.org/abs/2501.09038
   project_page: https://physics-iq.github.io/
 benchmark_assets:
   prompt_suite:
-    status: official_repo_data
+    status: bundled_in_tree
+    path: worldfoundry/data/benchmarks/assets/physics-iq/descriptions/descriptions_original.csv
+  dataset:
+    status: external_official_media
+    directory_name: physics-IQ-benchmark
 evaluation_surface:
-  purpose: Physical understanding benchmark for generative video models.
-  physics_categories: 5
-  requires_dataset_scorer: true
+  purpose: Original Physics-IQ physical-understanding protocol.
+  raw_metrics: [spatial_iou, weighted_spatial_iou, spatiotemporal_iou, mse]
+  score_protocol: original_global_aggregation
 metrics:
 - id: physics_iq_score
   name: Physics-IQ Score
-  description: Physics-IQ Score normalized benchmark score.
+  description: Original global-aggregation score (official final_score_orig).
   higher_is_better: true
   leaderboard_key: physics_iq_score
   aggregator: mean
-  output_unit: score
-- id: solid_mechanics
-  name: Solid Mechanics
-  description: Solid Mechanics normalized benchmark score.
-  higher_is_better: true
-  leaderboard_key: solid_mechanics
-  aggregator: mean
-  output_unit: score
-- id: fluid_dynamics
-  name: Fluid Dynamics
-  description: Fluid Dynamics normalized benchmark score.
-  higher_is_better: true
-  leaderboard_key: fluid_dynamics
-  aggregator: mean
-  output_unit: score
-- id: optics
-  name: Optics
-  description: Optics normalized benchmark score.
-  higher_is_better: true
-  leaderboard_key: optics
-  aggregator: mean
-  output_unit: score
-- id: thermodynamics
-  name: Thermodynamics
-  description: Thermodynamics normalized benchmark score.
-  higher_is_better: true
-  leaderboard_key: thermodynamics
-  aggregator: mean
-  output_unit: score
-- id: magnetism
-  name: Magnetism
-  description: Magnetism normalized benchmark score.
-  higher_is_better: true
-  leaderboard_key: magnetism
-  aggregator: mean
-  output_unit: score
-- id: physics_iq_average
-  name: Physics-IQ Average
-  description: Physics-IQ Average normalized benchmark score.
-  higher_is_better: true
-  leaderboard_key: physics_iq_average
-  aggregator: mean
-  output_unit: score
+  output_unit: rate
   primary: true
+- id: physics_iq_stable_score
+  name: Physics-IQ Stable Score
+  description: Component-clipped stable score emitted by the current official implementation.
+  higher_is_better: true
+  leaderboard_key: physics_iq_stable_score
+  aggregator: mean
+  output_unit: rate
+- id: physics_iq_spatiotemporal
+  name: Spatiotemporal IoU Ratio
+  higher_is_better: true
+  aggregator: mean
+- id: physics_iq_spatial
+  name: Spatial IoU Ratio
+  higher_is_better: true
+  aggregator: mean
+- id: physics_iq_weighted_spatial
+  name: Weighted Spatial IoU Ratio
+  higher_is_better: true
+  aggregator: mean
+- id: physics_iq_mse_penalty
+  name: MSE Penalty
+  higher_is_better: false
+  aggregator: mean
 runner:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
-  run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-    worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py --run-official
-    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir
-    "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
-  validation_command:
-  - worldfoundry-eval
-  - zoo
-  - benchmark-run
-  - --benchmark-id
-  - physics-iq
-  - --mode
-  - official-validation
-  - --official-results-path
-  - <official_results.json>
-  - --generated-artifact-dir
-  - <generated_videos>
-  - --output-dir
-  - <out>
-  - --json
+  run_command: >-
+    PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
+    worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
+    --benchmark-id physics-iq --protocol original --run-official
+    --dataset-root "${WORLDFOUNDRY_PHYSICS_IQ_ORIGINAL_ROOT}"
+    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}"
+    --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   runtime:
     kind: in_tree_official_runtime
-    repo_url: https://github.com/google-deepmind/physics-IQ-benchmark.git
-    repo_revision: 52e52a14d3a7284ae24d8aff98fe982ac7a60971
+    upstream_revision: b02cf26dc15d559d0ca4f63a6917070312dde185
     root: worldfoundry/evaluation/tasks/execution/runners/physics_iq
-    bundled_descriptions: worldfoundry/data/benchmarks/assets/physics-iq/descriptions/descriptions.csv
-    results_path_env: WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH
-    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-    descriptions_file: descriptions/descriptions.csv
-  expected_artifacts:
-  - scorecard.json
-  - benchmark_contract.json
-  - raw_metric_table.jsonl
-  - raw_metric_table.jsonl
-  - results_summary.csv
-  - per_sample_scores.jsonl
-  verification_status: official_runtime_ready
-  notes:
-  - WorldFoundry runs in-tree Physics-IQ scorer normalization over descriptions.csv and generated I2V videos.
-  - Use WORLDFOUNDRY_PHYSICS_IQ_SCORER_BACKEND to select the scorer backend.
-  - Full leaderboard parity still requires physics-IQ-benchmark dataset assets and 198 official 5-second videos.
-  required_env:
-  - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-  optional_env:
-  - WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS
-  - WORLDFOUNDRY_PHYSICS_IQ_ROOT
-  - WORLDFOUNDRY_PHYSICS_IQ_SCORER_BACKEND
-  - WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH
-  - WORLDFOUNDRY_PHYSICS_IQ_STRICT
+    source_checkout_required: false
+    bundled_descriptions: worldfoundry/data/benchmarks/assets/physics-iq/descriptions/descriptions_original.csv
+  expected_artifacts: [scorecard.json, benchmark_contract.json, raw_metrics.csv, official_metrics.json, results_summary.csv, raw_metric_table.jsonl, per_sample_scores.jsonl]
+  verification_status: in_tree_raw_video_evaluator
+  required_env: [WORLDFOUNDRY_PHYSICS_IQ_ORIGINAL_ROOT, WORLDFOUNDRY_GENERATED_ARTIFACT_DIR]
 integration:
   status: integrated
-  evidence:
-    framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id physics-iq --mode official-validation
-      --official-results-path <results_summary.csv> --generated-artifact-dir <generated_videos> --output-dir <out>
-      --json
-    normalizer_surface: physics_iq_official_in_tree
-    official_runtime: worldfoundry-eval zoo benchmark-run --benchmark-id physics-iq --mode official-run
-      --generated-artifact-dir <generated_videos> --output-dir <out> --json
-    dataset_readiness: descriptions/descriptions.csv
-    full_test_harness_ready: true
-    full_suite_testable: true
-    full_suite_verified: false
+  notes:
+  - Prompt materialization, mask generation, raw video metrics, and original score aggregation execute in tree.
+  - Official media are data assets and are not vendored; the upstream source repository is provenance only.
 release_status: experimental
-maturity: contract_ready
-full_test_harness_ready: true
-full_suite_testable: true
-full_suite_execution_recorded: false
+maturity: official_runtime_ready
 open_source_status: in_tree_runtime
 official_benchmark_verified: false
 integration_evidence: true
 leaderboard_valid: false
 requires:
-- bundled descriptions.csv or WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS override
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-- official_results_path or WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH for normalization-only runs
-framework_acceptance:
-- Physics-IQ integration is OK when the in-tree scorer runtime or caller-supplied results CSV, descriptions.csv, and
-  generated videos pass strict coverage checks and all declared metrics are normalized.
-blockers:
-- Leaderboard parity requires physics-IQ-benchmark dataset assets, 198 generated 5-second videos, and full upstream
-  mask/scorer execution.
+- Official physics-IQ-benchmark media directory
+- 198 generated five-second videos from the bundled prompt suite
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/physics-iq.yaml
-  bundled_asset_paths:
-  - worldfoundry/data/benchmarks/assets/physics-iq/descriptions/descriptions.csv
+  bundled_assets: worldfoundry/data/benchmarks/assets/physics-iq
 official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
 runner_availability:
   available: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQContract
-  runner_script_available: true
-  task_yaml_available: true
   runtime_verified: true
-  surface: physics_iq_official_in_tree
-  normalizer_verified: false
+  runtime_verification_scope: bounded_complete_three_view_scenario
+  full_suite_verified: false
 dataset:
-  not_applicable: true
-  reason: Official benchmark assets are supplied by the source repository or caller-provided generated artifacts; no
-    Hugging Face dataset is required for this contract entry.
-optional_base_model_dependencies:
-- grounded_depth_segmentation_stack
-validation_command:
-- worldfoundry-eval
-- zoo
-- benchmark-run
-- --benchmark-id
-- physics-iq
-- --mode
-- official-validation
-- --official-results-path
-- <results_summary.csv>
-- --generated-artifact-dir
-- <generated_videos>
-- --output-dir
-- <out>
-- --json
+  not_applicable: false
+  reason: Official reference videos and real masks must be downloaded separately.
+validation_command: [worldfoundry-eval, zoo, benchmark-run, --benchmark-id, physics-iq, --mode, official-validation, --official-results-path, <raw_metrics.csv>, --output-dir, <out>, --json]
 checkpoint_refs: []
-artifact_layout:
-  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-  output_artifact: benchmark_scorecard
-  filename_template: scorecard.json

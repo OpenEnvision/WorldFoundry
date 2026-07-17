@@ -15,8 +15,7 @@ METRIC_ORDER = (
     "semantic_adherence",
     "physical_commonsense",
     "joint_score",
-    "rule_classification_accuracy",
-    "videophy2_average",
+    "rule_followed_rate",
 )
 
 METRIC_SPECS: dict[str, dict[str, Any]] = {
@@ -37,21 +36,24 @@ METRIC_SPECS: dict[str, dict[str, Any]] = {
         "group": "general",
         "higher_is_better": True,
         "description": "Fraction of prompts with SA>=4 and PC>=4.",
-    },
-    "rule_classification_accuracy": {
-        "name": "Rule Classification Accuracy",
-        "group": "rule",
-        "higher_is_better": True,
-        "description": "Accuracy of physical-rule grounding (followed vs violated).",
-    },
-    "videophy2_average": {
-        "name": "VideoPhy2 Average",
-        "group": "aggregate",
-        "higher_is_better": True,
-        "description": "Primary joint performance metric.",
         "primary": True,
     },
+    "rule_followed_rate": {
+        "name": "Rule Followed Rate",
+        "group": "rule",
+        "higher_is_better": True,
+        "description": "Fraction of determined physical rules judged as followed rather than violated.",
+    },
 }
+
+SUMMARY_METRIC_ALIASES = {
+    "semantic_adherence": "semantic_adherence",
+    "physical_commonsense": "physical_commonsense",
+    "joint_score": "joint_score",
+    "rule_followed_rate": "rule_followed_rate",
+    "physical_rule_followed_rate": "rule_followed_rate",
+}
+DEPRECATED_METRIC_IDS = frozenset({"rule_classification_accuracy", "videophy2_average"})
 
 
 def _is_summary_rows(rows: Sequence[Mapping[str, Any]]) -> bool:
@@ -61,19 +63,42 @@ def _is_summary_rows(rows: Sequence[Mapping[str, Any]]) -> bool:
     )
 
 
-def _summary_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
+def _summary_metrics(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, float], dict[str, float]]:
     metrics: dict[str, float] = {}
+    deprecated_metrics: dict[str, float] = {}
     for row in rows:
-        metric_id = str(row.get("metric_id") or row.get("Metric") or row.get("metric") or "").strip()
+        raw_metric_id = str(row.get("metric_id") or row.get("Metric") or row.get("metric") or "").strip()
         score = row.get("score") if "score" in row else row.get("value")
-        if not metric_id or score in (None, ""):
+        if not raw_metric_id or score in (None, ""):
             continue
         try:
             value = float(score)
         except (TypeError, ValueError):
             continue
-        metrics[metric_id] = value / 100.0 if value > 1.0 else value
-    return metrics
+        value = value / 100.0 if value > 1.0 else value
+        if raw_metric_id in DEPRECATED_METRIC_IDS:
+            deprecated_metrics[raw_metric_id] = value
+            continue
+        metric_id = SUMMARY_METRIC_ALIASES.get(raw_metric_id)
+        if metric_id is not None:
+            metrics[metric_id] = value
+    return metrics, deprecated_metrics
+
+
+def _deprecated_row_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
+    deprecated: dict[str, float] = {}
+    for metric_id in DEPRECATED_METRIC_IDS:
+        values: list[float] = []
+        for row in rows:
+            value = row.get(metric_id)
+            try:
+                if value not in (None, ""):
+                    values.append(float(value))
+            except (TypeError, ValueError):
+                continue
+        if values:
+            deprecated[metric_id] = sum(values) / len(values)
+    return deprecated
 
 
 def load_results_rows(results_path: Path) -> list[dict[str, Any]]:
@@ -98,10 +123,14 @@ def compute_videophy2_metrics(
     results_path: Path | None = None,
 ) -> dict[str, Any]:
     if _is_summary_rows(rows):
-        direct_metrics = _summary_metrics(rows)
+        direct_metrics, deprecated_metrics = _summary_metrics(rows)
         return {
             "metrics": direct_metrics,
-            "components": {"row_count": len(rows), "format": "summary_csv"},
+            "components": {
+                "row_count": len(rows),
+                "format": "summary_csv",
+                "deprecated_metrics": deprecated_metrics,
+            },
         }
 
     official_scores = official_scores_from_records(list(rows), results_path)
@@ -111,5 +140,9 @@ def compute_videophy2_metrics(
     }
     return {
         "metrics": direct_metrics,
-        "components": {"row_count": len(rows), "format": "official_dimension_rows"},
+        "components": {
+            "row_count": len(rows),
+            "format": "official_dimension_rows",
+            "deprecated_metrics": _deprecated_row_metrics(rows),
+        },
     }

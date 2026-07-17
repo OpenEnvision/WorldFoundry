@@ -2,7 +2,7 @@ benchmark_ids:
 - ewmbench
 blocked_reason: EWMBench official-result normalization is framework-verified; leaderboard parity still requires official
   judge assets, full-suite generated artifacts, and normalized upstream result files.
-environment_id: worldplay-ewmbench-contract
+environment_id: worldfoundry-unified-cu128
 id: ewmbench
 name: EWMBench
 needs_new_env: false
@@ -23,11 +23,11 @@ required_assets:
   in_tree_runtime_paths:
   - worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/ewmbench.yaml
-required_env:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-- WORLDFOUNDRY_EWMBENCH_RESULTS_PATH
+required_env: []
 optional_env:
 - WORLDFOUNDRY_EWMBENCH_ROOT
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- WORLDFOUNDRY_EWMBENCH_RESULTS_PATH
 required_imports:
 - numpy
 required_packages:
@@ -40,7 +40,7 @@ required_paths:
 - id: in_tree_runtime_root
   path: worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
 requires_cuda_visibility: false
-status: in_tree_official_runtime_ready_full_upstream_pending
+status: in_tree_result_normalizer_ready_upstream_runtime_pending
 optional_imports:
 - numpy
 base_model_dependencies:

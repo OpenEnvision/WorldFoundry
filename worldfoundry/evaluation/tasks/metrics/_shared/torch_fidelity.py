@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+from .imports import prepend_import_path
 
 _VENDOR_ROOT = Path(__file__).resolve().parent / "vendor"
 
@@ -15,9 +16,7 @@ def vendor_root() -> Path:
 
 
 def ensure_torch_fidelity() -> None:
-    root = str(_VENDOR_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    prepend_import_path(_VENDOR_ROOT)
 
 
 @lru_cache(maxsize=1)

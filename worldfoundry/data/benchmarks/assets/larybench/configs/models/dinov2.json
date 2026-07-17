@@ -1,0 +1,14 @@
+{
+  "type": "Dinov2LaryWrap",
+  "name": "dinov2",
+  "dim": 1024,
+  "quant_dim": 32,
+  "codebook_size": 8,
+  "image_size": 224,
+  "patch_size": 14,
+  "spatial_depth": 4,
+  "temporal_depth": 4,
+  "dim_head": 64,
+  "heads": 16,
+  "code_seq_len": 16
+}

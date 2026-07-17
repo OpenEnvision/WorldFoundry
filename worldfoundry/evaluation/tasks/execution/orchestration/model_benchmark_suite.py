@@ -14,24 +14,30 @@ Sections:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.evaluation.utils import jsonable, write_json, write_jsonl, write_text
+from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+from worldfoundry.evaluation.models.catalog.manifest import model_zoo_entry_to_world_model_manifest
+from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import resolve_benchmark_manifest_path
 from worldfoundry.evaluation.tasks.catalog.schema import BenchmarkZooEntry
 from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
 from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.utils import BENCHMARKS_DATA_ROOT, BENCHMARK_ZOO_DIR, MODEL_ZOO_DIR
-from worldfoundry.evaluation.utils import load_manifest
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
-from worldfoundry.evaluation.models.catalog.manifest import model_zoo_entry_to_world_model_manifest
+from worldfoundry.evaluation.utils import (
+    BENCHMARK_ZOO_DIR,
+    MODEL_ZOO_DIR,
+    jsonable,
+    load_manifest,
+    write_json,
+    write_jsonl,
+    write_text,
+)
 
 from .cache import json_sha256
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import resolve_benchmark_manifest_path
+from .fidelity import model_benchmark_fidelity
 from .model_benchmark import CONTRACT_VALIDATION_ID, ModelBenchmarkRunRequest, run_model_benchmark
-
 
 # ---------------------------------------------------------------------------
 # Schema constants and artifact compatibility
@@ -105,6 +111,7 @@ class ModelBenchmarkSuiteRequest:
     benchmark_timeout_seconds: float | None = None
     benchmark_workdir: str | Path | None = None
     benchmark_env: Mapping[str, Any] | None = None
+    benchmark_parameters: Mapping[str, Any] | None = None
     materialize_placeholders: bool | None = None
     contract_fixture: bool = False
     fail_on_generation_error: bool = False
@@ -115,6 +122,7 @@ class ModelBenchmarkSuiteRequest:
 @dataclass(frozen=True)
 class ModelBenchmarkSuiteResult:
     """Aggregated suite status, cell records, and artifact paths."""
+
     schema_version: str
     status: str
     exit_code: int
@@ -151,6 +159,7 @@ class ModelBenchmarkSuiteResult:
 @dataclass(frozen=True)
 class _SuiteCellPlan:
     """Internal plan for one model × benchmark matrix cell."""
+
     model_id: str
     requested_model_id: str
     known_model: bool
@@ -162,6 +171,7 @@ class _SuiteCellPlan:
     required_artifacts: tuple[str, ...]
     compatibility: str
     reason: str | None
+    evaluation_provenance: Mapping[str, Any]
     cell_fingerprint: str
 
     def to_base_cell(self) -> dict[str, Any]:
@@ -176,6 +186,7 @@ class _SuiteCellPlan:
             "output_artifact": self.output_artifact,
             "required_artifacts": list(self.required_artifacts),
             "compatibility": self.compatibility,
+            "provenance": dict(self.evaluation_provenance),
             "cell_fingerprint": self.cell_fingerprint,
         }
 
@@ -329,7 +340,9 @@ def _selected_benchmarks(request: ModelBenchmarkSuiteRequest) -> tuple[Benchmark
 def _selected_model_ids(request: ModelBenchmarkSuiteRequest) -> tuple[str, ...]:
     """Maps selected model IDs onto list of strings, falling back to validation fixtures if necessary."""
     presets = _selected_suite_presets(request)
-    model_ids = tuple(dict.fromkeys((*_preset_values(presets, "model_ids"), *[str(item) for item in request.model_ids])))
+    model_ids = tuple(
+        dict.fromkeys((*_preset_values(presets, "model_ids"), *[str(item) for item in request.model_ids]))
+    )
     if model_ids:
         return model_ids
     manifest_dir = Path(request.model_manifest_dir) if request.model_manifest_dir is not None else None
@@ -421,30 +434,103 @@ def _cell_artifact_selection(
     if output_artifact is None:
         return None, required, "incompatible", f"model outputs {list(outputs)} do not satisfy {list(acceptable)}"
     if known_model and output_artifact not in outputs and "generated_artifact" not in outputs:
-        return output_artifact, required, "incompatible", (
-            f"model outputs {list(outputs)} do not include required artifact {output_artifact!r}"
+        return (
+            output_artifact,
+            required,
+            "incompatible",
+            (f"model outputs {list(outputs)} do not include required artifact {output_artifact!r}"),
         )
-    missing_required = [item for item in required if known_model and item not in outputs and "generated_artifact" not in outputs]
+    missing_required = [
+        item for item in required if known_model and item not in outputs and "generated_artifact" not in outputs
+    ]
     if missing_required:
-        return output_artifact, required, "incompatible", (
-            f"model outputs {list(outputs)} do not include required artifacts {missing_required}"
+        return (
+            output_artifact,
+            required,
+            "incompatible",
+            (f"model outputs {list(outputs)} do not include required artifacts {missing_required}"),
         )
     return output_artifact, required, "compatible" if known_model else "unknown", None
 
 
 def _benchmark_unavailable_reason(entry: BenchmarkZooEntry, *, mode: str) -> str | None:
-    """Confirms if a benchmark-zoo entry is physically runnable or restricted by status constraints."""
+    """Return why a benchmark cannot be attempted through the suite runner.
+
+    Runtime availability and evidence strength are deliberately separate.  An
+    integrated runner may be useful for a bounded run (and fail closed when an
+    asset is missing) before the full official benchmark has been verified.
+    The resulting scorecard carries that evidence boundary; planning must not
+    turn a conservative verification claim into an execution ban.
+    """
     if mode == "contract" and entry.runner_target:
         return None
-    if entry.integration_status == "integrated" and entry.verification_status == "verified":
-        return None
+    if entry.integration_status == "integrated" and entry.runner_target:
+        if mode == "official-run":
+            # The workspace registry is the executable argument contract for
+            # built-in model -> generated-artifact -> benchmark runs.  Keep
+            # result importers usable in normalizer mode without advertising
+            # them as raw-artifact evaluators in a matrix plan.
+            from ..runners.workspace_registry import workspace_benchmark_runtime_hint
+
+            runtime_hint = workspace_benchmark_runtime_hint(entry.benchmark_id)
+            if runtime_hint:
+                if runtime_hint.get("supports_official_runtime") is True and runtime_hint.get(
+                    "accepts_generated_artifacts"
+                ) is True:
+                    return None
+                return (
+                    "benchmark has an existing-result normalizer/importer but no official runtime "
+                    "that accepts generic generated artifacts; use normalizer mode or the "
+                    "benchmark-specific prepared layout"
+                )
+            # A new manifest need not edit the central registry when it ships
+            # its own explicit official-run command.
+            if entry.run_command:
+                return None
+            return "benchmark has no executable official-run route for generated artifacts"
+        if mode in {"official-validation", "normalizer"} and (entry.validation_command or entry.run_command):
+            return None
     return (
         f"benchmark is {entry.integration_status}/{entry.verification_status}; "
-        "only integrated/verified benchmark-zoo runners are runnable"
+        "an integrated benchmark with a mode-compatible executable route is required"
     )
 
 
-def _model_manifest_dir_for_cell(model_id: str, model_manifest_dir: str | Path | None, known_model: bool) -> str | Path | None:
+def _benchmark_aware_provenance(
+    provenance: Mapping[str, Any],
+    benchmark: BenchmarkZooEntry,
+) -> dict[str, Any]:
+    """Bound a planned claim by the benchmark's checked-in evidence.
+
+    Fidelity describes the requested protocol, while catalog evidence records
+    what the in-tree benchmark implementation has actually established.  A
+    bounded official component can therefore remain executable without being
+    advertised as benchmark-comparable or leaderboard-eligible.
+    """
+
+    payload = dict(provenance)
+    claim = dict(payload.get("claim") or {})
+    reasons = list(payload.get("reasons") or ())
+    full_official_evidence = bool(
+        benchmark.official_benchmark_verified
+        and benchmark.integration_evidence
+        and benchmark.verification_status == "verified"
+    )
+    if not full_official_evidence:
+        claim["level"] = "diagnostic"
+        claim["leaderboard_candidate"] = False
+        reasons.append("benchmark catalog does not establish full official-suite evidence")
+    elif not benchmark.leaderboard_valid:
+        claim["leaderboard_candidate"] = False
+        reasons.append("benchmark catalog is not leaderboard-valid")
+    payload["claim"] = claim
+    payload["reasons"] = list(dict.fromkeys(str(reason) for reason in reasons if str(reason).strip()))
+    return payload
+
+
+def _model_manifest_dir_for_cell(
+    model_id: str, model_manifest_dir: str | Path | None, known_model: bool
+) -> str | Path | None:
     """Filters model manifest dir search paths depending on model catalog recognition."""
     if known_model:
         return model_manifest_dir
@@ -524,6 +610,23 @@ def _plan_cell(
         output_override=request.output_artifact,
         required_override=request.required_artifacts,
     )
+    fidelity = model_benchmark_fidelity(
+        benchmark_mode=request.mode,
+        custom_data=any(
+            value not in (None, "")
+            for value in (
+                request.requests_path,
+                request.task_name,
+                request.dataset_root,
+                request.dataset_id,
+                request.generated_artifact_dir,
+            )
+        ),
+        sample_limited=request.num_samples is not None,
+        benchmark_parameters=request.benchmark_parameters,
+        producer="catalog_model" if known_model else "custom_model",
+    )
+    evaluation_provenance = _benchmark_aware_provenance(fidelity.to_dict(), benchmark)
     return _SuiteCellPlan(
         model_id=canonical_model_id,
         requested_model_id=model_id,
@@ -536,6 +639,7 @@ def _plan_cell(
         required_artifacts=tuple(required_artifacts),
         compatibility="benchmark_unavailable" if benchmark_unavailable_reason else compatibility,
         reason=reason or benchmark_unavailable_reason,
+        evaluation_provenance=evaluation_provenance,
         cell_fingerprint=_fingerprint_cell(
             run_fingerprint=run_fingerprint,
             model_id=canonical_model_id,
@@ -597,9 +701,14 @@ def _run_cell(
             benchmark_timeout_seconds=request.benchmark_timeout_seconds,
             benchmark_workdir=request.benchmark_workdir,
             benchmark_env=request.benchmark_env,
+            benchmark_parameters=request.benchmark_parameters,
             materialize_placeholders=request.materialize_placeholders,
             contract_fixture=request.contract_fixture,
             fail_on_generation_error=request.fail_on_generation_error,
+            evaluation_provenance=plan.evaluation_provenance,
+            leaderboard_candidate=bool(
+                dict(plan.evaluation_provenance.get("claim") or {}).get("leaderboard_candidate")
+            ),
         )
     )
     payload = result.to_dict()
@@ -722,8 +831,14 @@ def _run_summary_paths_and_labels(cells: Sequence[Mapping[str, Any]]) -> tuple[l
     return paths, labels
 
 
-def _write_empty_comparison(output_json: Path, output_md: Path) -> dict[str, Any]:
-    """Write stub comparison artifacts when no cell summaries exist."""
+def _write_empty_comparison(
+    output_json: Path,
+    output_md: Path,
+    *,
+    issue: str = "no completed run summaries found",
+) -> dict[str, Any]:
+    """Write a valid empty comparison artifact with an actionable reason."""
+
     from worldfoundry.evaluation.reporting import RUN_COMPARISON_SCHEMA_VERSION, build_markdown_comparison
 
     payload = {
@@ -734,11 +849,12 @@ def _write_empty_comparison(output_json: Path, output_md: Path) -> dict[str, Any
         "datasets": [],
         "metric_ids": [],
         "available_metric_ids": [],
+        "common_metric_ids": [],
         "runs": [],
         "rows": [],
         "metrics": {},
         "best_by_metric": {},
-        "issues": ["no completed run summaries found"],
+        "issues": [issue],
         "artifacts": {
             "comparison_json": str(output_json.resolve()),
             "comparison_markdown": str(output_md.resolve()),
@@ -781,16 +897,29 @@ def _write_suite_artifacts(root: Path, cells: Sequence[Mapping[str, Any]]) -> di
 
     comparison_json = root / "comparison" / "comparison.json"
     comparison_md = root / "comparison" / "comparison.md"
-    comparison = (
-        write_run_comparison(
-            summary_paths,
-            labels=labels,
-            output_json=comparison_json,
-            output_md=comparison_md,
+    completed_benchmark_ids = {
+        str(cell.get("benchmark_id"))
+        for cell in cells
+        if cell.get("run_summary_path") and Path(str(cell["run_summary_path"])).is_file()
+    }
+    if len(completed_benchmark_ids) > 1:
+        comparison = _write_empty_comparison(
+            comparison_json,
+            comparison_md,
+            issue="suite spans multiple benchmarks; select one benchmark from index.json before comparing runs",
         )
-        if summary_paths
-        else _write_empty_comparison(comparison_json, comparison_md)
-    )
+    elif summary_paths:
+        try:
+            comparison = write_run_comparison(
+                summary_paths,
+                labels=labels,
+                output_json=comparison_json,
+                output_md=comparison_md,
+            )
+        except ValueError as exc:
+            comparison = _write_empty_comparison(comparison_json, comparison_md, issue=str(exc))
+    else:
+        comparison = _write_empty_comparison(comparison_json, comparison_md)
 
     return {
         "scorecards_json": str(scorecards_json),
@@ -821,6 +950,8 @@ def run_model_benchmark_suite(
     * Aggregate index, comparison, and ``suite_manifest.json``.
     """
     suite_request = _coerce_request(request, kwargs)
+    if suite_request.contract_fixture and suite_request.mode != "contract":
+        suite_request = replace(suite_request, mode="contract")
     root = Path(suite_request.output_dir).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     run_fingerprint = _fingerprint_request(suite_request)
@@ -854,7 +985,9 @@ def run_model_benchmark_suite(
                 continue
             if not suite_request.execute:
                 status = "planned" if not plan.reason else "blocked"
-                cells.append({**base_cell, "status": status, "exit_code": 0 if not plan.reason else 1, "reason": plan.reason})
+                cells.append(
+                    {**base_cell, "status": status, "exit_code": 0 if not plan.reason else 1, "reason": plan.reason}
+                )
                 continue
             if plan.output_artifact is None:
                 cells.append({**base_cell, "status": "failed", "exit_code": 1, "reason": plan.reason})

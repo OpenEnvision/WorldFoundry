@@ -2,7 +2,7 @@ benchmark_ids:
 - phyfps-bench-gen
 credential_gated_reason: PhyFPS-Bench-Gen official-run requires Visual Chronometer checkpoint access and generated 
   videos; no external VLM/API judge is required.
-environment_id: worldplay-video-judge
+environment_id: worldfoundry-unified-cu128
 id: phyfps-bench-gen
 name: PhyFPS-Bench-Gen
 needs_new_env: false
@@ -20,9 +20,9 @@ required_assets:
   in_tree_runtime_paths:
   - worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer
   task_yaml: worldfoundry/data/benchmarks/tasks/external/phyfps-bench-gen.yaml
-required_env:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+required_env: []
 optional_env:
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_PHYFPS_BENCH_GEN_ROOT
 - WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT
 - WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST

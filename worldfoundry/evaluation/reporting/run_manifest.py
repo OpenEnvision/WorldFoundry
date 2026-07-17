@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.utils import jsonable, write_json
-from worldfoundry.runtime import check_required_env
+from worldfoundry.runtime.env import check_required_env
 from worldfoundry.evaluation.utils import git_metadata, package_version, stable_hash
 
 # ── Schema version identifiers ──────────────────────────────

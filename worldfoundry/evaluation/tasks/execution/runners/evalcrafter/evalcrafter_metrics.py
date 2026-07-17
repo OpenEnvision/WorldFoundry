@@ -6,7 +6,7 @@ import ast
 import math
 import re
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 METRIC_ORDER = (
     "visual_quality",
@@ -95,16 +95,6 @@ RESULT_PATTERNS = {
     "evalcrafter_total": r"Total\s+([-+]?\d+(?:\.\d+)?)",
 }
 
-QUALITY_WEIGHTS = (0.03004555, 0.02887537, -0.01382558)
-QUALITY_INTERCEPT = 0.08707462696457707
-TEMPORAL_WEIGHTS = (2.92492244, 0.45475678, 0.17561504)
-TEMPORAL_INTERCEPT = -3.42274050899774
-MOTION_WEIGHTS = (-0.01641512, -0.01340959, -0.10517075)
-MOTION_INTERCEPT = 0.1297562020899355
-T2V_ALIGN_WEIGHTS = (-0.0701577, 0.02561424, 0.05566109, 0.0173974, -0.020954, 0.03069167, 0.00372351, 0.22686202)
-T2V_ALIGN_INTERCEPT = -0.30683181901390977
-
-
 def scalar(value: Any) -> float | None:
     if isinstance(value, bool) or value is None:
         return None
@@ -169,76 +159,3 @@ def load_upstream_results(results_path: Path) -> tuple[dict[str, dict[str, Any]]
             "sample_count": None,
         }
     return extracted, final_result_path
-
-
-def compute_pillar_scores(raw_metrics: Mapping[str, float | None]) -> dict[str, float]:
-    metrics = {key: scalar(value) for key, value in raw_metrics.items()}
-    quality = (
-        sum(
-            weight * metric
-            for weight, metric in zip(
-                (w * 5 for w in QUALITY_WEIGHTS),
-                (
-                    (metrics.get("vqa_aesthetic") or 0.0) / 100.0,
-                    (metrics.get("vqa_technical") or 0.0) / 100.0,
-                    (metrics.get("inception_score") or 0.0) / 100.0,
-                ),
-            )
-        )
-        + QUALITY_INTERCEPT * 5
-    ) * 100.0
-    temporal = (
-        sum(
-            weight * metric
-            for weight, metric in zip(
-                (w * 5 for w in TEMPORAL_WEIGHTS),
-                (
-                    metrics.get("clip_temp_score") or 0.0,
-                    1.0 - (metrics.get("warping_error") or 0.0),
-                    metrics.get("face_consistency_score") or 0.0,
-                ),
-            )
-        )
-        + TEMPORAL_INTERCEPT * 5
-    ) * 100.0
-    motion = (
-        sum(
-            weight * metric
-            for weight, metric in zip(
-                (w * 5 for w in MOTION_WEIGHTS),
-                (
-                    metrics.get("action_score") or 0.0,
-                    metrics.get("motion_ac_score") or 0.0,
-                    (metrics.get("flow_score") or 0.0) / 100.0,
-                ),
-            )
-        )
-        + MOTION_INTERCEPT * 5
-    ) * 100.0
-    t2v_align = (
-        sum(
-            weight * metric
-            for weight, metric in zip(
-                (w * 5 for w in T2V_ALIGN_WEIGHTS),
-                (
-                    metrics.get("clip_score") or 0.0,
-                    metrics.get("blip_bleu") or 0.0,
-                    metrics.get("sd_score") or 0.0,
-                    metrics.get("detection_score") or 0.0,
-                    metrics.get("color_score") or 0.0,
-                    metrics.get("count_score") or 0.0,
-                    1.0 - (metrics.get("ocr_error") or 0.0),
-                    1.0 - (metrics.get("celebrity_id_error") or 0.0),
-                ),
-            )
-        )
-        + T2V_ALIGN_INTERCEPT * 5
-    ) * 100.0
-    total = quality + temporal + motion + t2v_align
-    return {
-        "visual_quality": round(quality / 100.0, 4),
-        "temporal_consistency": round(temporal / 100.0, 4),
-        "motion_quality": round(motion / 100.0, 4),
-        "text_video_alignment": round(t2v_align / 100.0, 4),
-        "evalcrafter_total": round(total / 100.0, 4),
-    }

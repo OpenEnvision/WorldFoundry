@@ -2,24 +2,10 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
-from typing import Any
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export, package_root_export
 
-
-def package_root() -> Path:
-    return Path(__file__).resolve().parent
-
-
-@lru_cache(maxsize=1)
-def _wrapper() -> Any:
-    from worldfoundry.evaluation.tasks.metrics.cfid import wrapper as _wrapper_module
-
-    return _wrapper_module
-
-
-def compute_cfid(*args: Any, **kwargs: Any) -> float:
-    return _wrapper().compute_cfid(*args, **kwargs)
+compute_cfid = lazy_export(f"{__name__}.wrapper", "compute_cfid", owner=__name__)
+package_root = package_root_export(__file__, owner=__name__)
 
 
 __all__ = ["compute_cfid", "package_root"]

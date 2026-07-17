@@ -1,7 +1,7 @@
 benchmark_ids:
 - videophy2
 blocked_reason: full leaderboard parity still requires VideoPhy-2-AutoEval checkpoint on all 200 prompts
-environment_id: worldplay-videophy2-contract
+environment_id: worldfoundry-unified-cu128
 id: videophy2
 name: VideoPhy2
 needs_new_env: false
@@ -19,7 +19,8 @@ pythonpath_roots:
 required_assets:
   bundled_prompt_manifest: worldfoundry/data/benchmarks/assets/videophy2/prompts.json
   task_yaml: worldfoundry/data/benchmarks/tasks/external/videophy2.yaml
-required_env:
+required_env: []
+optional_env:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 required_packages:
 - numpy

@@ -26,7 +26,7 @@ preflight_command:
   ${WORLDFOUNDRY_UNIFIED_PYTHON} -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile 
   vbench-plus-plus --manifest worldfoundry/data/benchmarks/runtime_profiles/official/vbench-plus-plus.yaml --output-dir 
   tmp/worldfoundry_preflight/vbench-plus-plus --json
-python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON}
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
 - worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
@@ -39,7 +39,8 @@ required_assets:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml
   scorecard_paths:
   - tmp/worldfoundry_audit/remaining_benchmarks/vbenchpp_long_temporal_flickering_unified_20260621_002/scorecard.json
-required_env:
+required_env: []
+optional_env:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 required_imports:
 - torch
@@ -80,7 +81,8 @@ bounded_official_gpu_validation:
   dimension: temporal_flickering
   generated_video_count: 2
   metrics_available: 3
-  official_benchmark_verified: true
+  official_component_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false

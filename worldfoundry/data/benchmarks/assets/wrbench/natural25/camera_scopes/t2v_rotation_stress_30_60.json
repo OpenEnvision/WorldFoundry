@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "scope_id": "natural25_t2v_rotation_stress_30_60",
+  "variant_filter": {
+    "oov_gap": "none"
+  },
+  "expected_task_count": 500,
+  "cameras": [
+    {
+      "label": "static",
+      "preset": "static",
+      "camera_type": "static",
+      "stress_axis": "static",
+      "stress_yaw_deg": null
+    },
+    {
+      "label": "yaw30_LR",
+      "preset": "yaw_LR",
+      "camera_type": "yaw_LR",
+      "stress_axis": "yaw",
+      "stress_yaw_deg": 30
+    },
+    {
+      "label": "yaw30_RL",
+      "preset": "yaw_RL",
+      "camera_type": "yaw_RL",
+      "stress_axis": "yaw",
+      "stress_yaw_deg": 30
+    },
+    {
+      "label": "yaw60_LR",
+      "preset": "yaw_LR",
+      "camera_type": "yaw_LR",
+      "stress_axis": "yaw",
+      "stress_yaw_deg": 60
+    },
+    {
+      "label": "yaw60_RL",
+      "preset": "yaw_RL",
+      "camera_type": "yaw_RL",
+      "stress_axis": "yaw",
+      "stress_yaw_deg": 60
+    }
+  ]
+}

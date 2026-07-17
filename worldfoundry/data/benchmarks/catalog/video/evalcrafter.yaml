@@ -13,6 +13,7 @@ modalities:
 - text
 - video
 status: confirmed_official_code_and_hf_data
+implementation_status: bounded_official_clip_metrics_verified
 official_sources:
   github:
     url: https://github.com/evalcrafter/EvalCrafter
@@ -43,6 +44,11 @@ evaluation_surface:
   - motion_quality
   - temporal_consistency
   objective_metrics: 17
+  runnable_raw_video_metrics:
+  - clip_score
+  - clip_temp_score
+  - face_consistency_score
+  full_official_suite_available: false
   requires_api: false
   requires_heavy_checkpoints: true
 metrics:
@@ -120,7 +126,7 @@ metrics:
   higher_is_better: true
   raw_metric_name: clip_temp_score
   leaderboard_key: clip_temp_score
-  normalizer: identity
+  normalizer: percent_or_fraction_to_unit
   aggregator: mean
   output_unit: score
 - id: warping_error
@@ -138,7 +144,7 @@ metrics:
   higher_is_better: true
   raw_metric_name: face_consistency_score
   leaderboard_key: face_consistency_score
-  normalizer: identity
+  normalizer: percent_or_fraction_to_unit
   aggregator: mean
   output_unit: score
 - id: action_score
@@ -174,7 +180,7 @@ metrics:
   higher_is_better: true
   raw_metric_name: clip_score
   leaderboard_key: clip_score
-  normalizer: identity
+  normalizer: percent_or_fraction_to_unit
   aggregator: mean
   output_unit: score
 - id: blip_bleu
@@ -242,26 +248,41 @@ metrics:
   output_unit: error
 runner:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:EvalCrafterContract
-  run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py --evalcrafter-root 
-    "${WORLDFOUNDRY_EVALCRAFTER_ROOT:-worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter}" 
-    --videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" 
-    --run-official --json
-  validation_command:
-  - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
-  - --evalcrafter-root
-  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter
-  - --results-dir
-  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter/results
+  run_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - evalcrafter
+  - --mode
+  - official-run
+  - --generated-artifact-dir
+  - /path/to/videos
+  - --metrics
+  - clip_score
+  - --limit
+  - '1'
   - --output-dir
-  - <out>
+  - tmp/evalcrafter-smoke
+  - --json
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - evalcrafter
+  - --mode
+  - official-validation
+  - --official-results-path
+  - worldfoundry/data/benchmarks/assets/evalcrafter/sample_results.txt
+  - --output-dir
+  - tmp/benchmark_zoo/evalcrafter-import-smoke
   - --json
   runtime:
-    kind: in_tree_official_source
+    kind: in_tree_official_runtime_bounded_clip_metrics
     repo_url: https://github.com/evalcrafter/EvalCrafter.git
     repo_revision: 1275bda05e74f295ad2585e3ebde8e95a81a15af
-    root: worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter
+    root: worldfoundry/data/benchmarks/assets/evalcrafter
     optional_root_env: WORLDFOUNDRY_EVALCRAFTER_ROOT
     results_path_env: WORLDFOUNDRY_EVALCRAFTER_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -271,69 +292,81 @@ runner:
   - raw_metric_table.jsonl
   verification_status: verified
   notes:
-  - WorldFoundry normalizes official EvalCrafter final_result.txt outputs.
-  - Official-run imports final_result.txt from WorldFoundry/base-model metric infrastructure; benchmark-local shell
-    entrypoints are not launched by this runner.
-  - Pass an inner generated-video directory with direct 0000.mp4 through 0699.mp4 files, not the outer dataset root.
-  - A complete official-run that exits 0 and normalizes EvalCrafter final_result.txt sets official_benchmark_verified 
-    and leaderboard_valid in the emitted scorecard.
-  - Full official metric execution still requires the complete EvalCrafter checkpoint bundle and generated videos.
+  - WorldFoundry runs the official clip_score, clip_temp_score, and face_consistency_score formulas directly on videos.
+  - WorldFoundry also normalizes existing official EvalCrafter final_result.txt outputs.
+  - If coverage metadata is needed, pass an inner generated-video directory with direct 0000.mp4 through 0699.mp4
+    files, not the outer dataset root.
+  - Importing final_result.txt does not set official_benchmark_verified or leaderboard_valid.
+  - The remaining 14 metrics and five official aggregates are not produced by this bounded path.
 base_model_dependencies:
-- grounded_video_quality_stack
-optional_base_model_dependencies:
-- sam_vit_b
-- aot_deaot_l
+- clip_vit_b32
 base_model_dependency_preflight:
-  status: ready
+  status: integrated
   missing: []
 integration:
   status: integrated
   evidence:
-    leaderboard_capable: true
+    bounded_official_component: true
+    bounded_metrics:
+    - clip_score
+    - clip_temp_score
+    - face_consistency_score
+    leaderboard_capable: false
     full_suite_verified: false
     scorecard_gate: scorecard.official_benchmark_verified && scorecard.eligibility.leaderboard_valid
-    official_run_command: worldfoundry-eval zoo benchmark-run --benchmark-id evalcrafter --mode official-run 
-      --generated-artifact-dir <dir-with-0000-to-0699-mp4> --output-dir <out> --json
+    official_run_command: worldfoundry-eval zoo benchmark-run --benchmark-id evalcrafter --mode official-run
+      --generated-artifact-dir <dir-with-numbered-mp4-files> --metrics clip_score --limit 1 --output-dir <out> --json
+    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id evalcrafter --mode
+      official-validation --official-results-path <final_result.txt> --generated-artifact-dir
+      <dir-with-0000-to-0699-mp4> --output-dir <out> --json
 release_status: experimental
 maturity: verified_runner
-open_source_status: experimental
+open_source_status: in_tree_runtime
 official_benchmark_verified: false
 integration_evidence: true
 leaderboard_valid: false
 requires:
-- Optional WORLDFOUNDRY_EVALCRAFTER_ROOT override; the bundled in-tree runtime is used by default.
-- Complete EvalCrafter metric checkpoint bundle for full official execution
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR pointing to an inner directory with direct 0000.mp4 through 0699.mp4 videos
+- A generated-video directory containing prompt-matched numbered MP4 files such as 0000.mp4
+- CLIP ViT-B/32 in the shared base-model asset directory, WORLDFOUNDRY_CLIP_VIT_B32_MODEL_DIR, or --clip-model
 blockers:
-- Leaderboard use requires a completed official-run scorecard with official_benchmark_verified=true and 
-  eligibility.leaderboard_valid=true.
-- Full official execution still requires heavyweight DOVER, OCR, action-recognition, BLIP2, SDXL, celebrity-ID, and 
-  generated-video assets.
+- Full EvalCrafter and leaderboard use remain blocked until all 17 raw metrics and five aggregates run on all 700 videos.
+- The full suite still requires the isolated DOVER, OCR, action-recognition, BLIP2, SDXL, and celebrity-ID stack.
 data_refs:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter
+  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
   task_yaml: worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
 runner_availability:
   available: true
+  bounded_official_component: true
+  dataset_optional_for_generated_artifacts: true
+  supported_raw_video_metrics:
+  - clip_score
+  - clip_temp_score
+  - face_consistency_score
   runner_target: worldfoundry.evaluation.tasks.contracts.external:EvalCrafterContract
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
-  leaderboard_capable: true
+  leaderboard_capable: false
   leaderboard_gate: scorecard.eligibility.leaderboard_valid
-  surface: evalcrafter_official_in_tree
+  surface: bounded_official_clip_metrics_and_final_result_importer
   normalizer_verified: true
 validation_command:
-- ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
-- --evalcrafter-root
-- worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter
-- --results-dir
-- <results-dir-with-final_result.txt>
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- evalcrafter
+- --mode
+- official-validation
+- --official-results-path
+- worldfoundry/data/benchmarks/assets/evalcrafter/sample_results.txt
 - --output-dir
-- <out>
+- tmp/benchmark_zoo/evalcrafter-import-smoke
 - --json
-checkpoint_refs: []
+checkpoint_refs:
+- clip_vit_b32
 artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard

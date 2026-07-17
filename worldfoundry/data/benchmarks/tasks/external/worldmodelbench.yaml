@@ -24,7 +24,7 @@ metadata:
     --output-dir tmp/benchmark_zoo/benchmark_contract/worldmodelbench --json
   open_source_status: in_tree_runtime
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   status: integrated
   full_test_harness_ready: true
@@ -83,7 +83,7 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldModelBenchContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
+    runtime_verified: false
     surface: worldmodelbench_official_in_tree
     normalizer_verified: true
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
@@ -155,7 +155,7 @@ tasks:
       benchmark_id: worldmodelbench
       open_source_status: experimental
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       hf_dataset_id: Efficient-Large-Model/worldmodelbench

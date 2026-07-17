@@ -39,9 +39,9 @@ metadata:
   status: in_tree_official_runtime_ready_full_upstream_pending
   maturity: contract_ready
   release_status: experimental
-  open_source_status: in_tree_runtime
+  open_source_status: in_tree_result_normalizer
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   base_model_dependencies:
   - ewmbench_dataset_assets
@@ -92,7 +92,7 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
-    surface: ewmbench_official_in_tree
+    surface: in_tree_result_normalizer
     normalizer_verified: true
   artifact_layout:
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -228,7 +228,7 @@ tasks:
         - official_scorecard_normalization
         - artifact_presence_format
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       status: official_hf_dataset_required

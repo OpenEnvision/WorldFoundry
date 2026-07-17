@@ -25,6 +25,8 @@ IMAGE_INPUT_KEYS = ("image", "input_image", "ref_image")
 VIDEO_INPUT_KEYS = ("video", "video_context")
 # Keys that carry action / interaction control signals (robotics, latent tokens, etc.).
 ACTION_CONTROL_KEYS = (
+    "interactions",
+    "interaction",
     "actions",
     "action",
     "action_chunk",

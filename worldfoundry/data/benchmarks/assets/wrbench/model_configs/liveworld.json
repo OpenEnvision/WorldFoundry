@@ -1,0 +1,27 @@
+{
+  "adapter": "liveworld",
+  "aliases": [
+    "liveworld"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.6,
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "trajectory_template_c2w"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": false
+  },
+  "default_fps": 16,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "source_video",
+  "key": "liveworld",
+  "notes": "LiveWorld; TI2V-style first-frame/text/geometry path; anchor pose at index 0, target poses start at index 1; native window is 65 frames (num_frames clamped to 65 when larger); translation not independently verified.",
+  "payload_type": "liveworld_geometry_npz",
+  "status": "active"
+}

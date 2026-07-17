@@ -1,0 +1,13 @@
+{
+  "type": "UnivlaLaryWrap",
+  "name": "univla",
+  "in_dim": 3,
+  "model_dim":768,
+  "latent_dim": 128,
+  "num_latents": 16,
+  "patch_size": 14,
+  "enc_blocks": 12,
+  "dec_blocks": 12,
+  "num_heads": 12,
+  "dropout": 0.0
+}

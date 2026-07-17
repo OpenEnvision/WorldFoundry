@@ -136,9 +136,12 @@ def _scorecard(
         and len(available_rows) == len(METRIC_ORDER)
     )
     normalization_ok = bool(available_rows)
-    official_verified = official_runtime_executed and normalization_ok
-    integration_evidence = official_verified and full_suite_valid
-    normalizer_only = not official_runtime_executed
+    # This runner currently normalizes scorer artifacts.  ``--run-official``
+    # only dispatches the local adapter; it does not prove that the complete
+    # upstream AIGCBench protocol was executed with its official dependencies.
+    official_verified = False
+    integration_evidence = False
+    normalizer_only = True
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "official_benchmark_verified": official_verified,
@@ -168,7 +171,7 @@ def _scorecard(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "aigcbench_official_in_tree" if official_runtime_executed else "aigcbench_result_normalizer",
+            "kind": "aigcbench_result_normalizer",
             "blocked_count": len(METRIC_ORDER) - len(available_rows),
         },
         "artifacts": {

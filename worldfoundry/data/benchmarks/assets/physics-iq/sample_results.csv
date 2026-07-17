@@ -1,8 +1,7 @@
 metric_id,score
 physics_iq_score,0.75
-solid_mechanics,0.75
-fluid_dynamics,0.75
-optics,0.75
-thermodynamics,0.75
-magnetism,0.75
-physics_iq_average,0.75
+physics_iq_stable_score,0.74
+physics_iq_spatiotemporal,0.78
+physics_iq_spatial,0.76
+physics_iq_weighted_spatial,0.77
+physics_iq_mse_penalty,0.02

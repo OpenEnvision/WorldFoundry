@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -11,11 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
-from worldfoundry.evaluation.utils import REPO_ROOT
 from worldfoundry.core.io.paths import cache_root_path
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.framework.io import env_path, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.utils import REPO_ROOT
 
 IN_TREE_VBENCH_ROOT = Path(__file__).resolve().parent / "runtime"
 DEFAULT_VBENCH_ROOT = IN_TREE_VBENCH_ROOT
@@ -206,7 +206,7 @@ def list_video_files(path: Path | None) -> list[str]:
         return [str(path)] if path.suffix.lower() in {".mp4", ".gif"} else []
     return [
         str(item)
-        for item in sorted(path.rglob("*"))
+        for item in sorted(path.iterdir())
         if item.is_file() and item.suffix.lower() in {".mp4", ".gif"}
     ]
 
@@ -242,7 +242,8 @@ def extract_scalar(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        scalar = float(value)
+        return scalar if math.isfinite(scalar) else None
     if isinstance(value, list) or isinstance(value, tuple):
         for item in value:
             scalar = extract_scalar(item)
@@ -351,14 +352,27 @@ def _expected_standard_prompt_video_names(prompts: list[str], video_files: list[
 def validate_prompt_suite_materialization(args: argparse.Namespace) -> dict[str, Any]:
     requested = official_prompt_suite_requested(args)
     full_json_path = resolved_full_json_path(args.full_json_dir, args.vbench_root)
-    video_files = list_video_files(args.videos_path)
+    video_files = (
+        [
+            str(item)
+            for item in sorted(args.videos_path.iterdir())
+            if item.is_file() and item.suffix.lower() in {".mp4", ".gif"}
+        ]
+        if args.videos_path is not None and args.videos_path.is_dir()
+        else list_video_files(args.videos_path)
+    )
     actual_video_names = {Path(path).name for path in video_files}
+    requested_dimensions = {canonical_dimension_id(item) for item in args.dimension}
     report: dict[str, Any] = {
         "ok": True,
         "leaderboard_valid": False,
         "requested": requested,
+        "canonical_mode": args.mode == "vbench_standard",
         "mode": args.mode,
         "presets": list(getattr(args, "preset", None) or []),
+        "requested_dimensions": sorted(requested_dimensions),
+        "expected_dimensions": list(VBENCH_DIMENSIONS),
+        "complete_dimension_coverage": requested_dimensions == set(VBENCH_DIMENSIONS),
         "full_json_dir": str(full_json_path),
         "full_json_exists": full_json_path.is_file(),
         "videos_path": None if args.videos_path is None else str(args.videos_path),
@@ -366,6 +380,8 @@ def validate_prompt_suite_materialization(args: argparse.Namespace) -> dict[str,
         "expected_prompt_count": 0,
         "expected_video_count": 0,
         "covered_video_count": 0,
+        "complete_sample_coverage": False,
+        "full_suite_complete": False,
         "issues": [],
         "reasons": [],
     }
@@ -400,6 +416,7 @@ def validate_prompt_suite_materialization(args: argparse.Namespace) -> dict[str,
     report["expected_prompt_count"] = len(prompts)
     report["expected_video_count"] = len(expected_video_names)
     report["covered_video_count"] = len(covered_video_names)
+    report["complete_sample_coverage"] = bool(expected_video_names) and covered_video_names == expected_video_names
     report["covered_videos"] = sorted(covered_video_names)
     report["sample_expected_videos"] = sorted(expected_video_names)[:10]
 
@@ -431,6 +448,13 @@ def validate_prompt_suite_materialization(args: argparse.Namespace) -> dict[str,
         for issue in report["issues"]
         if isinstance(issue, dict) and issue.get("message")
     ]
+    report["full_suite_complete"] = (
+        report["ok"]
+        and report["requested"]
+        and report["canonical_mode"]
+        and report["complete_dimension_coverage"]
+        and report["complete_sample_coverage"]
+    )
     return report
 
 
@@ -567,20 +591,29 @@ def normalize_vbench_results(
         for issue in prompt_suite_validation.get("issues", [])
         if isinstance(issue, dict) and issue.get("message")
     ]
-    official_verified = (
+    integration_evidence = (
         command is not None
         and returncode == 0
-        and available_count > 0
+        and bool(dimension_metrics)
         and bool(prompt_suite_validation.get("ok", True))
     )
+    full_metric_coverage = set(VBENCH_DIMENSIONS).issubset(dimension_metrics)
+    official_verified = (
+        integration_evidence
+        and full_metric_coverage
+        and bool(prompt_suite_validation.get("full_suite_complete", False))
+    )
+    normalized = command is None and returncode == 0 and available_count > 0
 
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
             "status": "official_verified"
             if official_verified
+            else "official_bounded"
+            if integration_evidence
             else "normalized"
-            if command is None and returncode == 0 and available_count
+            if normalized
             else "failed",
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_vbench_official_runner",
@@ -633,6 +666,8 @@ def normalize_vbench_results(
         },
         "validation": {
             "normalizer_only": command is None,
+            "official_runtime_executed": command is not None,
+            "full_metric_coverage": full_metric_coverage,
             "prompt_suite_materialization": prompt_suite_validation,
         },
         "artifacts": {
@@ -644,7 +679,9 @@ def normalize_vbench_results(
         },
         "normalization_ok": returncode == 0 and available_count > 0,
         "official_benchmark_verified": official_verified,
-        "integration_evidence": official_verified,
+        "integration_evidence": integration_evidence,
+        "leaderboard_valid": False,
+        "official_results_imported": normalized,
     }
 
     write_json(scorecard_path, scorecard)
@@ -914,7 +951,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     result = {
-        "ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
+        "ok": scorecard["normalization_ok"],
         "benchmark_id": args.benchmark_id,
         "output_dir": str(args.output_dir),
         "scorecard": scorecard["artifacts"]["scorecard"],
@@ -928,9 +965,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
     else:
         status = "ok" if result["ok"] else "failed"
-        print(f"{args.benchmark_id}: official VBench validation {status}")
+        print(f"{args.benchmark_id}: VBench evaluation {status}")
         print(f"scorecard: {result['scorecard']}")
-    return 0 if result["ok"] or result["normalization_ok"] else 1
+    return 0 if result["ok"] else 1
 
 
 def dispatch_main(argv: list[str] | None = None) -> int:

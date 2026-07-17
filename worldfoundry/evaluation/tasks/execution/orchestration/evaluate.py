@@ -8,22 +8,20 @@ aggregates scores, compiles scorecard outputs, and integrates with registered me
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from worldfoundry.evaluation.utils import read_json_or_jsonl
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, Metric
 from worldfoundry.evaluation.tasks.execution.framework.in_tree_evaluator import BenchmarkZooInTreeEvaluator
 from worldfoundry.evaluation.tasks.execution.framework.in_tree_registry import target_benchmark_metrics
 from worldfoundry.evaluation.tasks.metrics.registry import BuiltinExistingResultsMetric, create_existing_results_metric
-from worldfoundry.evaluation.utils import build_version_context
+from worldfoundry.evaluation.utils import build_version_context, read_json_or_jsonl
 
 from .cache import cache_paths_from_stats, run_generation_with_cache
 from .contract import ContractRunRequest, execute_contract_run
 from .existing_results import ExistingResultsMetric, ExistingResultsRunRequest, execute_existing_results
-
 
 # Schema versions defining structure format of request/result payloads
 EVALUATE_RUN_REQUEST_SCHEMA_VERSION = "worldfoundry-evaluate-run-request"
@@ -70,6 +68,7 @@ class EvaluateRunRequest:
     generation_cache_dir: str | Path | None = None
     generation_cache_mode: str = "off"
     generation_cache_namespace: str = "evaluate_model"
+    run_metadata: Mapping[str, Any] | None = None
     schema_version: str = EVALUATE_RUN_REQUEST_SCHEMA_VERSION
 
 
@@ -991,6 +990,7 @@ def run_evaluate(
                 run_id=run_request.run_id,
                 fail_on_sample_error=run_request.fail_on_sample_error,
                 write_artifacts_index=run_request.write_artifacts_index,
+                run_metadata=run_request.run_metadata,
             )
         )
         return _result_from_delegate(mode, "ExistingResultsRunner", delegate)
@@ -1097,7 +1097,10 @@ def run_evaluate(
                 run_id=run_request.run_id,
                 fail_on_sample_error=run_request.fail_on_sample_error,
                 write_artifacts_index=run_request.write_artifacts_index,
-                run_metadata={"generation_cache": generation_cache_stats.to_dict()},
+                run_metadata={
+                    **dict(run_request.run_metadata or {}),
+                    "generation_cache": generation_cache_stats.to_dict(),
+                },
                 cache_paths=cache_paths_from_stats(generation_cache_stats),
             )
         )

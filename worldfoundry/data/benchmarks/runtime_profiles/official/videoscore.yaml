@@ -6,7 +6,8 @@ bounded_official_gpu_validation:
   status: verified
   bench_name: video_feedback
   sample_count: 1
-  official_benchmark_verified: true
+  official_component_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false
@@ -25,11 +26,11 @@ notes:
 - Bounded official scorer GPU validation verified one VideoScore-Bench/video_feedback sample with local VideoScore-v1.1 
   weights.
 - Runner patches the transformers DynamicCache API mismatch locally; full-suite leaderboard remains pending.
-preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python -m 
+preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile videoscore --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/videoscore.yaml --output-dir 
   tmp/worldfoundry_preflight/videoscore --json
-python_path: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - .
 - worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore
@@ -45,11 +46,11 @@ required_assets:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/videoscore.yaml
   scorecard_paths:
   - tmp/local_open_eval/videoscore_bounded_official_gpu_validation_cachefix_20260525/scorecard.json
-required_env:
+required_env: []
+optional_env:
 - WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT
 - WORLDFOUNDRY_VIDEOSCORE_BENCH_DATASET_ROOT
 - WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT
-optional_env:
 - WORLDFOUNDRY_VIDEOSCORE_ROOT
 - WORLDFOUNDRY_VIDEOSCORE_MODEL_DIR
 - WORLDFOUNDRY_MANTIS_ROOT

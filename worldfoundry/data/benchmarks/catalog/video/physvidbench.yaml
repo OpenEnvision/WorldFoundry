@@ -93,10 +93,6 @@ runner:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysVidBenchContract
   official_runner_script:
     worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
-  run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-    worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py --run-official
-    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir
-    "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   validation_command:
   - worldfoundry-eval
   - zoo
@@ -113,7 +109,7 @@ runner:
   - <out>
   - --json
   runtime:
-    kind: in_tree_official_runtime
+    kind: in_tree_result_importer_and_bounded_caption_qa
     repo_url: https://github.com/ensanli/PhysVidBenchCode.git
     repo_revision: b1d20f121ed3ebe5d18337d884fdecfad065096b
     root_env: WORLDFOUNDRY_PHYSVIDBENCH_ROOT
@@ -129,13 +125,13 @@ runner:
   - raw_metric_table.jsonl
   - output.csv
   - per_sample_scores.jsonl
-  verification_status: official_runtime_ready
+  verification_status: bounded_caption_qa_ready
   notes:
-  - WorldFoundry runs in-tree Gemini QA over prompts_questions.csv and 8-caption AuroraCap tracks.
+  - WorldFoundry can run Gemini QA over caller-supplied caption tracks and can normalize prepared QA results.
+  - It does not generate AuroraCap captions from candidate videos or prove that supplied captions came from them.
   - Use WORLDFOUNDRY_PHYSVIDBENCH_JUDGE_BACKEND to select the judge backend.
-  - Full leaderboard parity still requires generated videos and complete caption coverage for the prompt suite.
-  required_env:
-  - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  - Mock QA is wiring-only and is never benchmark evidence.
+  required_env: []
   optional_env:
   - WORLDFOUNDRY_PHYSVIDBENCH_ROOT
   - WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST
@@ -149,32 +145,24 @@ integration:
   evidence:
     framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id physvidbench --mode official-validation
       --official-results-path <output.csv> --generated-artifact-dir <generated_videos> --output-dir <out> --json
-    normalizer_surface: physvidbench_official_in_tree
-    official_runtime: worldfoundry-eval zoo benchmark-run --benchmark-id physvidbench --mode official-run
-      --generated-artifact-dir <generated_videos> --output-dir <out> --json
+    normalizer_surface: in_tree_result_importer
+    bounded_component_surface: gemini_qa_over_supplied_caption_tracks
     dataset_readiness: prompts_questions.csv
-    full_test_harness_ready: true
-    full_suite_testable: true
-    full_suite_verified: false
 release_status: experimental
 maturity: contract_ready
-full_test_harness_ready: true
-full_suite_testable: true
-full_suite_execution_recorded: false
-open_source_status: in_tree_runtime
+open_source_status: in_tree_result_importer_and_bounded_caption_qa
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
 - Bundled PhysVidBench prompts_questions.csv and captions, or explicit prompt/caption override env vars
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - official_results_path or WORLDFOUNDRY_PHYSVIDBENCH_RESULTS_PATH for normalization-only runs
 framework_acceptance:
-- PhysVidBench integration is OK when in-tree Gemini QA or caller-supplied output.csv, prompts_questions.csv, captions,
-  and generated videos pass strict coverage checks and all declared metrics are normalized.
+- Result import is usable for prepared output.csv files; Gemini execution is a bounded QA component over supplied captions.
+- Neither path validates candidate-video-to-caption provenance or the full benchmark pipeline.
 blockers:
-- Leaderboard parity requires generated videos for the full prompt suite, complete AuroraCap caption tracks, Gemini/API
-  credentials for full official run, and normalized upstream evidence.
+- Candidate-video AuroraCap caption generation and provenance are not implemented in tree.
+- Gemini over supplied captions, and all mock runs, are not official benchmark or leaderboard evidence.
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/physvidbench.yaml
   local_dataset_paths:
@@ -190,8 +178,8 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysVidBenchContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
-  surface: physvidbench_official_in_tree
+  runtime_verified: false
+  surface: in_tree_result_importer_and_bounded_caption_qa
   normalizer_verified: false
 base_model_dependencies:
 - physvidbench_dataset_assets

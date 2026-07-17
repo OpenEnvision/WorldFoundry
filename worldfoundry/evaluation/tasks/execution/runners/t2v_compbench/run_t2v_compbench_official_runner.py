@@ -13,10 +13,10 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-
-from worldfoundry.evaluation.utils import REPO_ROOT
-
-from worldfoundry.evaluation.tasks.execution.framework.benchmark_data import VIDEO_EXTENSIONS, build_generated_video_manifest
+from worldfoundry.evaluation.tasks.execution.framework.benchmark_data import (
+    VIDEO_EXTENSIONS,
+    build_generated_video_manifest,
+)
 from worldfoundry.evaluation.tasks.execution.framework.io import (
     env_path,
     load_json,
@@ -26,6 +26,13 @@ from worldfoundry.evaluation.tasks.execution.framework.io import (
     write_json,
     write_jsonl,
 )
+from worldfoundry.evaluation.tasks.execution.runners.t2v_compbench.t2v_compbench_prompts import (
+    CANONICAL_PROMPT_COUNT,
+    GENERATION_MANIFEST_NAME,
+    PROMPTS_PER_CATEGORY,
+    materialize_t2v_compbench_official_layout,
+)
+from worldfoundry.evaluation.utils import REPO_ROOT
 
 DEFAULT_T2V_COMPBENCH_ROOT = (
     REPO_ROOT
@@ -46,7 +53,7 @@ HF_DATASET_ID = "Kaiyue/T2V-CompBench-Videos"
 HF_DATASET_CONFIG = "default"
 HF_DATASET_SPLIT = "train"
 HF_DATASET_EXPECTED_ROWS = 25200
-EXPECTED_PROMPT_COUNT = 1400
+EXPECTED_PROMPT_COUNT = CANONICAL_PROMPT_COUNT
 COMPONENT_METRICS = (
     "consistent_attribute_binding",
     "dynamic_attribute_binding",
@@ -454,12 +461,12 @@ def build_metric_rows(results: list[dict[str, Any]]) -> tuple[list[dict[str, Any
     component_scores = [
         item["raw_score"] for metric_id, item in by_metric.items() if metric_id in COMPONENT_METRICS and item["raw_score"] is not None
     ]
-    if component_scores and "t2v_compbench_average" not in by_metric:
+    if len(component_scores) == len(COMPONENT_METRICS) and "t2v_compbench_average" not in by_metric:
         by_metric["t2v_compbench_average"] = {
             "metric_id": "t2v_compbench_average",
             "raw_score": sum(component_scores) / len(component_scores),
             "sample_count": min((item.get("sample_count") or 0 for item in by_metric.values()), default=0),
-            "source": "computed_from_available_t2v_compbench_categories",
+            "source": "computed_from_all_official_t2v_compbench_categories",
             "source_csv": None,
         }
 
@@ -552,6 +559,8 @@ def normalize_t2v_compbench_results(
     returncode: int,
     stdout_path: Path | None,
     stderr_path: Path | None,
+    requested_categories: list[str] | None = None,
+    generation_bridge: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     scorecard_path = output_dir / "scorecard.json"
@@ -581,11 +590,62 @@ def normalize_t2v_compbench_results(
     complete_category_count = sum(1 for metric in COMPONENT_METRICS if metric in leaderboard)
     normalization_ok = returncode == 0 and available_count > 0
     normalizer_only = command is None
-    official_verified = command is not None and normalization_ok
+    result_by_metric = {str(item.get("metric_id")): item for item in results}
+    requested = list(
+        dict.fromkeys(
+            requested_categories
+            or [metric for metric in COMPONENT_METRICS if metric in result_by_metric]
+        )
+    )
+    runtime_results_complete = bool(requested) and all(
+        result_by_metric.get(metric, {}).get("raw_score") is not None
+        and int(result_by_metric.get(metric, {}).get("sample_count") or 0) > 0
+        for metric in requested
+    )
+    official_component_verified = (
+        command is not None
+        and returncode == 0
+        and runtime_results_complete
+    )
+    full_metric_outputs = set(requested) == set(COMPONENT_METRICS) and all(
+        result_by_metric.get(metric, {}).get("raw_score") is not None
+        and int(result_by_metric.get(metric, {}).get("sample_count") or 0) >= PROMPTS_PER_CATEGORY
+        for metric in COMPONENT_METRICS
+    )
+    full_video_coverage = (
+        generated_video_manifest["file_count"] == EXPECTED_PROMPT_COUNT
+        and all(
+            generated_video_manifest["by_category"].get(metric, 0) == PROMPTS_PER_CATEGORY
+            for metric in COMPONENT_METRICS
+        )
+    )
+    official_benchmark_verified = (
+        official_component_verified and full_metric_outputs and full_video_coverage
+    )
+    if official_benchmark_verified:
+        eligibility_reasons: list[str] = []
+    elif normalizer_only:
+        eligibility_reasons = [
+            "existing result normalization does not prove that WorldFoundry executed the official evaluator"
+        ]
+    else:
+        eligibility_reasons = [
+            "bounded official component evidence is not a full T2V-CompBench leaderboard run; "
+            "all seven categories require 200 scored videos each"
+        ]
+    run_status = (
+        "official_benchmark_verified"
+        if official_benchmark_verified
+        else "official_component_verified"
+        if official_component_verified
+        else "official_results_imported"
+        if normalization_ok
+        else "failed"
+    )
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_verified" if official_verified else "official_results_imported" if normalization_ok else "failed",
+            "status": run_status,
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_t2v_compbench_official_runner",
             "command": command,
@@ -611,10 +671,8 @@ def normalize_t2v_compbench_results(
             "generated_videos": generated_video_manifest,
         },
         "eligibility": {
-            "leaderboard_valid": False,
-            "reasons": [
-                "official T2V-CompBench runtime or official CSV normalization validation only; full leaderboard evidence requires all seven official category evaluations on the complete prompt set",
-            ],
+            "leaderboard_valid": official_benchmark_verified,
+            "reasons": eligibility_reasons,
         },
         "generation": {
             "successful": len(per_sample_rows),
@@ -647,6 +705,9 @@ def normalize_t2v_compbench_results(
             "source_dir": None if source_dir is None else str(source_dir.resolve()),
             "dataset_root": None if dataset_root is None else str(dataset_root.resolve()),
             "generated_video_root": None if video_root is None else str(video_root.resolve()),
+            "generation_bridge": generation_bridge,
+            "scope": "full" if official_benchmark_verified else "bounded",
+            "requested_categories": requested,
             "upstream_results": None if upstream_results_path is None else str(upstream_results_path.resolve()),
             "leaderboard_metrics": leaderboard,
             "skip_count": len(metric_rows) - available_count,
@@ -654,6 +715,9 @@ def normalize_t2v_compbench_results(
         "validation": {
             "normalizer_only": normalizer_only,
             "official_runtime_executed": command is not None,
+            "official_component_verified": official_component_verified,
+            "full_metric_outputs": full_metric_outputs,
+            "full_video_coverage": full_video_coverage,
             "official_results_imported": normalizer_only and normalization_ok,
         },
         "artifacts": {
@@ -663,12 +727,18 @@ def normalize_t2v_compbench_results(
             "leaderboard_csv_manifest": str(csv_manifest_path.resolve()),
             "generated_video_manifest": str(generated_video_manifest_path.resolve()),
             "dataset_manifest": str(dataset_manifest_path.resolve()),
+            "generation_bridge": (
+                str((output_dir / "generation_bridge.json").resolve())
+                if generation_bridge is not None
+                else None
+            ),
             "upstream_results": None if upstream_results_path is None else str(upstream_results_path.resolve()),
             "upstream_stdout": None if stdout_path is None else str(stdout_path.resolve()),
             "upstream_stderr": None if stderr_path is None else str(stderr_path.resolve()),
         },
-        "official_benchmark_verified": official_verified,
-        "integration_evidence": official_verified,
+        "official_benchmark_verified": official_benchmark_verified,
+        "official_component_verified": official_component_verified,
+        "integration_evidence": official_component_verified,
         "normalizer_only": normalizer_only,
         "normalization_ok": normalization_ok,
         "official_results_imported": normalizer_only and normalization_ok,
@@ -701,6 +771,36 @@ def category_list_from_args(args: argparse.Namespace) -> list[str]:
                 raise ValueError(f"unknown T2V-CompBench category: {part}")
             categories.append(metric_id)
     return list(dict.fromkeys(categories))
+
+
+def has_explicit_category_selection(args: argparse.Namespace) -> bool:
+    return bool(args.category or os.environ.get("WORLDFOUNDRY_T2V_COMPBENCH_CATEGORY"))
+
+
+def prepare_generated_video_bridge(args: argparse.Namespace) -> dict[str, Any] | None:
+    """Strictly stage generic generated artifacts for the official evaluators."""
+
+    existing = getattr(args, "generation_bridge", None)
+    if isinstance(existing, dict):
+        return existing
+    if args.generated_video_dir is None:
+        return None
+    if args.video_root is not None:
+        raise ValueError("--generated-video-dir and --video-root are mutually exclusive")
+    selected_categories = category_list_from_args(args) if has_explicit_category_selection(args) else None
+    report = materialize_t2v_compbench_official_layout(
+        generated_video_dir=args.generated_video_dir,
+        official_layout_dir=args.output_dir / "official_video_layout",
+        generation_manifest_path=args.generation_manifest,
+        selected_categories=selected_categories,
+        assets_root=args.t2v_compbench_assets,
+    )
+    args.video_root = Path(report["official_video_root"])
+    if not has_explicit_category_selection(args):
+        args.category = list(report["selected_categories"])
+    args.generation_bridge = report
+    write_json(args.output_dir / "generation_bridge.json", report)
+    return report
 
 
 def category_video_aliases(category: str) -> tuple[str, ...]:
@@ -822,10 +922,12 @@ def build_single_category_command(args: argparse.Namespace, category: str, outpu
                 args.device,
             ]
         )
+        maybe_add(command, "--config", args.grounded_config)
         maybe_add(command, "--grounded_checkpoint", args.grounded_checkpoint)
         maybe_add(command, "--sam_checkpoint", args.sam_checkpoint)
     elif category == "generative_numeracy":
         command.extend(["--t2v-model", model_name, "--output_dir", str(visual_dir)])
+        maybe_add(command, "--config_file", args.grounded_config)
         maybe_add(command, "--checkpoint_path", args.grounded_checkpoint)
     elif category == "motion_binding":
         raise ValueError("motion_binding requires --run-motion-two-stage; use --csv-dir for existing official outputs")
@@ -1075,6 +1177,7 @@ for module in modules:
 
 
 def build_t2v_compbench_preflight(args: argparse.Namespace) -> dict[str, Any]:
+    generation_bridge = prepare_generated_video_bridge(args)
     categories = category_list_from_args(args)
     checks: list[dict[str, Any]] = []
     root = args.t2v_compbench_root
@@ -1090,10 +1193,32 @@ def build_t2v_compbench_preflight(args: argparse.Namespace) -> dict[str, Any]:
         checks.append(preflight_check(f"{category}.prompt_file", prompt_file.is_file(), path=prompt_file))
 
     if args.dataset_root is None:
-        checks.append(preflight_check("dataset_root", False, path=None, detail="--dataset-root or WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT is required for formal evidence"))
+        checks.append(
+            preflight_check(
+                "dataset_root",
+                False,
+                required=False,
+                path=None,
+                detail="optional Kaiyue/T2V-CompBench-Videos mirror; official prompt assets are already in tree",
+            )
+        )
     else:
-        checks.append(preflight_check("dataset_root", args.dataset_root.is_dir(), path=args.dataset_root))
-        checks.append(preflight_check("dataset_readme", (args.dataset_root / "README.md").is_file(), path=args.dataset_root / "README.md"))
+        checks.append(
+            preflight_check(
+                "dataset_root",
+                args.dataset_root.is_dir(),
+                required=False,
+                path=args.dataset_root,
+            )
+        )
+        checks.append(
+            preflight_check(
+                "dataset_readme",
+                (args.dataset_root / "README.md").is_file(),
+                required=False,
+                path=args.dataset_root / "README.md",
+            )
+        )
 
     video_checks: dict[str, Any] = {}
     if args.csv_dir is None and args.from_upstream_results is None:
@@ -1105,18 +1230,23 @@ def build_t2v_compbench_preflight(args: argparse.Namespace) -> dict[str, Any]:
                 candidates = category_video_candidates(args, category)
                 selected = next((candidate for candidate in candidates if path_has_video_files(candidate)), None)
                 count = count_direct_video_files(selected)
+                expected_count = (
+                    int(generation_bridge["by_category"].get(category, 0))
+                    if generation_bridge is not None
+                    else PROMPTS_PER_CATEGORY
+                )
                 video_checks[category] = {
                     "selected_path": None if selected is None else str(selected),
                     "video_file_count": count,
-                    "expected_file_count": 200,
+                    "expected_file_count": expected_count,
                     "candidate_paths": [str(candidate) for candidate in candidates],
                 }
                 checks.append(
                     preflight_check(
                         f"{category}.video_files",
-                        count >= 200,
+                        expected_count > 0 and count == expected_count,
                         path=selected,
-                        detail=f"found={count}, expected>=200",
+                        detail=f"found={count}, expected={expected_count}",
                     )
                 )
     elif args.csv_dir is not None:
@@ -1147,6 +1277,14 @@ def build_t2v_compbench_preflight(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     if "detection" in groups:
+        if args.grounded_config is not None:
+            checks.append(
+                preflight_check(
+                    "detection.groundingdino_config",
+                    args.grounded_config.is_file(),
+                    path=args.grounded_config,
+                )
+            )
         checks.append(
             preflight_check(
                 "detection.groundingdino_checkpoint",
@@ -1178,7 +1316,21 @@ def build_t2v_compbench_preflight(args: argparse.Namespace) -> dict[str, Any]:
     ready = all(check["ok"] for check in required) and all(report["ok"] for report in import_reports)
     missing_names = {check["name"] for check in required if not check["ok"]}
     next_actions: list[str] = []
-    if any(name.endswith(".python_imports") for name in missing_names):
+    import_failures = [
+        item
+        for report in import_reports
+        for item in report["modules"]
+        if not item.get("ok")
+    ]
+    if any("TimeoutExpired" in str(item.get("error")) for item in import_failures):
+        next_actions.append(
+            "The selected Python import probe timed out. Increase --preflight-timeout or investigate the "
+            "reported slow module before starting the official evaluator."
+        )
+    if any(
+        "TimeoutExpired" not in str(item.get("error"))
+        for item in import_failures
+    ):
         next_actions.append(
             "Install the WorldFoundry benchmark dependencies into the selected Python with "
             "scripts/setup/model_env_install.sh --model evaluation-benchmarks. "
@@ -1210,6 +1362,7 @@ def build_t2v_compbench_preflight(args: argparse.Namespace) -> dict[str, Any]:
         "official_repo_root": str(root),
         "dataset_root": None if args.dataset_root is None else str(args.dataset_root),
         "video_root": None if args.video_root is None else str(args.video_root),
+        "generation_bridge": generation_bridge,
         "video_checks": video_checks,
         "import_reports": import_reports,
         "checks": checks,
@@ -1228,6 +1381,8 @@ def run_preflight(args: argparse.Namespace) -> dict[str, Any]:
 def run_t2v_compbench(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+    generation_bridge = prepare_generated_video_bridge(args)
+    requested_categories = category_list_from_args(args)
     stdout_path = output_dir / "upstream_stdout.log"
     stderr_path = output_dir / "upstream_stderr.log"
     stdout_path.write_text("", encoding="utf-8")
@@ -1249,6 +1404,8 @@ def run_t2v_compbench(args: argparse.Namespace) -> dict[str, Any]:
             returncode=0,
             stdout_path=stdout_path,
             stderr_path=stderr_path,
+            requested_categories=requested_categories,
+            generation_bridge=generation_bridge,
         )
 
     if args.csv_dir:
@@ -1266,6 +1423,8 @@ def run_t2v_compbench(args: argparse.Namespace) -> dict[str, Any]:
             returncode=0,
             stdout_path=stdout_path,
             stderr_path=stderr_path,
+            requested_categories=requested_categories,
+            generation_bridge=generation_bridge,
         )
 
     upstream_output_root = output_dir / "upstream"
@@ -1297,6 +1456,8 @@ def run_t2v_compbench(args: argparse.Namespace) -> dict[str, Any]:
         returncode=returncode,
         stdout_path=stdout_path,
         stderr_path=stderr_path,
+        requested_categories=requested_categories,
+        generation_bridge=generation_bridge,
     )
 
 
@@ -1318,6 +1479,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--csv-dir", type=Path, default=env_path("WORLDFOUNDRY_T2V_COMPBENCH_CSV_DIR"))
     parser.add_argument("--video-root", type=Path, default=env_path("WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT"))
     parser.add_argument(
+        "--generated-video-dir",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_T2V_COMPBENCH_GENERATED_VIDEO_DIR"),
+        help=(
+            "Model-independent generated videos. Requires an exact generation manifest and is staged "
+            "into the official category/NNNN.mp4 layout."
+        ),
+    )
+    parser.add_argument(
+        "--generation-manifest",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_T2V_COMPBENCH_GENERATION_MANIFEST"),
+        help=f"JSONL mapping manifest; defaults to <generated-video-dir>/{GENERATION_MANIFEST_NAME}.",
+    )
+    parser.add_argument(
         "--dataset-root",
         type=Path,
         default=env_path("WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT"),
@@ -1332,6 +1508,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--from-upstream-results", dest="from_upstream_results", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--llava-model-path", default=os.environ.get("WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH"))
     parser.add_argument("--llava-model-base", default=os.environ.get("WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_BASE"))
+    parser.add_argument(
+        "--grounded-config",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CONFIG"),
+        help="Optional GroundingDINO config override, including a local bert_base_uncased_path when offline.",
+    )
     parser.add_argument(
         "--grounded-checkpoint",
         type=Path,
@@ -1356,7 +1538,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--preflight-timeout",
         type=int,
-        default=int(os.environ.get("WORLDFOUNDRY_T2V_COMPBENCH_PREFLIGHT_TIMEOUT", "60")),
+        default=int(os.environ.get("WORLDFOUNDRY_T2V_COMPBENCH_PREFLIGHT_TIMEOUT", "180")),
     )
     parser.add_argument("--json", action="store_true")
     return parser
@@ -1374,9 +1556,12 @@ def normalize_path_args(args: argparse.Namespace) -> None:
         "t2v_compbench_assets",
         "csv_dir",
         "video_root",
+        "generated_video_dir",
+        "generation_manifest",
         "dataset_root",
         "output_dir",
         "from_upstream_results",
+        "grounded_config",
         "grounded_checkpoint",
         "sam_checkpoint",
         "depth_folder",
@@ -1415,7 +1600,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     result = {
-        "ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
+        "ok": scorecard["integration_evidence"],
         "benchmark_id": args.benchmark_id,
         "output_dir": str(args.output_dir),
         "scorecard": scorecard["artifacts"]["scorecard"],
@@ -1425,6 +1610,7 @@ def main(argv: list[str] | None = None) -> int:
         "generated_video_manifest": scorecard["artifacts"]["generated_video_manifest"],
         "dataset_manifest": scorecard["artifacts"]["dataset_manifest"],
         "official_benchmark_verified": scorecard["official_benchmark_verified"],
+        "official_component_verified": scorecard["official_component_verified"],
         "integration_evidence": scorecard["integration_evidence"],
         "normalization_ok": scorecard["normalization_ok"],
         "official_results_imported": scorecard["official_results_imported"],

@@ -1,0 +1,43 @@
+schema_version: worldfoundry-worldbench-evaluator-v1
+
+# WorldBench IntuitivePhysics gives the model nine conditioning frames.  A
+# generated continuation is therefore aligned with ground-truth frame 9 by
+# default.  Set generated_skip_frames to 9 for artifacts that prepend the
+# conditioning clip to their generated continuation.
+video:
+  target_size: [640, 1024]
+  ground_truth_start_frame: 9
+  generated_skip_frames: 0
+  max_frames: 24
+  frames_per_second: 24
+  segmentation_prefix: segmentation_
+  rgba_prefix: rgba_
+  background_label: 1
+  jpeg_quality: 95
+
+sam2:
+  # This is the model hard-coded by the public evaluator release.  The code is
+  # not vendored here: it is loaded through WorldFoundry's shared SAM2 base
+  # model implementation.
+  model_id: facebook/sam2.1-hiera-large
+  config_name: configs/sam2.1/sam2.1_hiera_l.yaml
+  checkpoint_env: WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT
+  offload_video_to_cpu: true
+  offload_state_to_cpu: false
+
+text:
+  question_glob: textual_questions/*.json
+  binary_answers: [Yes, No]
+  multiple_choice_marker: "Options:"
+
+provenance:
+  project_url: https://world-bench.github.io/
+  dataset_repo: worldbenchmark/IntuitivePhysics
+  evaluator_repo: https://github.com/WorldBenchmark/worldbench_eval
+  evaluator_commit: 4575a164225341b5a87de7235cd50216b4b204d8
+  distributed_bundle_sha256: cb48d4458f9c2cb80bde70ca8b8396613dfb85709f855d0413f8583c22cd50a3
+  implementation: clean_in_tree_reimplementation
+  notes:
+  - The public source has no attached license in the distributed bundle, so its files are not copied into WorldFoundry.
+  - The public source imports a missing module, references an undefined variable, and reads its result structure inconsistently.
+  - The public source names a Dice coefficient mIoU; this runtime emits conventional IoU and source-compatible Dice separately.

@@ -339,7 +339,7 @@ metadata:
   open_source_status: experimental
   maturity: contract_ready
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   requires:
   - bundled MiraBench metadata assets or caller-provided official results
@@ -364,8 +364,8 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:MiraBenchContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
-    surface: mirabench_official_in_tree
+    runtime_verified: false
+    surface: in_tree_result_normalizer
     normalizer_verified: true
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
   runner:
@@ -453,7 +453,7 @@ tasks:
       source_kind: benchmark_zoo
       benchmark_id: mirabench
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       status: bundled_metadata_or_generated_artifacts

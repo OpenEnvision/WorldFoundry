@@ -1,0 +1,31 @@
+{
+  "adapter": "cosmos3",
+  "key": "cosmos3-nano-generator",
+  "aliases": [
+    "cosmos3-nano-generator",
+    "cosmos3-nano",
+    "cosmos3_nano_generator",
+    "cosmos3_nano"
+  ],
+  "amplitude": {
+    "calibration_status": "official_pose_convention_pending_gpu_parity",
+    "max_amount": 0.6,
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 30,
+  "default_frames": 61,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "image",
+  "notes": "Uses Cosmos3-Nano forward dynamics with the official camera_pose 9D backward-framewise pose-delta convention.",
+  "payload_type": "cosmos3_camera_pose_actions",
+  "status": "active",
+  "worldfoundry_model_id": "cosmos3"
+}

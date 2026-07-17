@@ -1,0 +1,28 @@
+{
+  "adapter": "hunyuan",
+  "aliases": [
+    "hunyuan-worldplay"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.6,
+    "rotation_gain": 3.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "image",
+  "key": "hunyuan-worldplay",
+  "worldfoundry_model_id": "hy-worldplay",
+  "notes": "HunyuanVideo WorldPlay; frame-indexed pose dict (C2W + normalized K); video frames collapse to latent pose frames via stride-4 rule: (num_frames-1)//4+1.",
+  "payload_type": "hunyuan_worldplay_pose_dict",
+  "status": "active"
+}

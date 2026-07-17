@@ -128,7 +128,7 @@ release_status: experimental
 maturity: contract_ready
 open_source_status: in_tree_runtime
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
 - bundled EWMBench runtime assets

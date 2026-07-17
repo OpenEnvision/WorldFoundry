@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -12,10 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.core.io.paths import cache_root_path
-from worldfoundry.evaluation.utils import REPO_ROOT
-from worldfoundry.runtime import resolve_hf_cache_dir  # type: ignore[reportMissingImports]
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.framework.io import env_path, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.utils import REPO_ROOT
+from worldfoundry.runtime.env import resolve_hf_cache_dir  # type: ignore[reportMissingImports]
 
 RUNNERS_ROOT = Path(__file__).resolve().parents[1]
 BASE_VBENCH_RUNTIME_ROOT = RUNNERS_ROOT / "vbench" / "runtime"
@@ -73,6 +74,22 @@ PLUS_VARIANT_AVERAGE = {
     "long": "vbench_plus_plus_long_average",
     "trustworthiness": "vbench_plus_plus_trustworthiness_average",
 }
+CANONICAL_FULL_INFO_ASSETS = {
+    "i2v": bundled_benchmark_asset("vbench-plus-plus", "i2v", "vbench2_i2v_full_info.json"),
+    "long": bundled_benchmark_asset("vbench-plus-plus", "long", "VBench_full_info.json"),
+    "trustworthiness": bundled_benchmark_asset(
+        "vbench-plus-plus", "trustworthiness", "vbench2_trustworthy.json"
+    ),
+    "vbench2": bundled_benchmark_asset("vbench-2.0", "VBench2_full_info.json"),
+}
+AGGREGATE_METRIC_IDS = frozenset(
+    {
+        *VBENCH2_CATEGORY_GROUPS,
+        "vbench2_total",
+        *PLUS_VARIANT_AVERAGE.values(),
+        "vbench_plus_plus_average",
+    }
+)
 
 
 def hf_cache_dir_candidates(explicit_cache_dir: Path | None) -> list[Path]:
@@ -408,14 +425,42 @@ def canonical_metric_id(value: str) -> str:
     return value.strip().replace("-", "_").replace(" ", "_").lower()
 
 
+def canonical_declared_dimensions(variant: str) -> set[str]:
+    """Read the declared dimension set from the bundled canonical full-info asset."""
+    path = CANONICAL_FULL_INFO_ASSETS[variant]
+    if not path.is_file():
+        return set()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if not isinstance(payload, list):
+        return set()
+    dimensions: set[str] = set()
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        raw_dimensions = item.get("dimension", item.get("dimensions", []))
+        if isinstance(raw_dimensions, str):
+            raw_dimensions = [raw_dimensions]
+        dimensions.update(
+            canonical_metric_id(str(dimension))
+            for dimension in raw_dimensions
+            if str(dimension).strip()
+        )
+    return dimensions
+
+
 def scalar(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        score = float(value)
+        return score if math.isfinite(score) else None
     if isinstance(value, str):
         try:
-            return float(value.strip())
+            score = float(value.strip())
+            return score if math.isfinite(score) else None
         except ValueError:
             return None
     if isinstance(value, (list, tuple)):
@@ -599,16 +644,19 @@ def raw_dimension_rows(raw_results: dict[str, Any]) -> tuple[list[dict[str, Any]
         metric_id = canonical_metric_id(raw_name)
         raw_score = scalar(raw_results[raw_name])
         normalized_score = normalize_score(raw_score)
+        is_aggregate = metric_id in AGGREGATE_METRIC_IDS
         row = {
             "metric_id": metric_id,
             "raw_metric_name": raw_name,
-            "available": raw_score is not None,
-            "raw_score": raw_score,
-            "normalized_score": normalized_score,
+            "available": raw_score is not None and not is_aggregate,
+            "raw_score": None if is_aggregate else raw_score,
+            "normalized_score": None if is_aggregate else normalized_score,
             "raw_value": raw_results[raw_name],
             "source": "official_vbench_series_results",
         }
-        if raw_score is None:
+        if is_aggregate:
+            row["reason"] = "aggregate_recomputed_only_from_complete_declared_dimensions"
+        elif raw_score is None:
             row["reason"] = "score_not_found_in_vbench_series_results"
         else:
             scores[metric_id] = raw_score
@@ -616,12 +664,18 @@ def raw_dimension_rows(raw_results: dict[str, Any]) -> tuple[list[dict[str, Any]
     return rows, scores
 
 
-def aggregate_rows(variant: str, dimension_scores: dict[str, float]) -> list[dict[str, Any]]:
+def aggregate_rows(
+    variant: str,
+    dimension_scores: dict[str, float],
+    *,
+    expected_dimensions: set[str],
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     if variant == "vbench2":
         group_scores: dict[str, float] = {}
         for group_id, members in VBENCH2_CATEGORY_GROUPS.items():
-            raw_score = mean([dimension_scores.get(member) for member in members])
+            group_complete = set(members).issubset(dimension_scores)
+            raw_score = mean([dimension_scores[member] for member in members]) if group_complete else None
             if raw_score is not None:
                 group_scores[group_id] = raw_score
             rows.append(
@@ -636,7 +690,12 @@ def aggregate_rows(variant: str, dimension_scores: dict[str, float]) -> list[dic
                     **({} if raw_score is not None else {"reason": "required_vbench2_dimensions_missing"}),
                 }
             )
-        total = mean(list(group_scores.values()))
+        full_suite_complete = (
+            bool(expected_dimensions)
+            and expected_dimensions.issubset(dimension_scores)
+            and set(VBENCH2_CATEGORY_GROUPS).issubset(group_scores)
+        )
+        total = mean(list(group_scores.values())) if full_suite_complete else None
         rows.append(
             {
                 "metric_id": "vbench2_total",
@@ -645,13 +704,18 @@ def aggregate_rows(variant: str, dimension_scores: dict[str, float]) -> list[dic
                 "normalized_score": normalize_score(total),
                 "raw_score_range": [0.0, 1.0],
                 "source": "computed_from_vbench2_group_scores",
-                "dimensions": list(group_scores),
-                **({} if total is not None else {"reason": "vbench2_group_scores_missing"}),
+                "dimensions": list(VBENCH2_CATEGORY_GROUPS),
+                **({} if total is not None else {"reason": "complete_vbench2_suite_required"}),
             }
         )
         return rows
 
-    raw_score = mean(list(dimension_scores.values()))
+    variant_complete = bool(expected_dimensions) and expected_dimensions.issubset(dimension_scores)
+    raw_score = (
+        mean([dimension_scores[metric_id] for metric_id in sorted(expected_dimensions)])
+        if variant_complete
+        else None
+    )
     variant_average = PLUS_VARIANT_AVERAGE[variant]
     rows.append(
         {
@@ -661,20 +725,20 @@ def aggregate_rows(variant: str, dimension_scores: dict[str, float]) -> list[dic
             "normalized_score": normalize_score(raw_score),
             "raw_score_range": [0.0, 1.0],
             "source": f"computed_from_vbench_plus_plus_{variant}_dimensions",
-            "dimensions": sorted(dimension_scores),
-            **({} if raw_score is not None else {"reason": "vbench_plus_plus_dimensions_missing"}),
+            "dimensions": sorted(expected_dimensions),
+            **({} if raw_score is not None else {"reason": "complete_variant_dimension_suite_required"}),
         }
     )
     rows.append(
         {
             "metric_id": "vbench_plus_plus_average",
-            "available": raw_score is not None,
-            "raw_score": raw_score,
-            "normalized_score": normalize_score(raw_score),
+            "available": False,
+            "raw_score": None,
+            "normalized_score": None,
             "raw_score_range": [0.0, 1.0],
-            "source": f"computed_from_vbench_plus_plus_{variant}_dimensions",
-            "dimensions": [variant_average],
-            **({} if raw_score is not None else {"reason": "vbench_plus_plus_dimensions_missing"}),
+            "source": "requires_cross_variant_aggregation",
+            "dimensions": list(PLUS_VARIANT_AVERAGE.values()),
+            "reason": "all_vbench_plus_plus_variants_required",
         }
     )
     return rows
@@ -696,6 +760,7 @@ def normalize_results(
     dataset_manifest: dict[str, Any] | None = None,
     video_coverage: dict[str, Any] | None = None,
     long_presplit: dict[str, Any] | None = None,
+    suite_coverage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     scorecard_path = output_dir / "scorecard.json"
@@ -708,12 +773,29 @@ def normalize_results(
     video_files = list_video_files(videos_path, limit=1000, exclude_dirs={"split_clip"} if long_presplit is not None else None)
     video_coverage = video_coverage or build_vbench2_video_coverage(videos_path, dataset_manifest, limit=1000)
 
+    suite_coverage = suite_coverage or {
+        "full_suite_complete": False,
+        "expected_dimensions": [],
+        "reasons": ["canonical suite coverage was not evaluated"],
+    }
+    coverage_dimensions = {
+        canonical_metric_id(str(item))
+        for item in suite_coverage.get("expected_dimensions", [])
+    }
+    expected_dimensions = canonical_declared_dimensions(variant) or coverage_dimensions
+
     dimension_rows, dimension_scores = raw_dimension_rows(raw_results)
     metric_rows = [
         {key: value for key, value in row.items() if key != "raw_value"}
         for row in dimension_rows
     ]
-    metric_rows.extend(aggregate_rows(variant, dimension_scores))
+    metric_rows.extend(
+        aggregate_rows(
+            variant,
+            dimension_scores,
+            expected_dimensions=expected_dimensions,
+        )
+    )
 
     per_metric = {row["metric_id"]: row for row in metric_rows}
     leaderboard = {
@@ -734,7 +816,13 @@ def normalize_results(
     )
     normalizer_only = command is None
     normalization_ok = returncode == 0 and available_count > 0
-    official_verified = command is not None and normalization_ok
+    integration_evidence = command is not None and normalization_ok
+    full_metric_coverage = bool(expected_dimensions) and expected_dimensions.issubset(dimension_scores)
+    official_verified = (
+        integration_evidence
+        and full_metric_coverage
+        and bool(suite_coverage.get("full_suite_complete", False))
+    )
     normalized = normalizer_only and normalization_ok
     if variant == "vbench2":
         if dataset_manifest is None:
@@ -759,7 +847,13 @@ def normalize_results(
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_verified" if official_verified else "normalized" if normalized else "failed",
+            "status": "official_verified"
+            if official_verified
+            else "official_bounded"
+            if integration_evidence
+            else "normalized"
+            if normalized
+            else "failed",
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_vbench_series_official_runner",
             "command": command,
@@ -804,7 +898,11 @@ def normalize_results(
             "leaderboard": leaderboard,
             "groups": {
                 "dimensions": [row["metric_id"] for row in dimension_rows if row["available"]],
-                "aggregates": [row["metric_id"] for row in metric_rows if row.get("source", "").startswith("computed_")],
+                "aggregates": [
+                    row["metric_id"]
+                    for row in metric_rows
+                    if row["available"] and row.get("source", "").startswith("computed_")
+                ],
             },
             "per_metric": per_metric,
             "summary": {
@@ -826,6 +924,8 @@ def normalize_results(
             "normalizer_only": normalizer_only,
             "official_runtime_executed": command is not None,
             "official_validation_required_for_integration_evidence": True,
+            "full_metric_coverage": full_metric_coverage,
+            "canonical_suite_coverage": suite_coverage,
             **(
                 {
                     "dataset_discovery_ready": bool(dataset_manifest and dataset_manifest.get("ready")),
@@ -862,7 +962,8 @@ def normalize_results(
             ),
         },
         "official_benchmark_verified": official_verified,
-        "integration_evidence": official_verified,
+        "integration_evidence": integration_evidence,
+        "leaderboard_valid": False,
         "normalization_ok": normalization_ok,
         "official_results_imported": normalizer_only and normalization_ok,
     }
@@ -898,13 +999,7 @@ def default_runtime_root(variant: str) -> Path:
 
 
 def default_full_json(args: argparse.Namespace) -> Path:
-    mapping = {
-        "i2v": bundled_benchmark_asset("vbench-plus-plus", "i2v", "vbench2_i2v_full_info.json"),
-        "long": bundled_benchmark_asset("vbench-plus-plus", "long", "VBench_full_info.json"),
-        "trustworthiness": bundled_benchmark_asset("vbench-plus-plus", "trustworthiness", "vbench2_trustworthy.json"),
-        "vbench2": bundled_benchmark_asset("vbench-2.0", "VBench2_full_info.json"),
-    }
-    bundled = mapping[args.variant]
+    bundled = CANONICAL_FULL_INFO_ASSETS[args.variant]
     if bundled.is_file():
         return bundled
     fallback = {
@@ -914,6 +1009,107 @@ def default_full_json(args: argparse.Namespace) -> Path:
         "vbench2": args.vbench_root / "vbench2" / "VBench2_full_info.json",
     }
     return fallback[args.variant]
+
+
+def canonical_suite_coverage(args: argparse.Namespace) -> dict[str, Any]:
+    """Prove canonical prompt, sample, and dimension coverage conservatively."""
+    full_json_path = args.full_json_dir or default_full_json(args)
+    requested_dimensions = {
+        canonical_metric_id(item)
+        for item in split_values(args.dimension, "WORLDFOUNDRY_VBENCH_SERIES_DIMENSIONS")
+    }
+    canonical_mode = (
+        not args.custom_input
+        if args.variant == "trustworthiness"
+        else args.mode == ("long_vbench_standard" if args.variant == "long" else "vbench_standard")
+    )
+    report: dict[str, Any] = {
+        "schema_version": "worldfoundry-vbench-canonical-suite-coverage-v1",
+        "variant": args.variant,
+        "full_json_dir": str(full_json_path),
+        "full_json_exists": full_json_path.is_file(),
+        "canonical_mode": canonical_mode,
+        "requested_dimensions": sorted(requested_dimensions),
+        "expected_dimensions": [],
+        "complete_dimension_coverage": False,
+        "generated_file_count": 0,
+        "expected_prompt_count": 0,
+        "expected_video_count": 0,
+        "covered_video_count": 0,
+        "complete_sample_coverage": False,
+        "full_suite_complete": False,
+        "reasons": [],
+    }
+    if not full_json_path.is_file():
+        report["reasons"].append(f"canonical full-info JSON was not found: {full_json_path}")
+        return report
+    try:
+        payload = json.loads(full_json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        report["reasons"].append(f"canonical full-info JSON could not be loaded: {exc}")
+        return report
+    if not isinstance(payload, list):
+        report["reasons"].append("canonical full-info JSON must contain a list")
+        return report
+
+    expected_dimensions: set[str] = set()
+    prompt_sample_counts: dict[str, int] = {}
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        raw_dimensions = item.get("dimension", item.get("dimensions", []))
+        if isinstance(raw_dimensions, str):
+            raw_dimensions = [raw_dimensions]
+        item_dimensions = {
+            canonical_metric_id(str(dimension))
+            for dimension in raw_dimensions
+            if str(dimension).strip()
+        }
+        expected_dimensions.update(item_dimensions)
+        prompt = item.get("prompt_en") or item.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            continue
+        prompt = prompt[:180] if args.variant == "vbench2" else prompt
+        if args.variant == "vbench2":
+            samples = 20 if "diversity" in item_dimensions else 3
+        elif args.variant == "trustworthiness":
+            samples = 10
+        else:
+            samples = 5
+        prompt_sample_counts[prompt] = max(prompt_sample_counts.get(prompt, 0), samples)
+
+    expected_stems = {
+        f"{prompt}-{index}"
+        for prompt, samples in prompt_sample_counts.items()
+        for index in range(samples)
+    }
+    video_files = direct_video_files(args.videos_path)
+    actual_stems = {path.stem for path in video_files}
+    covered_stems = expected_stems & actual_stems
+    report.update(
+        {
+            "expected_dimensions": sorted(expected_dimensions),
+            "complete_dimension_coverage": requested_dimensions == expected_dimensions,
+            "generated_file_count": len(video_files),
+            "expected_prompt_count": len(prompt_sample_counts),
+            "expected_video_count": len(expected_stems),
+            "covered_video_count": len(covered_stems),
+            "complete_sample_coverage": bool(expected_stems) and expected_stems.issubset(actual_stems),
+            "sample_missing_videos": sorted(expected_stems - actual_stems)[:10],
+        }
+    )
+    if not canonical_mode:
+        report["reasons"].append("the run did not use the canonical benchmark mode")
+    if requested_dimensions != expected_dimensions:
+        report["reasons"].append("requested dimensions do not exactly match the canonical dimension suite")
+    if not report["complete_sample_coverage"]:
+        report["reasons"].append("generated videos do not cover every canonical prompt/sample pair")
+    report["full_suite_complete"] = (
+        canonical_mode
+        and report["complete_dimension_coverage"]
+        and report["complete_sample_coverage"]
+    )
+    return report
 
 
 def resolved_path(path: Path | None) -> Path | None:
@@ -1011,6 +1207,7 @@ def run_series(args: argparse.Namespace) -> dict[str, Any]:
         if args.variant == "vbench2"
         else None
     )
+    suite_coverage = canonical_suite_coverage(args)
 
     results_path = args.from_upstream_results or default_results_path(args.variant)
     if results_path is not None:
@@ -1029,6 +1226,7 @@ def run_series(args: argparse.Namespace) -> dict[str, Any]:
             stderr_path=stderr_path,
             dataset_manifest=dataset_manifest,
             video_coverage=video_coverage,
+            suite_coverage=suite_coverage,
         )
 
     upstream_output_dir = output_dir / "upstream"
@@ -1075,6 +1273,7 @@ def run_series(args: argparse.Namespace) -> dict[str, Any]:
         dataset_manifest=dataset_manifest,
         video_coverage=video_coverage,
         long_presplit=long_presplit,
+        suite_coverage=suite_coverage,
     )
 
 
@@ -1143,7 +1342,7 @@ def main(
         return 1
 
     result = {
-        "ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
+        "ok": scorecard["normalization_ok"],
         "benchmark_id": args.benchmark_id,
         "variant": args.variant,
         "output_dir": str(args.output_dir),
@@ -1159,9 +1358,9 @@ def main(
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
     else:
         status = "ok" if result["ok"] else "failed"
-        print(f"{args.benchmark_id}/{args.variant}: official VBench-series validation {status}")
+        print(f"{args.benchmark_id}/{args.variant}: VBench-series evaluation {status}")
         print(f"scorecard: {result['scorecard']}")
-    return 0 if result["ok"] or result["normalization_ok"] else 1
+    return 0 if result["ok"] else 1
 
 
 if __name__ == "__main__":

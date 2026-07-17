@@ -1,0 +1,2 @@
+model_id,display_name,n_outputs,D1_CamPrec,D1_CamPrec_n,D1_CamAlign_common_yaw,D1_CamAlign_common_yaw_n,D1_CamAlign_static_hold,D1_CamAlign_static_hold_n,D2,D2_n,D3,D3_n,D4,D4_n,D5,D5_n,D6,D6_n,Avg
+fixture_model,WRBench fixture model,500,0.70,500,0.80,400,0.90,100,0.75,500,0.72,500,0.68,500,0.62,120,0.58,120,0.675

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
@@ -16,15 +17,9 @@ def package_root() -> Path:
     return PACKAGE_ROOT
 
 
-def _ensure_trend() -> None:
-    root = str(PACKAGE_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
 @lru_cache(maxsize=1)
 def _trend_module() -> Any:
-    _ensure_trend()
+    prepend_import_path(PACKAGE_ROOT)
     import trend_core as mod
 
     return mod

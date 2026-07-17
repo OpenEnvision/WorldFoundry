@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 from worldfoundry.evaluation.tasks.metrics._shared.perceptual import default_data_range, resolve_device, to_tensor
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -19,15 +19,9 @@ def package_root() -> Path:
     return PACKAGE_ROOT
 
 
-def _ensure_piq() -> None:
-    root = str(VENDOR_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
 @lru_cache(maxsize=1)
 def _fsim_fn() -> Any:
-    _ensure_piq()
+    prepend_import_path(VENDOR_ROOT)
     from piq.fsim import fsim
 
     return fsim

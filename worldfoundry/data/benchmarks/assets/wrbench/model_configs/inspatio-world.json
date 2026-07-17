@@ -1,0 +1,26 @@
+{
+  "adapter": "inspatio",
+  "aliases": [
+    "inspatio-world"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 1.0,
+    "rotation_gain": 3.0,
+    "translation_gain": 1.0,
+    "translation_unit": "official_displacement_scale"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": false,
+    "translation": true
+  },
+  "default_fps": 24,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "source_video",
+  "key": "inspatio-world",
+  "payload_type": "inspatio_per_frame_action_txt",
+  "status": "active"
+}

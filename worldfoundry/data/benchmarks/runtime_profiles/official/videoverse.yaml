@@ -2,7 +2,7 @@ benchmark_ids:
 - videoverse
 credential_gated_reason: VideoVerse official-run executes the in-tree Gemini/local-VLM judge; set GEMINI_API_KEY or 
   WORLDFOUNDRY_VIDEOVERSE_GEMINI_API_KEY for production runs.
-environment_id: worldplay-video-judge
+environment_id: worldfoundry-unified-cu128
 id: videoverse
 name: VideoVerse
 needs_new_env: false
@@ -15,19 +15,19 @@ notes:
   integration_evidence=true.
 - Leaderboard parity requires audited Gemini/API judge execution evidence and generated artifacts for the full prompt 
   suite.
-preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python -m 
+preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile videoverse --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/videoverse.yaml --output-dir 
   tmp/worldfoundry_preflight/videoverse --json
-python_path: ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 required_assets:
   bundled_asset_paths:
   - worldfoundry/data/benchmarks/assets/videoverse/prompt/prompts_of_VideoVerse.json
   - worldfoundry/data/benchmarks/assets/videoverse/prompt/prompts_of_VideoVerse_decomposed.json
   task_yaml: worldfoundry/data/benchmarks/tasks/external/videoverse.yaml
-required_env:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+required_env: []
 optional_env:
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_VIDEOVERSE_STRICT
 - WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST
 - WORLDFOUNDRY_VIDEOVERSE_DECOMPOSED_PROMPT_MANIFEST

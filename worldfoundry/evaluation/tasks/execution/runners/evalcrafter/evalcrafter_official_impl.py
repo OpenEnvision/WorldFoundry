@@ -25,9 +25,11 @@ from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_pro
     resolve_prompt700_path,
     unique_prompt_records,
 )
+from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_raw_metrics import (
+    SUPPORTED_RAW_METRICS,
+)
 from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_runtime import (
     run_evalcrafter_scorer,
-    scorer_config_from_env,
     validate_official_inputs,
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
@@ -60,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--run-official",
         action="store_true",
-        help="Import EvalCrafter final_result.txt for WorldFoundry-generated artifacts.",
+        help="Run the supported official raw-video metrics on WorldFoundry-generated artifacts.",
     )
     parser.add_argument(
         "--run-fixture",
@@ -74,7 +76,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--prompt-manifest", type=Path)
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--strict", action="store_true")
+    parser.add_argument(
+        "--metrics",
+        nargs="+",
+        help=(
+            "Raw-video metrics to execute (space- or comma-separated). "
+            f"Supported: {', '.join(SUPPORTED_RAW_METRICS)}. Defaults to all supported metrics."
+        ),
+    )
+    parser.add_argument("--clip-model", type=Path, help="Local openai/clip-vit-base-patch32 checkpoint directory.")
+    parser.add_argument("--device", default="auto", help="Torch device for raw-video metrics (default: auto).")
+    parser.add_argument("--batch-size", type=int, default=8, help="CLIP frame batch size (default: 8).")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Require the complete 700-video, 17-metric, five-aggregate suite; bounded metric runs fail this gate.",
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -187,27 +204,49 @@ def write_scorecard(
     available_count = sum(1 for row in metric_rows if row["available"])
     normalization_ok = available_count > 0
     official_run = scorer_summary.get("official_run") if isinstance(scorer_summary, Mapping) else None
-    official_verified = bool(
-        official_runtime_executed
-        and normalization_ok
-        and (official_run is None or official_run.get("returncode") == 0)
+    scorer_backend = str(scorer_summary.get("backend") or "") if isinstance(scorer_summary, Mapping) else ""
+    executed_metrics = (
+        [str(item) for item in scorer_summary.get("executed_metrics") or ()]
+        if isinstance(scorer_summary, Mapping)
+        else []
     )
-    official_results_imported = not official_runtime_executed and normalization_ok
+    raw_video_component = scorer_backend == "raw_video" and normalization_ok and bool(executed_metrics)
+    official_results_imported = normalization_ok and not raw_video_component
     video_complete = (
         video_coverage.get("expected_count", 0) > 0
         and video_coverage.get("complete") is True
-    )
-    legacy_input_validation_ok = bool(
-        isinstance(official_run, Mapping)
-        and isinstance(official_run.get("input_validation"), Mapping)
-        and official_run["input_validation"].get("ok") is True
     )
     full_suite_valid = (
         prompt_count >= CANONICAL_PROMPT_COUNT
         and video_complete
         and available_count == len(METRIC_ORDER)
-    ) or legacy_input_validation_ok
-    run_status = "official_verified" if official_verified else "official_results_imported" if normalization_ok else "failed"
+    )
+    official_verified = raw_video_component and full_suite_valid
+    integration_evidence = raw_video_component
+    normalizer_only = not raw_video_component
+    evidence_level = (
+        "official_raw_video_metric_subset"
+        if raw_video_component and not full_suite_valid
+        else "official_full_runtime"
+        if official_verified
+        else "official_results_normalized"
+    )
+    run_status = (
+        "official_full_runtime"
+        if official_verified
+        else "official_raw_video_metric_subset"
+        if raw_video_component
+        else "official_results_imported"
+        if normalization_ok
+        else "failed"
+    )
+    eligibility_reasons: list[str] = []
+    if not full_suite_valid:
+        eligibility_reasons.append(
+            "full EvalCrafter requires 700 prompt-matched videos and all 17 raw metrics plus five official aggregates"
+        )
+    if not raw_video_component:
+        eligibility_reasons.append("this invocation did not execute raw-video metrics")
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
@@ -222,7 +261,10 @@ def write_scorecard(
             "benchmark_id": BENCHMARK_ID,
             "name": DISPLAY_NAME,
             "contract_only": False,
-            "evidence_level": "official_results_normalized",
+            "evidence_level": evidence_level,
+            "evidence_scope": (
+                "bounded_official_clip_metric_subset" if raw_video_component and not full_suite_valid else evidence_level
+            ),
             "official_benchmark_verified": official_verified,
         },
         "dataset": {
@@ -232,8 +274,10 @@ def write_scorecard(
         "eligibility": {
             "full_suite_valid": full_suite_valid,
             "video_coverage_complete": video_complete,
+            "official_raw_video_component_verified": raw_video_component,
+            "executed_metrics": executed_metrics,
             "leaderboard_valid": official_verified and full_suite_valid,
-            "reasons": [] if official_verified else ["official EvalCrafter runtime was not completed by this runner invocation"],
+            "reasons": [] if official_verified else eligibility_reasons,
         },
         "metrics": {
             "leaderboard": leaderboard,
@@ -241,19 +285,23 @@ def write_scorecard(
             "summary": {
                 "available_metrics": available_count,
                 "total_metrics": len(metric_rows),
+                "executed_raw_video_metrics": len(executed_metrics),
             },
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "evalcrafter_official_in_tree" if official_runtime_executed else "evalcrafter_result_normalizer",
-            "evidence_level": "official_results_normalized",
+            "kind": (
+                "evalcrafter_official_raw_video_metrics" if raw_video_component else "evalcrafter_result_normalizer"
+            ),
+            "evidence_level": evidence_level,
             "leaderboard_metrics": leaderboard,
             "num_results": available_count,
             "blocked_count": len(METRIC_ORDER) - available_count,
         },
         "validation": {
-            "normalizer_only": not official_runtime_executed,
+            "normalizer_only": normalizer_only,
             "official_runtime_executed": official_runtime_executed,
+            "official_raw_video_component_verified": raw_video_component,
             "official_results_imported": official_results_imported,
         },
         "coverage": {"videos": dict(video_coverage)},
@@ -266,14 +314,19 @@ def write_scorecard(
         },
         "official_benchmark_verified": official_verified,
         "leaderboard_valid": official_verified and full_suite_valid,
-        "integration_evidence": official_verified and full_suite_valid,
+        "integration_evidence": integration_evidence,
         "normalization_ok": normalization_ok,
-        "normalizer_only": not official_runtime_executed and not (official_verified and full_suite_valid),
+        "normalizer_only": normalizer_only,
         "official_results_imported": official_results_imported,
         "prompt_count": prompt_count,
         "notes": [
-            "EvalCrafter runner consumes final_result.txt produced by WorldFoundry/base-model metric infrastructure.",
-            "Benchmark-local shell entrypoints are not launched from this runner.",
+            (
+                "This run executed a bounded subset of official EvalCrafter raw-video metrics; it is not a full "
+                "17-metric benchmark or leaderboard result."
+                if raw_video_component and not full_suite_valid
+                else "This run normalized an existing EvalCrafter final_result.txt."
+            ),
+            "Unavailable metrics remain unavailable; no missing value or aggregate is synthesized.",
         ],
     }
 
@@ -283,14 +336,15 @@ def write_scorecard(
         "input_keys": list(INPUT_KEYS),
         "output_keys": list(OUTPUT_KEYS),
         "metric_ids": list(METRIC_ORDER),
-        "requires_upstream_runtime": True,
+        "requires_upstream_runtime": not raw_video_component,
         "runner": "benchmark_zoo_evalcrafter_official_runner",
         "upstream_results": str(upstream_results_path),
     }
     write_json(scorecard_path, scorecard)
     write_json(contract_path, benchmark_contract)
     write_jsonl(raw_metric_table_path, metric_rows)
-    write_jsonl(per_sample_path, [])
+    if not per_sample_path.is_file():
+        write_jsonl(per_sample_path, [])
     return scorecard
 
 
@@ -327,6 +381,16 @@ def normalize_evalcrafter_results(
         source_path=upstream_results_path,
         official_runtime_executed=official_runtime_executed,
     )
+    if isinstance(scorer_summary, Mapping) and scorer_summary.get("backend") == "raw_video":
+        sample_counts = scorer_summary.get("metric_sample_counts")
+        sample_counts = sample_counts if isinstance(sample_counts, Mapping) else {}
+        executed = {str(item) for item in scorer_summary.get("executed_metrics") or ()}
+        for row in metric_rows:
+            metric_id = str(row["metric_id"])
+            if metric_id in executed:
+                row["source"] = "evalcrafter_official_raw_video_metric"
+                row["sample_count"] = int(sample_counts.get(metric_id) or 0)
+                row["evidence_scope"] = "bounded_official_clip_metric_subset"
     video_coverage = _coverage({record["prompt_id"] for record in prompt_records}, videos_dir)
     scorecard = write_scorecard(
         extracted_scores,
@@ -363,7 +427,6 @@ def run_official_evalcrafter(args: argparse.Namespace) -> dict[str, Any]:
     evalcrafter_root = args.evalcrafter_root or resolve_evalcrafter_root()
     if evalcrafter_root is None:
         raise FileNotFoundError("EvalCrafter root not found; bundled assets should be available in-tree.")
-    config = scorer_config_from_env()
     input_validation = validate_official_inputs(evalcrafter_root, Path(videos_dir))
     write_json(output_dir / "input_validation.json", input_validation)
     if args.strict and not input_validation["ok"]:
@@ -372,9 +435,14 @@ def run_official_evalcrafter(args: argparse.Namespace) -> dict[str, Any]:
     scorer_summary = run_evalcrafter_scorer(
         generated_artifact_dir=Path(videos_dir),
         output_dir=output_dir,
-        config=config,
+        evalcrafter_root=evalcrafter_root,
         prompt700_path=prompt700_path,
         limit=args.limit,
+        metrics=args.metrics,
+        clip_model_path=args.clip_model,
+        device=args.device,
+        batch_size=args.batch_size,
+        use_official_metric_prompts=args.prompt_manifest is None,
     )
     normalize_args = argparse.Namespace(
         benchmark_id=args.benchmark_id,
@@ -389,6 +457,10 @@ def run_official_evalcrafter(args: argparse.Namespace) -> dict[str, Any]:
         run_official=False,
         run_fixture=False,
         check_inputs=False,
+        metrics=args.metrics,
+        clip_model=args.clip_model,
+        device=args.device,
+        batch_size=args.batch_size,
     )
     return normalize_evalcrafter_results(
         normalize_args,
@@ -443,14 +515,14 @@ def main(argv: list[str] | None = None) -> int:
             scorecard = run_official_evalcrafter(args)
         else:
             scorecard = normalize_evalcrafter_results(args)
-    except (OSError, ValueError, SyntaxError) as exc:
+    except (ImportError, OSError, RuntimeError, ValueError, SyntaxError) as exc:
         args.output_dir.mkdir(parents=True, exist_ok=True)
         scorecard = {
             "schema_version": SCORECARD_SCHEMA_VERSION,
             "official_benchmark_verified": False,
             "integration_evidence": False,
             "leaderboard_valid": False,
-            "normalizer_only": True,
+            "normalizer_only": not args.run_official,
             "normalization_ok": False,
             "run": {
                 "status": "failed",
@@ -460,9 +532,33 @@ def main(argv: list[str] | None = None) -> int:
                 "error": f"{type(exc).__name__}: {exc}",
             },
             "benchmark": {"benchmark_id": BENCHMARK_ID, "name": DISPLAY_NAME},
+            "dataset": {
+                "generated_artifact_dir": None if args.videos_dir is None else str(args.videos_dir),
+                "prompt_suite": None if args.prompt_manifest is None else str(args.prompt_manifest),
+            },
+            "eligibility": {
+                "full_suite_valid": False,
+                "video_coverage_complete": False,
+                "leaderboard_valid": False,
+                "reasons": [f"EvalCrafter execution failed: {exc}"],
+            },
             "metrics": {"leaderboard": {}, "per_metric": {}, "summary": {"available_metrics": 0}},
-            "evaluation": {"available": False, "kind": "evalcrafter_result_normalizer", "blocked_count": len(METRIC_ORDER)},
+            "evaluation": {
+                "available": False,
+                "kind": (
+                    "evalcrafter_official_raw_video_metrics"
+                    if args.run_official
+                    else "evalcrafter_result_normalizer"
+                ),
+                "blocked_count": len(METRIC_ORDER),
+            },
+            "validation": {
+                "normalizer_only": not args.run_official,
+                "official_runtime_executed": False,
+                "official_results_imported": False,
+            },
             "artifacts": {"scorecard": str((args.output_dir / "scorecard.json").resolve())},
+            "official_results_imported": False,
         }
         write_json(args.output_dir / "scorecard.json", scorecard)
         if args.json:
@@ -471,8 +567,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    run_failed = scorecard["run"].get("status") == "failed" or scorecard["run"].get("returncode") not in {
+        None,
+        0,
+    }
     result = {
-        "ok": bool(scorecard["evaluation"]["available"]),
+        "ok": bool(scorecard["evaluation"]["available"]) and not run_failed,
         "benchmark_id": BENCHMARK_ID,
         "output_dir": str(args.output_dir),
         "official_benchmark_verified": scorecard["official_benchmark_verified"],
@@ -485,7 +585,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
     else:
-        status = "official verified" if result["official_benchmark_verified"] else "official results normalized"
+        status = (
+            "failed"
+            if not result["ok"]
+            else "full official benchmark verified"
+            if result["official_benchmark_verified"]
+            else "official raw-video metric subset completed"
+            if result["integration_evidence"]
+            else "official results normalized"
+        )
         print(f"evalcrafter: {status}")
         print(f"output_dir: {result['output_dir']}")
     return 0 if result["ok"] else 1

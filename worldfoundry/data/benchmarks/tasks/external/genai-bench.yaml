@@ -2,7 +2,7 @@ benchmark: genai-bench
 description: GenAI-Bench external benchmark contract manifest.
 id: genai-bench
 name: GenAI-Bench
-status: integrated_in_tree_official_runtime
+status: in_tree_result_normalizer
 domain:
 - human-preference
 - judge-alignment
@@ -162,10 +162,10 @@ metadata:
     results_path_env: WORLDFOUNDRY_GENAI_BENCH_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   release_status: experimental
-  open_source_status: in_tree_runtime
+  open_source_status: in_tree_result_normalizer
   maturity: contract_ready
   official_benchmark_verified: false
-  integration_evidence: true
+  integration_evidence: false
   leaderboard_valid: false
   base_model_dependencies:
   - genai_bench_dataset_assets
@@ -191,8 +191,8 @@ metadata:
     runner_target: worldfoundry.evaluation.tasks.contracts.external:GenAIBenchContract
     runner_script_available: true
     task_yaml_available: true
-    runtime_verified: true
-    surface: genai_bench_official_in_tree
+    runtime_verified: false
+    surface: in_tree_result_normalizer
     normalizer_verified: true
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
   runner:
@@ -263,7 +263,7 @@ tasks:
       source_kind: benchmark_zoo
       benchmark_id: genai-bench
       official_benchmark_verified: false
-      integration_evidence: true
+      integration_evidence: false
       leaderboard_valid: false
     dataset:
       status: official_repo_or_generated_artifacts

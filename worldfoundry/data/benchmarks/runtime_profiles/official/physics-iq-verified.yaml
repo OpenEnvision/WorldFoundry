@@ -1,0 +1,28 @@
+benchmark_ids: [physics-iq-verified]
+environment_id: worldfoundry-unified-cu128
+id: physics-iq-verified
+name: Physics-IQ Verified
+needs_new_env: false
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots: [.]
+preflight_command: >-
+  PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
+  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight
+  --profile physics-iq-verified
+  --manifest worldfoundry/data/benchmarks/runtime_profiles/official/physics-iq-verified.yaml
+  --output-dir tmp/worldfoundry_preflight/physics-iq-verified --json
+required_assets:
+  bundled_prompt: worldfoundry/data/benchmarks/assets/physics-iq-verified/descriptions/descriptions_base.csv
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/physics-iq-verified.yaml
+required_env: []
+optional_env: [WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT, WORLDFOUNDRY_GENERATED_ARTIFACT_DIR, WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_DESCRIPTIONS, WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH]
+required_imports: [numpy, pandas, joblib, cv2, tqdm, PIL]
+required_packages: [numpy, pandas, joblib, opencv-python, tqdm, Pillow]
+required_paths:
+- {id: official_runner_script, path: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py}
+- {id: official_runtime, path: worldfoundry/evaluation/tasks/execution/runners/physics_iq/official}
+- {id: task_yaml, path: worldfoundry/data/benchmarks/tasks/external/physics-iq-verified.yaml}
+- {id: bundled_descriptions, path: worldfoundry/data/benchmarks/assets/physics-iq-verified/descriptions/descriptions_base.csv}
+requires_cuda_visibility: false
+status: in_tree_official_runtime_integrated_data_required
+validation_command: [worldfoundry-eval, zoo, benchmark-run, --benchmark-id, physics-iq-verified, --mode, official-validation, --official-results-path, <raw_metrics.csv>, --output-dir, <out>, --json]

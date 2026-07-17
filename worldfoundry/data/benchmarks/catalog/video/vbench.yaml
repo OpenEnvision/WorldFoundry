@@ -13,7 +13,7 @@ modalities:
 status: bounded_official_long_temporal_flickering_unified_verified_full_suite_pending
 open_source_status: stable
 official_benchmark_verified: false
-integration_evidence: false
+integration_evidence: true
 leaderboard_valid: false
 requires:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -35,7 +35,8 @@ official_gpu_validation:
   verified: true
   dimension: aesthetic_quality
   generated_video_count: 1
-  official_benchmark_verified: true
+  official_component_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false
@@ -307,7 +308,8 @@ runner:
       status: verified
       dimension: aesthetic_quality
       generated_video_count: 1
-      official_benchmark_verified: true
+      official_component_verified: true
+      official_benchmark_verified: false
       integration_evidence: true
       leaderboard_valid: false
       full_suite_verified: false
@@ -319,15 +321,16 @@ runner:
   notes:
   - Contract runner maps generated videos, all 16 official VBench dimensions, and WorldFoundry aggregate scorecard 
     metrics into BenchmarkSpec.
-  - Bounded official GPU validation verified aesthetic_quality with official_benchmark_verified=true and 
-    integration_evidence=true.
+  - Bounded official GPU validation verified aesthetic_quality with official_component_verified=true and
+    integration_evidence=true; official_benchmark_verified remains false until full-suite verification.
   - Bounded official-run evidence is integrated; leaderboard-grade full-suite validation remains blocked below.
 integration:
   status: integrated
   evidence:
     report_path: tmp/benchmark_zoo/validation/vbench/report.json
     validation_dimension: aesthetic_quality
-    official_benchmark_verified: true
+    official_component_verified: true
+    official_benchmark_verified: false
     integration_evidence: true
     leaderboard_valid: false
   limitations:
@@ -347,8 +350,10 @@ runner_availability:
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
+  runtime_verification_scope: bounded_aesthetic_quality_dimension
+  full_suite_verified: false
   normalizer_verified: false
-  surface: official_runner
+  surface: bounded_official_gpu_validation
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
 - worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py

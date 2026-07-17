@@ -15,11 +15,11 @@ notes:
   result files are supplied.
 - Full leaderboard parity still requires VILA judge checkpoint execution and upstream submission evidence.
 preflight_command: PYTHONPATH=worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime:. 
-  ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python -m 
+  ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile worldmodelbench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/worldmodelbench.yaml --output-dir 
   tmp/worldfoundry_preflight/worldmodelbench --json
-python_path: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime
 - .
@@ -34,13 +34,14 @@ required_assets:
   - <worldmodelbench_data_root>/evaluation.py
   - <worldmodelbench_data_root>/images/
   task_yaml: worldfoundry/data/benchmarks/tasks/external/worldmodelbench.yaml
-required_env:
-- WORLDFOUNDRY_WORLDMODELBENCH_RESULTS_PATH
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-- WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT or WORLDFOUNDRY_BENCHMARK_DATA_ROOT
-- WORLDFOUNDRY_WORLDMODELBENCH_JUDGE=<VILA_checkpoint_or_HF_model_id>
+required_env: []
 optional_env:
 - WORLDFOUNDRY_WORLDMODELBENCH_ROOT
+- WORLDFOUNDRY_WORLDMODELBENCH_RESULTS_PATH
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT
+- WORLDFOUNDRY_BENCHMARK_DATA_ROOT
+- WORLDFOUNDRY_WORLDMODELBENCH_JUDGE
 required_packages:
 - numpy
 - rich
@@ -55,9 +56,10 @@ required_paths:
   path: worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime
 - id: local_dataset_1
   path: cache/worldfoundry/data/hfd_datasets/Efficient-Large-Model/worldmodelbench
+  required: false
 - id: local_dataset_2
   path: cache/worldfoundry/data/hfd_datasets/Efficient-Large-Model__worldmodelbench
-- id: generated_artifact_example_1
+  required: false
 requires_cuda_visibility: true
 status: in_tree_official_runtime_ready_full_judge_assets_pending
 full_test_harness_ready: true

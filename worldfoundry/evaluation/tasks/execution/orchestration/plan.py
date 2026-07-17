@@ -7,28 +7,27 @@ Orchestrators parse RunPlans to materialize requests and execute model evaluatio
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-import json
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.utils import jsonable, read_json_or_jsonl, write_json
 from worldfoundry.evaluation.api import GenerationRequest
-from worldfoundry.evaluation.tasks.execution.framework.in_tree_registry import target_benchmark_metrics
+from worldfoundry.evaluation.tasks.catalog.registry import TaskRegistryEntry, load_task_registry_from_paths
 from worldfoundry.evaluation.tasks.datasets import (
     load_dataset_manifest,
     read_dataset_samples,
     resolve_dataset_samples_path,
     validate_dataset_manifest,
 )
+from worldfoundry.evaluation.tasks.execution.framework.in_tree_registry import target_benchmark_metrics
 from worldfoundry.evaluation.tasks.metrics.registry import validate_metric_ids
-from worldfoundry.evaluation.tasks.catalog.registry import TaskRegistryEntry, load_task_registry_from_paths
+from worldfoundry.evaluation.utils import jsonable, read_json_or_jsonl, write_json
 
 from .cache import json_sha256
-from .materialize import materialize_generation_requests
 from .evaluate import EVALUATE_RUN_REQUEST_SCHEMA_VERSION, EvaluateRunRequest
-
+from .materialize import materialize_generation_requests
 
 # Canonical schema version for RunPlan structure tracking
 RUN_PLAN_SCHEMA_VERSION = "worldfoundry-run-plan"
@@ -421,6 +420,7 @@ def evaluate_request_from_run_plan(plan: RunPlan) -> EvaluateRunRequest:
         generation_cache_dir=plan.generation_cache_dir,
         generation_cache_mode=plan.generation_cache_mode,
         generation_cache_namespace=plan.generation_cache_namespace,
+        run_metadata=plan.metadata,
         schema_version=EVALUATE_RUN_REQUEST_SCHEMA_VERSION,
     )
 

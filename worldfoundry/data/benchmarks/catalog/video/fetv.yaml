@@ -126,7 +126,7 @@ metrics:
   output_unit: distance
 - id: fetv_average
   name: FETV Average
-  description: Mean over available normalized FETV scores.
+  description: Mean emitted only when every declared FETV component score is available.
   higher_is_better: true
   leaderboard_key: fetv_average
   aggregator: mean
@@ -161,15 +161,15 @@ runner:
   - scorecard.json
   - benchmark_contract.json
   - raw_metric_table.jsonl
-  verification_status: pending
+  verification_status: bounded_official_clipscore_verified
   notes:
-  - WorldFoundry vendors the FETV-EVAL CLIP/BLIP/FID/FVD source in tree and can normalize caller-provided official result
-    files and FETV-EVAL auto/manual result directories.
+  - A generic generated-video artifact was strictly joined to the official FETV prompt index, decoded to the required
+    16-frame layout, and scored by the in-tree official CLIPScore runtime on one real sample.
+  - WorldFoundry can also normalize caller-provided official result files and FETV-EVAL auto/manual result directories.
   - Full leaderboard validation still requires generated videos and metric model assets.
 integration:
   status: integrated
   blocked_reasons:
-  - FETV-EVAL CLIP/BLIP/FID/FVD source is vendored in tree.
   - Full metric execution requires prepared BLIP/FID/FVD assets and metric packages.
   - Full leaderboard validation requires generated videos and FETV metric dependency setup.
 release_status: experimental
@@ -179,8 +179,8 @@ official_benchmark_verified: false
 integration_evidence: true
 leaderboard_valid: false
 requires:
-- Official FETV result file, official_results rows, or FETV-EVAL auto/manual result directory
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR with generated frame directories for in-tree official scorer execution
+- A generated-video directory plus the persisted FETV generation manifest, or an exact official sent-index frame layout
+- A local CLIP checkpoint resolved through the shared VBench base-model assets for the default CLIPScore component
 - Reference frame directories for FID/FVD when those metric families are requested
 - FETV metric model packages/assets for full scorer recomputation and leaderboard validation
 blockers:
@@ -207,7 +207,7 @@ runner_availability:
   task_yaml_available: true
   runtime_verified: true
   normalizer_verified: true
-  surface: fetv_official_in_tree
+  surface: fetv_official_in_tree_bounded_clipscore
 validation_command:
 - worldfoundry-eval
 - zoo

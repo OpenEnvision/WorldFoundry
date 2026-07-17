@@ -1,0 +1,14 @@
+{
+  "type": "Siglip2LaryWrap",
+  "name": "siglip2",
+  "dim": 768,
+  "quant_dim": 32,
+  "codebook_size": 8,
+  "image_size": 224,
+  "patch_size": 16,
+  "spatial_depth": 4,
+  "temporal_depth": 4,
+  "dim_head": 64,
+  "heads": 16,
+  "code_seq_len": 16
+}

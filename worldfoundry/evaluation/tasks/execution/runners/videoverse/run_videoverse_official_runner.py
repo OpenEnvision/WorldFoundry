@@ -5,14 +5,15 @@ import argparse
 import json
 import os
 import re
-import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset  # noqa: E402
-from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl  # noqa: E402
-from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics.formulas import videoverse_subquestion_metrics  # noqa: E402
+from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
+from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics.formulas import (
+    videoverse_subquestion_metrics,
+)
 
 SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 PROMPT_MANIFEST_REL = Path("prompt/prompts_of_VideoVerse.json")
@@ -297,6 +298,21 @@ def _manifest_stats(prompt_manifest: Mapping[str, Mapping[str, Any]]) -> dict[st
     }
 
 
+def _bounded_prompt_manifest(
+    prompt_manifest: Mapping[str, Mapping[str, Any]],
+    limit: int | None,
+) -> dict[str, dict[str, Any]]:
+    """Return the exact prompt subset used by a bounded judge run."""
+    if limit is None:
+        return {str(key): dict(value) for key, value in prompt_manifest.items()}
+    if limit <= 0:
+        raise ValueError("VideoVerse --limit must be a positive integer")
+    return {
+        prompt_id: dict(prompt_manifest[prompt_id])
+        for prompt_id in sorted(prompt_manifest)[:limit]
+    }
+
+
 def _video_index(generated_dir: Path | None) -> dict[str, Any]:
     if generated_dir is None:
         return {
@@ -555,11 +571,12 @@ def _scorecard(
         and video_complete
         and len(available_rows) == len(METRIC_ORDER)
     )
-    integration_evidence = full_suite_valid
     normalization_ok = bool(available_rows)
-    official_verified = official_runtime_executed and normalization_ok
-    if official_runtime_executed:
-        integration_evidence = official_verified and full_suite_valid
+    official_runtime_ok = official_runtime_executed and normalization_ok
+    official_verified = official_runtime_ok and full_suite_valid
+    integration_evidence = official_runtime_ok or (
+        not official_runtime_executed and full_suite_valid
+    )
     normalizer_only = not official_runtime_executed and not integration_evidence
     eligibility_reasons = []
     if official_runtime_executed:
@@ -593,6 +610,8 @@ def _scorecard(
             "status": (
                 "official_verified"
                 if official_verified and integration_evidence
+                else "official_runtime_executed"
+                if official_runtime_ok
                 else "official_results_normalized"
                 if available_rows
                 else "official_results_missing_scores"
@@ -698,7 +717,12 @@ def normalize_videoverse_results(
     prompt_payload = _load_json(prompt_manifest_path)
     if not isinstance(prompt_payload, Mapping):
         raise ValueError(f"VideoVerse prompt manifest must be an object keyed by prompt id: {prompt_manifest_path}")
-    prompt_manifest = {str(key): dict(value) for key, value in prompt_payload.items() if isinstance(value, Mapping)}
+    full_prompt_manifest = {
+        str(key): dict(value)
+        for key, value in prompt_payload.items()
+        if isinstance(value, Mapping)
+    }
+    prompt_manifest = _bounded_prompt_manifest(full_prompt_manifest, args.limit)
     manifest_stats = _manifest_stats(prompt_manifest)
     results_payload = _load_json_or_jsonl(official_results_path)
 
@@ -718,7 +742,11 @@ def normalize_videoverse_results(
             }
         )
     else:
-        result_records = _records_by_id(results_payload)
+        result_records = {
+            prompt_id: record
+            for prompt_id, record in _records_by_id(results_payload).items()
+            if prompt_id in prompt_manifest
+        }
         subquestion = _subquestion_components(result_records)
         result_coverage = _coverage(set(prompt_manifest), set(result_records))
         video_index = _video_index(generated_artifact_dir)

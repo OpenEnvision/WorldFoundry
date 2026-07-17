@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
+
+from worldfoundry.evaluation.tasks.execution.framework.io import optional_float
 
 JsonValue = Any
 
@@ -16,18 +17,6 @@ class OfficialMetricScore:
     score: float
     raw_value: JsonValue
     evidence: Mapping[str, JsonValue]
-
-
-def _float_value(value: JsonValue) -> float | None:
-    """Convert numeric metadata to float when present.
-
-    Args:
-        value: Raw numeric value.
-    """
-
-    return None if value in (None, "") else float(value)
-
-
 
 
 def _dimension_scores(
@@ -156,11 +145,11 @@ def _joint_score_from_records(
 
 
 
-def _rule_classification_score(
+def _rule_followed_rate(
     records: list[Mapping[str, JsonValue]],
     official_results_path: Path | None,
 ) -> OfficialMetricScore | None:
-    """Compute VideoPhy2 rule-following accuracy from official rule labels.
+    """Compute the VideoPhy2 followed-rule rate from official rule labels.
 
     Args:
         records: Official rows with physical-rule result lists.
@@ -264,7 +253,7 @@ def _unit_score(value: JsonValue, *, scale_max: float | None = None) -> float | 
 
     if isinstance(value, bool):
         return 1.0 if value else 0.0
-    numeric = _float_value(value)
+    numeric = optional_float(value)
     if numeric is None:
         return None
     if scale_max is not None:
@@ -287,7 +276,7 @@ def _looks_likert(value: JsonValue) -> bool:
         value: Candidate official score value.
     """
 
-    numeric = _float_value(value)
+    numeric = optional_float(value)
     return numeric is not None and 1.0 <= numeric <= 5.0 and float(numeric).is_integer()
 
 
@@ -345,5 +334,3 @@ def _float_list(value: JsonValue) -> list[float]:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return [float(value)]
     return []
-
-

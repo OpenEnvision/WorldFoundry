@@ -17,6 +17,8 @@ from worldfoundry.evaluation.api import WorldModelConfig
 
 from .bindings import PipelineRoute, first_text, resolve_pipeline_route, runtime_profile_id
 
+GENERATION_DEFAULTS_PARAMETER = "_worldfoundry_generation_defaults"
+
 
 # ── Route resolution ────────────────────────────────────────────────
 
@@ -28,9 +30,8 @@ def pipeline_route_from_config(
     """Resolve the pipeline route (target, binding, source) from model config, parameters, and runtime maps.
 
     Searches for ``runtime_profile``, ``pipeline_binding``, and
-    ``pipeline_target`` values across parameters, runtime, manifest metadata,
-    and config metadata (priority order: parameters → runtime → manifest →
-    config metadata).
+    ``pipeline_target`` values across explicit overrides, resolved config
+    metadata, and finally manifest defaults.
 
     Raises:
         ValueError: If a binding is declared but cannot be resolved, or if no
@@ -40,38 +41,39 @@ def pipeline_route_from_config(
     profile_value = first_text(
         parameters.get("runtime_profile"),
         runtime.get("runtime_profile"),
+        config.metadata.get("resolved_runtime_profile"),
+        config.metadata.get("runtime_profile"),
+        config.variant,
         manifest_metadata.get("default_runtime_profile"),
         manifest_metadata.get("runtime_profile"),
-        config.metadata.get("runtime_profile"),
-        config.metadata.get("resolved_runtime_profile"),
     )
     binding_id = first_text(
         parameters.get("pipeline_binding"),
         runtime.get("pipeline_binding"),
+        config.metadata.get("pipeline_binding"),
         manifest_metadata.get("default_pipeline_binding"),
         manifest_metadata.get("pipeline_binding"),
-        config.metadata.get("pipeline_binding"),
     )
     binding_root = first_text(
         parameters.get("pipeline_bindings_root"),
         runtime.get("pipeline_bindings_root"),
-        manifest_metadata.get("pipeline_bindings_root"),
         config.metadata.get("pipeline_bindings_root"),
+        manifest_metadata.get("pipeline_bindings_root"),
     )
     alias_root = first_text(
         parameters.get("pipeline_aliases_root"),
         runtime.get("pipeline_aliases_root"),
-        manifest_metadata.get("pipeline_aliases_root"),
         config.metadata.get("pipeline_aliases_root"),
+        manifest_metadata.get("pipeline_aliases_root"),
     )
     route = resolve_pipeline_route(
         model_id=first_text(parameters.get("model_id"), config.model_id),
         pipeline_target=first_text(
             parameters.get("pipeline_target"),
             runtime.get("pipeline_target"),
+            config.metadata.get("pipeline_target"),
             manifest_metadata.get("default_pipeline_target"),
             manifest_metadata.get("pipeline_target"),
-            config.metadata.get("pipeline_target"),
         ),
         pipeline_binding=binding_id,
         runtime_profile=profile_value,
@@ -106,6 +108,7 @@ class PipelineRunnerSpec:
         required_components: Optional mapping of component names to paths/IDs.
         device: Target device string (e.g. ``"cuda"``).
         output_dir: Optional directory for pipeline output artifacts.
+        generation_defaults: Defaults merged into each generation request.
     """
 
     model_id: str
@@ -116,6 +119,7 @@ class PipelineRunnerSpec:
     required_components: Mapping[str, Any] | None
     device: str
     output_dir: Path | None = None
+    generation_defaults: Mapping[str, Any] | None = None
 
 
 # ── Dynamic import & HFD cache resolution ───────────────────────────
@@ -255,6 +259,9 @@ def build_pipeline_runner_spec(config: WorldModelConfig) -> PipelineRunnerSpec:
     """
     parameters = dict(config.parameters or {})
     runtime = dict(config.runtime or {})
+    generation_defaults = parameters.pop(GENERATION_DEFAULTS_PARAMETER, None)
+    if generation_defaults is not None and not isinstance(generation_defaults, Mapping):
+        raise TypeError(f"{GENERATION_DEFAULTS_PARAMETER} must be a mapping when provided.")
     model_id = str(parameters.get("model_id") or config.model_id)
     manifest_metadata = dict(config.manifest.metadata or {}) if config.manifest is not None else {}
     # NOTE: runtime_profile is resolved across parameters, runtime, manifest, config metadata, and model_id.
@@ -262,10 +269,11 @@ def build_pipeline_runner_spec(config: WorldModelConfig) -> PipelineRunnerSpec:
         first_text(
             parameters.get("runtime_profile"),
             runtime.get("runtime_profile"),
+            config.metadata.get("resolved_runtime_profile"),
+            config.metadata.get("runtime_profile"),
+            config.variant,
             manifest_metadata.get("default_runtime_profile"),
             manifest_metadata.get("runtime_profile"),
-            config.metadata.get("runtime_profile"),
-            config.metadata.get("resolved_runtime_profile"),
             model_id,
         )
     )
@@ -276,6 +284,8 @@ def build_pipeline_runner_spec(config: WorldModelConfig) -> PipelineRunnerSpec:
 
     # Build a model_path dict that includes all parameters plus runtime extras.
     model_path = {**parameters, "model_id": model_id}
+    if config.variant:
+        model_path.setdefault("variant_id", config.variant)
     model_path.setdefault("profile_id", resolved_runtime_profile_id)
     model_path.setdefault("runtime_profile", resolved_runtime_profile_id)
     # NOTE: pipeline_target is consumed at import time, not passed to from_pretrained.
@@ -306,6 +316,7 @@ def build_pipeline_runner_spec(config: WorldModelConfig) -> PipelineRunnerSpec:
         required_components=dict(required_components) if isinstance(required_components, Mapping) else None,
         device=str(runtime.get("device", parameters.get("device", "cuda"))),
         output_dir=output_dir,
+        generation_defaults=(dict(generation_defaults) if isinstance(generation_defaults, Mapping) else None),
     )
 
 
@@ -466,6 +477,7 @@ def load_pipeline_from_config(config: WorldModelConfig) -> tuple[PipelineRunnerS
 
 
 __all__ = [
+    "GENERATION_DEFAULTS_PARAMETER",
     "PipelineRunnerSpec",
     "build_pipeline_runner_spec",
     "call_pipeline_from_pretrained",

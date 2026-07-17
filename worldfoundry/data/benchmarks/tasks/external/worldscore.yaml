@@ -68,7 +68,8 @@ metadata:
     verified: true
     split: dynamic
     generated_video_count: 1
-    official_benchmark_verified: true
+    official_component_verified: true
+    official_benchmark_verified: false
     integration_evidence: true
     leaderboard_valid: false
     full_suite_verified: false
@@ -110,8 +111,10 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
+    runtime_verification_scope: bounded_one_dynamic_sample
+    full_suite_verified: false
     normalizer_verified: false
-    surface: official_runner
+    surface: bounded_official_gpu_validation
   validation_command:
   - worldfoundry-eval
   - zoo
@@ -163,7 +166,8 @@ tasks:
         verified: true
         split: dynamic
         generated_video_count: 1
-        official_benchmark_verified: true
+        official_component_verified: true
+        official_benchmark_verified: false
         integration_evidence: true
         leaderboard_valid: false
         full_suite_verified: false

@@ -1,0 +1,36 @@
+{
+  "adapter": "gen3c",
+  "aliases": [
+    "gen3c"
+  ],
+  "amplitude": {
+    "calibration_status": "model_limitation_20260616",
+    "max_amount": 0.6,
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "cache3d_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "execution_contract": {
+    "backend_status": "planned",
+    "entry_script": {
+      "launcher": "scripts/inference/run_local_benchmark.sh",
+      "worker": "scripts/inference/workers/run_gen3c_worker.py"
+    },
+    "note": "GEN3C requires ViPE cache + in-process Gen3cPipeline; local backend is planned.",
+    "upstream_command": "Gen3cPipeline.generate via official gen3c_dynamic Cache4D path"
+  },
+  "input_kind": "source_video",
+  "key": "gen3c",
+  "notes": "GEN3C; official dynamic path; W2C matrices and intrinsics for ViPE cache rendering; requires source-matched rgb/depth/pose/intrinsics cache at inference time.",
+  "payload_type": "gen3c_w2c_intrinsics",
+  "status": "active"
+}

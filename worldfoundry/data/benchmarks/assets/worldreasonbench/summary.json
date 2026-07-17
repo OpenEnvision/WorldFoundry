@@ -1,0 +1,12 @@
+{
+  "num_videos_evaluated": 4,
+  "num_videos_skipped": 0,
+  "num_questions_evaluated": 20,
+  "overall_average_score": 0.75,
+  "process_aware": {
+    "state_score": 0.8,
+    "process_satisfaction": 0.6,
+    "fidelity_score": 0.7,
+    "mechanism_score": 0.4
+  }
+}

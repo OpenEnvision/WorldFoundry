@@ -17,7 +17,7 @@ modalities:
 status: confirmed_official_code_and_data_in_github
 open_source_status: in_tree_runtime
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 full_test_harness_ready: true
 full_suite_testable: true
@@ -201,7 +201,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldModelBenchContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   surface: worldmodelbench_official_in_tree
   normalizer_verified: true
 base_model_dependencies:

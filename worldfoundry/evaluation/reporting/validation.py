@@ -11,21 +11,22 @@ to the appropriate schema validator based on ``schema_version`` or an explicit
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from worldfoundry.evaluation.utils import read_json_object, read_jsonl_objects
 
+from .comparison_identity import COMPARISON_IDENTITY_SCHEMA_VERSION
 from .run_comparison import RUN_COMPARISON_SCHEMA_VERSION
 from .run_index import RUN_INDEX_SCHEMA_VERSION
 from .run_manifest import (
-    ENVIRONMENT_SCHEMA_VERSION,
     ENV_REQUIREMENTS_SCHEMA_VERSION,
+    ENVIRONMENT_SCHEMA_VERSION,
     RUN_MANIFEST_SCHEMA_VERSION,
 )
 from .run_report import RUN_SUMMARY_SCHEMA_VERSION
 from .scorecard import SCORECARD_SCHEMA_VERSION
-
 
 # ── Schema version identifiers ──────────────────────────────
 CONTRACT_VALIDATION_SCHEMA_VERSION = "worldfoundry-contract-validation"
@@ -71,6 +72,20 @@ def _warn_empty_mapping(payload: Mapping[str, Any], key: str, warnings: list[str
     value = payload.get(key)
     if not isinstance(value, Mapping) or not value:
         warnings.append(f"missing or empty mapping: {key}")
+
+
+def _validate_finite_numbers(value: Any, *, path: str, errors: list[str]) -> None:
+    """Reject JSON's non-standard NaN/Infinity values inside metric payloads."""
+    if isinstance(value, float) and not math.isfinite(value):
+        errors.append(f"non-finite metric value: {path}")
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _validate_finite_numbers(item, path=f"{path}.{key}", errors=errors)
+        return
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for index, item in enumerate(value):
+            _validate_finite_numbers(item, path=f"{path}[{index}]", errors=errors)
 
 
 # ── Artifact path helpers ───────────────────────────────────
@@ -136,6 +151,38 @@ def _validate_artifacts(
         _check_artifact_paths(dict(artifacts), source_path=source_path, errors=errors)
 
 
+def _validate_comparison_identity(
+    payload: Mapping[str, Any],
+    *,
+    warnings: list[str],
+    errors: list[str],
+) -> None:
+    """Validate an identity when present while keeping legacy artifacts readable."""
+
+    identity = payload.get("comparison_identity")
+    if identity is None:
+        return
+    if not isinstance(identity, Mapping):
+        errors.append("invalid mapping: comparison_identity")
+        return
+    if identity.get("schema_version") != COMPARISON_IDENTITY_SCHEMA_VERSION:
+        errors.append(
+            "comparison_identity schema_version must be "
+            f"{COMPARISON_IDENTITY_SCHEMA_VERSION!r}"
+        )
+    if not identity.get("comparison_key"):
+        errors.append("comparison_identity missing comparison_key")
+    if identity.get("status") not in {"complete", "incomplete"}:
+        errors.append("comparison_identity status must be 'complete' or 'incomplete'")
+    if identity.get("status") == "incomplete":
+        missing = [
+            *(_sequence(identity.get("missing_required"))),
+            *(_sequence(identity.get("missing_recommended"))),
+        ]
+        if missing:
+            warnings.append("incomplete comparison identity: " + ", ".join(map(str, missing)))
+
+
 def _validate_run_summary(
     payload: Mapping[str, Any],
     *,
@@ -151,6 +198,9 @@ def _validate_run_summary(
     for key in ("sample_count", "successful_samples", "failed_samples"):
         if key not in counts:
             errors.append(f"counts missing required key: {key}")
+    _validate_finite_numbers(payload.get("metrics"), path="metrics", errors=errors)
+    _validate_finite_numbers(payload.get("leaderboard"), path="leaderboard", errors=errors)
+    _validate_comparison_identity(payload, warnings=warnings, errors=errors)
     _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
 
 
@@ -174,6 +224,8 @@ def _validate_scorecard(
             errors.append(f"metrics missing or invalid mapping: {key}")
     if not isinstance(metrics.get("leaderboard"), Mapping):
         warnings.append("metrics missing optional leaderboard mapping")
+    _validate_finite_numbers(metrics, path="metrics", errors=errors)
+    _validate_comparison_identity(payload, warnings=warnings, errors=errors)
     _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
 
 
@@ -198,6 +250,8 @@ def _validate_run_index(
             errors.append(f"rows[{index}] missing source_path")
         if not isinstance(row.get("metrics"), Mapping):
             errors.append(f"rows[{index}] missing or invalid metrics")
+        _validate_finite_numbers(row.get("metrics"), path=f"rows[{index}].metrics", errors=errors)
+        _validate_comparison_identity(row, warnings=warnings, errors=errors)
         if check_artifacts and isinstance(row.get("artifacts"), Mapping):
             _check_artifact_paths(dict(row["artifacts"]), source_path=source_path, errors=errors)
     _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
@@ -214,6 +268,7 @@ def _validate_run_comparison(
     """Validate a ``worldfoundry-run-comparison`` payload."""
     rows = _required_sequence(payload, "rows", errors)
     _required_mapping(payload, "metrics", errors)
+    _validate_finite_numbers(payload.get("metrics"), path="metrics", errors=errors)
     if not isinstance(payload.get("metric_ids"), Sequence) or isinstance(payload.get("metric_ids"), (str, bytes)):
         errors.append("missing or invalid list: metric_ids")
     run_count = payload.get("run_count")
@@ -225,6 +280,17 @@ def _validate_run_comparison(
             continue
         if not isinstance(row.get("metrics"), Mapping):
             errors.append(f"rows[{index}] missing or invalid metrics")
+        _validate_finite_numbers(row.get("metrics"), path=f"rows[{index}].metrics", errors=errors)
+        _validate_comparison_identity(row, warnings=warnings, errors=errors)
+    compatibility = payload.get("compatibility")
+    if compatibility is not None:
+        if not isinstance(compatibility, Mapping):
+            errors.append("invalid mapping: compatibility")
+        elif compatibility.get("status") not in {
+            "compatible",
+            "compatible_with_incomplete_identity",
+        }:
+            errors.append("invalid compatibility status")
     _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
 
 

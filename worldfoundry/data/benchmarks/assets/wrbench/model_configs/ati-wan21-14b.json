@@ -1,0 +1,30 @@
+{
+  "adapter": "ati",
+  "aliases": [
+    "ati-wan21-14b",
+    "ati_wan21_14b",
+    "ati"
+  ],
+  "amplitude": {
+    "calibration_status": "analytic_projection_pending_gpu_parity",
+    "max_amount": 0.6,
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "image",
+  "key": "ati-wan21-14b",
+  "notes": "Camera C2W is converted analytically to ATI's official 121-sample dense point-track condition; GPU parity remains to be certified.",
+  "payload_type": "ati_dense_point_tracks",
+  "status": "active",
+  "worldfoundry_model_id": "ati-wan21-14b"
+}

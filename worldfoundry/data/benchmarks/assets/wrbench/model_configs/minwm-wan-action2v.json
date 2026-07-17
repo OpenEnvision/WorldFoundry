@@ -1,0 +1,129 @@
+{
+  "adapter": "minwm_wan_action2v",
+  "aliases": [
+    "minwm-wan-action2v",
+    "minwm_wan_action2v"
+  ],
+  "amplitude": {
+    "calibration_status": "validated_official_inference_20260620_prompt_trajectory",
+    "max_amount": 0.6,
+    "metadata": {
+      "candidate_payload_unit": "native_minwm_motion_tokens",
+      "official_fps": 16,
+      "official_input_kind": "prompt_plus_trajectory",
+      "official_video_length": 77,
+      "requires_first_frame_image": false,
+      "target_c2w_is_model_effective": false
+    },
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "canonical_scene"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 77,
+  "default_height": 480,
+  "default_width": 832,
+  "execution_contract": {
+    "cli_flag_parameters": [],
+    "cli_parameter_order": [
+      [
+        "--config_path",
+        "config_path"
+      ],
+      [
+        "--checkpoint_path",
+        "checkpoint_path"
+      ],
+      [
+        "--data_path",
+        "prompt_path"
+      ],
+      [
+        "--output_folder",
+        "output_dir"
+      ],
+      [
+        "--sp_size",
+        "sp_size"
+      ],
+      [
+        "--trajectory_path",
+        "trajectory_path"
+      ],
+      [
+        "--num_output_frames",
+        "num_output_frames"
+      ]
+    ],
+    "command_prefix": [
+      "python"
+    ],
+    "entrypoint": "Wan21/wan_inference.py",
+    "official_inference_profile": {
+      "base_model": "Wan2.1-T2V-1.3B",
+      "checkpoint": "Wan21/Action2V/dmd/model.pt",
+      "chunk_latent_frames": 4,
+      "config_path": "worldfoundry/data/models/runtime/configs/minwm/wan_action2v.yaml",
+      "decoded_video_length": 77,
+      "denoising_step_list": [
+        1000,
+        750,
+        500,
+        250
+      ],
+      "duration_seconds": 4.8125,
+      "fps": 16,
+      "guidance_scale": 3.0,
+      "input_kind": "prompt_plus_trajectory",
+      "num_frame_per_block": 4,
+      "num_output_frames": 20,
+      "requires_first_frame_image": false,
+      "use_camera": true,
+      "video_length": 77
+    },
+    "official_runtime": {
+      "entry_mode": "python Wan21/wan_inference.py or torchrun --nproc_per_node=1",
+      "python": ">=3.10",
+      "source": "shengshu-ai/minWM Wan21/scripts/inference/run_infer_causal_camera.sh",
+      "torch": "CUDA-enabled torch with Wan21 dependencies"
+    },
+    "runtime_parameters": {
+      "base_model": "Wan2.1-T2V-1.3B",
+      "checkpoint_path": "<MINWM_WAN_DMD_MODEL_PT>",
+      "chunk_latent_frames": 4,
+      "config_path": "worldfoundry/data/models/runtime/configs/minwm/wan_action2v.yaml",
+      "hf_revision": "21bd74da43b5a061c0b8ff277515088ccd2c798b",
+      "model": "MIN-Lab/minWM",
+      "num_output_frames": 20,
+      "sp_size": 1,
+      "transformer_subdir": "Wan21/Action2V/dmd"
+    },
+    "wrbench_benchmark_profile": {
+      "duration_seconds": 4.8125,
+      "fps": 16,
+      "reason": "Validated on 2026-06-20 against the official minWM Wan Action2V DMD inference path; 20 latent frames decode to 77 video frames at 16 fps.",
+      "video_length": 77
+    },
+    "wrbench_policy": {
+      "camera_control_is_native_motion_tokens": true,
+      "no_weight_download_in_dry_run": true,
+      "prompt_source": "WRBench materialized Natural-25 prompt profile",
+      "record_materialized_prompt_and_trajectory_files_for_non_dry_run": true,
+      "requires_first_frame_image": false,
+      "requires_prompt_for_real_generation": true,
+      "requires_source_video": false,
+      "requires_use_camera": true,
+      "target_c2w_is_model_effective": false
+    }
+  },
+  "input_kind": "none",
+  "key": "minwm-wan-action2v",
+  "notes": "Official minWM Wan 2.1 Action2V DMD uses prompt text plus native minWM camera trajectory tokens. It does not consume a first-frame image in the verified 4-block DMD configuration.",
+  "payload_type": "minwm_wan_action2v_prompt_trajectory",
+  "status": "active"
+}

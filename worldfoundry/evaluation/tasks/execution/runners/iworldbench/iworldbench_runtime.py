@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.utils import REPO_ROOT
 from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_metrics import METRIC_ORDER
 from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_prompts import (
     resolve_iworldbench_root,
 )
 from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import IN_TREE_VBENCH_ROOT
+from worldfoundry.evaluation.utils import REPO_ROOT
 
 EVAL_SCRIPT_REL = Path("run_iworldbench_evaluation.py")
 REPORTS_DIR_NAME = "reports"
@@ -87,8 +87,12 @@ def runtime_config_from_env(
     backend = (
         os.environ.get("WORLDFOUNDRY_IWORLD_BENCH_RUNTIME_BACKEND")
         or os.environ.get("WORLDFOUNDRY_IWORLD_BENCH_SCORER_BACKEND")
-        or "mock"
+        or "official"
     ).strip().lower()
+    if backend not in {"official", "mock"}:
+        raise ValueError(
+            "WORLDFOUNDRY_IWORLD_BENCH_RUNTIME_BACKEND must be 'official' or the explicit CI-only 'mock'"
+        )
     strict = os.environ.get("WORLDFOUNDRY_IWORLD_BENCH_STRICT", "").strip().lower() in {"1", "true", "yes", "on"}
     return IWorldBenchRuntimeConfig(
         backend=backend,
@@ -152,7 +156,8 @@ def _build_upstream_command(
     if script is None:
         raise FileNotFoundError(f"missing iWorld-Bench runner: {repo_root / 'run_iworldbench_evaluation.py'}")
     command = [
-        os.environ.get("WORLDFOUNDRY_UNIFIED_PYTHON", sys.executable),
+        os.environ.get("WORLDFOUNDRY_IWORLD_BENCH_PYTHON")
+        or os.environ.get("WORLDFOUNDRY_UNIFIED_PYTHON", sys.executable),
         str(script),
         str(generated_artifact_dir.resolve()),
         str(upstream_output_dir.resolve()),

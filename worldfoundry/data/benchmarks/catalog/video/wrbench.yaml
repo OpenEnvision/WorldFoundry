@@ -1,0 +1,206 @@
+id: wrbench
+name: WRBench
+aliases:
+- wr-bench
+benchmark_kind:
+- camera-controlled-video
+- world-state-consistency
+- re-observation
+domains:
+- video-generation
+- world-model
+- camera-control
+- persistent-state
+modalities:
+- text
+- image
+- video
+- camera-trajectory
+tags:
+- benchmark-zoo
+- external-official
+- natural25
+- d1-d6
+status: confirmed_official_code_and_hf_data
+source:
+  status: open_source
+  official_repo_url: https://github.com/JinPLu/WRBench
+  paper_url: https://arxiv.org/abs/2606.20545
+official_sources:
+  github:
+    url: https://github.com/JinPLu/WRBench
+    head_sha: 629595dc60ec08a29711af0377280c4ac9dd40bc
+  paper_url: https://arxiv.org/abs/2606.20545
+  project_page: https://jinplu.github.io/WRBench/
+  huggingface_datasets:
+  - repo_id: WRBench/wrbench-natural25
+    private: false
+    gated: false
+  - repo_id: WRBench/wrbench-results
+    private: false
+    gated: false
+  - repo_id: WRBench/wrbench-videos
+    private: false
+    gated: false
+dataset:
+  hf_dataset_id: WRBench/wrbench-natural25
+  split: train
+  requires_auth: false
+benchmark_assets:
+  prompt_suite:
+    name: Natural-25
+    family_count: 25
+    semantic_variant_count: 100
+    camera_control_count: 5
+    generation_request_count: 500
+    status: bundled_in_tree
+evaluation_surface:
+  purpose: Diagnose camera compliance, visible consistency, and persistent state after content leaves and re-enters view.
+  metric_contract: wrbench_latest_d1_d6_metrics_v3
+  reobservation_gate: runtime_v2_evidence_shared_oov_applicable
+metrics:
+- id: d1_cam_prec
+  name: Requested-camera precision (D1-CamPrec)
+  higher_is_better: true
+  raw_metric_name: D1_CamPrec
+  leaderboard_key: D1_CamPrec
+  aggregator: mean
+  output_unit: score
+- id: d1_cam_align_common_yaw
+  name: Prompt-camera alignment (common yaw)
+  higher_is_better: true
+  raw_metric_name: D1_CamAlign_common_yaw
+  leaderboard_key: D1_CamAlign_common_yaw
+  aggregator: mean
+  output_unit: score
+- id: d1_cam_align_static_hold
+  name: Prompt-camera alignment (static hold)
+  higher_is_better: true
+  raw_metric_name: D1_CamAlign_static_hold
+  leaderboard_key: D1_CamAlign_static_hold
+  aggregator: mean
+  output_unit: score
+- id: d2_visual_integrity
+  name: Visual integrity (D2)
+  higher_is_better: true
+  raw_metric_name: D2
+  leaderboard_key: D2
+  aggregator: mean
+  output_unit: score
+- id: d3_visible_spatial_consistency
+  name: Visible spatial consistency (D3)
+  higher_is_better: true
+  raw_metric_name: D3
+  leaderboard_key: D3
+  aggregator: mean
+  output_unit: score
+- id: d4_visible_state_consistency
+  name: Visible state consistency (D4)
+  higher_is_better: true
+  raw_metric_name: D4
+  leaderboard_key: D4
+  aggregator: mean
+  output_unit: score
+- id: d5_reobservation_spatial_consistency
+  name: Re-observation spatial consistency (D5)
+  higher_is_better: true
+  raw_metric_name: D5
+  leaderboard_key: D5
+  aggregator: mean
+  output_unit: score
+- id: d6_reobservation_state_consistency
+  name: Re-observation state consistency (D6)
+  higher_is_better: true
+  raw_metric_name: D6
+  leaderboard_key: D6
+  aggregator: mean
+  output_unit: score
+- id: wrbench_average
+  name: WRBench diagnostic average
+  higher_is_better: true
+  raw_metric_name: Avg
+  leaderboard_key: Avg
+  aggregator: mean
+  output_unit: score
+  primary: true
+runner:
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - wrbench
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <official_results.json_or_csv>
+  - --generated-artifact-dir
+  - <generated_videos>
+  - --output-dir
+  - <out>
+  - --json
+  run_command: >-
+    ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+    worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+    --benchmark-id wrbench --run-official
+    --output-dir "$WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR"
+    --generated-artifact-dir "$WORLDFOUNDRY_GENERATED_ARTIFACT_DIR" --json
+  runtime:
+    kind: in_tree_official_source
+    root: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime
+    root_env: WORLDFOUNDRY_WRBENCH_ROOT
+    repo_url: https://github.com/JinPLu/WRBench.git
+    repo_revision: 629595dc60ec08a29711af0377280c4ac9dd40bc
+    results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  expected_artifacts:
+  - scorecard.json
+  - benchmark_contract.json
+  - raw_metric_table.jsonl
+  - per_sample_scores.jsonl
+  - generation_requests.jsonl
+  verification_status: pending
+  notes:
+  - The complete WRBench package and Natural-25 assets are checked in under the runner runtime.
+  - The canonical camera track expands 100 semantic variants over five camera controls into 500 requests.
+  - Official-result normalization is lightweight; full D1-D6 execution requires configured scorer model assets.
+integration:
+  status: integrated
+  evidence:
+    runtime_surface: wrbench_official_in_tree
+    normalizer_verified: true
+    full_suite_verified: false
+open_source_status: in_tree_runtime
+release_status: experimental
+maturity: contract_ready
+official_benchmark_verified: false
+integration_evidence: false
+leaderboard_valid: false
+requires:
+- in-tree WRBench runtime and Natural-25 assets
+- generated videos and camera sidecars for a new model evaluation
+- WRBench scorer runtime configuration for full D1-D6 execution
+blockers:
+- Leaderboard parity requires complete Natural-25 generation plus VGGT-Omega, DINOv2, Qwen3.5, and Qwen3-VL checkpoints.
+base_model_dependencies:
+- vggt_omega
+- dinov2
+- qwen3_5_vl
+- qwen3_vl
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/wrbench.yaml
+  bundled_assets: worldfoundry/data/benchmarks/assets/wrbench
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: false
+  normalizer_verified: true
+  surface: wrbench_official_in_tree
+notes:
+- D1-CamPrec and D1-CamAlign are deliberately not merged.
+- D5 and D6 are conditional on the official re-observation applicability gate.

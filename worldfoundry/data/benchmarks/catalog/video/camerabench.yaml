@@ -21,8 +21,9 @@ official_validation:
   metric_family: camera_motion_binary_classification
   score_file_count: 1
   evaluated_splits: 1
-  official_benchmark_verified: true
-  integration_evidence: true
+  official_benchmark_verified: false
+  official_component_verified: true
+  integration_evidence: false
   leaderboard_valid: false
   full_suite_verified: false
   scorecard: tmp/local_open_eval/camerabench_binary_official_validation_after_readiness_layers_20260525/scorecard.json
@@ -135,8 +136,9 @@ runner:
       metric_family: camera_motion_binary_classification
       score_file_count: 1
       evaluated_splits: 1
-      official_benchmark_verified: true
-      integration_evidence: true
+      official_benchmark_verified: false
+      official_component_verified: true
+      integration_evidence: false
       leaderboard_valid: false
       full_suite_verified: false
       verified: true
@@ -157,12 +159,12 @@ integration:
       official-validation --score-dir <score_dir> --benchmark-data-root <camerabench_data_root> --output-dir <out> 
       --json
     official_benchmark_verified: false
-    integration_evidence: true
+    integration_evidence: false
 release_status: experimental
 maturity: verified_runner
-open_source_status: in_tree_runtime
+open_source_status: normalizer_only
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
 - syCen/CameraBench testset root via WORLDFOUNDRY_CAMERABENCH_DATA_ROOT or 
@@ -206,7 +208,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:CameraBenchContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   credential_gated: true
   framework_ready: true
   surface: camerabench_official_in_tree

@@ -65,21 +65,14 @@ metrics:
   leaderboard_key: joint_score
   aggregator: mean
   output_unit: score
-- id: rule_classification_accuracy
-  name: Rule Classification Accuracy
-  description: Rule Classification Accuracy normalized benchmark score.
-  higher_is_better: true
-  leaderboard_key: rule_classification_accuracy
-  aggregator: mean
-  output_unit: score
-- id: videophy2_average
-  name: VideoPhy2 Average
-  description: VideoPhy2 Average normalized benchmark score.
-  higher_is_better: true
-  leaderboard_key: videophy2_average
-  aggregator: mean
-  output_unit: score
   primary: true
+- id: rule_followed_rate
+  name: Rule Followed Rate
+  description: Fraction of determined physical rules judged as followed rather than violated.
+  higher_is_better: true
+  leaderboard_key: rule_followed_rate
+  aggregator: mean
+  output_unit: score
 runner:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoPhy2Contract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py
@@ -130,7 +123,7 @@ release_status: experimental
 maturity: contract_ready
 open_source_status: experimental
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -152,7 +145,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoPhy2Contract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   surface: videophy2_official_in_tree
   normalizer_verified: false
 base_model_dependencies:

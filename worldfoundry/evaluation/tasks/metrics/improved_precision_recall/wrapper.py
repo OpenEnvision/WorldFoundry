@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
@@ -17,15 +18,9 @@ def package_root() -> Path:
     return PACKAGE_ROOT
 
 
-def _ensure_ipr() -> None:
-    root = str(PACKAGE_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
 @lru_cache(maxsize=1)
 def _ipr_class() -> Any:
-    _ensure_ipr()
+    prepend_import_path(PACKAGE_ROOT)
     from improved_precision_recall import IPR
 
     return IPR
@@ -52,14 +47,13 @@ def compute_improved_precision_recall(
 
 
 def _custom_loader(*args: Any, **kwargs: Any) -> Any:
-    _ensure_ipr()
+    prepend_import_path(PACKAGE_ROOT)
     from improved_precision_recall import get_custom_loader
 
     return get_custom_loader(*args, **kwargs)
 
 
 def _load_image_tensor(image: np.ndarray, device: str) -> Any:
-    import torch
     from torchvision import transforms
 
     arr = np.asarray(image)
@@ -92,7 +86,7 @@ def compute_realism_score(
     """Compute IPR realism score(s) relative to a reference image manifold."""
     import torch
 
-    _ensure_ipr()
+    prepend_import_path(PACKAGE_ROOT)
     device_t = device or ("cuda" if torch.cuda.is_available() else "cpu")
     ipr = _ipr_class()(batch_size=batch_size, k=k, num_samples=num_samples, device=device_t)
     with torch.no_grad():

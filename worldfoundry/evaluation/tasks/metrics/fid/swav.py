@@ -2,23 +2,18 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
+
 VENDOR_ROOT = Path(__file__).resolve().parent / "vendor" / "swav"
-
-
-def _ensure_swav_fid() -> None:
-    root = str(VENDOR_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
 
 
 @lru_cache(maxsize=1)
 def _swav_fid_module() -> Any:
-    _ensure_swav_fid()
+    prepend_import_path(VENDOR_ROOT)
     import fid_score as mod
 
     return mod

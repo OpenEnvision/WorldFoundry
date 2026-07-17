@@ -7,7 +7,7 @@ benchmark_kind:
 status: confirmed_official_code_and_partial_hf_data
 open_source_status: gated
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 alpha_readiness:
   status: credential_gated_integrated
@@ -216,7 +216,7 @@ runner:
   - Runtime execution writes a temporary private config from environment variables rather than mutating the upstream 
     config.json.
   - Local preflight validated the hfd_datasets annotation mirror, official video zip mirror, generated prompt manifest, 
-    sample video decode, official layout matching, and dependency imports through the prepared worldplay environment.
+    sample video decode, official layout matching, and dependency imports through the prepared unified environment.
   - Official GPT judge execution remains gated only by explicit user-provided API credentials.
   - Missing API credentials are a runtime configuration requirement, not an integration blocker; with credentials and 
     generated videos, the wrapper dispatches to upstream evaluate.py and normalizes official score outputs.
@@ -255,7 +255,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoBenchContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   credential_gated: true
   surface: videobench_official_in_tree
   normalizer_available: true

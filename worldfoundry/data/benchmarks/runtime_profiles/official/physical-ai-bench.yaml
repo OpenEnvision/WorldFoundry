@@ -1,0 +1,64 @@
+benchmark_ids: [physical-ai-bench]
+id: physical-ai-bench
+name: Physical AI Bench (PAI-Bench)
+environment_id: worldfoundry-unified-cu128
+needs_new_env: false
+readiness_note: Core runtime and all shared model code use the unified environment; a separately served vLLM judge is optional for the PAI-Bench-G binary-VQA model.
+
+notes:
+- No upstream Physical AI Bench checkout is required.
+- CPU transfer metrics and result normalization work without CUDA.
+- Selected VBench/DOVER/depth/segmentation metrics require their existing WorldFoundry checkpoints.
+- Qwen2.5-VL can run locally in the unified environment when it fits, or through --judge-backend openai-compatible from a separate vLLM service environment.
+
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots: [.]
+required_assets:
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
+  - worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
+  evaluator_config: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/physical-ai-bench.yaml
+
+required_env: []
+optional_env:
+- WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- WORLDFOUNDRY_DOVER_CKPT
+- WORLDFOUNDRY_GROUNDING_DINO_CKPT
+- WORLDFOUNDRY_SAM2_CKPT
+- OPENAI_API_KEY
+
+required_imports: [numpy, cv2, skimage, scipy, yaml, torch, decord, lpips, pycocotools, supervision, transformers, requests]
+required_packages: [numpy, opencv-python, scikit-image, scipy, PyYAML, torch, decord, lpips, pycocotools, supervision, transformers, requests]
+required_paths:
+- {id: official_runner_script, path: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py}
+- {id: in_tree_runtime, path: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench}
+- {id: evaluator_config, path: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml}
+- {id: task_yaml, path: worldfoundry/data/benchmarks/tasks/external/physical-ai-bench.yaml}
+
+requires_cuda_visibility: false
+status: in_tree_runtime_ready
+base_model_dependencies: [vbench, vbench-plus-plus, qwen-vl, dover, lpips, video-depth-anything, grounding-dino, sam2]
+bounded_fixture_validation:
+  status: verified
+  components: [canny, blur, depth, segmentation, generation_vqa_parser, result_normalizer]
+  full_model_inference: false
+  official_benchmark_verified: false
+  integration_evidence: true
+  leaderboard_valid: false
+
+validation_command:
+- ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+- -m
+- worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner
+- --track
+- conditional-generation
+- --run-official
+- --dataset-root
+- ${WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT}
+- --generated-video-dir
+- ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
+- --output-dir
+- <out>
+- --json

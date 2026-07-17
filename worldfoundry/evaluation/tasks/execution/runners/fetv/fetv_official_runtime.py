@@ -7,13 +7,21 @@ import csv
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any, Iterable
 
+from worldfoundry.base_models.capabilities import vbench_asset_path
+from worldfoundry.core.io.serialization import read_jsonl_objects, write_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
+from worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_prompts import (
+    FETV_FRAME_COUNT,
+    FETV_GENERATION_MANIFEST_NAME,
+    load_fetv_prompt_records,
+)
 
 OFFICIAL_RUNTIME_ROOT = Path(__file__).resolve().parent / "runtime" / "fetv_eval"
 REPO_ROOT = Path(__file__).resolve().parents[6]
@@ -94,6 +102,8 @@ METRIC_ALIASES = {
     "fvd": "fvd",
 }
 
+_FETV_FRAME_DIR_PATTERN = re.compile(r"^sent(?P<index>\d+)_frames$")
+
 
 def _has_import(module: str) -> bool:
     try:
@@ -109,6 +119,24 @@ def resolve_fetv_runtime_root(explicit: Path | None = None) -> Path:
     if env_root:
         return Path(env_root).expanduser().resolve()
     return OFFICIAL_RUNTIME_ROOT
+
+
+def resolve_clip_checkpoint(value: str) -> str:
+    """Resolve official CLIP aliases to a staged local checkpoint."""
+
+    configured = value.strip()
+    alias_assets = {
+        "ViT-B/32": "vbench_clip_vit_b32_checkpoint",
+        "ViT-L/14": "vbench_clip_vit_l14_checkpoint",
+    }
+    if configured in alias_assets:
+        return str(vbench_asset_path(alias_assets[configured]))
+    candidate = Path(configured).expanduser()
+    if candidate.is_file():
+        return str(candidate.resolve())
+    if "/" in configured or "\\" in configured or candidate.suffix:
+        raise FileNotFoundError(f"FETV CLIP checkpoint does not exist: {candidate}")
+    return configured
 
 
 def official_runtime_preflight(runtime_root: Path | None = None) -> dict[str, Any]:
@@ -165,6 +193,153 @@ def normalize_metric_tokens(raw: str | Iterable[str] | None) -> tuple[str, ...]:
         if metric not in normalized:
             normalized.append(metric)
     return tuple(normalized)
+
+
+def validate_fetv_clip_frame_layout(
+    *,
+    generated_video_dir: Path,
+    prompt_file: Path,
+    metrics: Iterable[str],
+    limit: int,
+) -> dict[str, Any]:
+    """Validate the index-sensitive frame layout consumed by FETV-EVAL.
+
+    The official dataset joins prompts to generated media by JSONL line number,
+    not by prompt text or ``video_id``.  Guessing that index from an arbitrary
+    MP4 filename can silently score a video against the wrong prompt, so this
+    adapter intentionally accepts only a manifest-proven ``sentN_frames``
+    layout whose prompt rows still match the official source JSONL.
+    """
+
+    root = generated_video_dir.expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"FETV generated frame directory does not exist: {root}")
+    if limit <= 0:
+        raise ValueError("FETV --limit must be a positive integer")
+
+    metric_ids = normalize_metric_tokens(metrics)
+    prompt_records = load_fetv_prompt_records(prompt_file=prompt_file)
+    prompt_total = len(prompt_records)
+    required_count = min(prompt_total, limit)
+
+    manifest_path = root / FETV_GENERATION_MANIFEST_NAME
+    if not manifest_path.is_file():
+        raise ValueError(
+            f"FETV generated artifacts are missing {FETV_GENERATION_MANIFEST_NAME}; "
+            "the evaluator will not guess sample_id-to-sent_index mappings from filenames or prompt text"
+        )
+    manifest_rows = read_jsonl_objects(manifest_path)
+    if not manifest_rows:
+        raise ValueError(f"FETV generation manifest is empty: {manifest_path}")
+
+    manifest_by_index: dict[int, dict[str, Any]] = {}
+    sample_ids: set[str] = set()
+    for row_number, row in enumerate(manifest_rows, start=1):
+        sample_id = row.get("sample_id")
+        sent_index = row.get("sent_index")
+        if not isinstance(sample_id, str) or not sample_id:
+            raise ValueError(f"FETV generation manifest row {row_number} has no sample_id: {manifest_path}")
+        if sample_id in sample_ids:
+            raise ValueError(f"duplicate FETV generation manifest sample_id: {sample_id!r}")
+        sample_ids.add(sample_id)
+        if isinstance(sent_index, bool) or not isinstance(sent_index, int) or sent_index < 0:
+            raise ValueError(f"FETV generation manifest row {row_number} has invalid sent_index: {sent_index!r}")
+        if sent_index in manifest_by_index:
+            raise ValueError(f"duplicate FETV generation manifest sent_index: {sent_index}")
+        expected_name = f"sent{sent_index}_frames"
+        if row.get("frame_dir_name") != expected_name:
+            raise ValueError(
+                f"FETV generation manifest sent_index {sent_index} must name frame_dir_name {expected_name!r}"
+            )
+        if row.get("status") != "decoded":
+            raise ValueError(f"FETV generation manifest sent_index {sent_index} is not a successfully decoded video")
+        if sent_index >= prompt_total or row.get("prompt_record") != prompt_records[sent_index]["prompt_record"]:
+            raise ValueError(
+                f"FETV generation manifest sent_index {sent_index} does not match the official prompt JSONL"
+            )
+        manifest_by_index[sent_index] = row
+
+    missing_manifest_indices = [index for index in range(required_count) if index not in manifest_by_index]
+    if missing_manifest_indices:
+        raise ValueError(
+            "FETV generation manifest does not cover the bounded prompt prefix; missing sent_index values: "
+            + ", ".join(map(str, missing_manifest_indices[:8]))
+        )
+
+    indexed_dirs: dict[int, Path] = {}
+    for path in root.iterdir():
+        match = _FETV_FRAME_DIR_PATTERN.fullmatch(path.name)
+        if match is not None and path.is_dir():
+            indexed_dirs[int(match.group("index"))] = path
+
+    missing = [index for index in range(required_count) if index not in indexed_dirs]
+    if missing:
+        flat_videos = sorted(path.name for path in root.iterdir() if path.is_file() and path.suffix.lower() == ".mp4")
+        video_note = (
+            f" Found {len(flat_videos)} flat MP4 file(s), but they were not converted because their prompt indices "
+            "cannot be proven from arbitrary filenames."
+            if flat_videos
+            else ""
+        )
+        preview = ", ".join(f"sent{index}_frames" for index in missing[:8])
+        raise ValueError(
+            "FETV official CLIP/BLIP evaluation requires frame directories named "
+            f"sent{{prompt-line-index}}_frames; missing {len(missing)} required directories, starting with {preview}."
+            f"{video_note} Stage frames using the exact zero-based order of {prompt_file}."
+        )
+
+    empty_or_invalid: list[str] = []
+    for index in range(required_count):
+        frame_dir = indexed_dirs[index]
+        expected_frames = [frame_dir / f"frame{frame_index}.jpg" for frame_index in range(FETV_FRAME_COUNT)]
+        entries = [path for path in frame_dir.iterdir() if not path.name.startswith(".")]
+        if len(entries) != FETV_FRAME_COUNT or any(not path.is_file() for path in expected_frames):
+            empty_or_invalid.append(frame_dir.name)
+            continue
+        try:
+            from PIL import Image
+
+            for path in expected_frames:
+                with Image.open(path) as image:
+                    image.verify()
+        except (ImportError, OSError, ValueError):
+            empty_or_invalid.append(frame_dir.name)
+    if empty_or_invalid:
+        preview = ", ".join(empty_or_invalid[:8])
+        raise ValueError(
+            f"FETV frame directories must contain exactly frame0.jpg..frame{FETV_FRAME_COUNT - 1}.jpg "
+            "readable by the official dataset; "
+            f"invalid directories: {preview}"
+        )
+
+    return {
+        "layout": "fetv_sent_indexed_frames",
+        "prompt_file": str(prompt_file),
+        "prompt_count": prompt_total,
+        "required_frame_directories": required_count,
+        "available_frame_directories": len(indexed_dirs),
+        "manifest_path": str(manifest_path),
+        "manifest_record_count": len(manifest_rows),
+        "bounded": required_count < prompt_total,
+        "metrics": list(metric_ids),
+        "mapping": "prompt_jsonl_zero_based_line_index",
+    }
+
+
+def materialize_bounded_fetv_prompt_file(
+    *,
+    prompt_file: Path,
+    output_dir: Path,
+    prompt_count: int,
+) -> Path:
+    """Write an exact prefix of official rows for a bounded official run."""
+
+    records = load_fetv_prompt_records(prompt_file=prompt_file)
+    if prompt_count <= 0 or prompt_count > len(records):
+        raise ValueError(f"FETV bounded prompt count must be in [1, {len(records)}], got {prompt_count}")
+    destination = output_dir / "runtime_inputs" / f"fetv_data_first_{prompt_count}.jsonl"
+    write_jsonl(destination, [record["prompt_record"] for record in records[:prompt_count]])
+    return destination.resolve()
 
 
 def _parse_ints(raw: str | Iterable[int] | None, default: tuple[int, ...]) -> tuple[int, ...]:
@@ -365,15 +540,32 @@ def run_official_fetv_runtime(
         prompt_path = (root / "datas" / "fetv_data.json").expanduser().resolve()
     commands: list[dict[str, Any]] = []
     env = _runtime_env(root, cuda_visible_devices=cuda_visible_devices)
+    input_layout: dict[str, Any] | None = None
 
     if "clip_score" in metric_ids or "blip_score" in metric_ids:
+        clip_model = resolve_clip_checkpoint(clip_model)
+        input_layout = validate_fetv_clip_frame_layout(
+            generated_video_dir=generated_video_dir,
+            prompt_file=prompt_path,
+            metrics=metric_ids,
+            limit=limit,
+        )
+        evaluator_prompt_path = prompt_path
+        evaluator_limit = int(input_layout["required_frame_directories"])
+        if input_layout["bounded"]:
+            evaluator_prompt_path = materialize_bounded_fetv_prompt_file(
+                prompt_file=prompt_path,
+                output_dir=output_dir,
+                prompt_count=evaluator_limit,
+            )
+        input_layout["evaluator_prompt_file"] = str(evaluator_prompt_path)
         command = [
             python,
             "auto_eval.py",
             "--eval_model",
             clip_model,
             "--prompt_file",
-            str(prompt_path),
+            str(evaluator_prompt_path),
             "--gen_path",
             str(generated_video_dir),
             "--t2v_model",
@@ -387,7 +579,7 @@ def run_official_fetv_runtime(
             "--max_frm_num",
             str(max_frame_num),
             "--limit",
-            str(limit),
+            str(evaluator_limit),
         ]
         if "blip_score" in metric_ids:
             command.extend(["--blip_config", str((blip_config or BLIP_CONFIG_PATH).resolve())])
@@ -482,6 +674,7 @@ def run_official_fetv_runtime(
         "preflight": official_runtime_preflight(root),
         "model_name": model_name,
         "metrics": list(metric_ids),
+        "input_layout": input_layout,
         "commands": commands,
         "results_path": str(results_path),
         "result_root": str(result_root),
@@ -575,6 +768,7 @@ __all__ = [
     "official_runtime_preflight",
     "resolve_fetv_runtime_root",
     "run_official_fetv_runtime",
+    "validate_fetv_clip_frame_layout",
 ]
 
 

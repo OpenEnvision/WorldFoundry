@@ -116,7 +116,7 @@ release_status: experimental
 maturity: contract_ready
 open_source_status: in_tree_runtime
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -129,7 +129,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VisualChronometerContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   credential_gated: false
   framework_ready: true
   surface: visual_chronometer_official_in_tree

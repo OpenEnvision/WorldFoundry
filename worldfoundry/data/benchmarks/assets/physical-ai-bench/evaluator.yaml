@@ -1,0 +1,46 @@
+schema_version: worldfoundry-physical-ai-bench-evaluator-v1
+
+tracks:
+  generation:
+    dataset_id: shi-labs/physical-ai-bench-generation
+    prompt_file: cosmos_predict2_bench_full_info.json
+    condition_image_dir: condition_image
+    vqa_dir: vqa
+    video_template: "{video_id}__{seed}.mp4"
+    metrics:
+    - aesthetic_quality
+    - background_consistency
+    - imaging_quality
+    - motion_smoothness
+    - overall_consistency
+    - subject_consistency
+    - i2v_background
+    - i2v_subject
+    - vqa_accuracy
+  conditional-generation:
+    dataset_id: shi-labs/physical-ai-bench-conditional-generation
+    metadata_file: metadata.csv
+    max_frames: 121
+    canny_thresholds: [100, 200]
+    bilateral_filter: {diameter: 30, sigma_color: 150, sigma_space: 100}
+    depth: {encoder: vits, residual_clip: 10.0}
+    segmentation: {matching: hungarian, acceptance_iou: 0.1}
+    diversity_variants: [base, caption1, caption2, caption3, caption4, caption5]
+    metrics:
+    - dover_tech_score
+    - blur_ssim
+    - canny_f1_score
+    - canny_precision
+    - canny_recall
+    - depth_si_rmse
+    - seg_m_iou
+    - seg_recall
+    - lpips_diversity
+shared_base_models:
+  vbench: worldfoundry.evaluation.tasks.execution.runners.vbench.runtime
+  vbench_i2v: worldfoundry.evaluation.tasks.execution.runners.vbench_plus_plus.runtime
+  qwen_vl: worldfoundry.base_models.llm_mllm_core.mllm.qwen
+  dover: worldfoundry.base_models.perception_core.video_quality.dover
+  lpips: worldfoundry.base_models.perception_core.video_quality.lpips
+  video_depth_anything: worldfoundry.base_models.three_dimensions.depth.videodepthanything
+  grounded_sam2: worldfoundry.base_models.perception_core.segment.grounded_segment_anything

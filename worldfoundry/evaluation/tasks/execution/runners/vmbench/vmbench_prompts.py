@@ -195,5 +195,10 @@ def materialize_vmbench_meta_info(
                 video_path = alt_matches[0]
         if video_path.is_file():
             rows.append({**record, "filepath": str(video_path.resolve())})
+    if not rows:
+        raise FileNotFoundError(
+            f"No VMBench generated videos matched the official prompt ids in {video_root}. "
+            "Expected names such as 0001.mp4."
+        )
     write_json(output_path, rows)
     return rows

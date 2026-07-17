@@ -7,7 +7,6 @@ from typing import Any, Mapping
 from worldfoundry.evaluation.api.json_contract import JsonContract, require_mapping, to_plain
 from worldfoundry.evaluation.utils import load_manifest
 
-
 SOURCE_STATUSES = frozenset({"open_source", "api", "closed", "unknown"})
 OPEN_SOURCE_STATUSES = frozenset(
     {
@@ -576,7 +575,7 @@ def _entry_blockers(entry: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def _entry_bool_flag(entry: Mapping[str, Any], key: str) -> bool:
-    """Helper to safely extract a boolean flag value, preferring integration/evidence level definitions.
+    """Extract an entry-level evidence flag with legacy nested fallback.
 
     Args:
         entry: Input catalog entry mapping.
@@ -585,6 +584,12 @@ def _entry_bool_flag(entry: Mapping[str, Any], key: str) -> bool:
     Returns:
         The extracted boolean flag value.
     """
+    # Entry-level flags are the public claim boundary.  Older manifests stored
+    # these values under integration.evidence, so retain that form only when a
+    # top-level declaration is absent.  In particular, bounded component
+    # evidence must never override an explicit full-benchmark ``false``.
+    if key in entry:
+        return _bool(entry[key])
     integration = entry.get("integration")
     if isinstance(integration, Mapping):
         evidence = integration.get("evidence")

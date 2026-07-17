@@ -75,9 +75,11 @@ SPECIALIZED_ARTIFACT_OFFICIAL_RUN_BENCHMARKS: frozenset[str] = frozenset(
         "phyfps-bench-gen",
         "phyeduvideo",
         "physics-iq",
+        "physics-iq-verified",
         "phyground",
         "visual-chronometer",
         "world-in-world",
+        "wrbench",
     }
 )
 
@@ -179,6 +181,45 @@ def _command_for_mode(entry: BenchmarkZooEntry, mode: str) -> str | tuple[str, .
     if mode == "official-run":
         return entry.run_command
     return None
+
+
+def _workspace_official_run_command(
+    benchmark_id: str,
+    *,
+    output_dir: Path,
+    generated_artifact_dir: JsonValue,
+    kwargs: Mapping[str, JsonValue],
+) -> tuple[str, ...] | None:
+    """Build an official command from the canonical in-tree runner registry.
+
+    Catalog commands remain useful documentation, but the executable argument
+    contract lives beside the runner implementations.  Using that registry for
+    ``official-run`` also covers integrated benchmarks whose catalog entry does
+    not duplicate a shell command.
+    """
+    from ..runners.workspace_registry import (
+        CLI_RUNNERS,
+        benchmark_key,
+        build_workspace_benchmark_command,
+    )
+
+    key = benchmark_key(benchmark_id)
+    if key not in CLI_RUNNERS:
+        return None
+    params = dict(kwargs)
+    params["run_official"] = True
+    params.setdefault("python", sys.executable)
+    if generated_artifact_dir is not None:
+        params["generated_artifact_dir"] = str(generated_artifact_dir)
+    payload = {
+        "benchmark_id": key,
+        "dataset_root": kwargs.get("dataset_root"),
+        "dataset_manifest": kwargs.get("dataset_manifest"),
+        "metrics": kwargs.get("metrics", ()),
+        "results_path": kwargs.get("official_results_path"),
+        "params": params,
+    }
+    return tuple(build_workspace_benchmark_command(payload, output_dir))
 
 
 def _resolve_python_command(command: str | tuple[str, ...] | list[str]) -> str | tuple[str, ...]:
@@ -557,6 +598,7 @@ def _run_specialized_result_normalizer(
         "phyfps-bench-gen",
         "visual-chronometer",
         "physics-iq",
+        "physics-iq-verified",
         "physvidbench",
         "phygenbench",
         "videophy",
@@ -568,6 +610,7 @@ def _run_specialized_result_normalizer(
         "memobench",
         "ewmbench",
         "evalcrafter",
+        "wrbench",
     } and generated_artifact_dir is not None:
         command.extend(["--generated-artifact-dir", str(generated_artifact_dir)])
     if benchmark_id == "phyfps-bench-gen" and kwargs.get("prompt_manifest"):
@@ -1007,6 +1050,17 @@ class ManifestBenchmarkRunner:
         mode = str(data.get("mode", "official-validation"))
         command_kind = str(data.get("command_kind") or _command_kind_for_mode(mode))
         command = _command_for_mode(self.entry, mode)
+        kwargs = data.get("kwargs")
+        kwargs = kwargs if isinstance(kwargs, Mapping) else {}
+        if mode == "official-run":
+            workspace_command = _workspace_official_run_command(
+                self.benchmark_id,
+                output_dir=prepared.output_dir,
+                generated_artifact_dir=data.get("generated_artifact_dir"),
+                kwargs=kwargs,
+            )
+            if workspace_command is not None:
+                command = workspace_command
         runtime_spec = data.get("runtime")
         runtime_spec = dict(runtime_spec) if isinstance(runtime_spec, Mapping) else _runner_runtime_spec(self.entry, benchmark_id=self.benchmark_id)
         data["runtime"] = runtime_spec
@@ -1046,8 +1100,6 @@ class ManifestBenchmarkRunner:
                 data=data,
                 metadata={**metadata, "run_status": "official_results_import"},
             )
-        kwargs = data.get("kwargs")
-        kwargs = kwargs if isinstance(kwargs, Mapping) else {}
         score_dir = kwargs.get("score_dir") or os.environ.get("WORLDFOUNDRY_CAMERABENCH_SCORE_DIR")
         if self.benchmark_id == "camerabench" and mode in {"official-validation", "normalizer"} and score_dir:
             score_dir_path = Path(str(score_dir))
@@ -1133,6 +1185,12 @@ class ManifestBenchmarkRunner:
         generated_artifact_dir = data.get("generated_artifact_dir")
         if generated_artifact_dir is not None:
             env["WORLDFOUNDRY_GENERATED_ARTIFACT_DIR"] = str(generated_artifact_dir)
+        if kwargs.get("limit") not in (None, ""):
+            env["WORLDFOUNDRY_BENCHMARK_LIMIT"] = str(kwargs["limit"])
+        if kwargs.get("model_id") not in (None, ""):
+            env["WORLDFOUNDRY_MODEL_ID"] = str(kwargs["model_id"])
+        if kwargs.get("split") not in (None, ""):
+            env["WORLDFOUNDRY_BENCHMARK_SPLIT"] = str(kwargs["split"])
         env.update(
             _runtime_spec_env(
                 runtime_spec,
@@ -1554,6 +1612,7 @@ class ManifestBenchmarkRunner:
                 "runtime": dict(runtime_spec),
                 "runner_runtime_spec": dict(runtime_spec),
                 **extra_metadata,
+                "normalization_ok": available_count > 0,
             },
         )
 
@@ -1644,7 +1703,6 @@ class ManifestBenchmarkRunner:
                 runtime_report["run_status"] = (
                     "official_results_normalized" if specialized["ok"] else "official_results_missing_scores"
                 )
-                runtime_report_path = _write_runtime_report(root, runtime_report)
                 scorecard = specialized.get("scorecard")
                 scorecard = dict(scorecard) if isinstance(scorecard, Mapping) else {}
                 artifacts = dict(scorecard.get("artifacts") or {})
@@ -1652,6 +1710,33 @@ class ManifestBenchmarkRunner:
                 scorecard["runtime"] = runtime_spec
                 scorecard["artifacts"] = artifacts
                 write_json(scorecard_path, scorecard)
+                expected_artifact_checks = _expected_artifact_checks(self.entry, root)
+                refreshed_flags = inspect_scorecard_runtime_flags(scorecard_path)
+                scorecard_runtime_flags = {
+                    "official_benchmark_verified": refreshed_flags.get("official_benchmark_verified") is True,
+                    "integration_evidence": refreshed_flags.get("integration_evidence") is True,
+                    **refreshed_flags,
+                }
+                artifacts_ok = all(item.get("ok") is True for item in expected_artifact_checks)
+                command_ok = specialized["returncode"] == 0
+                runtime_report.update(
+                    {
+                        "error": specialized.get("error"),
+                        "expected_artifact_checks": expected_artifact_checks,
+                        "scorecard_runtime_flags": scorecard_runtime_flags,
+                        "official_benchmark_verified": (
+                            command_ok
+                            and artifacts_ok
+                            and scorecard_runtime_flags.get("official_benchmark_verified") is True
+                        ),
+                        "integration_evidence": (
+                            command_ok
+                            and artifacts_ok
+                            and scorecard_runtime_flags.get("integration_evidence") is True
+                        ),
+                    }
+                )
+                runtime_report_path = _write_runtime_report(root, runtime_report)
                 raw_metric_path = root / "raw_metric_table.jsonl"
                 return OfficialRunResult(
                     benchmark_id=self.benchmark_id,
@@ -1678,6 +1763,7 @@ class ManifestBenchmarkRunner:
                         "specialized_normalizer": True,
                         "specialized_normalizer_error": specialized.get("error"),
                         **extra_metadata,
+                        "normalization_ok": specialized.get("ok") is True,
                     },
                 )
             embodied = _run_embodied_result_normalizer(
@@ -1732,6 +1818,7 @@ class ManifestBenchmarkRunner:
                         "embodied_normalizer": True,
                         "embodied_normalizer_error": embodied.get("error"),
                         **extra_metadata,
+                        "normalization_ok": embodied.get("ok") is True,
                     },
                 )
             if self.benchmark_id in GENERIC_RESULT_NORMALIZER_BENCHMARKS:
@@ -1790,6 +1877,7 @@ class ManifestBenchmarkRunner:
                         "runtime": runtime_spec,
                         "runner_runtime_spec": runtime_spec,
                         **extra_metadata,
+                        "normalization_ok": _scorecard_normalization_available(scorecard),
                     },
                 )
             return self._normalize_generic_official_results(
@@ -1899,6 +1987,7 @@ class ManifestBenchmarkRunner:
                 "runtime": runtime_spec,
                 "runner_runtime_spec": runtime_spec,
                 **extra_metadata,
+                "normalization_ok": scorecard_runtime_flags.get("normalization_ok") is True,
             },
         )
 

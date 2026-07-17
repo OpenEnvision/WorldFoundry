@@ -1,0 +1,252 @@
+[
+  {
+    "family_id": "apartment_lobby_adult_sofa_sit",
+    "image_path": "first_frames/apartment_lobby_adult_sofa_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In an apartment lobby, a middle-aged man in a navy blue suit and light gray shirt stands on the left third of the frame, with his chest and hips turned toward a brown leather lobby sofa on the right side of the frame, several steps away. He has short, neatly combed hair and a calm, composed expression. A wide open tile floor stretches between them, with a smooth, polished texture, leaving ample empty space in the foreground. A bank of mailboxes and a potted plant with lush green leaves are clearly visible in the background, under soft indoor lobby lighting. Spacious composition with generous margins, neutral lobby tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "backyard_adult_patio_chair_sit",
+    "image_path": "first_frames/backyard_adult_patio_chair_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a backyard patio, an adult person in casual summer clothing stands on the left third of the frame, with their chest and hips turned toward a wooden patio chair with a cushioned seat on the right side of the frame, several steps away. The person has a relaxed, content expression. A wide open stone paving path stretches between them, with a clear, smooth texture, leaving ample empty space in the foreground. A garden bench and a wooden fence are clearly visible in the background, under natural daylight. Spacious composition with generous margins, warm daylight tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "backyard_dog_water_bowl_tip",
+    "image_path": "first_frames/backyard_dog_water_bowl_tip.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at the animal's shoulder height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a backyard patio, a medium-sized dog with short brown fur and a wagging tail stands on the left third of the frame, its snout pointing toward a metal water bowl on the right side of the frame, several steps away. The dog has a playful, alert expression. A wide open stone paving path stretches between them, with a smooth, even texture, leaving ample empty space in the foreground. A garden bench and a wooden fence are clearly visible in the background, under natural daylight. Spacious composition with generous margins, warm daylight tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "bedroom_adult_bed_sit",
+    "image_path": "first_frames/bedroom_adult_bed_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a bedroom, an adult person in casual home clothes, wearing a soft gray t-shirt and comfortable sweatpants, stands on the left third of the frame, with their chest and hips turned toward a neatly made bed with a crisp white duvet and plump pillows on the right side of the frame, several steps away. The person has a relaxed, calm expression. A wide open wooden floor stretches between them, with a smooth polished texture, leaving ample empty space in the foreground. A bedside table and a bedroom curtain are clearly visible in the background, under soft indoor ambient light. Spacious composition with generous margins, warm neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "bedroom_adult_blanket_fold",
+    "image_path": "first_frames/bedroom_adult_blanket_fold.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a bedroom, an adult person in a casual gray sweater and dark jeans stands on the left third of the frame, holding a folded blue blanket at their side, with their chest and hips turned toward a neatly made bed with a crisp white duvet and plump pillows on the right side of the frame, several steps away. The person has a calm, focused expression and short brown hair. A wide open wooden floor stretches between them, with a smooth polished texture, leaving ample empty space in the foreground. A bedside table and a bedroom curtain are clearly visible in the background, under soft indoor ambient light. Spacious composition with generous margins, warm neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "bedroom_cat_bed_jump",
+    "image_path": "first_frames/bedroom_cat_bed_jump.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at ground level angled slightly up, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a bedroom, a house cat with soft gray fur and bright green eyes stands on the left third of the frame on the wooden floor, its snout pointing toward a neatly made bed with a crisp white duvet and plump pillows on the right side of the frame, several steps away. The cat has a calm, alert posture with its tail held high. A wide open wooden floor stretches between them, with a smooth polished texture, leaving ample empty space in the foreground. A bedside table and a dresser are clearly visible in the background, under soft indoor ambient light. Spacious composition with generous margins, warm neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "cafe_customer_chair_sit",
+    "image_path": "first_frames/cafe_customer_chair_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a cafe interior, a young woman in a beige cardigan and jeans stands on the left third of the frame, holding a small handbag at her side, with her torso angled toward a wooden cafe chair with a cushioned seat on the right side of the frame, several steps away. She has shoulder-length brown hair and a relaxed, pleasant expression. A wide open tile floor stretches between them, with a smooth, clean texture, leaving ample empty space in the foreground. A cafe table and a counter shelf with pastry displays are clearly visible in the background, under warm ambient cafe lighting. Spacious composition with generous margins, warm earthy cafe tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "cafe_customer_table_cup_place",
+    "image_path": "first_frames/cafe_customer_table_cup_place.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a cafe interior, a young woman in a cozy knit sweater and dark jeans stands on the left third of the frame, holding a steaming coffee cup in her right hand, with her chest and hips turned toward a wooden cafe table with a simple design on the right side of the frame, several steps away. She has wavy brown hair and a content, relaxed expression. A wide open tile floor stretches between them, with a smooth, clean texture, leaving ample empty space in the foreground. A cafe chair and a counter shelf with various pastries are clearly visible in the background, under warm ambient cafe lighting. Spacious composition with generous margins, warm earthy cafe tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "classroom_student_desk_sit",
+    "image_path": "first_frames/classroom_student_desk_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a classroom, a student in a blue school uniform stands on the left third of the frame, holding a notebook and pen, with their chest and hips turned toward a classroom chair at a desk on the right side of the frame, several steps away. The student has short brown hair and a focused expression. A wide open classroom floor stretches between them, with a smooth, clean texture, leaving ample empty space in the foreground. A whiteboard easel and a bookshelf are clearly visible in the background, under bright classroom fluorescent lighting. Spacious composition with generous margins, cool neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "construction_worker_brick_toolbox_place",
+    "image_path": "first_frames/construction_worker_brick_toolbox_place.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a construction site, a construction worker in a yellow hard hat and orange safety vest stands on the left third of the frame, holding a red metal toolbox at his side, with his chest and hips turned toward a brick stack on the right side of the frame, several steps away. The worker has a focused expression and wears sturdy work boots. A wide open sandy ground stretches between them, with a rough, grainy texture, leaving ample empty space in the foreground. A concrete mixer and a white paint bucket are clearly visible in the background, under hard outdoor daylight. Spacious composition with generous margins, earthy brown and gray site tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "dining_room_adult_chair_sit",
+    "image_path": "first_frames/dining_room_adult_chair_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a dining room, an adult person in a casual blue shirt and dark jeans stands on the left third of the frame, with their chest and hips turned toward a wooden dining chair with a fabric seat on the right side of the frame, several steps away. The person has a calm, composed expression. A wide open wood floor stretches between them, with a smooth, polished texture, leaving ample empty space in the foreground. A dining table and a side table are clearly visible in the background, under soft indoor ambient light. Spacious composition with generous margins, warm neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "dining_room_child_chair_sit",
+    "image_path": "first_frames/dining_room_child_chair_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at the child's waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a dining room, a young child in a blue t-shirt and khaki shorts stands on the left third of the frame, with their chest and hips turned toward a wooden dining chair with a cushioned seat on the right side of the frame, several steps away. The child has a cheerful, expectant expression. A wide open wood floor stretches between them, with a smooth, polished texture, leaving ample empty space in the foreground. A dining table and a fruit bowl are clearly visible in the background, under soft indoor ambient light. Spacious composition with generous margins, warm neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "farmyard_goat_bucket_tip",
+    "image_path": "first_frames/farmyard_goat_bucket_tip.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at the animal's shoulder height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a farmyard, a goat with shaggy brown fur and curved horns stands on the left third of the frame, its front end pointing toward a metal water bucket on the right side of the frame, several steps away. The goat has a calm, inquisitive expression. A wide open packed dirt ground stretches between them, with a smooth, even texture, leaving ample empty space in the foreground. A wooden fence and a hay bale are clearly visible in the background, under natural outdoor daylight. Spacious composition with generous margins, earthy brown and green farm tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "hospital_waiting_patient_chair_sit",
+    "image_path": "first_frames/hospital_waiting_patient_chair_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a hospital waiting area, a patient in a light blue hospital gown and slippers stands on the left third of the frame, holding a small clipboard with forms, with their chest and hips turned toward a waiting chair with a gray fabric seat and metal frame on the right side of the frame, several steps away. The patient has a calm and slightly concerned expression. A wide open hospital floor stretches between them, with a smooth, clean texture, leaving ample empty space in the foreground. A check-in kiosk and a hand sanitizer stand are clearly visible in the background, under bright clinical fluorescent lighting. Spacious composition with generous margins, clean white and gray clinical tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "hotel_lobby_guest_sofa_sit",
+    "image_path": "first_frames/hotel_lobby_guest_sofa_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a hotel lobby, a hotel guest in a navy blue suit and a light-colored shirt stands on the left third of the frame, holding a small leather briefcase at his side, with his chest and hips turned toward a plush lobby sofa with dark brown leather upholstery on the right side of the frame, several steps away. He has short, neatly styled hair and a composed, relaxed expression. A wide open marble floor stretches between them, with a smooth, reflective texture, leaving ample empty space in the foreground. A reception desk and a side table are clearly visible in the background, under warm hotel lobby lighting. Spacious composition with generous margins, warm marble and brass tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "kitchen_adult_counter_bowl_place",
+    "image_path": "first_frames/kitchen_adult_counter_bowl_place.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a kitchen, an adult person in a casual shirt and jeans stands on the left third of the frame, holding a ceramic bowl with both hands at chest level, with their chest and hips turned toward a kitchen counter on the right side of the frame, several steps away. The person has a focused, calm expression. A wide open tile floor stretches between them, with a smooth, clean texture, leaving ample empty space in the foreground. A sink cabinet and a kitchen chair are clearly visible in the background, under soft indoor ambient light. Spacious composition with generous margins, warm neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "kitchen_cat_cup_knock",
+    "image_path": "first_frames/kitchen_cat_cup_knock.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at ground level angled slightly up, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a kitchen, a house cat with soft gray fur and bright green eyes stands on the left third of the frame on the tile floor, its snout pointing toward a ceramic cup on the counter edge on the right side of the frame, several steps away. The cat has a curious, alert posture with its tail held high. A wide open tile floor stretches between them, with a smooth, clean texture, leaving ample empty space in the foreground. A sink cabinet and a fruit bowl are clearly visible in the background, under soft indoor ambient light. Spacious composition with generous margins, warm neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "library_student_chair_sit",
+    "image_path": "first_frames/library_student_chair_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a library reading room, a young reader in a blue sweater and khaki pants stands on the left third of the frame, holding a book in one hand, with their chest and hips turned toward a comfortable reading chair with a wooden frame and a cushioned seat on the right side of the frame, several steps away. The reader has short brown hair and a focused, attentive expression. A wide open library floor stretches between them, with a smooth, polished texture, leaving ample empty space in the foreground. A reading table and a bookshelf are clearly visible in the background, under bright classroom fluorescent lighting. Spacious composition with generous margins, cool neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "living_room_adult_sofa_sit",
+    "image_path": "first_frames/living_room_adult_sofa_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a living room, an adult person in a casual outfit stands on the left third of the frame, with their chest and hips turned toward a comfortable sofa with soft cushions on the right side of the frame, several steps away. The person has a relaxed, composed expression. A wide open wood floor stretches between them, with a smooth, polished texture, leaving ample empty space in the foreground. A coffee table and a floor lamp are clearly visible in the background, under soft indoor ambient light. Spacious composition with generous margins, warm neutral tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "loading_dock_worker_pallet_box_place",
+    "image_path": "first_frames/loading_dock_worker_pallet_box_place.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a loading dock, a dock worker in a blue jumpsuit and safety vest stands on the left third of the frame, holding a cardboard box at his side, with his chest and hips turned toward a wooden pallet on the right side of the frame, several steps away. The worker has a focused expression and wears work gloves. A wide open concrete floor stretches between them, with a smooth, clean texture, leaving ample empty space in the foreground. A dock door frame and a stack of empty pallets are clearly visible in the background, under bright industrial overhead lighting. Spacious composition with generous margins, cool gray industrial tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "meeting_room_adult_chair_sit",
+    "image_path": "first_frames/meeting_room_adult_chair_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a meeting room, an office worker in a navy blue suit and white shirt stands on the left third of the frame, holding a folder at their side, with their chest and hips turned toward a black leather meeting chair on the right side of the frame, several steps away. The office worker has short, neatly styled hair and a composed, professional expression. A wide open carpeted floor stretches between them, with a subtle, uniform texture, leaving ample empty space in the foreground. A meeting table and a presentation screen are clearly visible in the background, under soft office ambient lighting. Spacious composition with generous margins, muted cool office tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "office_lounge_adult_sofa_sit",
+    "image_path": "first_frames/office_lounge_adult_sofa_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In an office lounge, a middle-aged office worker in a navy blue suit and white shirt stands on the left third of the frame, holding a briefcase at his side, with his chest and hips turned toward a lounge sofa with soft gray upholstery on the right side of the frame, several steps away. He has short, neatly combed hair and a calm, professional expression. A wide open carpeted floor stretches between them, with a subtle, uniform texture, leaving ample empty space in the foreground. A low coffee table and a potted plant are clearly visible in the background, under soft office ambient lighting. Spacious composition with generous margins, muted cool office tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "restaurant_waiter_table_tray_place",
+    "image_path": "first_frames/restaurant_waiter_table_tray_place.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a restaurant dining area, a waiter in a crisp white shirt and black apron stands on the left third of the frame, holding a serving tray with one hand at his side, with his chest and hips turned toward a restaurant table with a white tablecloth and neatly arranged cutlery on the right side of the frame, several steps away. The waiter has a focused, professional expression. A wide open wood floor stretches between them, with a smooth, polished texture, leaving ample empty space in the foreground. A dining chair and a condiment station are clearly visible in the background, under warm cafe interior ambient light. Spacious composition with generous margins, warm earthy cafe tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "supermarket_customer_checkout_basket_place",
+    "image_path": "first_frames/supermarket_customer_checkout_basket_place.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a supermarket checkout area, a customer in a casual outfit stands on the left third of the frame, holding a plastic shopping basket filled with groceries at their side, with their chest and hips turned toward a checkout counter with a conveyor belt and a cash register on the right side of the frame, several steps away. The customer has a focused, patient expression. A wide open smooth store floor stretches between them, with a clean, polished texture, leaving ample empty space in the foreground. A queue barrier and a checkout display rack are clearly visible in the background, under bright retail store lighting. Spacious composition with generous margins, bright neutral retail tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  },
+  {
+    "family_id": "train_platform_passenger_bench_sit",
+    "image_path": "first_frames/train_platform_passenger_bench_sit.png",
+    "prompt_source": "families.jsonl:t2i_scene",
+    "t2i_scene": "Realistic photography, medium-wide shot, camera at waist height, straight-ahead eye-level, zero downward tilt, wide-angle lens, deep focus. In a train platform, a passenger in a blue jacket and dark jeans stands on the left third of the frame, holding a small backpack over one shoulder, with their chest and hips turned toward a transit bench with a metal frame and wooden slats on the right side of the frame, several steps away. The passenger has short brown hair and a calm, expectant expression. A wide open platform pavement stretches between them, with a smooth, even texture, leaving ample empty space in the foreground. A ticket machine and a warning sign are clearly visible in the background, under bright, open outdoor lighting. Spacious composition with generous margins, cool concrete and metal tones, every object sharp from foreground to background.",
+    "width": 1294,
+    "height": 712,
+    "format": "png",
+    "release_note": "Bundled Natural-25 first-frame image for out-of-the-box TI2V reuse."
+  }
+]

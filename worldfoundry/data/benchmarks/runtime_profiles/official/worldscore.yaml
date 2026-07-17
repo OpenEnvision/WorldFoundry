@@ -7,7 +7,8 @@ bounded_official_gpu_validation:
   split: dynamic
   generated_video_count: 1
   metrics_available: 4
-  official_benchmark_verified: true
+  official_component_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false
@@ -28,11 +29,11 @@ notes:
   CUDA_VISIBLE_DEVICES=7; both cu118 stacks initialized CUDA and completed a one-element tensor sum.
 preflight_command: 
   PYTHONPATH=${WORLDFOUNDRY_REPO_ROOT}:${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
-  ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python -m 
+  ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile worldscore --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/worldscore.yaml --output-dir 
   tmp/worldfoundry_preflight/worldscore --json
-python_path: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
 required_assets:

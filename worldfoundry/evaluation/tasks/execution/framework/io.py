@@ -73,6 +73,11 @@ def mean_numeric(values: Iterable[float | int | None]) -> float | None:
     return sum(clean) / len(clean)
 
 
+def optional_float(value: Any) -> float | None:
+    """Convert an optional numeric value to ``float`` while preserving missing values."""
+    return None if value in (None, "") else float(value)
+
+
 def scalar_number(
     value: Any,
     *,
@@ -195,6 +200,7 @@ __all__ = [
     "load_json",
     "mean_numeric",
     "normalize_unit_score",
+    "optional_float",
     "read_json",
     "read_json_object",
     "read_json_or_jsonl",

@@ -1,0 +1,132 @@
+benchmark: worldreasonbench
+name: WorldReasonBench
+description: World-state reasoning QA and reward-model evaluation for generated videos.
+tags:
+- benchmark-zoo
+- external-official
+- world-reasoning
+- image-to-video
+splits:
+- standard
+metrics:
+  score_pr: {aggregation: geometric, primary: true}
+  qa_accuracy: {aggregation: mean}
+  state_score: {aggregation: mean}
+  process_score: {aggregation: mean}
+  fidelity_score: {aggregation: mean}
+  mechanism_score: {aggregation: mean}
+  static_outcome_score: {aggregation: mean}
+  dynamic_reasoning_score: {aggregation: mean}
+  reasoning_gap: {aggregation: mean}
+  pointwise_score: {aggregation: weighted_mean}
+  reasoning_correctness: {aggregation: mean}
+  content_fidelity: {aggregation: mean}
+  visual_aesthetics: {aggregation: mean}
+  pointwise_spearman: {aggregation: correlation}
+  induced_pairwise_accuracy: {aggregation: mean}
+  pairwise_accuracy_with_ties: {aggregation: mean}
+  pairwise_accuracy_without_ties: {aggregation: mean}
+metadata:
+  source_kind: benchmark_zoo
+  benchmark_id: worldreasonbench
+  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldReasonBenchContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldreasonbench --mode normalizer
+    --output-dir tmp/benchmark_zoo/benchmark_contract/worldreasonbench --json
+  runtime:
+    kind: in_tree_protocol_runtime_external_assets
+    root: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench
+    root_env: WORLDFOUNDRY_WORLDREASONBENCH_ROOT
+    results_path_env: WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH
+  release_status: experimental
+  maturity: verified_runner
+  open_source_status: in_tree_result_normalizer
+  official_benchmark_verified: false
+  integration_evidence: false
+  leaderboard_valid: false
+  requires:
+  - Official restricted assets supplied outside the WorldFoundry source tree.
+  - OpenAI-compatible multimodal judge for real evaluation.
+  blockers:
+  - Upstream README prohibits redistribution and modification without prior approval.
+  data_refs:
+    task_yaml: worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml
+    fixture: worldfoundry/data/benchmarks/assets/worldreasonbench
+  runner_availability:
+    available: true
+    runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldReasonBenchContract
+    runner_script_available: true
+    task_yaml_available: true
+    runtime_verified: false
+    normalizer_verified: true
+    surface: worldreasonbench_official_in_tree
+  local_evaluator:
+    target: worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.run_worldreasonbench_official_runner:main
+    status: implemented
+    protocols:
+    - qa
+    - pointwise
+    - pairwise
+  integration_status: integrated
+  checkpoint_refs: []
+tasks:
+  worldreasonbench_standard:
+    benchmark_name: worldreasonbench
+    protocol: external_official_benchmark
+    capability_track: world_reasoning
+    input_keys:
+    - input_image
+    - prompt
+    - generated_video
+    output_keys:
+    - qa_answers
+    - pointwise_scores
+    - pairwise_verdicts
+    metric_ids:
+    - score_pr
+    - qa_accuracy
+    - state_score
+    - process_score
+    - fidelity_score
+    - mechanism_score
+    - static_outcome_score
+    - dynamic_reasoning_score
+    - reasoning_gap
+    - pointwise_score
+    - reasoning_correctness
+    - content_fidelity
+    - visual_aesthetics
+    - pointwise_spearman
+    - induced_pairwise_accuracy
+    - pairwise_accuracy_with_ties
+    - pairwise_accuracy_without_ties
+    metric_groups:
+    - worldreasonbench_qa
+    - worldrewardbench_pointwise
+    - worldrewardbench_pairwise
+    tags:
+    - benchmark-zoo
+    - world-reasoning
+    - video-reward-model
+    dataset:
+      status: external_restricted_asset
+      root_env: WORLDFOUNDRY_WORLDREASONBENCH_ROOT
+      hf_dataset_id: WorldReasonBench
+      hf_endpoint: https://hf-mirror.com
+    artifact_contract:
+      required:
+        generated_video: {kind: video}
+      optional:
+        input_image: {kind: image}
+    evaluation_protocol:
+    - name: qa_process_reasoning
+      metric_ids: [score_pr, qa_accuracy, state_score, process_score, fidelity_score, mechanism_score,
+        static_outcome_score, dynamic_reasoning_score, reasoning_gap]
+    - name: pointwise_reward
+      metric_ids: [pointwise_score, reasoning_correctness, content_fidelity, visual_aesthetics,
+        pointwise_spearman, induced_pairwise_accuracy]
+    - name: pairwise_reward
+      metric_ids: [pairwise_accuracy_with_ties, pairwise_accuracy_without_ties]
+    runtime_requirements:
+      root_env: WORLDFOUNDRY_WORLDREASONBENCH_ROOT
+      results_path_env: WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH

@@ -1,0 +1,6 @@
+metric_id,score
+physics_iq_verified_score,0.75
+physics_iq_verified_spatiotemporal,0.76
+physics_iq_verified_spatial,0.74
+physics_iq_verified_weighted_spatial,0.77
+physics_iq_verified_mse,0.73

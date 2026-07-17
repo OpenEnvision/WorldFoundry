@@ -1,0 +1,27 @@
+{
+  "adapter": "recammaster",
+  "aliases": [
+    "recammaster"
+  ],
+  "amplitude": {
+    "calibration_status": "calibrated_acceptance_20260616",
+    "max_amount": 0.6,
+    "rotation_gain": 1.0,
+    "translation_gain": 1.0,
+    "translation_unit": "relative_pose_embedding"
+  },
+  "capabilities": {
+    "rotation": true,
+    "supports_static": true,
+    "translation": true
+  },
+  "default_fps": 16,
+  "default_frames": 81,
+  "default_height": 480,
+  "default_width": 832,
+  "input_kind": "source_video",
+  "key": "recammaster",
+  "notes": "ReCamMaster; 21-latent relative pose embedding (1,21,12) resampled from canonical trajectory.",
+  "payload_type": "recammaster_relative_pose_embedding",
+  "status": "active"
+}

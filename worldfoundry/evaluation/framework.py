@@ -66,6 +66,7 @@ class WorldFoundryRunRequest:
     benchmark_timeout_seconds: float | None = None
     benchmark_workdir: str | Path | None = None
     benchmark_env: Mapping[str, Any] | None = None
+    benchmark_parameters: Mapping[str, Any] | None = None
     materialize_placeholders: bool | None = None
     contract_fixture: bool = False
     fail_on_generation_error: bool = False
@@ -317,6 +318,7 @@ def _benchmark_execution_kwargs(request: WorldFoundryRunRequest) -> dict[str, An
         "benchmark_timeout_seconds": request.benchmark_timeout_seconds,
         "benchmark_workdir": request.benchmark_workdir,
         "benchmark_env": request.benchmark_env,
+        "benchmark_parameters": request.benchmark_parameters,
         "materialize_placeholders": request.materialize_placeholders,
         "contract_fixture": request.contract_fixture,
         "fail_on_generation_error": request.fail_on_generation_error,

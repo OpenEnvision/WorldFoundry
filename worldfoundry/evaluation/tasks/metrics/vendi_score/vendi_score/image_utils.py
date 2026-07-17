@@ -36,18 +36,6 @@ def get_cifar10(root, split="test"):
     return examples
 
 
-def get_cifar10(root, split="test"):
-    dataset = torchvision.datasets.CIFAR10(
-        root=root, train=split == "train", download=True
-    )
-    examples = []
-    for x, y in dataset:
-        features = {"pixels": np.array(x).flatten()}
-        labels = {"y": dataset.classes[y]}
-        examples.append(Example(x=x, features=features, labels=labels))
-    return examples
-
-
 def get_mnist(root, split="train", transform=None):
     dataset = torchvision.datasets.MNIST(
         root, train=split == "train", download=True, transform=transform

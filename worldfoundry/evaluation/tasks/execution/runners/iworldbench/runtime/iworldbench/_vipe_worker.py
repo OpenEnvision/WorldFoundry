@@ -5,10 +5,11 @@ Args: <videos_json_file> <vipe_output_dir> <process_index>
 CUDA_VISIBLE_DEVICES must be set by the caller before launching.
 """
 
-import sys
 import json
-import time
 import logging
+import os
+import sys
+import time
 from pathlib import Path
 
 import torch
@@ -47,11 +48,7 @@ def main():
     gpu_id = os.environ.get("CUDA_VISIBLE_DEVICES", "0")
     logger.info(f"Worker {proc_idx} on GPU {gpu_id}: {len(video_paths)} videos assigned")
 
-    import hydra
-    from worldfoundry.base_models.three_dimensions.general_3d.vipe import get_config_path
-    from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.raw_mp4_stream import RawMp4Stream
-    from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import ProcessedVideoStream
-    from worldfoundry.base_models.three_dimensions.general_3d.vipe.pipeline import make_pipeline as vipe_make_pipeline
+    from worldfoundry.base_models.three_dimensions.general_3d.vipe import infer_poses
 
     torch.cuda.set_device(0)  # CUDA_VISIBLE_DEVICES already restricts to one GPU
     torch.cuda.empty_cache()
@@ -60,48 +57,15 @@ def main():
     unlabeled = [v for v in video_paths if not _is_labeled(v, vipe_output_dir)]
     logger.info(f"Worker {proc_idx}: {len(unlabeled)} unlabeled, {len(video_paths) - len(unlabeled)} already done")
 
-    for video_path in unlabeled:
-        video_name = Path(video_path).name
-        try:
-            if _is_labeled(video_path, vipe_output_dir):
-                logger.info(f"Worker {proc_idx}: skip {video_name} (NPZ exists)")
-                continue
-
-            torch.cuda.empty_cache()
-
-            overrides = [
-                "pipeline=default",
-                f"pipeline.output.path={vipe_output_dir}",
-                "pipeline.output.save_artifacts=true",
-                "pipeline.output.save_viz=false",
-                "pipeline.slam.visualize=false",
-            ]
-            with hydra.initialize_config_dir(
-                config_dir=str(get_config_path()), version_base=None
-            ):
-                cfg = hydra.compose(
-                    config_name="default",
-                    overrides=overrides,
-                    return_hydra_config=False,
-                )
-
-            stream = ProcessedVideoStream(
-                RawMp4Stream(Path(video_path)), []
-            ).cache(desc="Reading video stream")
-            vipe_make_pipeline(cfg.pipeline).run(stream)
-
-            # Remove non-pose artefacts to save disk space
-            stem = Path(video_path).stem
-            for entry in Path(vipe_output_dir).iterdir():
-                if entry.is_dir() and entry.name != POSE_DIR_NAME:
-                    for f in entry.glob(f"{stem}*"):
-                        f.unlink(missing_ok=True)
-
-            logger.info(f"Worker {proc_idx}: done {video_name}")
-
-        except Exception as exc:
-            logger.error(f"Worker {proc_idx}: failed {video_name}: {str(exc)[:300]}")
-            torch.cuda.empty_cache()
+    if not unlabeled:
+        return
+    try:
+        results = infer_poses(unlabeled, vipe_output_dir)
+    except Exception:
+        logger.exception(f"Worker {proc_idx}: batch pose inference failed")
+        raise
+    for result in results:
+        logger.info(f"Worker {proc_idx}: done {Path(result.input_video).name}")
 
 
 if __name__ == "__main__":

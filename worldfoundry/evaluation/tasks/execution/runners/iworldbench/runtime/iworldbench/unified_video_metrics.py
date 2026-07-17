@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# ruff: noqa: E402, I001
 """
 Unified video evaluation metrics.
 
@@ -17,27 +18,27 @@ Usage example:
     )
 """
 
-import os
-import sys
-import json
 import csv
+import json
 import logging
+import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional, List
+from typing import List, Optional
 
 import numpy as np
 
 from worldfoundry.base_models.three_dimensions.general_3d import vipe as _worldfoundry_vipe
+from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
     IN_TREE_VBENCH_ROOT,
     VBENCH_FULL_INFO_ASSET,
     VBenchRunRequest,
     run_vbench,
 )
-from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 
 # ─── Path setup ───────────────────────────────────────────────────────────────
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -65,21 +66,20 @@ sys.path.insert(0, _THIS_DIR)
 sys.path.append(_VIPE_ROOT)
 
 # ─── Import metric implementation functions ───────────────────────────────────
-from index_revise_pro_plus_c_h import (
-    calculate_brightness as _brightness,
-    calculate_hue as _hue,
-    calculate_noise as _noise,
-    calculate_clarity as _clarity,
-    calculate_memory as _memory,
-)
 from index_att2 import (
     calculate_trajectory_accuracy as _traj_acc,
     calculate_trajectory_difference as _traj_diff,
     calculate_trajectory_npz_similarity_v2 as _traj_sim,
 )
+from index_revise_pro_plus_c_h import (
+    calculate_brightness as _brightness,
+    calculate_clarity as _clarity,
+    calculate_hue as _hue,
+    calculate_memory as _memory,
+    calculate_noise as _noise,
+)
 
 # ─── VIPe configuration ───────────────────────────────────────────────────────
-AVAILABLE_GPUS: List[int] = [0, 5, 6, 7]
 POSE_DIR_NAME: str = "pose"
 SUPPORTED_FORMATS: tuple = ('.mp4', '.avi', '.mov', '.mkv', '.ts', '.flv', '.webm')
 
@@ -90,6 +90,37 @@ _VBENCH_SHORT_NAMES = {
     "imaging_quality": "Imaging_Quality_MUSIQ",
     "motion_smoothness": "Motion_Smoothness_AMT",
 }
+
+
+def _parse_gpu_devices(value: str, variable: str) -> List[str]:
+    devices = [device.strip() for device in value.split(",") if device.strip()]
+    if not devices or any(device.lower() in {"-1", "none", "void"} for device in devices):
+        raise RuntimeError(f"{variable} does not expose a CUDA device for ViPE: {value!r}")
+    return list(dict.fromkeys(devices))
+
+
+def _available_vipe_gpus() -> List[str]:
+    """Resolve worker devices from an explicit override or the visible CUDA set."""
+    override = os.environ.get("WORLDFOUNDRY_IWORLD_BENCH_VIPE_GPUS")
+    if override is not None:
+        return _parse_gpu_devices(override, "WORLDFOUNDRY_IWORLD_BENCH_VIPE_GPUS")
+
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible is not None:
+        return _parse_gpu_devices(visible, "CUDA_VISIBLE_DEVICES")
+
+    try:
+        import torch
+
+        count = torch.cuda.device_count()
+    except Exception as exc:
+        raise RuntimeError(f"Could not discover CUDA devices for ViPE: {exc}") from exc
+    if count < 1:
+        raise RuntimeError(
+            "ViPE requires at least one visible CUDA device. Set CUDA_VISIBLE_DEVICES or "
+            "WORLDFOUNDRY_IWORLD_BENCH_VIPE_GPUS explicitly."
+        )
+    return [str(index) for index in range(count)]
 
 
 def _ensure_vbench_path() -> None:
@@ -248,21 +279,21 @@ def _run_vipe(video_dir: str, vipe_output_dir: str) -> str:
     )
 
     if already_done < len(video_paths):
-        gpus = AVAILABLE_GPUS
+        gpus = _available_vipe_gpus()
         # Distribute videos round-robin across GPUs
         chunks: List[List[str]] = [[] for _ in gpus]
         for i, v in enumerate(video_paths):
             chunks[i % len(gpus)].append(v)
 
         tmp_files: List[str] = []
-        processes: List[subprocess.Popen] = []
+        processes: List[tuple[subprocess.Popen, str]] = []
 
         for idx, rank in enumerate(gpus):
             chunk = chunks[idx]
             if not chunk:
                 continue
             # Write the video list to a temp JSON file
-            fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix=f"vipe_gpu{rank}_")
+            fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix=f"vipe_worker{idx}_")
             os.close(fd)
             with open(tmp_path, "w") as f:
                 json.dump(chunk, f)
@@ -276,17 +307,31 @@ def _run_vipe(video_dir: str, vipe_output_dir: str) -> str:
                 [sys.executable, _WORKER_SCRIPT, tmp_path, vipe_output_dir, str(idx)],
                 env=env,
             )
-            processes.append(p)
+            processes.append((p, rank))
             logger.info(f"Launched VIPe worker for GPU {rank} (PID {p.pid}, {len(chunk)} videos)")
 
-        for p in processes:
-            p.wait()
+        failed_workers: list[tuple[str, int]] = []
+        for process, rank in processes:
+            returncode = process.wait()
+            if returncode != 0:
+                failed_workers.append((rank, returncode))
 
         for f in tmp_files:
             try:
                 os.unlink(f)
             except OSError:
                 pass
+
+        if failed_workers:
+            details = ", ".join(f"gpu {rank}: exit {returncode}" for rank, returncode in failed_workers)
+            raise RuntimeError(f"VIPe worker failure ({details})")
+
+        missing_pose = [path for path in video_paths if not _is_labeled(path, vipe_output_dir)]
+        if missing_pose:
+            preview = ", ".join(Path(path).name for path in missing_pose[:5])
+            raise RuntimeError(
+                f"VIPe did not produce pose NPZ files for {len(missing_pose)} video(s): {preview}"
+            )
 
         logger.info("VIPe labeling complete")
 

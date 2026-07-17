@@ -120,7 +120,8 @@ runner:
       dimension: temporal_flickering
       generated_video_count: 2
       metrics_available: 3
-      official_benchmark_verified: true
+      official_component_verified: true
+      official_benchmark_verified: false
       integration_evidence: true
       leaderboard_valid: false
       full_suite_verified: false
@@ -139,7 +140,8 @@ integration:
     is still pending.
   - Leaderboard parity requires the complete official variant suites and generated artifacts.
   evidence:
-    official_benchmark_verified: true
+    official_component_verified: true
+    official_benchmark_verified: false
     integration_evidence: true
     leaderboard_valid: false
 notes: Tracked separately from VBench because upstream documents VBench++ modules as an extension even though they share
@@ -148,7 +150,7 @@ release_status: experimental
 maturity: contract_ready
 open_source_status: experimental
 official_benchmark_verified: false
-integration_evidence: false
+integration_evidence: true
 leaderboard_valid: false
 requires:
 - dimension-dependent
@@ -177,15 +179,18 @@ runner_availability:
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
+  runtime_verification_scope: bounded_long_temporal_flickering_dimension
+  full_suite_verified: false
   normalizer_verified: false
-  surface: official_runner
+  surface: bounded_official_gpu_validation
 official_gpu_validation:
   verified: true
   variant: long
   dimension: temporal_flickering
   generated_video_count: 2
   metrics_available: 3
-  official_benchmark_verified: true
+  official_component_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false

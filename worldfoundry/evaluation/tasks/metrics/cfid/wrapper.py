@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -16,18 +15,11 @@ def package_root() -> Path:
     return PACKAGE_ROOT
 
 
-def _ensure_cfid() -> None:
-    root = str(PACKAGE_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-
-
 @lru_cache(maxsize=1)
 def _cfid_fn() -> Any:
-    _ensure_cfid()
-    import cfid_core as mod
+    from .cfid_core import cfid
 
-    return mod.cfid
+    return cfid
 
 
 def compute_cfid(

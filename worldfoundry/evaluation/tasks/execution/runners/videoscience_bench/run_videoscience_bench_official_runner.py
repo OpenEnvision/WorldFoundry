@@ -15,13 +15,14 @@ import os
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.utils import REPO_ROOT
-
 from worldfoundry.evaluation.tasks.execution.framework import official_runner as ors
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
-from worldfoundry.evaluation.tasks.execution.framework.io import env_path, mean_numeric, normalize_unit_score, scalar_number
-
-
+from worldfoundry.evaluation.tasks.execution.framework.io import (
+    env_path,
+    mean_numeric,
+    normalize_unit_score,
+    scalar_number,
+)
 
 CONFIG = ors.BenchRunnerConfig(
     benchmark_id='videoscience-bench',
@@ -30,7 +31,7 @@ CONFIG = ors.BenchRunnerConfig(
     results_path_env='WORLDFOUNDRY_VIDEOSCIENCE_BENCH_RESULTS_PATH',
     default_repo_subdir='worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/runtime/videoscience_bench',
     metric_order=('prompt_consistency', 'phenomenon_congruency', 'correct_dynamism', 'immutability', 'spatio_temporal_coherence', 'videoscience_average'),
-    metric_specs={'prompt_consistency': {'name': 'Prompt Consistency', 'group': 'science', 'higher_is_better': True}, 'phenomenon_congruency': {'name': 'Phenomenon Congruency', 'group': 'science', 'higher_is_better': True}, 'correct_dynamism': {'name': 'Correct Dynamism', 'group': 'science', 'higher_is_better': True}, 'immutability': {'name': 'Immutability', 'group': 'science', 'higher_is_better': True}, 'spatio_temporal_coherence': {'name': 'Spatio-Temporal Coherence', 'group': 'science', 'higher_is_better': True}, 'videoscience_average': {'name': 'VideoScience Average', 'group': 'aggregate', 'higher_is_better': True}},
+    metric_specs={'prompt_consistency': {'name': 'Prompt Consistency', 'group': 'science', 'higher_is_better': True}, 'phenomenon_congruency': {'name': 'Phenomenon Congruency', 'group': 'science', 'higher_is_better': True}, 'correct_dynamism': {'name': 'Correct Dynamism', 'group': 'science', 'higher_is_better': True}, 'immutability': {'name': 'Immutability', 'group': 'science', 'higher_is_better': True}, 'spatio_temporal_coherence': {'name': 'Spatio-Temporal Coherence', 'group': 'science', 'higher_is_better': True}, 'videoscience_average': {'name': 'VideoScience Weighted Overall', 'group': 'aggregate', 'higher_is_better': True}},
     metric_aliases={'prompt_consistency': 'prompt_consistency', 'pcs': 'prompt_consistency', 'phenomenon_congruency': 'phenomenon_congruency', 'expected_phenomenon': 'phenomenon_congruency', 'phenomenon': 'phenomenon_congruency', 'pcg': 'phenomenon_congruency', 'correct_dynamism': 'correct_dynamism', 'dynamism': 'correct_dynamism', 'cdn': 'correct_dynamism', 'immutability': 'immutability', 'imb': 'immutability', 'spatio_temporal_coherence': 'spatio_temporal_coherence', 'coherence': 'spatio_temporal_coherence', 'spatio_temporal_continuity': 'spatio_temporal_coherence', 'stc': 'spatio_temporal_coherence', 'overall': 'videoscience_average', 'overall_weighted': 'videoscience_average', 'videoscience_average': 'videoscience_average'},
     average_metric_id='videoscience_average',
     official_entry='videoscience_batch.py',

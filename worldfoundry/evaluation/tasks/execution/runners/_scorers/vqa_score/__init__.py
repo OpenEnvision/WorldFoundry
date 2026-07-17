@@ -34,9 +34,8 @@ def VQAScore(
 
 
 def package_root() -> Path:
-    from worldfoundry.base_models.perception_core.video_text.vqa_score import constants
-
-    return Path(constants.__file__).resolve().parent
+    """Return the in-tree VQAScore implementation root."""
+    return Path(__file__).resolve().parent
 
 
 __all__ = ["VQAScore", "list_all_vqascore_models", "package_root"]

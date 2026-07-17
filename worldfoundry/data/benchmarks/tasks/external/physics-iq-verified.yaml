@@ -1,0 +1,63 @@
+benchmark: physics-iq-verified
+id: physics-iq-verified
+name: Physics-IQ Verified
+description: Recommended Physics-IQ protocol with verified data, prompts, masks, and per-view scoring.
+status: official_runtime_integrated_data_required
+domain: [physics, physical-understanding]
+task_type: image_to_video_physical_understanding_evaluation
+input:
+  modalities: [image, text]
+  keys: [prompt, prompt_id, conditioning_image, generated_artifact_manifest]
+output:
+  modalities: [video]
+  artifacts: [generated_video]
+tags: [benchmark-zoo, external-official, physics-iq-verified, image-to-video]
+splits: [standard]
+metrics:
+  physics_iq_verified_score: {aggregation: mean, primary: true}
+  physics_iq_verified_spatiotemporal: {aggregation: mean}
+  physics_iq_verified_spatial: {aggregation: mean}
+  physics_iq_verified_weighted_spatial: {aggregation: mean}
+  physics_iq_verified_mse: {aggregation: mean}
+metadata:
+  source_kind: benchmark_zoo
+  benchmark_id: physics-iq-verified
+  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQVerifiedContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
+  source_provenance:
+    official_repository:
+      url: https://github.com/google-deepmind/physics-IQ-benchmark
+      revision: b02cf26dc15d559d0ca4f63a6917070312dde185
+      role: provenance_only_not_runtime_dependency
+    dataset: Anates-Labs-Research/Physics-IQ-Verified
+  prompt_suite:
+    path: worldfoundry/data/benchmarks/assets/physics-iq-verified/descriptions/descriptions_base.csv
+    setting: bpp-base
+    count: 198
+  metric_protocol:
+    raw_engine: shared_physics_iq_mask_iou_mse
+    score_adapter: verified_scenario_view_aggregation
+    primary_upstream_key: final_score_view
+  runtime:
+    kind: in_tree_official_runtime
+    root: worldfoundry/evaluation/tasks/execution/runners/physics_iq
+    dataset_root_env: WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  run_command: >-
+    PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
+    worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
+    --benchmark-id physics-iq-verified --protocol verified --run-official
+    --dataset-root "${WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT}"
+    --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}"
+    --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
+tasks:
+  physics_iq_verified:
+    benchmark_name: physics-iq-verified
+    protocol: official_verified
+    capability_track: image_to_video
+    input_keys: [prompt, prompt_id, conditioning_image, generated_artifact_manifest]
+    output_keys: [generated_video]
+    metric_ids: [physics_iq_verified_score, physics_iq_verified_spatiotemporal, physics_iq_verified_spatial, physics_iq_verified_weighted_spatial, physics_iq_verified_mse]
+    artifact_contract:
+      required:
+        generated_video: {kind: video}

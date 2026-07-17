@@ -2,16 +2,16 @@ benchmark_ids:
 - phyground
 blocked_reason: WorldFoundry imports PhyGround scores.json from generated artifacts; full leaderboard validation still
   requires PhyJudge/vLLM or API judge scores for all official prompts.
-environment_id: worldfoundry-phyground-artifacts
+environment_id: worldfoundry-unified-cu128
 id: phyground
 name: PhyGround
 needs_new_env: false
 notes:
-- PhyGround official-run imports scores.json from WORLDFOUNDRY_PHYGROUND_RESULTS_PATH or --generated-artifact-dir.
+- The result importer reads scores.json from WORLDFOUNDRY_PHYGROUND_RESULTS_PATH, an explicit path, or a prepared data root.
 - Judge execution is handled by WorldFoundry/base-model infrastructure, not benchmark-local shell scripts.
 - Standard data roots auto-discover prompts/phyground.json and first_images/; use --prompt-manifest for non-standard 
   layouts.
-- Full leaderboard validation still requires all 250 generated videos and complete PhyJudge scores.
+- This profile does not execute PhyJudge or a cloud judge and produces no official benchmark evidence.
 preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile phyground --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/phyground.yaml --output-dir 
@@ -25,8 +25,7 @@ required_assets:
   - <phyground_data_root>/first_images/
   - <phyground_data_root>/videos/<model_id>/
   task_yaml: worldfoundry/data/benchmarks/tasks/external/phyground.yaml
-required_env:
-- WORLDFOUNDRY_PHYGROUND_RESULTS_PATH
+required_env: []
 optional_env:
 - WORLDFOUNDRY_PHYGROUND_DATA_ROOT
 - WORLDFOUNDRY_BENCHMARK_DATA_ROOT
@@ -41,7 +40,7 @@ required_paths:
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/phyground.yaml
 requires_cuda_visibility: false
-status: in_tree_artifact_scores_ready_full_judge_pending
+status: in_tree_artifact_score_importer_ready_full_judge_pending
 optional_imports:
 - numpy
 base_model_dependencies:

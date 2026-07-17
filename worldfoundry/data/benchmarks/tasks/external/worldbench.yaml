@@ -1,157 +1,164 @@
 benchmark: worldbench
-description: WorldBench external benchmark task manifest for video-based and text-based physical understanding results.
+description: In-tree WorldBench IntuitivePhysics video-continuation and textual-question evaluation.
 tags:
 - benchmark-zoo
 - external-official
 - worldbench
 - video-understanding
-splits:
-- standard
+- physical-understanding
+splits: [standard]
+
 metrics:
-  video_based_accuracy:
+  foreground_miou:
     aggregation: mean
+    primary: true
+  foreground_dice:
+    aggregation: mean
+    diagnostic: true
+  background_rmse:
+    aggregation: mean
+    higher_is_better: false
   text_based_accuracy:
     aggregation: mean
   multiple_choice_accuracy:
     aggregation: mean
   binary_accuracy:
     aggregation: mean
-  worldbench_average:
-    aggregation: mean
-    primary: true
+
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: worldbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldbench --mode contract 
+  contract_validation_command: >-
+    worldfoundry-eval zoo benchmark-run --benchmark-id worldbench --mode contract
     --output-dir tmp/benchmark_zoo/benchmark_contract/worldbench --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
   prompt_suite:
-    hf_dataset_id: worldbenchmark/WorldBench
+    hf_dataset_id: worldbenchmark/IntuitivePhysics
     split: standard
   artifact_layout:
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    answer_manifest_env: WORLDFOUNDRY_WORLDBENCH_ANSWER_MANIFEST
     output_artifact: benchmark_scorecard
     filename_template: scorecard.json
   runtime:
-    kind: in_tree_official_runtime
+    kind: in_tree_model_backed_evaluator
     root: worldfoundry/evaluation/tasks/execution/runners/worldbench
-    root_env: WORLDFOUNDRY_WORLDBENCH_ROOT
-    artifact_score_dir_env: WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR
+    implementation: worldfoundry/evaluation/tasks/execution/runners/worldbench/runtime/worldbench
+    config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
+    dataset_root_env: WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    answer_manifest_env: WORLDFOUNDRY_WORLDBENCH_ANSWER_MANIFEST
+    sam2_checkpoint_env: WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT
     results_path_env: WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH
   release_status: experimental
-  maturity: contract_ready
-  open_source_status: in_tree_runtime
+  maturity: runtime_ready
+  open_source_status: in_tree_clean_reimplementation
   official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   base_model_dependencies:
   - worldbench_dataset_assets
+  - sam2
   optional_base_model_dependencies:
   - video_world_perception_stack
   requires:
-  - WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR or --artifact-score-dir for in-tree runtime execution
-  - official_results_path or WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH for result import
+  - WorldBench dataset and generated continuations for video metrics
+  - WorldBench textual questions and an answer manifest for text metrics
+  - SAM2.1 Hiera Large checkpoint unless precomputed masks are supplied
   blockers:
-  - In-tree runtime is wired; source-verified upstream official evaluation code was not confirmed from official GitHub
-    or Hugging Face sources.
-  - Dataset license is null in HF API response.
-  - Requires video-to-video and VQA task split mapping.
+  - Dataset and public evaluator bundle do not declare a redistribution license.
+  - Full-dataset numerical parity and official submission parity remain unaudited.
+  - Public evaluator labels Dice as mIoU; WorldFoundry exposes both definitions.
   data_refs:
     local_dataset_paths:
-    - cache/worldfoundry/data/hfd_datasets/worldbenchmark/WorldBench
-    - cache/worldfoundry/data/hfd_datasets/worldbenchmark__WorldBench
+    - cache/worldfoundry/data/hfd_datasets/worldbenchmark/IntuitivePhysics
+    - cache/worldfoundry/data/hfd_datasets/worldbenchmark__IntuitivePhysics
     task_yaml: worldfoundry/data/benchmarks/tasks/external/worldbench.yaml
+    evaluator_config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
   runner_availability:
     available: true
     runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
-    surface: worldbench_official_in_tree
+    surface: raw_generated_artifact_evaluator_and_result_normalizer
     normalizer_verified: true
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
   local_evaluator:
     target: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
     status: implemented
-    protocol: in_tree_official_runtime_and_result_normalization
+    protocol: raw_artifact_evaluation_and_compatibility_result_normalization
+    raw_artifact_evaluation:
+      status: bounded_fixture_verified
+      inputs:
+      - dataset_root
+      - generated_video_dir or video_manifest
+      - answer_manifest
+      - optional predicted_mask_dir
+      shared_base_model: sam2
     official_result_normalization:
       status: implemented
-      input_keys:
-      - artifact_score_dir
-      - WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR
-      - official_results_path
-      - WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH
-      formats:
-      - json
-      - jsonl
-      - csv
-      - tsv
-      provenance: normalizes caller-provided official outputs without executing upstream repos
+      formats: [json, jsonl, csv, tsv]
   runner:
-    validation_command:
+    run_command:
     - worldfoundry-eval
     - zoo
     - benchmark-run
     - --benchmark-id
     - worldbench
     - --mode
-    - official-validation
-    - --official-results-path
-    - <official_results.json>
+    - official-run
+    - --dataset-root
+    - <worldbench_dataset>
     - --generated-artifact-dir
-    - <generated_videos>
+    - <generated_continuations>
     - --output-dir
     - <out>
     - --json
-    runtime:
-      results_path_env: WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldbench --mode 
-      official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
-      --output-dir <out> --json
-  validation_command:
-  - worldfoundry-eval
-  - zoo
-  - benchmark-run
-  - --benchmark-id
-  - worldbench
-  - --mode
-  - official-validation
-  - --official-results-path
-  - <official_results.json>
-  - --generated-artifact-dir
-  - <generated_videos>
-  - --output-dir
-  - <out>
-  - --json
+    validation_command:
+    - python
+    - -m
+    - worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+    - --run-official
+    - --dataset-root
+    - <worldbench_dataset>
+    - --generated-video-dir
+    - <generated_continuations>
+    - --output-dir
+    - <out>
+    - --json
   integration_status: integrated
-  status: integrated_in_tree_official_runtime
-  checkpoint_refs: []
+  status: in_tree_runtime_ready
+  checkpoint_refs:
+  - repo_id: facebook/sam2.1-hiera-large
+    filename: sam2.1_hiera_large.pt
+    env: WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT
+
 tasks:
-  worldbench_video_standard:
+  worldbench_intuitive_physics_standard:
     benchmark_name: worldbench
-    protocol: external_official_benchmark
+    protocol: in_tree_worldbench_intuitive_physics
     capability_track: physical_understanding
     input_keys:
+    - input_video
     - prompt
-    - prompt_id
     - question
     - choices
     output_keys:
     - generated_video
     - answer
     metric_ids:
-    - video_based_accuracy
+    - foreground_miou
+    - foreground_dice
+    - background_rmse
     - text_based_accuracy
     - multiple_choice_accuracy
     - binary_accuracy
-    - worldbench_average
     metric_groups:
-    - worldbench_accuracy
-    tags:
-    - benchmark-zoo
-    - worldbench
-    - vqa
+    - worldbench_video_overlap
+    - worldbench_background_fidelity
+    - worldbench_text_accuracy
+    tags: [benchmark-zoo, worldbench, vqa, video-continuation]
     metadata:
       source_kind: benchmark_zoo
       benchmark_id: worldbench
@@ -159,10 +166,12 @@ tasks:
       integration_evidence: true
       leaderboard_valid: false
     dataset:
-      hf_dataset_id: worldbenchmark/WorldBench
+      hf_dataset_id: worldbenchmark/IntuitivePhysics
       split: standard
+      conditioning_frames: 9
     runtime_requirements:
-      results_path_env: WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH
+      dataset_root_env: WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT
+      sam2_checkpoint_env: WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT
     artifact_contract:
       required:
         generated_video:
@@ -170,14 +179,14 @@ tasks:
       optional:
         answer:
           kind: text
+        predicted_masks:
+          kind: segmentation
     evaluation_protocol:
-    - name: in_tree_official_runtime
-      metric_ids:
-      - video_based_accuracy
-      - text_based_accuracy
-      - multiple_choice_accuracy
-      - binary_accuracy
-      - worldbench_average
+    - name: in_tree_video_evaluator
+      metric_ids: [foreground_miou, foreground_dice, background_rmse]
       runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+    - name: in_tree_text_evaluator
+      metric_ids: [text_based_accuracy, multiple_choice_accuracy, binary_accuracy]
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py

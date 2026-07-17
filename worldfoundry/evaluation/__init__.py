@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """WorldFoundry evaluation: one execution stack, two typed sides.
 
 Runs always go through :mod:`worldfoundry.evaluation.runner` — ``execute_evaluate_run`` /
@@ -20,6 +18,8 @@ low-level evaluation path/manifest/IO helpers live under
 Shortcuts below mirror the main runner and resolver APIs for ``import worldfoundry.evaluation as ev``.
 """
 
+from __future__ import annotations
+
 from importlib import import_module
 
 _PRIMARY_EXPORT_MAP = {
@@ -33,6 +33,7 @@ _PUBLIC_SUBMODULES = (
     "api",
     "framework",
     "models",
+    "reporting",
     "runner",
     "tasks",
     "utils",

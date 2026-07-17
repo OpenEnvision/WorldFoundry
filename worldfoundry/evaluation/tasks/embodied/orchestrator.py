@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-import json
 import logging
-from pathlib import Path
 import uuid
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, MetricResult
@@ -16,12 +15,12 @@ from worldfoundry.evaluation.tasks.embodied.docker_runner import inside_docker, 
 from worldfoundry.evaluation.tasks.embodied.materialize_rollouts import materialize_embodied_rollout_requests
 from worldfoundry.evaluation.tasks.embodied.metrics import metric_suite
 from worldfoundry.evaluation.tasks.embodied.rollout_runner import build_embodied_closed_loop_runner
-from worldfoundry.evaluation.tasks.execution.evaluate import (
+from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import (
     EVALUATE_RUN_RESULT_SCHEMA_VERSION,
     EvaluateRunResult,
 )
-from worldfoundry.evaluation.tasks.execution.existing_results import run_existing_results
-from worldfoundry.evaluation.utils import append_jsonl, write_json
+from worldfoundry.evaluation.tasks.execution.orchestration.existing_results import run_existing_results
+from worldfoundry.evaluation.utils import write_json
 
 logger = logging.getLogger(__name__)
 

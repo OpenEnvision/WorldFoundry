@@ -106,14 +106,23 @@ def _normalize_1to4(value: Any) -> float | None:
     return (score - 1.0) / 3.0
 
 
-def _metrics_from_rubric(rubric: dict[str, Any]) -> dict[str, float]:
+def _metrics_from_rubric(
+    rubric: dict[str, Any],
+    *,
+    overall_1to4: float | None = None,
+) -> dict[str, float]:
     metrics: dict[str, float] = {}
     for source_key, metric_id in METRIC_MAP.items():
         normalized = _normalize_1to4(rubric.get(source_key))
         if normalized is not None:
             metrics[metric_id] = normalized
-    if metrics:
-        metrics["videoscience_average"] = sum(metrics.values()) / len(metrics)
+    if overall_1to4 is None:
+        overall_1to4 = _compute_overall_1to4(rubric, WEIGHTS)
+    overall = _normalize_1to4(overall_1to4)
+    if overall is not None:
+        # Preserve the weighting from the vendored official judge.  A simple
+        # mean would incorrectly discard the 30% phenomenon weight.
+        metrics["videoscience_average"] = overall
     return metrics
 
 
@@ -199,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         rubric, explanations = _parse_output_text(str(raw.get("output_text", "")))
         overall_1to4 = _compute_overall_1to4(rubric, WEIGHTS)
-        metrics = _metrics_from_rubric(rubric)
+        metrics = _metrics_from_rubric(rubric, overall_1to4=overall_1to4)
         item = {
             "video_id": video_id,
             "video": str(video_path),

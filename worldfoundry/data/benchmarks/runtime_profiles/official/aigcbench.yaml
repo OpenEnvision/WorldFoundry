@@ -11,19 +11,19 @@ notes:
 - WorldFoundry materializes HF dataset prompt lists and normalizes caller-provided AIGCBench metric result files.
 - Workspace and TUI generate videos through WorldFoundry model integrations; this runner imports the metric result file.
 - Full validation requires reference assets, generated videos, ViT-L-14.pt, DOVER, and optical-flow metric outputs.
-preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ROOT}/worldfoundry-unified-cu128/bin/python -m 
+preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile aigcbench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/aigcbench.yaml --output-dir 
   tmp/worldfoundry_preflight/aigcbench --json
-python_path: ${WORLDFOUNDRY_CONDA_ROOT}/worldfoundry-unified-cu128/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - .
 required_assets:
   bundled_assets: worldfoundry/data/benchmarks/assets/aigcbench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/aigcbench.yaml
-required_env:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+required_env: []
 optional_env:
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT
 - WORLDFOUNDRY_AIGCBENCH_PROMPT_MANIFEST
 - WORLDFOUNDRY_AIGCBENCH_RESULTS_PATH

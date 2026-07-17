@@ -268,18 +268,19 @@ def compute_average(config: BenchRunnerConfig, extracted: dict[str, dict[str, An
     if existing is not None and existing.get("normalized_score") is not None:
         return
     component_ids = [metric_id for metric_id in config.metric_order if metric_id != config.average_metric_id]
-    values = [
-        item["normalized_score"]
-        for metric_id in component_ids
-        if (item := extracted.get(metric_id)) and item.get("normalized_score") is not None
-    ]
+    values = []
+    for metric_id in component_ids:
+        item = extracted.get(metric_id)
+        if item is None or item.get("normalized_score") is None:
+            return
+        values.append(item["normalized_score"])
     average = mean_numeric(values)
     if average is not None:
         extracted[config.average_metric_id] = {
             "metric_id": config.average_metric_id,
             "raw_score": average,
             "normalized_score": average,
-            "source": "mean_available_component_metrics",
+            "source": "mean_complete_component_metrics",
             "sample_count": len(values),
         }
 
@@ -517,8 +518,16 @@ def build_scorecard(
 
     available_count = sum(1 for row in metric_rows if row["available"])
     normalizer_only = command is None and not blocked_reasons
-    official_verified = command is not None and returncode == 0 and available_count > 0
-    run_status = "blocked" if blocked_reasons else "official_verified" if official_verified else "normalized" if available_count else "failed"
+    official_runtime_succeeded = command is not None and returncode == 0 and available_count > 0
+    run_status = (
+        "blocked"
+        if blocked_reasons
+        else "official_bounded"
+        if official_runtime_succeeded
+        else "normalized"
+        if available_count
+        else "failed"
+    )
     runner_name = f"benchmark_zoo_{config.benchmark_id.replace('-', '_')}_official_runner"
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
@@ -566,6 +575,9 @@ def build_scorecard(
         "validation": {
             "normalizer_only": normalizer_only,
             "official_runtime_executed": command is not None,
+            "official_runtime_succeeded": official_runtime_succeeded,
+            "full_suite_complete": False,
+            "scope": "bounded_or_unproven" if official_runtime_succeeded else "not_executed",
             "blocked_reasons": blocked_reasons or [],
         },
         "artifacts": {
@@ -576,8 +588,11 @@ def build_scorecard(
             "upstream_stdout": str((output_dir / "upstream_stdout.log").resolve()),
             "upstream_stderr": str((output_dir / "upstream_stderr.log").resolve()),
         },
-        "official_benchmark_verified": official_verified,
-        "integration_evidence": official_verified,
+        # The shared runner cannot infer canonical prompt/sample/metric coverage.
+        # Benchmark-specific runners may make a full-suite claim only after an
+        # explicit coverage check; a successful component run proves integration.
+        "official_benchmark_verified": False,
+        "integration_evidence": official_runtime_succeeded,
         "normalizer_only": normalizer_only,
         "normalization_ok": available_count > 0,
         "official_results_imported": normalizer_only and available_count > 0,

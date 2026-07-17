@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import sys
 import tempfile
 from pathlib import Path
 
+from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
 _VENDOR_ROOT = Path(__file__).resolve().parent / "vendor"
@@ -32,9 +32,7 @@ def compute_fvmd(
     *,
     log_dir: str | Path | None = None,
 ) -> float:
-    root = str(_VENDOR_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    prepend_import_path(_VENDOR_ROOT)
     from fvmd.fvmd import fvmd as _fvmd
 
     work_dir = Path(log_dir) if log_dir is not None else Path(tempfile.mkdtemp(prefix="worldfoundry-fvmd-"))

@@ -167,34 +167,30 @@ runner:
   - raw_metric_table.jsonl
   verification_status: pending
   notes:
-  - WorldFoundry normalizes caller-provided T2VSafetyBench official result files through the unified benchmark-run 
-    entrypoint.
-  - 'Scorecards remain non-leaderboard setup evidence: official runtime execution, judge assets, and leaderboard parity remain pending.'
-  - Full validation requires generated artifacts for the official prompt/task suite plus upstream scorer or judge 
-    assets.
-  required_env:
-  - WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH
+  - WorldFoundry supports both official-result import and strict prompt-to-video staging into the checked-in GPT judge.
+  - Command construction, staging, failure semantics, and normalization are tested without treating a mocked API as metric evidence.
+  - Real judge execution and leaderboard parity remain pending user-supplied API/model access and complete generated artifacts.
+  required_env: []
 integration:
   status: integrated
   blocked_reasons:
-  - Official repository/source metadata and the official-result normalizer are integrated.
-  - Full validation requires generated videos or rollouts for the official prompt/task suite.
-  - Leaderboard parity requires official judge/checkpoint/API assets and normalized upstream result files.
+  - Real judge execution was not run during release validation because it requires user credentials.
+  - Full validation requires every generated video in all official prompt classes.
+  - Leaderboard parity requires the same judge model and protocol used by the benchmark authors.
 release_status: experimental
 maturity: contract_ready
 open_source_status: in_tree_runtime
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
-- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
-- WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH
-- official_results_path or official_results
-- configured GPT/manual judge assets for full leaderboard parity
+- 'import mode: WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH or official_results_path'
+- 'judge mode: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR plus OPENAI_API_KEY or WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_API_KEY'
+- configured GPT/manual judge assets for leaderboard parity
 blockers:
-- Official repository/source metadata and the official-result normalizer are integrated.
-- Full validation requires generated videos or rollouts for the official prompt/task suite.
-- Leaderboard parity requires official judge/checkpoint/API assets and normalized upstream result files.
+- Real judge execution was not run during release validation because it requires user credentials.
+- Full validation requires every generated video in all official prompt classes.
+- Leaderboard parity requires the same judge model and protocol used by the benchmark authors.
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/t2v-safety-bench.yaml
   in_tree_runtime_paths:
@@ -206,7 +202,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VSafetyBenchContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   surface: t2v_safety_bench_official_in_tree
   normalizer_verified: true
 dataset:

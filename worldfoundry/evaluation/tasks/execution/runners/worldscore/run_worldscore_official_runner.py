@@ -13,7 +13,7 @@ from typing import Any
 
 from worldfoundry.evaluation.utils import REPO_ROOT
 
-from worldfoundry.runtime import first_env_value, resolve_hf_cache_dir  # type: ignore[reportMissingImports]  # noqa: E402
+from worldfoundry.runtime.env import first_env_value, resolve_hf_cache_dir  # type: ignore[reportMissingImports]  # noqa: E402
 from worldfoundry.evaluation.utils import HFD_DATASET_CACHE_ROOT, worldfoundry_hfd_dataset_root
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.framework.io import env_path, load_json, utc_now_iso, write_json, write_jsonl

@@ -2,7 +2,7 @@ benchmark_ids:
 - videoscience-bench
 blocked_reason: VideoScience-Bench official-result normalization is wired; full upstream runtime, generated artifacts, 
   and leaderboard parity remain pending.
-environment_id: worldplay-videoscience-bench-contract
+environment_id: worldfoundry-unified-cu128
 id: videoscience-bench
 name: VideoScience-Bench
 needs_new_env: false
@@ -20,10 +20,10 @@ required_assets:
   in_tree_runtime_paths:
   - worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/runtime/videoscience_bench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/videoscience-bench.yaml
-required_env:
-- WORLDFOUNDRY_VIDEOSCIENCE_BENCH_RESULTS_PATH
+required_env: []
 optional_env:
 - WORLDFOUNDRY_VIDEOSCIENCE_BENCH_ROOT
+- WORLDFOUNDRY_VIDEOSCIENCE_BENCH_RESULTS_PATH
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_VIDEOSCIENCE_PROVIDER
 - WORLDFOUNDRY_VIDEOSCIENCE_MODEL

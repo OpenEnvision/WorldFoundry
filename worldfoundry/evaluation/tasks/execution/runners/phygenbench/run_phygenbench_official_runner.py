@@ -41,7 +41,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--run-official",
         action="store_true",
-        help="Execute in-tree PhyGenBench judge (mock or upstream overall.py dispatch).",
+        help="Run the configured fixture/overall aggregation component; official stage judges are not in-tree.",
     )
     parser.add_argument(
         "--run-fixture",
@@ -67,7 +67,7 @@ def _metric_rows(
     *,
     computed: Mapping[str, Any],
     source_path: Path,
-    official_runtime_executed: bool,
+    official_component_executed: bool,
 ) -> list[dict[str, Any]]:
     direct_metrics = computed.get("metrics") if isinstance(computed.get("metrics"), Mapping) else {}
     components = computed.get("components") if isinstance(computed.get("components"), Mapping) else {}
@@ -85,7 +85,11 @@ def _metric_rows(
                 "score": score,
                 "higher_is_better": spec["higher_is_better"],
                 "group": spec["group"],
-                "source": "phygenbench_official_runtime" if official_runtime_executed else "phygenbench_results_file",
+                "source": (
+                    "phygenbench_official_overall_aggregation"
+                    if official_component_executed
+                    else "phygenbench_results_file"
+                ),
                 "source_path": str(source_path),
                 "components": components,
                 "reason": None if score is not None else "score_not_available_in_phygenbench_results",
@@ -122,6 +126,15 @@ def _coverage(expected_ids: set[str], generated_dir: Path | None) -> dict[str, A
     }
 
 
+def _official_overall_component_executed(
+    *,
+    official_runtime_executed: bool,
+    judge_summary: Mapping[str, Any] | None,
+) -> bool:
+    backend = str((judge_summary or {}).get("backend") or "").strip().lower()
+    return official_runtime_executed and backend == "official"
+
+
 def _scorecard(
     *,
     benchmark_id: str,
@@ -145,46 +158,76 @@ def _scorecard(
         video_coverage.get("expected_count", 0) > 0
         and video_coverage.get("complete") is True
     )
-    full_suite_valid = (
+    input_coverage_complete = (
         prompt_count >= CANONICAL_PROMPT_COUNT
         and video_complete
         and len(available_rows) == len(METRIC_ORDER)
     )
     normalization_ok = bool(available_rows)
-    official_verified = official_runtime_executed and normalization_ok
-    integration_evidence = official_verified and full_suite_valid
-    normalizer_only = not official_runtime_executed and not integration_evidence
+    component_executed = _official_overall_component_executed(
+        official_runtime_executed=official_runtime_executed,
+        judge_summary=judge_summary,
+    )
+    integration_evidence = component_executed and normalization_ok
+    evidence_scope = (
+        "official_overall_aggregation"
+        if integration_evidence
+        else "mock_or_result_import"
+    )
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
-        "official_benchmark_verified": official_verified,
+        "official_benchmark_verified": False,
         "integration_evidence": integration_evidence,
         "leaderboard_valid": False,
-        "normalizer_only": normalizer_only,
+        "normalizer_only": not integration_evidence,
         "normalization_ok": normalization_ok,
         "eligibility": {
-            "full_suite_valid": full_suite_valid,
+            "full_suite_valid": False,
+            "input_coverage_complete": input_coverage_complete,
             "video_coverage_complete": video_complete,
+            "official_stage_judges_executed": False,
         },
         "run": {
-            "status": "succeeded" if normalization_ok else "failed",
+            "status": (
+                "official_overall_aggregation_completed"
+                if integration_evidence
+                else "mock_or_results_normalized"
+                if normalization_ok
+                else "failed"
+            ),
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_phygenbench_official_runner",
             "returncode": 0 if normalization_ok else 1,
             "judge_summary": dict(judge_summary or {}),
         },
-        "benchmark": {"benchmark_id": benchmark_id, "name": "PhyGenBench"},
+        "benchmark": {
+            "benchmark_id": benchmark_id,
+            "name": "PhyGenBench",
+            "evidence_scope": evidence_scope,
+        },
+        "dataset": {
+            "prompt_manifest": None if prompt_manifest_path is None else str(prompt_manifest_path),
+            "prompt_count": prompt_count,
+            "generated_video_coverage": dict(video_coverage),
+        },
         "metrics": {
             "leaderboard": leaderboard,
             "per_metric": per_metric,
             "summary": {
                 "available_metric_count": len(available_rows),
-                "official_available_count": len(available_rows),
+                "official_available_count": len(available_rows) if integration_evidence else 0,
                 "declared_metric_count": len(METRIC_ORDER),
             },
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "phygenbench_official_in_tree" if official_runtime_executed else "phygenbench_result_normalizer",
+            "kind": (
+                "phygenbench_official_overall_component"
+                if integration_evidence
+                else "phygenbench_mock_or_result_normalizer"
+            ),
+            "evidence_scope": evidence_scope,
+            "official_stage_judges_executed": False,
             "blocked_count": len(METRIC_ORDER) - len(available_rows),
         },
         "artifacts": {
@@ -194,7 +237,8 @@ def _scorecard(
         "coverage": {"videos": dict(video_coverage)},
         "notes": [
             "PhyGenBench in-tree runtime materializes prompts.json T2V requests and official output_video_{id}.mp4 names.",
-            "Use WORLDFOUNDRY_PHYGENBENCH_JUDGE_BACKEND=mock for CI fixture validation.",
+            "The non-mock runtime executes upstream overall.py only after official stage-result files already exist.",
+            "The mock backend is fixture validation and never benchmark evidence.",
         ],
         "prompt_manifest": None if prompt_manifest_path is None else str(prompt_manifest_path),
         "prompt_count": prompt_count,
@@ -230,10 +274,14 @@ def normalize_phygenbench_results(
             raise
     result_rows = load_results_rows(Path(official_results_path))
     computed = compute_phygenbench_metrics(rows=result_rows, results_path=Path(official_results_path))
+    official_component_executed = _official_overall_component_executed(
+        official_runtime_executed=official_runtime_executed,
+        judge_summary=judge_summary,
+    )
     metric_rows = _metric_rows(
         computed=computed,
         source_path=Path(official_results_path),
-        official_runtime_executed=official_runtime_executed,
+        official_component_executed=official_component_executed,
     )
     video_coverage = _coverage({record["prompt_id"] for record in prompt_records}, generated_dir)
     scorecard = _scorecard(
@@ -352,6 +400,15 @@ def main(argv: list[str] | None = None) -> int:
                 "error": f"{type(exc).__name__}: {exc}",
             },
             "benchmark": {"benchmark_id": args.benchmark_id, "name": "PhyGenBench"},
+            "dataset": {
+                "prompt_manifest": None,
+                "prompt_count": 0,
+                "generated_video_coverage": {},
+            },
+            "eligibility": {
+                "full_suite_valid": False,
+                "official_stage_judges_executed": False,
+            },
             "metrics": {
                 "leaderboard": {},
                 "per_metric": {},

@@ -4,7 +4,8 @@ bounded_official_gpu_validation:
   status: verified
   dimension: aesthetic_quality
   generated_video_count: 1
-  official_benchmark_verified: true
+  official_component_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false
@@ -32,11 +33,11 @@ base_model_dependency_preflight:
   - Detectron2-specific upstream dimensions remain external official-runtime dependencies.
   missing: []
 preflight_command: PYTHONPATH=worldfoundry/evaluation/tasks/execution/runners/vbench/runtime:. 
-  ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python -m 
+  ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile vbench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/vbench.yaml --output-dir tmp/worldfoundry_preflight/vbench 
   --json
-python_path: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
 required_assets:
@@ -45,7 +46,8 @@ required_assets:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench.yaml
   scorecard_paths:
   - tmp/local_open_eval/vbench_zeroscope_aesthetic_official_gpu_validation_after_prompt_file_fix_20260525/scorecard.json
-required_env:
+required_env: []
+optional_env:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 required_imports:
 - torch

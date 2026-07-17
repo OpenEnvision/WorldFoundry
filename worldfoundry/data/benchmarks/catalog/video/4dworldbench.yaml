@@ -209,7 +209,7 @@ release_status: experimental
 maturity: contract_ready
 open_source_status: in_tree_official_runtime
 official_benchmark_verified: false
-integration_evidence: true
+integration_evidence: false
 leaderboard_valid: false
 requires:
 - dataset_json prepared in the official 4DWorldBench JSON schema
@@ -222,7 +222,7 @@ runner_availability:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
   runner_script_available: true
   task_yaml_available: true
-  runtime_verified: true
+  runtime_verified: false
   surface: official_runner
   normalizer_verified: true
 base_model_dependencies:

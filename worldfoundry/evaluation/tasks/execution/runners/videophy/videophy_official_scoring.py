@@ -27,7 +27,7 @@ def official_scores_from_records(
     records: list[Mapping[str, Any]],
     official_results_path: Path | None,
     *,
-    average_id: str = "videophy_average",
+    average_id: str | None = "videophy_average",
     rating_scale_max: float | None = None,
 ) -> dict[str, OfficialMetricScore]:
     if not records:
@@ -54,10 +54,14 @@ def official_scores_from_records(
         scores["physical_commonsense"] = physical
     if joint is not None:
         scores["joint_score"] = joint
-    average = _score_from_records(records, average_id, official_results_path)
-    if average is not None:
+    average = (
+        _score_from_records(records, average_id, official_results_path)
+        if average_id is not None
+        else None
+    )
+    if average_id is not None and average is not None:
         scores[average_id] = average
-    else:
+    elif average_id is not None:
         component_values = [
             scores[metric_id].score
             for metric_id in ("semantic_adherence", "physical_commonsense")

@@ -19,6 +19,8 @@ from worldfoundry.evaluation.utils import (
     write_text,
 )
 
+from .comparison_identity import build_comparison_identity, comparison_identity_from_summary
+
 
 RUN_SUMMARY_SCHEMA_VERSION = "worldfoundry-run-summary"
 
@@ -136,6 +138,8 @@ def _row_from_summary(
     leaderboard = _mapping(summary.get("leaderboard"))
     artifacts = _mapping(summary.get("artifacts"))
     generation_cache = _mapping(run.get("generation_cache") or summary.get("generation_cache"))
+    comparison_identity = comparison_identity_from_summary(summary)
+    evaluation = _mapping(summary.get("evaluation"))
 
     return {
         "index": index,
@@ -143,11 +147,18 @@ def _row_from_summary(
         "source_path": str(source_path.resolve()),
         "run_id": run.get("run_id"),
         "status": run.get("status"),
-        "benchmark": benchmark.get("benchmark_name"),
+        "benchmark": _first_present(benchmark, "benchmark_name", "benchmark_id", "name", "id"),
         "task_type": benchmark.get("task_type"),
         "model_id": model.get("model_id"),
         "model_name": model.get("model_name"),
-        "dataset_id": dataset.get("dataset_id"),
+        "dataset_id": _first_present(dataset, "dataset_id", "name", "id"),
+        "evaluation_mode": evaluation.get("mode") or comparison_identity.get("evaluation_mode"),
+        "protocol_id": comparison_identity.get("protocol_id"),
+        "protocol_fidelity": comparison_identity.get("protocol_fidelity"),
+        "data_fidelity": comparison_identity.get("data_fidelity"),
+        "comparison_key": comparison_identity.get("comparison_key"),
+        "comparison_identity_status": comparison_identity.get("status"),
+        "comparison_identity": comparison_identity,
         "sample_count": _int_or_zero(counts.get("sample_count")),
         "successful_samples": _int_or_zero(counts.get("successful_samples")),
         "failed_samples": _int_or_zero(counts.get("failed_samples")),
@@ -172,6 +183,16 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
     metrics_summary = _mapping(metrics.get("summary"))
     eligibility = _mapping(scorecard.get("eligibility"))
     artifacts = _mapping(scorecard.get("artifacts"))
+    provenance = _mapping(scorecard.get("provenance"))
+    evaluation = _mapping(scorecard.get("evaluation"))
+    comparison_identity = build_comparison_identity(
+        benchmark=benchmark,
+        dataset=dataset,
+        metrics=metrics,
+        provenance=provenance,
+        evaluation_kind=str(evaluation.get("mode") or evaluation.get("kind") or "unknown"),
+        explicit=_mapping(scorecard.get("comparison_identity")),
+    )
 
     sample_count = _int_or_zero(
         metrics_summary.get("sample_count")
@@ -199,10 +220,21 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
             "run_fingerprint": run.get("run_fingerprint"),
         },
         "benchmark": {
+            "benchmark_id": _first_present(benchmark, "benchmark_id", "id", "benchmark_name", "name"),
             "benchmark_name": _first_present(benchmark, "benchmark_name", "name", "id"),
+            "benchmark_revision": _first_present(
+                benchmark,
+                "benchmark_revision",
+                "revision",
+                "repo_revision",
+                "upstream_revision",
+            ),
             "task_type": benchmark.get("task_type"),
             "suite": benchmark.get("suite"),
             "evaluation_protocol": benchmark.get("evaluation_protocol"),
+            "protocol_id": comparison_identity.get("protocol_id"),
+            "protocol_revision": comparison_identity.get("protocol_revision"),
+            "protocol_config_hash": comparison_identity.get("protocol_config_hash"),
         },
         "model": {
             "model_id": _first_present(model, "model_id", "model_name", "name"),
@@ -214,7 +246,15 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
             "name": _first_present(dataset, "name", "dataset_id", "id"),
             "split": dataset.get("split"),
             "sample_count": dataset.get("sample_count"),
+            "dataset_revision": comparison_identity.get("dataset_revision"),
+            "dataset_hash": comparison_identity.get("dataset_hash"),
         },
+        "evaluation": {
+            "kind": evaluation.get("kind"),
+            "mode": comparison_identity.get("evaluation_mode"),
+        },
+        "provenance": provenance,
+        "comparison_identity": comparison_identity,
         "counts": {
             "sample_count": sample_count,
             "successful_samples": successful_samples,
@@ -262,6 +302,8 @@ def build_markdown_report(summary: Mapping[str, Any]) -> str:
     eligibility = _mapping(summary.get("eligibility"))
     leaderboard = _mapping(summary.get("leaderboard"))
     artifacts = _mapping(summary.get("artifacts"))
+    evaluation = _mapping(summary.get("evaluation"))
+    comparison_identity = comparison_identity_from_summary(summary)
 
     lines = [
         "# WorldFoundry Run Report",
@@ -271,6 +313,11 @@ def build_markdown_report(summary: Mapping[str, Any]) -> str:
         f"- Benchmark: {_format_value(benchmark.get('benchmark_name'))}",
         f"- Model: {_format_value(model.get('model_id') or model.get('model_name'))}",
         f"- Dataset: {_format_value(dataset.get('dataset_id') or dataset.get('name'))}",
+        f"- Evaluation mode: {_format_value(evaluation.get('mode') or comparison_identity.get('evaluation_mode'))}",
+        f"- Protocol: {_format_value(comparison_identity.get('protocol_id'))}",
+        f"- Protocol fidelity: {_format_value(comparison_identity.get('protocol_fidelity'))}",
+        f"- Data fidelity: {_format_value(comparison_identity.get('data_fidelity'))}",
+        f"- Comparison identity: {_format_value(comparison_identity.get('status'))}",
         (
             "- Samples: "
             f"{_format_value(counts.get('sample_count'))} total, "

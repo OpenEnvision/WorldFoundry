@@ -1,7 +1,7 @@
 benchmark_ids:
 - videophy
 blocked_reason: full leaderboard parity still requires VideoCon-Physics checkpoint on all 688 prompts
-environment_id: worldplay-videophy-contract
+environment_id: worldfoundry-unified-cu128
 id: videophy
 name: VideoPhy
 needs_new_env: false
@@ -19,7 +19,8 @@ pythonpath_roots:
 required_assets:
   bundled_prompt_manifest: worldfoundry/data/benchmarks/assets/videophy/prompts.json
   task_yaml: worldfoundry/data/benchmarks/tasks/external/videophy.yaml
-required_env:
+required_env: []
+optional_env:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 required_packages:
 - numpy

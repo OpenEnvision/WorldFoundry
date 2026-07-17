@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export, package_root_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
-
-from .wrapper import compute_improved_precision_recall, compute_realism_score
 
 METRIC_ID = "improved_precision_recall"
 ALIASES = (
@@ -38,12 +35,10 @@ METRIC_MODULE = metric_module_from_globals(
     tags=TAGS,
 )
 
-
-@lru_cache(maxsize=1)
-def _wrapper() -> Any:
-    from worldfoundry.evaluation.tasks.metrics.improved_precision_recall import wrapper as _wrapper_module
-
-    return _wrapper_module
+compute_improved_precision_recall = lazy_export(
+    f"{__name__}.wrapper", "compute_improved_precision_recall", owner=__name__
+)
+compute_realism_score = lazy_export(f"{__name__}.wrapper", "compute_realism_score", owner=__name__)
 
 
 def compute(*args: Any, **kwargs: Any) -> dict[str, float]:
@@ -61,7 +56,4 @@ __all__ = [
     "compute_realism_score",
     "package_root",
 ]
-
-
-def package_root() -> Path:
-    return Path(__file__).resolve().parent
+package_root = package_root_export(__file__, owner=__name__)

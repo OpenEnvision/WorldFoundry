@@ -2,7 +2,7 @@ benchmark_ids:
 - video-bench
 blocked_reason: Video-Bench official judge wrapper is credential-gated; provide OPENAI_API_KEY or the Video-Bench 
   GPT-4o/GPT-4o-mini keys plus generated videos to execute the official judge.
-environment_id: worldplay-videobench-api-wrapper
+environment_id: worldfoundry-unified-cu128
 id: video-bench
 name: Video-Bench
 needs_new_env: false
@@ -27,12 +27,12 @@ required_assets:
   in_tree_runtime_paths:
   - worldfoundry/evaluation/tasks/execution/runners/videobench/runtime
   task_yaml: worldfoundry/data/benchmarks/tasks/external/video-bench.yaml
-required_env:
+required_env: []
+optional_env:
+- WORLDFOUNDRY_VIDEOBENCH_ROOT
 - WORLDFOUNDRY_VIDEOBENCH_RESULTS_PATH
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - OPENAI_API_KEY
-optional_env:
-- WORLDFOUNDRY_VIDEOBENCH_ROOT
 - WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT
 - WORLDFOUNDRY_VIDEOBENCH_OFFICIAL_VIDEOS_ROOT
 - WORLDFOUNDRY_VIDEOBENCH_GENERATED_VIDEO_DIR
@@ -51,12 +51,16 @@ required_paths:
   path: worldfoundry/evaluation/tasks/execution/runners/videobench/runtime
 - id: local_dataset_1
   path: cache/worldfoundry/data/hfd_datasets/Video-Bench/Video-Bench_human_annotation
+  required: false
 - id: local_dataset_2
   path: cache/worldfoundry/data/hfd_datasets/Video-Bench__Video-Bench_human_annotation
+  required: false
 - id: local_dataset_3
   path: cache/worldfoundry/data/hfd_datasets/Video-Bench/Video-Bench_videos
+  required: false
 - id: local_dataset_4
   path: cache/worldfoundry/data/hfd_datasets/Video-Bench__Video-Bench_videos
+  required: false
 requires_cuda_visibility: false
 status: in_tree_official_runtime_ready_full_api_assets_pending
 optional_imports:

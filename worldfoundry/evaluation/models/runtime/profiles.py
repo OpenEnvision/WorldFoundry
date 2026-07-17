@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 import yaml
 
-from worldfoundry.runtime import resolve_hfd_root
+from worldfoundry.runtime.env import resolve_hfd_root
 from worldfoundry.runtime.cuda_tiers import SUPPORTED_CUDA_TIERS, unified_env_exists
 from worldfoundry.evaluation.models.catalog.schema import iter_model_zoo_payloads
 from worldfoundry.evaluation.utils import DATA_ROOT, REPO_ROOT

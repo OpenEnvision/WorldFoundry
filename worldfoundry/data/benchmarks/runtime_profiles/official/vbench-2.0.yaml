@@ -4,7 +4,8 @@ bounded_official_gpu_validation:
   status: verified
   dimension: Diversity
   generated_video_count: 20
-  official_benchmark_verified: true
+  official_component_verified: true
+  official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
   full_suite_verified: false
@@ -35,11 +36,11 @@ base_model_dependency_preflight:
     checkpoints through the base-model/cache paths.
   missing: []
 preflight_command: PYTHONPATH=worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime:. 
-  ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python -m 
+  ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
   worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile vbench-2.0 --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/vbench-2.0.yaml --output-dir 
   tmp/worldfoundry_preflight/vbench-2.0 --json
-python_path: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-unified-cu128/bin/python
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
 required_assets:
@@ -55,7 +56,8 @@ required_assets:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml
   scorecard_paths:
   - tmp/local_open_eval/gpu_vbench2_cu113_diversity_probe/scorecard.json
-required_env:
+required_env: []
+optional_env:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 required_imports:
 - torch

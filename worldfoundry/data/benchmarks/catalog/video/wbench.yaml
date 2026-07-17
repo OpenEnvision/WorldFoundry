@@ -292,7 +292,6 @@ runner:
   expected_artifacts:
   - scorecard.json
   - raw_metric_table.jsonl
-  - report.json
   verification_status: in_tree_runtime
   notes:
   - The public runner can execute the checked-in WBench metric runtime with --run-official or normalize an existing
@@ -300,6 +299,10 @@ runner:
   - Default metric recomputation uses the in-tree WBench runtime backed by WorldFoundry base-model assets,
     including HPSv3, TransNetV2 segment continuity, PAVRM visual plausibility, DreamSim, and MegaSAM pose precompute.
   - Official GitHub sources are provenance only; runtime execution uses the checked-in WorldFoundry runner.
+  - Generated videos are staged into an isolated work directory under --output-dir; the checked-in runtime is never
+    used as mutable work storage.
+  - A video-only or partial-metric run is integration evidence only. WBench comparability also requires a declared
+    multi-turn submission protocol and full official coverage.
 integration:
   status: integrated
   blocked_reasons:
@@ -312,9 +315,11 @@ official_benchmark_verified: false
 integration_evidence: false
 leaderboard_valid: false
 requires:
-- --run-official with --model-name or WORLDFOUNDRY_WBENCH_MODEL_NAME, or --official-results-path <report.json_or_eval_dir>
-  for result normalization
-- --generated-artifact-dir <generated_videos> when coverage metadata is required
+- --run-official with --model-name or WORLDFOUNDRY_MODEL_ID, --dataset-root <WBench>, and
+  --generated-artifact-dir <generated_videos>; or --official-results-path <report.json_or_eval_dir> for result
+  normalization
+- --submission-protocol text_multi_turn, camera_conditioned, or action_conditioned only when the generated videos
+  actually follow that official multi-turn interface
 blockers:
 - Leaderboard-valid scores require a complete official report for the full split.
 data_refs:
@@ -327,7 +332,9 @@ runner_availability:
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
-  surface: official_runner
+  runtime_verification_scope: bounded_single_metric
+  full_suite_verified: false
+  surface: bounded_single_metric_runtime
   normalizer_verified: true
 base_model_dependencies:
 - video_world_perception_stack
@@ -338,9 +345,13 @@ validation_command:
 - --model-name
 - <model_name>
 - --phase
-- report
+- gpu
+- --metrics
+- temporal_flickering
+- --dataset-root
+- <WBench_dataset>
 - --generated-artifact-dir
-- <generated_videos>
+- <one_officially_named_generated_video>
 - --output-dir
 - <out>
 - --json
