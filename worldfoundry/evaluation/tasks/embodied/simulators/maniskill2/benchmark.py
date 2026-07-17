@@ -19,7 +19,14 @@ from typing import Any
 import numpy as np
 
 from worldfoundry.evaluation.tasks.embodied.simulators.base import BaseSimulator, StepResult
-from worldfoundry.evaluation.tasks.embodied.simulators.specs import GRIPPER_CLOSE_NEG, IMAGE_RGB, LANGUAGE, POSITION_DELTA, ROTATION_EULER, DimSpec
+from worldfoundry.evaluation.tasks.embodied.simulators.specs import (
+    GRIPPER_CLOSE_NEG,
+    IMAGE_RGB,
+    LANGUAGE,
+    POSITION_DELTA,
+    ROTATION_EULER,
+    DimSpec,
+)
 
 # Prevent display issues in headless environments
 os.environ.setdefault("DISPLAY", "")
@@ -205,8 +212,7 @@ class ManiSkill2Benchmark(BaseSimulator):
         )
         return StepResult(obs=obs, reward=reward, done=done, info=info)
 
-    @staticmethod
-    def _extract_frame(raw_obs: Any) -> np.ndarray | None:
+    def _extract_frame(self, raw_obs: Any) -> np.ndarray | None:
         """Extract and format the RGB frame from a raw ManiSkill2 observation.
 
         This method attempts to locate and return the RGB image data from the
@@ -221,9 +227,7 @@ class ManiSkill2Benchmark(BaseSimulator):
         """
         if not isinstance(raw_obs, dict):
             return None
-        # Iterates through cameras to find and return the first available RGB image.
-        # Note: 'self.enabled_cameras' is an instance attribute and not accessible from a static method.
-        # This line will cause a NameError at runtime. Adhering to rule 1, the signature cannot be changed.
+        # Iterate through configured cameras and return the first available RGB image.
         for cam in self.enabled_cameras:
             cam_data = raw_obs.get("image", {}).get(cam)
             if cam_data is not None and "rgb" in cam_data:
