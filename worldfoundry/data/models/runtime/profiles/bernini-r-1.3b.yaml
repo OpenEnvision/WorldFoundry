@@ -17,7 +17,7 @@ input_schema:
   images: true
   video: true
   task_type: [t2i, i2i, t2v, v2v, r2v, rv2v]
-artifact_kind: generated_media
+artifact_kind: generated_video
 artifact_filename: bernini-r-1.3b.mp4
 execution:
   backend_stage: official_in_tree_runtime

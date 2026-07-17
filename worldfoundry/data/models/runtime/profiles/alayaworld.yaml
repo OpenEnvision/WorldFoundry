@@ -40,10 +40,10 @@ input_schema:
   actions:
   - camera_trajectory
   - camera_path
-artifact_kind: generated_world_video
+artifact_kind: generated_world
 artifact_filename: alayaworld.mp4
 execution:
-  environment: worldfoundry-unified-cu128
+  environment: alayaworld
   backend_stage: independent_in_tree_runtime
   runtime_status: checkpoint_gpu_validated_official_case1_single_chunk
   integration_status: integrated
