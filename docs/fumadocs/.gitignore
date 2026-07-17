@@ -1,14 +1,22 @@
 # deps
 /node_modules
 
-# generated content
+# generated content (fumadocs-mdx)
 .source
+
+# generated at dev/build time (predev/prebuild)
+/generated/
 
 # test & build
 /coverage
 /.next/
+/.next.*/
+.next/
+/tmp/
+/tmp/**
 /out/
 /out.nfs-busy-*/
+/out.bak.*/
 /build
 *.tsbuildinfo
 
@@ -20,6 +28,17 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# python cache in local scripts
+scripts/**/__pycache__/
+scripts/**/*.pyc
+
+# local typography/layout debug screenshots (not site assets)
+/*.png
+/.intro*.png
+/.docs-*.png
+/docs-fixed.png
+/intro-*.png
 
 # others
 .env*.local

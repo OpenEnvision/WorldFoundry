@@ -1,0 +1,81 @@
+---
+title: Runtime 与资产
+description: Environment 路径、本地资产 manifest、readiness 检查和受限子进程执行。
+---
+
+Runtime helper 用来显式表示机器专属状态：解析共享根目录、检查本地 staged asset、为 manifest 脱敏凭据，并把可能超时的子进程转成结构化结果。它们不会下载受保护数据，也不会静默替换缺失资产。
+
+## `RequiredEnvReport`
+
+这个 report 分开记录已存在和缺失的环境变量名。它刻意不包含变量值，因此可以安全进入日志和 preflight response。
+
+<PythonApiReference symbol="worldfoundry.runtime.env.RequiredEnvReport" locale="zh" />
+
+## `WorldFoundryEnv`
+
+`WorldFoundryEnv` 为 `worldfoundry.runtime.env` 中的路径解析与 preflight 函数提供面向对象入口。
+
+```python
+from worldfoundry.runtime.env import WorldFoundryEnv
+
+env = WorldFoundryEnv.from_os()
+print(env.resolve_model_dir())
+print(env.resolve_data_dir())
+print(env.resolve_artifact_dir())
+
+report = env.check_required(("HF_TOKEN", "WORLDFOUNDRY_DATA_DIR"))
+if not report.ok:
+    print("missing:", report.missing)
+```
+
+检查只报告是否存在。写 run record 时应使用 `redact_for_manifest()`，不要直接复制 `os.environ`。
+
+<PythonApiReference symbol="worldfoundry.runtime.env.WorldFoundryEnv" locale="zh" />
+
+## `LocalAsset`
+
+Local asset 把稳定 manifest identity、解析后路径与当前 `ready` 状态放在一起。Readiness 只表示路径存在，不证明 checkpoint 完整、dataset license 已接受或 runtime 能成功加载内容。
+
+<PythonApiReference symbol="worldfoundry.runtime.assets.LocalAsset" locale="zh" />
+
+## `expand_worldfoundry_path`
+
+这个 helper 使用与 bootstrap/preflight 命令相同的根目录约定，展开受支持的 `$WORLDFOUNDRY_*` token。相对结果会锚定到仓库根目录。
+
+<PythonApiReference symbol="worldfoundry.runtime.assets.expand_worldfoundry_path" locale="zh" />
+
+## `load_local_assets`
+
+Loader 读取选中的 local asset manifest，并返回解析后的 `LocalAsset`。因此，不调用 GPU runtime 也能写一个小型 readiness 检查脚本。
+
+```python
+from worldfoundry.runtime.assets import load_local_assets
+
+assets = load_local_assets()
+missing = [asset for asset in assets if not asset.ready]
+
+for asset in missing[:10]:
+    print(asset.asset_id, asset.path or asset.canonical_path)
+```
+
+<PythonApiReference symbol="worldfoundry.runtime.assets.load_local_assets" locale="zh" />
+
+## `run_bounded_command`
+
+Official evaluator 或 simulator 有时会卡在 native code 中。这个 helper 创建独立 process group、执行硬超时、捕获 stdout/stderr，并用 dictionary 返回 timeout 状态，而不是让信息丢失在未捕获 traceback 中。
+
+```python
+from worldfoundry.runtime.jobs import run_bounded_command
+
+completed = run_bounded_command(
+    ["python", "-c", "print('preflight ok')"],
+    timeout=30,
+)
+assert completed["returncode"] == 0
+```
+
+不要把用户不可信命令直接传给这个函数。它限制进程生命周期，但不是安全 sandbox。
+
+<PythonApiReference symbol="worldfoundry.runtime.jobs.run_bounded_command" locale="zh" />
+
+根目录约定与 setup 命令见[环境配置](/zh/docs/reference/environments)和[本地资产指南](/zh/docs/guides/local-assets)。

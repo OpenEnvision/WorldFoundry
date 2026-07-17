@@ -12,6 +12,7 @@ description: Physics-IQ 在 WorldFoundry 中的资产、runner、指标与限制
 | 论文 | [arXiv:2501.09038](https://arxiv.org/abs/2501.09038) |
 | GitHub | [github.com/google-deepmind/physics-IQ-benchmark](https://github.com/google-deepmind/physics-IQ-benchmark) |
 | 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py` |
+
 ## 简介
 
 Physics-IQ 评估生成视频是否符合真实物理行为，覆盖固体力学、流体、光学、热学与磁学。源 README 描述了真实拍摄视频、三个视角和每个场景两次 take。WorldFoundry 使用仓内打包的 take-1 prompt 描述，生成或检查仓内 runner 使用的 198 个候选视频。
@@ -117,12 +118,3 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
 - `per_sample_scores.jsonl`：输入文件包含 scenario 级字段时写出的逐场景结果。
 - `physics_iq_results.csv` 或 `physics_iq_results.json`：评分包装器导入结果时复制出的结果文件。
 - 通过 `worldfoundry-eval zoo benchmark-run` 调用时，还会写出 `specialized_normalizer_stdout.log` 与 `specialized_normalizer_stderr.log`。
-
-## 限制
-
-- 仓内 runner 不从原始视频生成 mask，也不完整执行 Physics-IQ 媒体评分器；它导入结果 CSV/JSON，并检查生成视频覆盖率。
-- 完整 leaderboard parity 需要外部 Physics-IQ 数据媒体、二值 mask、198 个精确 5 秒生成视频，以及上游评分流程输出。
-- `official-run` 可作为 WorldFoundry pipeline 集成证据；在完整媒体评分资产与输出齐备之前，`leaderboard_valid` 仍为 false。
-- 覆盖率检查只匹配生成产物目录下的扁平视频文件名；嵌套视频目录应先物化为扁平布局。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

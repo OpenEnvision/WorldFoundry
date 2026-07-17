@@ -1,0 +1,139 @@
+---
+title: WRBench
+description: WRBench — 指标、依赖与运行命令。
+---
+
+## 简介
+
+Natural-25 camera intervention benchmark for persistent visual world state.
+
+**WorldFoundry 评测路径:** 通过仓内 vendored official pipeline，对生成产物执行或归一化官方 benchmark 流程。 候选模型输出从 generated-artifact 目录读取。
+
+## 集成状态
+
+| 项目 | 当前状态 |
+| --- | --- |
+| Catalog integration | `integrated` |
+| Runner verification | `pending` |
+| Leaderboard | 暂不可用于 leaderboard 声明 |
+
+## 指标
+
+### Task YAML
+
+`worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`
+
+### Primary
+
+- `wrbench_average`
+
+| Metric | 关注点 |
+| --- | --- |
+| `d1_cam_prec` | 官方 Requested-camera precision (D1-CamPrec) 指标在 benchmark 协议中的计分结果。 |
+| `d1_cam_align_common_yaw` | 官方 Prompt-camera alignment (common yaw) 指标在 benchmark 协议中的计分结果。 |
+| `d1_cam_align_static_hold` | 官方 Prompt-camera alignment (static hold) 指标在 benchmark 协议中的计分结果。 |
+| `d2_visual_integrity` | 官方 Visual integrity (D2) 指标在 benchmark 协议中的计分结果。 |
+| `d3_visible_spatial_consistency` | 官方 Visible spatial consistency (D3) 指标在 benchmark 协议中的计分结果。 |
+| `d4_visible_state_consistency` | 官方 Visible state consistency (D4) 指标在 benchmark 协议中的计分结果。 |
+| `d5_reobservation_spatial_consistency` | 官方 Re-observation spatial consistency (D5) 指标在 benchmark 协议中的计分结果。 |
+| `d6_reobservation_state_consistency` | 官方 Re-observation state consistency (D6) 指标在 benchmark 协议中的计分结果。 |
+| `wrbench_average` | 汇总 WRBench diagnostic average 相关子指标后的 benchmark 总分。 |
+
+## 环境准备
+
+### 运行环境
+
+- **Conda 环境：** `worldfoundry-unified-cu128`。
+- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
+- Contract, Natural-25 request materialization, published-result normalization, and WRBench source are available in-tree.
+- Full D1-D6 execution requires external checkpoint paths in WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG.
+
+### 测评数据
+
+- `worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench`
+- `worldfoundry/data/benchmarks/assets/wrbench/natural25`
+- `worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`
+
+### Checkpoint 与资产
+
+- Base-model / metric 依赖：`vggt_omega`, `dinov2`, `qwen3_5_vl`, `qwen3_vl`。
+- Metric / evaluator checkpoint 默认路径与覆盖变量见 [local assets 指南](/zh/docs/guides/local-assets)。
+
+### 关键环境变量
+
+- `WORLDFOUNDRY_WRBENCH_ROOT`
+- `WORLDFOUNDRY_WRBENCH_ASSETS_ROOT`
+- `WORLDFOUNDRY_WRBENCH_RESULTS_PATH`
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+- `WORLDFOUNDRY_WRBENCH_VIDEO_MANIFEST`
+- `WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG`
+
+### 环境检查
+
+```bash
+PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py --run-fixture --output-dir tmp/worldfoundry_preflight/wrbench --json
+```
+
+## 运行评测
+
+准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
+
+### 设置候选产物目录
+
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
+```
+
+### 导入已有官方结果
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id wrbench \
+  --mode normalizer \
+  --official-results-path /path/to/official/results-or-report \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/wrbench/normalizer \
+  --json
+```
+
+### 从生成产物重新打分
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id wrbench \
+  --mode official-run \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/wrbench/official-run \
+  --json
+```
+
+### 直接调用仓内 runner
+
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON:-python} worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py --benchmark-id wrbench --run-official --output-dir "$WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR" --generated-artifact-dir "$WORLDFOUNDRY_GENERATED_ARTIFACT_DIR" --json
+```
+
+## 依赖与产物
+
+### Inputs
+
+- in-tree WRBench runtime and Natural-25 assets
+- generated videos and camera sidecars for a new model evaluation
+- WRBench scorer runtime configuration for full D1-D6 execution
+
+### Outputs
+
+- `scorecard.json`
+- `benchmark_contract.json`
+- `raw_metric_table.jsonl`
+- `per_sample_scores.jsonl`
+- `generation_requests.jsonl`
+
+## 官方资料
+
+- [GitHub](https://github.com/JinPLu/WRBench)
+- [Paper](https://arxiv.org/abs/2606.20545)
+- [Project page](https://jinplu.github.io/WRBench/)
+- [Hugging Face dataset](https://huggingface.co/datasets/WRBench/wrbench-natural25)
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

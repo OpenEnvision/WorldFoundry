@@ -3,6 +3,7 @@
   "defaultOpen": true,
   "pages": [
     "index",
+    "runtime-environments",
     "---Embodied AI---",
     "ai2thor",
     "behavior1k",
@@ -49,11 +50,14 @@
     "videophy",
     "videophy2",
     "physics-iq",
+    "physics-iq-verified",
     "ipv-bench",
     "videoscience-bench",
     "phyeduvideo",
     "phyground",
     "phyfps-bench-gen",
+    "visual-chronometer",
+    "memobench",
     "---World Models---",
     "worldmodelbench",
     "worldscore",
@@ -63,6 +67,9 @@
     "t2vworldbench",
     "worldarena",
     "world-in-world",
-    "ewmbench"
+    "ewmbench",
+    "4dworldbench",
+    "worldreasonbench",
+    "wrbench"
   ]
 }

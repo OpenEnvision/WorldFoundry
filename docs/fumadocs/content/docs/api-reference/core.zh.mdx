@@ -1,0 +1,71 @@
+---
+title: Core API
+description: 如何选择和组合 WorldFoundry 的注意力、配置、I/O、模型加载、分布式、推理与加速公共能力。
+---
+
+`worldfoundry.core` 是模型接入层下面的公共复用层。这里存放很多世界模型都会需要、但又不应该属于某个具体模型身份的能力，例如注意力分发、checkpoint 加载、逻辑路径、媒体 I/O、分布式通信、Transformer 形状计算、显存策略和推理进程初始化。
+
+这一部分现在记录 236 个 Core 函数或类。顶层公开接口直接从 `worldfoundry/core/__init__.py` 发现，同时补充 Lazy Config、上下文并行切分等在仓库中被高频使用的子包接口。签名、方法、参数默认值、返回标注和源码行号都会在文档构建时从 Python 源码重新生成。
+
+文档生成器不 import runtime，但真正调用 Core API 仍然需要对应子系统的依赖。最小 package 安装有意不会拉取 Torch、OmegaConf、Loguru、视频 codec 和所有模型栈。应使用所选模型文档声明的环境；下面各分类也会指出关键依赖边界。
+
+## 读完能解决什么问题
+
+它首先帮助你选择入口。如果 Q、K、V 已经拆成多头布局，应使用 `scaled_dot_product_attention`；如果模型有自己的 QKV 排布，还希望在可选融合实现之间分发，应使用 `attention_forward`。需要 checkpoint 权重时，可以根据 Core 应当负责多少工作，在 `load_torch_checkpoint`、`load_state_dict`、`DiskMap` 和 `load_model` 之间选择。Manifest 中出现路径时，应解析 WorldFoundry 逻辑 token，而不是写死当前机器的绝对路径。
+
+它也会说明调用的状态和顺序。`BlockKVCache` 有准备、写入、完成记账的顺序；上下文并行有切分、计算、聚合的对称流程；显存 wrapper 会经过 offload、onload、preparing 和 computation 四种放置阶段。这些约束往往比函数名更重要，所以每个分类页会先解释使用模型，再列完整接口。
+
+## Import 边界
+
+当接口已经由顶层导出时，优先从惰性 facade 导入：
+
+```python
+from worldfoundry.core import (
+    load_state_dict,
+    resolve_attention_backend,
+    scaled_dot_product_attention,
+)
+```
+
+当能力本身属于一个明确子系统时，从公开子包导入：
+
+```python
+from worldfoundry.core.configuration import LazyCall, instantiate
+from worldfoundry.core.distributed import cat_outputs_cp, split_inputs_cp
+from worldfoundry.core.io.paths import checkpoint_root_path
+```
+
+不要直接依赖下划线开头的 helper 或某个 vendor 实现。它们是分发与兼容层背后的实现细节，不是接入代码的稳定边界。
+
+## 一个跨模块的小例子
+
+下面同时使用便携路径、统一序列化和 state dict 结构指纹。它说明 Core 的价值：不同模型接入可以复用同一套路径规则、输出格式和 checkpoint 身份规则。
+
+```python
+import torch
+
+from worldfoundry.core import dump_serialized, hash_state_dict_keys
+from worldfoundry.core.io.paths import checkpoint_root_path
+
+checkpoint = checkpoint_root_path("matrix-game-2", env={
+    "WORLDFOUNDRY_CKPT_DIR": "/srv/worldfoundry/checkpoints",
+})
+state_dict = {
+    "transformer.proj.weight": torch.zeros(4, 8),
+    "transformer.proj.bias": torch.zeros(4),
+}
+
+manifest = {
+    "checkpoint": str(checkpoint),
+    "layout_id": hash_state_dict_keys(state_dict, with_shape=True),
+}
+print(dump_serialized(manifest, file_format="json", indent=2))
+```
+
+这里的 hash 只标识参数名称和形状，并不读取张量内容。它适合 loader 路由，不适合安全校验或 artifact 完整性检查。模型加载页会把它与 `hash_model_file` 的职责区分清楚。
+
+## 按职责继续阅读
+
+[注意力](/zh/docs/api-reference/core-attention)解释 SDPA、后端分发、RoPE、packed sequence 和 KV cache。[配置](/zh/docs/api-reference/core-configuration)解释延迟构造的对象图。[I/O 与媒体](/zh/docs/api-reference/core-io-media)解释逻辑路径、URI、序列化、图像和视频。[模型加载](/zh/docs/api-reference/core-model-loading)解释 checkpoint 信任边界、state dict、DiskMap 和模型构造。
+
+[分布式](/zh/docs/api-reference/core-distributed)说明单卡 no-op 语义以及切分与聚合的对称关系。[推理 Runtime](/zh/docs/api-reference/core-runtime)说明任务规格、进程配置、编译和计时器。[神经网络与数学](/zh/docs/api-reference/core-nn-math)收录与模型身份无关的张量变换。[加速与内存](/zh/docs/api-reference/core-acceleration-memory)解释近似策略和权重放置状态。[基础能力](/zh/docs/api-reference/core-foundations)解释 registry、通用规范化、图像组合和安全 guardrail 契约。

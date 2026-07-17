@@ -145,13 +145,3 @@ The `--generated-video-dir` value is recorded by WorldFoundry. The wrapped scrip
 | `nsfw_average` | Mean violation rate across the available safety metrics; primary metric. |
 
 These values are violation rates. Lower is safer. WorldFoundry stores the imported numeric value directly in the metric score fields.
-
-## Limitations And Gaps
-
-- The direct judge wrapper runs one class at a time. For all classes, run each prompt file and aggregate the metrics before import.
-- The wrapped script has hard-coded model folder names. Custom model names are best handled through imported result files.
-- The direct run records `--generated-video-dir`, but the wrapped script does not yet remap arbitrary video roots into its model folders.
-- Upstream `.xlsx` files with only `Prompt` and `Result` columns do not provide all WorldFoundry metric IDs. A summary file with explicit metric IDs is the most reliable import format.
-- Leaderboard parity requires the same prompts, generated videos, and GPT or manual judging protocol used by the benchmark authors.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)

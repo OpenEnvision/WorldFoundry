@@ -1,46 +1,31 @@
 ---
 title: Benchmark Hub
-description: 面向 Embodied AI、Video Generation 和 World Models 的开源 benchmark 与 model inventory。
+description: 查找 benchmark，检查执行边界，并打开由 manifest 生成的运行配方。
 ---
 
-## 简介
+<BenchmarkRecipeCatalog locale="zh" />
 
-WorldFoundry 的 benchmark / model 索引页。集成状态、blockers、指标与 evidence 以 `worldfoundry/data/benchmarks/` 和 `worldfoundry/data/models/` 下的 manifest 为准。
+## 每个 Benchmark 配方记录什么
 
-**本页不发布 leaderboard 排名。**
+详情页直接由 benchmark catalog 与 task manifest 生成，不再依赖人工维护的长链接列表。每个配方会把下面几类声明分开呈现：
 
-## 一览
+| 记录 | 可以确认什么 |
+| --- | --- |
+| Catalog | 稳定 benchmark ID、领域、别名、官方来源与集成状态。 |
+| Evaluation surface | 主要指标、artifact layout、judge 要求与可用执行路径。 |
+| Runtime | 仓内 evaluator、外部结果导入、托管 judge 或仿真环境边界。 |
+| Verification | Manifest 当前记录的 runner 或 normalizer 最高验证证据。 |
+| Eligibility | 现有证据是否足以支持 leaderboard-facing 声明。 |
 
-- **3 类** — Embodied AI · Video Generation · World Models
-- **58 个 benchmark** — embodied 22 / video 27 / world models 9
-- **60 个 model** — 三大 core catalog（VLA/VA/WAM、open video、world models）
-- **leaderboard-valid cells：0**（本页声明）→ 见 [Leaderboard Eligibility](#leaderboard-eligibility)
+本 Hub **不发布 leaderboard 排名**。缺失或待完成的验证会明确显示，不会被提升为更强的支持声明。
 
-```bash
-worldfoundry-eval zoo benchmarks --json   # 刷新计数
-```
-
-## Benchmark 列表
-
-### Embodied AI — 22
-
-语言条件智能体、操作、仿真 rollout、动作轨迹、离线策略。当前均为 `leaderboard_valid=false`。VLA/VA/WAM catalog：15 models。
-
-### Video Generation — 27
-
-T2V / I2V 质量、对齐、动态、偏好评审、安全。open-video catalog：19 models。
-
-### World Models — 9
-
-长时程 / 交互式世界（action、camera、state、memory）。world-model catalog：26 models。
+安装 benchmark-specific package 前先看[运行环境矩阵](/zh/docs/evaluation/benchmark-hub/runtime-environments)。该页面区分统一环境、仓库管理的独立环境、托管 judge service，以及 dimension-specific native/checkpoint stack。
 
 ## 如何运行一个 Benchmark
 
-先看对应 benchmark 的独立页面。prompt 文件、generated-artifact layout、checkpoint 名称、judge model 和 official result 格式都是 benchmark-specific 的，不能只靠一个全局模板判断。
+先打开对应 benchmark 配方。Prompt 文件、generated-artifact layout、checkpoint 名称、judge model 和 official result 格式都是 benchmark-specific 的。
 
-### 导入 official result 文件
-
-如果 official benchmark 已经产出了 report / score 文件，导入它：
+### 导入 Official Result 文件
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -52,7 +37,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-如果 benchmark 页面说明仓内 official runtime 可以直接从 generated artifacts 计算指标，再用 `official-run`：
+### 给生成产物评分
+
+只有 benchmark 配方明确说明仓内 runtime 可以从 generated artifacts 重新计算分数，并且所需 checkpoint 已准备好时，才使用 `official-run`：
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -63,9 +50,7 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-### 让 WorldFoundry 先跑模型
-
-模型已经在 model zoo 中注册，且 benchmark 页面说明支持 facade 时，可以直接运行：
+需要先用已注册模型生成 artifact 时：
 
 ```bash
 worldfoundry-eval run \
@@ -75,89 +60,3 @@ worldfoundry-eval run \
   --output-dir tmp/<benchmark-id>/<model-id> \
   --json
 ```
-
-如果 generated artifacts 已经存在：
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id <benchmark-id> \
-  --mode official-run \
-  --generated-artifact-dir <generated-artifact-dir> \
-  --output-dir tmp/<benchmark-id>/official-run \
-  --json
-```
-
-评分前按对应 benchmark 页面匹配 artifact layout：prompt index 视频、case id 视频、prompt id 视频、sampled frame directories、reports 或 structured rollout traces。
-
-{/* benchmark-subpages */}
-
-## Benchmarks
-
-每个 benchmark 独立页面说明该 benchmark 真实需要的资产、输出结构和可运行命令。
-
-### Embodied AI
-
-- [AI2-THOR](/zh/docs/evaluation/benchmark-hub/ai2thor)
-- [BEHAVIOR-1K](/zh/docs/evaluation/benchmark-hub/behavior1k)
-- [BridgeData V2](/zh/docs/evaluation/benchmark-hub/bridgedata-v2)
-- [CALVIN](/zh/docs/evaluation/benchmark-hub/calvin)
-- [Kinetix](/zh/docs/evaluation/benchmark-hub/kinetix)
-- [LIBERO](/zh/docs/evaluation/benchmark-hub/libero)
-- [LIBERO-Mem](/zh/docs/evaluation/benchmark-hub/libero-mem)
-- [LIBERO-Para](/zh/docs/evaluation/benchmark-hub/libero-para)
-- [LIBERO-Plus](/zh/docs/evaluation/benchmark-hub/libero-plus)
-- [LIBERO-Pro](/zh/docs/evaluation/benchmark-hub/libero-pro)
-- [ManiSkill](/zh/docs/evaluation/benchmark-hub/maniskill)
-- [ManiSkill2](/zh/docs/evaluation/benchmark-hub/maniskill2)
-- [Meta-World](/zh/docs/evaluation/benchmark-hub/metaworld)
-- [MiKASA-Robo](/zh/docs/evaluation/benchmark-hub/mikasa)
-- [MolmoSpaces-Bench](/zh/docs/evaluation/benchmark-hub/molmospaces)
-- [RLBench](/zh/docs/evaluation/benchmark-hub/rlbench)
-- [RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)
-- [RoboCerebra](/zh/docs/evaluation/benchmark-hub/robocerebra)
-- [RoboMME](/zh/docs/evaluation/benchmark-hub/robomme)
-- [RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)
-- [SimplerEnv](/zh/docs/evaluation/benchmark-hub/simpler-env)
-- [VLABench](/zh/docs/evaluation/benchmark-hub/vlabench)
-
-### Video Generation
-
-- [VBench](/zh/docs/evaluation/benchmark-hub/vbench)
-- [VBench++](/zh/docs/evaluation/benchmark-hub/vbench-plus-plus)
-- [VBench-2.0](/zh/docs/evaluation/benchmark-hub/vbench-2.0)
-- [Video-Bench](/zh/docs/evaluation/benchmark-hub/video-bench)
-- [VMBench](/zh/docs/evaluation/benchmark-hub/vmbench)
-- [T2V-CompBench](/zh/docs/evaluation/benchmark-hub/t2v-compbench)
-- [VideoScore](/zh/docs/evaluation/benchmark-hub/videoscore)
-- [ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)
-- [EvalCrafter](/zh/docs/evaluation/benchmark-hub/evalcrafter)
-- [FETV](/zh/docs/evaluation/benchmark-hub/fetv)
-- [AIGCBench](/zh/docs/evaluation/benchmark-hub/aigcbench)
-- [MiraBench](/zh/docs/evaluation/benchmark-hub/mirabench)
-- [DEVIL Dynamics](/zh/docs/evaluation/benchmark-hub/devil-dynamics)
-- [GenAI-Bench](/zh/docs/evaluation/benchmark-hub/genai-bench)
-- [T2VSafetyBench](/zh/docs/evaluation/benchmark-hub/t2v-safety-bench)
-- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)
-- [VideoVerse](/zh/docs/evaluation/benchmark-hub/videoverse)
-- [PhysVidBench](/zh/docs/evaluation/benchmark-hub/physvidbench)
-- [PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench)
-- [VideoPhy](/zh/docs/evaluation/benchmark-hub/videophy)
-- [VideoPhy2](/zh/docs/evaluation/benchmark-hub/videophy2)
-- [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)
-- [IPV-Bench](/zh/docs/evaluation/benchmark-hub/ipv-bench)
-- [VideoScience-Bench](/zh/docs/evaluation/benchmark-hub/videoscience-bench)
-- [PhyEduVideo](/zh/docs/evaluation/benchmark-hub/phyeduvideo)
-- [PhyGround](/zh/docs/evaluation/benchmark-hub/phyground)
-- [PhyFPS-Bench-Gen](/zh/docs/evaluation/benchmark-hub/phyfps-bench-gen)
-
-### World Models
-
-- [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)
-- [WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)
-- [WorldBench](/zh/docs/evaluation/benchmark-hub/worldbench)
-- [WBench](/zh/docs/evaluation/benchmark-hub/wbench)
-- [iWorld-Bench](/zh/docs/evaluation/benchmark-hub/iworld-bench)
-- [T2VWorldBench](/zh/docs/evaluation/benchmark-hub/t2vworldbench)
-- [WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena)
-- [World-in-World](/zh/docs/evaluation/benchmark-hub/world-in-world)
-- [EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)

@@ -1,32 +1,35 @@
 'use client';
 
-import { AnchorProvider, ScrollProvider, type TOCItemType } from 'fumadocs-core/toc';
+import { ScrollProvider, type TOCItemType } from 'fumadocs-core/toc';
 import { useRef } from 'react';
 
 import { DocsTocLinks } from '@/components/docs-toc-links';
-import { useMediaQuery } from '@/lib/use-media-query';
+import { DocsTocScrollSpyProvider } from '@/lib/docs-toc-scroll-spy';
+import { useDocsTocItems } from '@/lib/use-docs-toc-items';
 
 type DocsTocRailProps = {
   title: string;
   items: TOCItemType[];
+  slugs: readonly string[];
+  pageKey: string;
 };
 
-export function DocsTocRail({ title, items }: DocsTocRailProps) {
-  const wide = useMediaQuery('(min-width: 1280px)');
+export function DocsTocRail({ title, items, slugs, pageKey }: DocsTocRailProps) {
   const linksRef = useRef<HTMLDivElement>(null);
+  const toc = useDocsTocItems(slugs, items);
 
-  if (!wide || items.length === 0) return null;
+  if (toc.length === 0) return null;
 
   return (
-    <AnchorProvider toc={items} single>
+    <DocsTocScrollSpyProvider key={pageKey} items={toc}>
       <ScrollProvider containerRef={linksRef}>
         <aside className="pi-doc-right-rail" aria-label={title}>
           <nav className="pi-doc-toc">
             <span>{title}</span>
-            <DocsTocLinks items={items} linksRef={linksRef} />
+            <DocsTocLinks items={toc} linksRef={linksRef} />
           </nav>
         </aside>
       </ScrollProvider>
-    </AnchorProvider>
+    </DocsTocScrollSpyProvider>
   );
 }

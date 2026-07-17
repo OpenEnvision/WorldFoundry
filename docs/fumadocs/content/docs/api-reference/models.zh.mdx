@@ -1,0 +1,81 @@
+---
+title: 模型与 runner
+description: 公开模型 metadata、构建配置、执行协议和共享 pipeline 接口。
+---
+
+WorldFoundry 有两个相关但职责不同的扩展边界。`WorldModelRunner` 面向评测：接收归一化 request，返回归一化 result。`PipelineABC` 面向模型：负责加载和原生推理行为。一个 integration 可以同时实现两者，也可以用 adapter 把二者连接起来。
+
+## `WorldModelManifest`
+
+公开 manifest 是模型身份与能力的紧凑 DTO。它不是完整 catalog YAML，也不是 runtime 证据；它保存的是 catalog 加载后 runner resolution 与评测真正需要的字段。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelManifest" locale="zh" />
+
+## `WorldModelConfig`
+
+`WorldModelConfig` 是传给 runner 的构建 payload。模型原生参数放入 `parameters`，设备、endpoint 等执行设置放入 `runtime`；如果已经解析出公开 manifest，也应一并保留。
+
+```python
+from worldfoundry.evaluation.api import WorldModelConfig
+
+config = WorldModelConfig(
+    model_id="matrix-game-2",
+    runner="worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+    variant="matrix-game-2-universal-action-validation",
+    parameters={"num_output_frames": 15, "fps": 12},
+    runtime={"device": "cuda:0"},
+    seed=42,
+)
+```
+
+上面是当前 Matrix-Game 2 catalog 使用的 binding。Runtime binding 会演进，生产代码仍应解析当前模型 manifest，而不是把文档示例硬编码进去。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelConfig" locale="zh" />
+
+## `WorldModelRunner`
+
+这个 runtime-checkable protocol 刻意保持很小。本地 checkpoint、托管 API、simulator policy 或 subprocess bridge 都可以满足它，不需要继承同一个基类。
+
+```python
+from worldfoundry.evaluation.api import GenerationResult, WorldModelRunner
+
+class ExistingArtifactRunner:
+    model_id = "existing-artifact"
+    capabilities = {"video_generation"}
+
+    @classmethod
+    def from_config(cls, config):
+        return cls()
+
+    def generate(self, requests):
+        return [
+            GenerationResult(
+                sample_id=request.sample_id,
+                model_id=self.model_id,
+                status="failed",
+                error="No generation implementation was configured.",
+            )
+            for request in requests
+        ]
+
+    def cleanup(self):
+        pass
+
+assert isinstance(ExistingArtifactRunner(), WorldModelRunner)
+```
+
+这个例子故意返回显式失败，用来展示契约；真实 runner 必须物化输出，并把每个成功 artifact 写入对应 result。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelRunner" locale="zh" />
+
+## `PipelineABC`
+
+`PipelineABC` 给模型 integration 提供共同的加载与调用形态，同时保留原生行为。`from_pretrained` 构建组件，`process` 归一化输入，`__call__` 执行一次推理，`stream` 把相同操作暴露给交互界面。生产 pipeline 可以按需要覆盖这些方法。
+
+<PythonApiReference symbol="worldfoundry.pipelines.pipeline_utils.PipelineABC" locale="zh" />
+
+## 应该实现哪一个边界
+
+如果目标是 benchmark 执行、批量处理归一化 sample、缓存或生成评测 ledger，应实现 `WorldModelRunner`。如果目标是为脚本或 Studio 提供可复用的模型原生推理对象，应使用 `PipelineABC`。两者都需要时，把 checkpoint 加载与原生调用留在 pipeline，再由 runner/operator 把 `GenerationRequest` 转成 pipeline 输入，并把原生输出转回 `GenerationResult`。
+
+完整模型接入不只要求 API 形态正确。[添加模型指南](/zh/docs/guides/add-model)还会处理 catalog identity、资产、runtime binding、bounded validation 与文档。

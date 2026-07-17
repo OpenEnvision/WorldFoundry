@@ -197,12 +197,3 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
 Video-Bench 还报告了比既有自动指标更强的人类对齐 Spearman 相关。在其 human-alignment 表中，Video-Bench 在 imaging quality 上达到 **0.733**，在 color consistency 上达到 **0.750**，而单个 VBench 组件指标大约在 **0.363–0.545**。
 
 WorldFoundry scorecard 只是本地证据。复现上表仍需要官方 prompt suite、GPT judge 凭证，以及按维度组织的视频 layout。
-
-## 已知限制
-
-- 官方 judge 执行依赖 API 凭证。没有 `WORLDFOUNDRY_VIDEOBENCH_GPT4O_API_KEY` 或 `OPENAI_API_KEY` 时，runner 会写出失败 scorecard，而不是生成合成分数。
-- 受限数据集 [Video-Bench/Video-Bench_videos](https://huggingface.co/datasets/Video-Bench/Video-Bench_videos) 可能需要 Hugging Face 访问审批；不过 WorldFoundry 仍可直接评测调用方提供的生成视频。
-- Leaderboard 级 run 需要为完整 prompt/dimension 集合生成视频，并遵守 model-name 子目录 layout。
-- Judge 成本与延迟会随维度数、模型数和 prompt 样本数线性增长。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

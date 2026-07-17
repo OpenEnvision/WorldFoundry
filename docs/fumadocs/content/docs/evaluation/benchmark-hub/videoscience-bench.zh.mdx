@@ -177,13 +177,3 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
 | `videoscience_average` | 可用 VideoScience metrics 的平均值；主指标。 |
 
 judge rubric 是 1-4 分。WorldFoundry 使用 `(score - 1) / 3` 归一到 `[0, 1]`，越高越好。
-
-## 限制与缺口
-
-- 公开 catalog 命令用于导入已有 judge outputs。需要执行仓内 VLM judge 时，用直接 runner。
-- 直接 judge run 需要 provider credentials，可能较慢且有调用成本。
-- 缺失生成视频会被跳过；如果没有任何视频完成评测，run 会失败。
-- 当前仓内 runtime 重点是基于 sampled frames 的 VLM grading。上游 README 描述的可选 CV evidence 还没有在当前 WorldFoundry runner 中完整复现。
-- 完整 leaderboard 对齐需要与 reference evaluation 一致的 prompt selection、生成视频、provider/model 设置和 judge 行为。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

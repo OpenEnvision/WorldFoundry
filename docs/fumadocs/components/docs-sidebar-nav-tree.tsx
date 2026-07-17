@@ -38,11 +38,15 @@ export function DocsSidebarNavTree({
   const hubActive = isSidebarItemActive(hub, currentUrl);
 
   useEffect(() => {
-    if (!defaultOpen || !panelRef.current) return;
+    setOpen(defaultOpen);
+  }, [defaultOpen]);
+
+  useEffect(() => {
+    if (!open || !panelRef.current) return;
 
     const activeLink = panelRef.current.querySelector<HTMLElement>('.pi-doc-link-active');
     activeLink?.scrollIntoView({ block: 'nearest' });
-  }, [defaultOpen, currentUrl]);
+  }, [open, currentUrl]);
 
   return (
     <div className={['pi-doc-benchmark-tree', open ? 'pi-doc-benchmark-tree-open' : ''].filter(Boolean).join(' ')}>

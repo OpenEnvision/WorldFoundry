@@ -1,0 +1,133 @@
+---
+title: Visual Chronometer
+description: Visual Chronometer — metrics, requirements, and run commands.
+---
+
+## About
+
+Visual Chronometer external benchmark task manifest for in-tree PhyFPS prediction.
+
+**WorldFoundry evaluation path:** Runs the in-tree official metric runtime on caller-supplied generated artifacts using local checkpoints and evaluators. Candidate outputs are read from the generated-artifact directory.
+
+## Integration status
+
+| Item | Current state |
+| --- | --- |
+| Catalog integration | `integrated` |
+| Runner verification | `official_runtime_ready` |
+| Leaderboard | not yet eligible for leaderboard claims |
+
+## Metrics
+
+### Task YAML
+
+`worldfoundry/data/benchmarks/tasks/external/visual-chronometer.yaml`
+
+### Primary
+
+- `visual_chronometer_average`
+
+| Metric | Focus |
+| --- | --- |
+| `mean_phyfps` | Mean average PhyFPS across evaluated videos. |
+| `inter_video_cv` | Cross-video coefficient of variation over average PhyFPS. |
+| `intra_video_cv` | Mean within-video coefficient of variation over sliding-window clips. |
+| `visual_chronometer_average` | Mean over Visual Chronometer temporal-consistency score families for time-perception probes (lower is better). |
+
+## Environment setup
+
+### Runtime environment
+
+- **Conda env:** `worldfoundry-unified-cu128`.
+- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
+- WorldFoundry runs Visual Chronometer PhyFPS prediction in-process and normalizes results.csv into the Visual Chronometer metric surface.
+- Use WORLDFOUNDRY_VISUAL_CHRONOMETER_PREDICT_BACKEND to select the local prediction backend.
+
+### Evaluation data
+
+- Candidate model outputs: set `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` to the generated-video or rollout artifact root.
+- `worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer`
+- `worldfoundry/data/benchmarks/tasks/external/visual-chronometer.yaml`
+
+### Checkpoints & assets
+
+- Base-model / metric dependencies: `visual_chronometer_fps_predictor`.
+- Default metric-checkpoint paths and override env vars are listed in the [local assets guide](/docs/guides/local-assets).
+
+### Key environment variables
+
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+- `WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT`
+- `WORLDFOUNDRY_VISUAL_CHRONOMETER_PREDICT_BACKEND`
+- `WORLDFOUNDRY_VISUAL_CHRONOMETER_RESULTS_PATH`
+- `WORLDFOUNDRY_VISUAL_CHRONOMETER_STRICT`
+
+### Verify setup
+
+```bash
+PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile visual-chronometer --manifest worldfoundry/data/benchmarks/runtime_profiles/official/visual-chronometer.yaml --output-dir tmp/worldfoundry_preflight/visual-chronometer --json
+```
+
+## Run Evaluation
+
+After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
+
+### Set Candidate Artifacts
+
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
+```
+
+### Import Official Results
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id visual-chronometer \
+  --mode normalizer \
+  --official-results-path /path/to/official/results-or-report \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/visual-chronometer/normalizer \
+  --json
+```
+
+### Score Generated Artifacts
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id visual-chronometer \
+  --mode official-run \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/visual-chronometer/official-run \
+  --json
+```
+
+### Direct In-Tree Runner
+
+```bash
+PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_visual_chronometer_official_runner.py --run-official --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
+```
+
+## Requirements
+
+### Inputs
+
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- Visual Chronometer checkpoint assets for full official prediction
+
+### Environment
+
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+
+### Outputs
+
+- `scorecard.json`
+- `benchmark_contract.json`
+- `raw_metric_table.jsonl`
+- `results.csv`
+- `per_sample_scores.jsonl`
+
+## Official references
+
+- [GitHub](https://github.com/taco-group/Visual_Chronometer)
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

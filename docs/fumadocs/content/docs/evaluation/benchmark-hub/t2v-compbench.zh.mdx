@@ -228,12 +228,3 @@ T2V-CompBench 在 [Kaiyue/T2V-CompBench_Leaderboard](https://huggingface.co/spac
 上游论文在七个 compositional category 上评测了 17 个开源和 6 个商业 T2V 系统。每个 category 期望 200 个视频；leaderboard 后端会排除得分行数不足 200 的 category。每个 category 的最终 CSV 末行必须以 `score:` 或 `Score:` 开头。
 
 WorldFoundry 的 `t2v_compbench_average` 是本地 scorecard 中可用 category 分数的均值。当前排名请以 live leaderboard 为准。
-
-## 已知限制
-
-- 完整 metric 重算很重：MLLM category 需要 LLaVA-v1.6-34b，detection category 需要 GroundingDINO + SAM + depth 资产，`motion_binding` 还需要两阶段 GroundingSAM + DOT pipeline。
-- 官方默认分支是 `V2`；prompt schema/version 必须与仓内 bundled assets 一致。
-- 被跳过或因 safety 过滤未生成的视频不会进入 category CSV，也不会计入 leaderboard 平均。
-- WorldFoundry 可以立即归一化已有 CSV export；端到端 category 执行仍依赖 staged checkpoints 和 `WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT` 下的生成视频。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

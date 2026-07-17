@@ -1,0 +1,44 @@
+---
+title: Core model loading
+description: Safe checkpoint reads, state-dict discovery, structural identity, lazy disk maps, and model construction.
+---
+
+Model loading is layered so callers can choose how much policy Core owns. `load_torch_checkpoint` reads one PyTorch object with weights-only safety by default. `load_state_dict` understands files, folders, multiple paths, safetensors, and sharded indices. `DiskMap` exposes checkpoint tensors lazily by parameter name. `load_model` additionally constructs a module, converts keys, assigns weights, installs optional VRAM management, moves placement, and selects eval mode.
+
+## A safe local state-dict example
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import torch
+
+from worldfoundry.core import hash_state_dict_keys, load_torch_state_dict
+
+with TemporaryDirectory() as directory:
+    checkpoint = Path(directory) / "weights.pt"
+    expected = {"linear.weight": torch.arange(8).reshape(2, 4)}
+    torch.save(expected, checkpoint)
+
+    loaded = load_torch_state_dict(checkpoint, map_location="cpu")
+    assert torch.equal(loaded["linear.weight"], expected["linear.weight"])
+    print(hash_state_dict_keys(loaded, with_shape=True))
+```
+
+`hash_state_dict_keys` is a routing fingerprint over key names and optionally shapes. It intentionally ignores values, so two checkpoints with the same architecture can share the digest. `hash_model_file` hashes bytes and is appropriate when content identity matters.
+
+## Choosing the loading level
+
+Use `load_torch_checkpoint` when you know the file is a PyTorch checkpoint and need its original outer structure. Use `load_state_dict` when the input may be a directory, a sharded index, safetensors, or a list and you want one merged mapping. Use `DiskMap` when loading all tensors at once would exceed host memory; safetensors gives the best lazy behavior, while binary files use an in-memory compatibility reader.
+
+Use `load_model` only when the shared construction path matches the model. It builds under a meta-device initialization context, supports a state-dict converter, handles the DeepSpeed ZeRO-3 assignment path, and can install module wrappers from `module_map`. A model with unusual parameter materialization should own that seam in its runner and use lower-level Core functions.
+
+## Checkpoint trust boundary
+
+`load_torch_checkpoint` defaults to `weights_only=True`. The optional `allow_unsafe_pickle_fallback=True` can execute pickle payloads and must never be enabled for untrusted files. Safetensors does not carry this pickle execution risk. Remote URIs are localized through Core storage helpers before a reader is opened.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-model-loading" />

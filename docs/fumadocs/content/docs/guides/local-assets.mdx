@@ -182,6 +182,48 @@ Planner fields to read: `assets.data`, `assets.checkpoints`, `env.api_or_secret`
 
 ## 3. Model checkpoints (inference)
 
+### Perception and 3D visualization checkpoints
+
+These in-tree runtimes keep checkpoint locations in the shared base-model asset registry. Source code does not assume a checkout-specific absolute path.
+
+| Capability | Official source | Expected file | Default location | Override |
+| --- | --- | --- | --- | --- |
+| `sam2` | HF [`facebook/sam2.1-hiera-base-plus`](https://huggingface.co/facebook/sam2.1-hiera-base-plus) | `sam2.1_hiera_base_plus.pt` | `${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/` | `WORLDFOUNDRY_SAM2_CKPT` |
+| `mobile_sam` | GitHub [`ChaoningZhang/MobileSAM`, `weights/`](https://github.com/ChaoningZhang/MobileSAM/tree/master/weights) | `mobile_sam.pt` | `${WORLDFOUNDRY_CKPT_DIR}/MobileSAM/` | `WORLDFOUNDRY_MOBILE_SAM_CKPT` |
+| `repvit_sam` | GitHub [`THU-MIG/RepViT`, release `v1.0`](https://github.com/THU-MIG/RepViT/releases/tag/v1.0) | `repvit_sam.pt` | `${WORLDFOUNDRY_CKPT_DIR}/RepViT/` | `WORLDFOUNDRY_REPVIT_SAM_CKPT` |
+| `midas_v21_small_256` | GitHub [`isl-org/MiDaS`, release `v2_1`](https://github.com/isl-org/MiDaS/releases/tag/v2_1) | `midas_v21_small_256.pt` | `${WORLDFOUNDRY_CKPT_DIR}/` | `WORLDFOUNDRY_MIDAS_V21_SMALL_CKPT` |
+| `unidepth_v2_vitl14` | HF [`lpiccinelli/unidepth-v2-vitl14`](https://huggingface.co/lpiccinelli/unidepth-v2-vitl14) | `config.json`, `model.safetensors` | `${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14/` | `WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR` |
+| `unik3d_vitl` | HF [`lpiccinelli/unik3d-vitl`](https://huggingface.co/lpiccinelli/unik3d-vitl) | `config.json`, `model.safetensors` | `${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unik3d-vitl/` | `WORLDFOUNDRY_UNIK3D_VITL_MODEL_DIR` |
+
+UniDepth V2 and UniK3D are released under CC-BY-NC-4.0. Review the upstream non-commercial terms before downloading or redistributing their weights.
+
+Inspect the exact URLs, resolved paths, size checks, and export commands without downloading:
+
+```bash
+worldfoundry-eval models assets \
+  --capability sam2 \
+  --capability mobile_sam \
+  --capability repvit_sam \
+  --capability midas_v21_small_256 \
+  --capability unidepth_v2_vitl14 \
+  --capability unik3d_vitl \
+  --json
+```
+
+To materialize missing files, add `--execute-downloads`. `HF_ENDPOINT` is honored for the SAM2, UniDepth V2, and UniK3D Hugging Face assets. MobileSAM, RepViT-SAM, and MiDaS are downloaded from their official GitHub repository or release URLs:
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+worldfoundry-eval models assets \
+  --capability sam2 \
+  --capability mobile_sam \
+  --capability repvit_sam \
+  --capability midas_v21_small_256 \
+  --capability unidepth_v2_vitl14 \
+  --capability unik3d_vitl \
+  --execute-downloads
+```
+
 Plan only, then execute after you accept storage and license:
 
 ```bash

@@ -2,11 +2,12 @@
   "title": "WorldFoundry",
   "pages": [
     "index",
+    "overview",
     "quickstart",
     "reference",
     "guides",
     "evaluation",
-
+    "api-reference",
     "maintainers"
   ]
 }

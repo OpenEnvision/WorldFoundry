@@ -1,0 +1,70 @@
+---
+title: What's included
+description: A concrete inventory of WorldFoundry catalogs, runtimes, interfaces, evaluation tools, outputs, and support states.
+---
+
+WorldFoundry is more than a list of papers and more than an evaluation wrapper. The repository contains a catalog layer, an execution layer, an inspection layer, and an evidence layer. Each can be useful independently, but they are designed to form one workflow.
+
+## Catalogs: knowing what exists
+
+The **Model Zoo** assigns stable IDs and aliases to world-model systems. A model manifest can record tasks, upstream sources, checkpoint references, variants, runtime bindings, install profiles, hardware expectations, validation notes, and known blockers. The catalog currently spans more than 200 entries, but that number describes catalog coverage rather than uniform runtime maturity.
+
+Those entries are organized around five operational families. The video catalog covers text-, image-, and video-conditioned generation, editing, animation, and audio-video systems. The world-model catalog focuses on interactive worlds, navigation, action or camera conditioning, and simulators. The 3D/4D catalog includes reconstruction, depth, point clouds, scene representations, and dynamic geometry. The VLA/VA/WAM catalog covers embodied policies and world-action systems. A separate hosted-API catalog represents provider-backed systems whose weights are not loaded locally.
+
+The **Benchmark Zoo** performs the same role for evaluation protocols. Its 60-plus manifests cover generated-video quality, physical and dynamic consistency, camera and 3D/4D behavior, world-model capability, safety, memory, and embodied control. A benchmark manifest can declare datasets, generated-output layouts, metric assets, official commands, normalizers, runtime profiles, eligibility conditions, and blockers.
+
+Use the catalogs before downloading anything:
+
+```bash
+worldfoundry-eval zoo models --json
+worldfoundry-eval zoo benchmarks --json
+worldfoundry-eval zoo model-show --model-id <model-id> --include-manifest --json
+worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --json
+```
+
+The detailed model index lives in [Models](/docs/guides/supported-models). Benchmark requirements and current execution paths live in the [Benchmark Hub](/docs/evaluation/benchmark-hub).
+
+## Runtimes: turning declarations into work
+
+Model execution is implemented through in-tree pipelines and operators, local checkpoint loaders, hosted API adapters, subprocess launchers, and dedicated-environment dispatch. A pipeline stays close to the model’s native implementation; an operator adapts that implementation to WorldFoundry requests and artifacts.
+
+This means WorldFoundry can support models with very different inputs and outputs without forcing them into an artificial lowest-common-denominator interface. A text-to-video model can expose prompt and sampling controls, a camera-conditioned model can accept trajectories, a 3D system can emit geometry, and a robot policy can produce actions or traces. Their native differences remain visible while their execution status and outputs enter the same reporting system.
+
+Some runtimes work inside the unified environment. Others require a dedicated conda profile, an official upstream environment, a simulator container, or an API credential. The [environment reference](/docs/reference/environments) explains how these profiles are selected; the [local assets guide](/docs/guides/local-assets) explains where checkpoints, datasets, and metric weights live.
+
+## Interfaces: different ways to operate one core
+
+Six surfaces share the same catalogs and run contracts; they differ by who drives the work.
+
+- **TUI** — guided entry. Reads the same manifests as the CLI, helps select IDs, and can print the final command before launching expensive work.
+- **CLI** — automation surface. Covers discovery, asset checks, task and dataset materialization, run planning, inference/evaluation, reporting, comparison, validation, and machine-readable JSON output.
+- **Studio** — browser workspace. Provides model-aware job forms, inference history, galleries, and visualizers for media, geometry, timelines, simulators, and interactive model output. Jobs write durable outputs that can be evaluated later; results are not trapped in the UI.
+- **Python API** — research contracts. Exposes public request, result, run, metric, and reporting types for in-process research code.
+- **MCP server** — agent tools. Exposes bounded discovery and evaluation tools for agent-driven workflows.
+- **Shell helpers** — escape hatch. Remain available for model families or environments whose upstream details do not fit cleanly into a generic command.
+
+## Evaluation: from artifact to evidence
+
+The evaluation core can score existing result ledgers, run registered models over materialized requests, execute a model × benchmark cell, resume or cache selected work, compare runs, and build suite-level reports. Reusable metrics are kept separate from full benchmark protocols so a scorer can be applied to compatible artifacts without claiming that the entire official benchmark was reproduced.
+
+Benchmark integrations can mature in stages. Some provide metadata and an asset plan. Some can normalize an existing official-shaped result. Some expose in-tree metric execution or an official runner facade. A smaller subset has bounded runtime evidence, and full leaderboard eligibility requires the protocol-specific data, coverage, credentials, and validation gates to be satisfied together.
+
+That staged model is deliberate. It allows useful catalog and normalization work to land without overstating what is runnable or official.
+
+## Reporting: what remains after a run
+
+WorldFoundry treats the run directory as a research record rather than a disposable cache. A typical run preserves a manifest describing identity and configuration, a request ledger showing the samples or conditions that were asked for, and a result ledger recording per-sample status, timing, errors, and artifact references.
+
+The generated artifacts themselves may include videos, frames, images, geometry, point clouds, trajectories, actions, traces, or structured rows. Metric summaries retain machine-readable aggregates, while `report.md` and `summary.json` provide human and compact programmatic views. `scorecard.json` adds coverage, provenance, blockers, validation state, and eligibility to the scores.
+
+Exact files depend on the run mode and integration. The contract is that unavailable work remains unavailable; a scorecard should not turn a missing dataset, skipped sample, or unverified official path into apparent success.
+
+## What is intentionally not bundled
+
+WorldFoundry does not redistribute model checkpoints, gated weights, full benchmark datasets, simulator assets, API keys, private endpoints, or normal user outputs. It also does not vendor every upstream training stack or guarantee that every model × benchmark pair is meaningful.
+
+Those boundaries keep the repository reviewable and respect upstream licenses. The checked-in code describes how external assets connect to a run and reports when they are missing; it does not silently download or substitute protected resources.
+
+## Where to go next
+
+To browse available systems, continue to [Models](/docs/guides/supported-models) and the [Benchmark Hub](/docs/evaluation/benchmark-hub). To generate an artifact, follow [Run inference](/docs/guides/inference). To score existing or newly generated output, read the [Evaluation overview](/docs/evaluation). To add coverage, use [Add a model](/docs/guides/add-model) or [Add a benchmark](/docs/guides/add-benchmark).

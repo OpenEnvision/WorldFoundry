@@ -182,6 +182,48 @@ python scripts/setup/prepare_benchmark_assets.py \
 
 ## 3. 模型 checkpoint（推理）
 
+### 感知与 3D 可视化 checkpoint
+
+以下仓内 runtime 通过统一 base-model asset registry 解析 checkpoint；源码不依赖某台机器的绝对路径。
+
+| Capability | 官方来源 | 文件名 | 默认位置 | 覆盖变量 |
+| --- | --- | --- | --- | --- |
+| `sam2` | HF [`facebook/sam2.1-hiera-base-plus`](https://huggingface.co/facebook/sam2.1-hiera-base-plus) | `sam2.1_hiera_base_plus.pt` | `${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/` | `WORLDFOUNDRY_SAM2_CKPT` |
+| `mobile_sam` | GitHub [`ChaoningZhang/MobileSAM` 的 `weights/`](https://github.com/ChaoningZhang/MobileSAM/tree/master/weights) | `mobile_sam.pt` | `${WORLDFOUNDRY_CKPT_DIR}/MobileSAM/` | `WORLDFOUNDRY_MOBILE_SAM_CKPT` |
+| `repvit_sam` | GitHub [`THU-MIG/RepViT` 的 `v1.0` release](https://github.com/THU-MIG/RepViT/releases/tag/v1.0) | `repvit_sam.pt` | `${WORLDFOUNDRY_CKPT_DIR}/RepViT/` | `WORLDFOUNDRY_REPVIT_SAM_CKPT` |
+| `midas_v21_small_256` | GitHub [`isl-org/MiDaS` 的 `v2_1` release](https://github.com/isl-org/MiDaS/releases/tag/v2_1) | `midas_v21_small_256.pt` | `${WORLDFOUNDRY_CKPT_DIR}/` | `WORLDFOUNDRY_MIDAS_V21_SMALL_CKPT` |
+| `unidepth_v2_vitl14` | HF [`lpiccinelli/unidepth-v2-vitl14`](https://huggingface.co/lpiccinelli/unidepth-v2-vitl14) | `config.json`、`model.safetensors` | `${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14/` | `WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR` |
+| `unik3d_vitl` | HF [`lpiccinelli/unik3d-vitl`](https://huggingface.co/lpiccinelli/unik3d-vitl) | `config.json`、`model.safetensors` | `${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unik3d-vitl/` | `WORLDFOUNDRY_UNIK3D_VITL_MODEL_DIR` |
+
+UniDepth V2 与 UniK3D 权重采用 CC-BY-NC-4.0；下载或再分发前需要核对上游的非商业使用条款。
+
+先查看准确 URL、解析后路径、大小校验和 export 命令，不执行下载：
+
+```bash
+worldfoundry-eval models assets \
+  --capability sam2 \
+  --capability mobile_sam \
+  --capability repvit_sam \
+  --capability midas_v21_small_256 \
+  --capability unidepth_v2_vitl14 \
+  --capability unik3d_vitl \
+  --json
+```
+
+补齐缺失文件时添加 `--execute-downloads`。SAM2、UniDepth V2 与 UniK3D 的 Hugging Face 下载会遵循 `HF_ENDPOINT`；MobileSAM、RepViT-SAM 与 MiDaS 使用各自官方 GitHub repo/release URL：
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+worldfoundry-eval models assets \
+  --capability sam2 \
+  --capability mobile_sam \
+  --capability repvit_sam \
+  --capability midas_v21_small_256 \
+  --capability unidepth_v2_vitl14 \
+  --capability unik3d_vitl \
+  --execute-downloads
+```
+
 先 plan，确认存储与 license 后再 execute：
 
 ```bash

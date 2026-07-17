@@ -166,9 +166,3 @@ The runner writes these files under `--output-dir`:
 - `upstream_stdout.log` and `upstream_stderr.log`: direct judge execution logs.
 
 Public benchmark-zoo runs can also write `runner_runtime_report.json`.
-
-## Limitations
-
-The official answers and explanations are withheld, so local runs depend on the released prompts, generated videos, and the judge checkpoint. WorldFoundry can verify manifest coverage and result shape, but leaderboard evidence still requires the upstream submission process. In this revision, use the direct runner for judge execution; the public benchmark-zoo import path is supported, while the public judge-execution path does not pass all runner arguments through the catalog entry.
-
-[← Benchmark Hub](/docs/evaluation/benchmark-hub)

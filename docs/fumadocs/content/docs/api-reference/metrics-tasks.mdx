@@ -1,0 +1,108 @@
+---
+title: Metrics and tasks
+description: Metric outputs, metric implementations, task contracts, evaluation protocols, and benchmark specifications.
+---
+
+Task contracts describe what should be generated. Metric contracts describe how compatible results are scored. Keeping them separate allows one generated artifact set to be evaluated by more than one metric without rerunning the model.
+
+Import the symbols on this page from `worldfoundry.evaluation.api`.
+
+## `MetricSpec`
+
+`MetricSpec` is declarative metadata: identity, aliases, required artifact kinds, output unit, aggregation policy, and score direction. The `implementation` field may point to code, but the spec itself does not execute it.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.MetricSpec" />
+
+## `MetricResult`
+
+One `MetricResult` belongs to one sample and one metric. Use `valid=False` with `skip_reason` when the metric cannot score the sample. `coverage` makes partial evaluation visible instead of silently averaging only the successful subset.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.MetricResult" />
+
+## `AggregateResult`
+
+An aggregate records total, valid, and skipped counts together with summary statistics. It is the metric-level result; leaderboard eligibility is decided later by benchmark and scorecard evidence.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.AggregateResult" />
+
+## `Metric`
+
+Metric implementations satisfy this protocol structurally. The following deliberately simple metric counts artifact references; it shows the API shape, not a benchmark-quality video metric.
+
+```python
+from worldfoundry.evaluation.api import AggregateResult, MetricResult
+
+class ArtifactCountMetric:
+    name = "artifact_count_example"
+    version = "1.0"
+    required_artifacts = ()
+    higher_is_better = None
+
+    def compute_sample(self, request, result):
+        value = len(result.artifacts)
+        return MetricResult(
+            sample_id=request.sample_id,
+            metric_id=self.name,
+            raw_value=value,
+            normalized_value=value,
+        )
+
+    def aggregate(self, results):
+        values = [item.raw_value for item in results if item.valid]
+        mean = sum(values) / len(values) if values else None
+        return AggregateResult(
+            metric_id=self.name,
+            n_total=len(results),
+            n_valid=len(values),
+            n_skipped=len(results) - len(values),
+            raw_stats={"mean": mean},
+            normalized_stats={"mean": mean},
+            valid=bool(values),
+        )
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.Metric" />
+
+## `EvaluationProtocolSpec`
+
+A protocol groups metric IDs and metric groups under a named evaluation behavior. Extra protocol-specific keys loaded from a catalog are preserved in `metadata`.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.EvaluationProtocolSpec" />
+
+## `WorldTaskConfig`
+
+This object describes one task's input keys, output keys, generation defaults, and intended metric set. For an action-conditioned video task, inputs might contain an initial image, controls might carry actions, and the output key would be `generated_video`.
+
+```python
+from worldfoundry.evaluation.api import WorldTaskConfig
+
+task = WorldTaskConfig(
+    name="action-conditioned-video",
+    protocol="open_loop",
+    input_keys=("image", "actions"),
+    output_keys=("generated_video",),
+    metric_ids=("artifact_count_example",),
+    generation_defaults={"fps": 12, "seed": 42},
+)
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.WorldTaskConfig" />
+
+## `BenchmarkSpec`
+
+`BenchmarkSpec` collects tasks, metrics, splits, and dataset metadata into an in-process benchmark description. A checked-in benchmark catalog entry can be richer; this public DTO is the execution-facing form.
+
+```python
+from worldfoundry.evaluation.api import BenchmarkSpec, MetricSpec
+
+benchmark = BenchmarkSpec(
+    name="navigation-smoke-test",
+    tasks=(task,),
+    metrics=(MetricSpec(id="artifact_count_example"),),
+    splits=("validation",),
+)
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.BenchmarkSpec" />
+
+For an official benchmark integration, these contracts are necessary but not sufficient. The [add a benchmark guide](/docs/guides/add-benchmark) covers datasets, official runners, normalizers, runtime profiles, coverage, and evidence gates.

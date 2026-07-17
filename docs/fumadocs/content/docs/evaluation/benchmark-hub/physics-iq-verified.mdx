@@ -1,0 +1,135 @@
+---
+title: Physics-IQ Verified
+description: Physics-IQ Verified — metrics, requirements, and run commands.
+---
+
+## About
+
+Recommended Physics-IQ protocol with verified data, prompts, masks, and per-view scoring.
+
+**WorldFoundry evaluation path:** Runs the in-tree official metric runtime on caller-supplied generated artifacts using local checkpoints and evaluators. Candidate outputs are read from the generated-artifact directory.
+
+## Integration status
+
+| Item | Current state |
+| --- | --- |
+| Catalog integration | `integrated` |
+| Runner verification | `in_tree_raw_video_evaluator` |
+| Leaderboard | not yet eligible for leaderboard claims |
+
+### Integration notes
+
+- Shares the official mask/raw-metric engine with Original and selects only the Verified score adapter.
+- The bundled default is the upstream base best-practice prompt; model-specific prompt files may override it.
+- End-to-end execution evidence is pending a complete authorized download of the Verified media and masks.
+## Metrics
+
+### Task YAML
+
+`worldfoundry/data/benchmarks/tasks/external/physics-iq-verified.yaml`
+
+### Primary
+
+- `physics_iq_verified_score`
+
+| Metric | Focus |
+| --- | --- |
+| `physics_iq_verified_score` | Arithmetic mean after per-scenario, per-view physical-variance normalization. |
+| `physics_iq_verified_spatiotemporal` | Value reported for Verified Spatiotemporal Score under the official benchmark protocol. |
+| `physics_iq_verified_spatial` | Value reported for Verified Spatial Score under the official benchmark protocol. |
+| `physics_iq_verified_weighted_spatial` | Value reported for Verified Weighted Spatial Score under the official benchmark protocol. |
+| `physics_iq_verified_mse` | Value reported for Verified MSE Score under the official benchmark protocol. |
+
+## Environment setup
+
+### Runtime environment
+
+- **Conda env:** `worldfoundry-unified-cu128`.
+- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
+
+### Evaluation data
+
+- `worldfoundry/data/benchmarks/assets/physics-iq-verified/descriptions/descriptions_base.csv`
+- `worldfoundry/data/benchmarks/tasks/external/physics-iq-verified.yaml`
+
+### Checkpoints & assets
+
+- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
+
+### Key environment variables
+
+- `WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT`
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+- `WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_DESCRIPTIONS`
+- `WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH`
+
+### Verify setup
+
+```bash
+PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile physics-iq-verified --manifest worldfoundry/data/benchmarks/runtime_profiles/official/physics-iq-verified.yaml --output-dir tmp/worldfoundry_preflight/physics-iq-verified --json
+```
+
+## Run Evaluation
+
+After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
+
+### Set Candidate Artifacts
+
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
+```
+
+### Import Official Results
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id physics-iq-verified \
+  --mode normalizer \
+  --official-results-path /path/to/official/results-or-report \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/physics-iq-verified/normalizer \
+  --json
+```
+
+### Score Generated Artifacts
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id physics-iq-verified \
+  --mode official-run \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/physics-iq-verified/official-run \
+  --json
+```
+
+### Direct In-Tree Runner
+
+```bash
+PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py --benchmark-id physics-iq-verified --protocol verified --run-official --dataset-root "${WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT}" --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
+```
+
+## Requirements
+
+### Inputs
+
+- Official Physics-IQ-Verified media directory from Hugging Face
+- 198 generated five-second videos per run; four runs are recommended for leaderboard claims
+
+### Outputs
+
+- `scorecard.json`
+- `benchmark_contract.json`
+- `raw_metrics.csv`
+- `official_metrics.json`
+- `results_summary.csv`
+- `raw_metric_table.jsonl`
+- `per_sample_scores.jsonl`
+
+## Official references
+
+- [GitHub](https://github.com/google-deepmind/physics-IQ-benchmark)
+- [Paper](https://arxiv.org/abs/2606.18943)
+- [Project page](https://physics-iq-verified.anates.ai/)
+- [Dataset](https://huggingface.co/datasets/Anates-Labs-Research/Physics-IQ-Verified)
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

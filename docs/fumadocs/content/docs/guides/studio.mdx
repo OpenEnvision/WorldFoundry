@@ -11,7 +11,7 @@ Studio exposes multiple frontends:
 
 | Frontend | Best for | Notes |
 | --- | --- | --- |
-| `world` | Interactive world models | Standalone Studio-native console using the repository `load` / `start` / `step` / `reset` API. It does not render through Gradio. |
+| `world` | Interactive world models | Standalone WebRTC console with a resident model runtime, reliable input-edge DataChannel, bounded in-memory frame queue, one persistent video track, immersive fullscreen, and a live runtime log. It does not render through Gradio or materialize an MP4 per control step. |
 | `points` | Viser point clouds / meshes | Starts native Viser directly instead of embedding it in the console shell. |
 | `embodied` | Embodied simulators | **Planned.** URL bridge only: Studio registers an external simulator URL and tunnel hints; no in-tree embodied viewer yet. |
 | `spark` | 3DGS | Starts the standalone Spark 3DGS viewer with repository-local Spark assets. |
@@ -201,6 +201,28 @@ does not yet launch an in-tree embodied viewer.
 `world` defaults to port `7868`. Set a port manually only when your deployment
 requires a fixed proxy route.
 
+The realtime frontend requires `worldfoundry[studio_realtime]` (also included
+by `worldfoundry[ui]`). Model loading begins in the background when the server
+starts. A session then keeps one pipeline context and one execution thread
+resident; WASD/IJKL key edges are resampled at chunk boundaries while RGB
+frames are delivered over a long-lived WebRTC track. Per-run manifests,
+artifact scanning, and MP4 encoding remain Workspace/offline responsibilities
+and are intentionally absent from the control-to-frame hot path.
+
+Latency-oriented defaults can be tuned without changing model catalog quality
+profiles:
+
+| Environment variable | Default | Effect |
+| --- | --- | --- |
+| `WORLDFOUNDRY_REALTIME_FPS` | `16` | WebRTC video pacing and input-resampler rate. |
+| `WORLDFOUNDRY_REALTIME_CHUNK_FRAMES` | `9` | Target frames per generated chunk; known model temporal contracts may override it. |
+| `WORLDFOUNDRY_REALTIME_INFERENCE_STEPS` | model default; LingBot Fast `4` | Explicit latency/quality override. Non-distilled models are not silently reduced to four steps. |
+| `WORLDFOUNDRY_REALTIME_FRAME_QUEUE` | `max(chunk, 8)` | One steady-state chunk of bounded playback buffering. |
+| `WORLDFOUNDRY_REALTIME_BACKPRESSURE_MS` | half a chunk | Preserve every frame during normal playback; evict stale frames only after this congestion budget expires. |
+| `WORLDFOUNDRY_REALTIME_WARMUP_CHUNKS` | `1` | Background stream warmup; set `0` to disable or raise it for compile/autotune experiments. |
+| `WORLDFOUNDRY_REALTIME_LIVENESS_TIMEOUT_SECONDS` | `30` | Reclaim a session whose browser heartbeats disappear without killing a slow in-flight chunk. |
+| `WORLDFOUNDRY_REALTIME_ICE_SERVERS_JSON` | unset | Optional browser-compatible STUN/TURN `iceServers` JSON for hosts that are not directly reachable. |
+
 For remote workstations, expose the Workspace port and the viewer ports you use.
 For example:
 
@@ -226,6 +248,40 @@ preview video/image only; it does not duplicate viewer launch shortcuts.
 | `.splat`, `.spz`, `.ksplat`, `.sog`, and Gaussian-splat `.ply` files | Spark Gaussian Splat Viewer |
 | `.rrd` recordings | Rerun Timeline Viewer |
 
+### Base-model perception outputs
+
+WorldFoundry keeps one visualization capability registry for in-tree 3D and
+perception models. Query it before writing model-specific viewer code:
+
+```bash
+worldfoundry-eval models visualizations
+worldfoundry-eval models visualizations --family perception_core
+worldfoundry-eval models visualizations --model raft --json
+```
+
+Structured 2D results share one conversion command. Supported kinds are
+`detection`, `mask`, `flow`, `tracks`, `feature-pca`, `depth`, `normal`,
+`keypoints`, and `text`:
+
+```bash
+worldfoundry-eval models visualize \
+  --kind flow \
+  --artifact outputs/flow.npz \
+  --output outputs/flow.png
+
+worldfoundry-eval models visualize \
+  --kind detection \
+  --artifact outputs/detections.json \
+  --media inputs/frame.png \
+  --output outputs/detections.png
+```
+
+This shared path covers the official output schemas used by the Depth Anything,
+SAM, RAFT, DINO, GroundingDINO, YOLO World, CoTracker, and related in-tree
+families. Native image/video outputs open in the media viewer; point clouds and
+meshes use Viser, Gaussian splats use Spark, and synchronized scene recordings
+use Rerun. The registry command is the authoritative per-model mapping.
+
 Open the run in Workspace and use the **Artifacts** tab to confirm viewer
 routing for files that already exist on disk. The table above is the routing
 reference; the Artifacts actions are authoritative for a specific run.
@@ -245,6 +301,59 @@ Gaussian-splat PLY whose header contains splat attributes such as scale,
 rotation, opacity, and spherical-harmonic color fields. The Workspace
 distinguishes ordinary PLY geometry from Gaussian-splat PLY files before
 choosing Viser or Spark.
+
+### Coordinate-system contract
+
+Viewer launch is part of the geometry contract. A valid artifact can still look
+upside down or tilted when its world frame is interpreted twice. Keep points,
+meshes, camera-to-world transforms, frustums, and trajectories in one declared
+frame:
+
+- An official GLB that already applies OpenCV-to-OpenGL alignment must use
+  `coordinate_preset=asset-native` and the exporter-defined up axis. VGGT and
+  VGGT-Omega official GLBs use `+Y` up and `alignment=none`.
+- A raw VGGT/VGGT-Omega prediction NPZ remains in the model's OpenCV frame, so
+  Viser applies `coordinate_preset=opencv-to-opengl` once and uses `+Y` up.
+- Raw UniDepth V2 and UniK3D model-point NPZ files also use the OpenCV camera
+  frame. Their Workspace PLY exporter instead persists `x-right/y-up/z-forward`,
+  so those PLY files use `asset-native`, `+Y` up, and `alignment=none` without a
+  second flip.
+- DUSt3R, LoGeR, and Pi3 PLY point clouds keep their predicted camera-to-world
+  sidecars. Viser applies `first-camera-opengl` to points and cameras together,
+  uses `+Y` up, and frames the central 5-95% geometry range so sparse outliers do
+  not shrink the useful scene.
+- Rerun recordings must log the world `ViewCoordinates` and use the same camera
+  convention in every `Pinhole`. Cut3R and MonST3R use RDF for both world and
+  camera entities.
+- Never fix an orientation mismatch by flipping only the point cloud. Apply the
+  same rigid transform to geometry and camera-to-world poses, then verify reset,
+  orbit, and timeline interaction in a browser.
+
+Workspace resolves the proven VGGT, DUSt3R, LoGeR, and Pi3 defaults automatically.
+The Visualizer defaults also cover UniDepth V2 and UniK3D raw/Workspace assets.
+The Visualizer Params JSON remains an explicit override for other exporters. Viser reports the
+actual bound port when its requested port is occupied. Rerun uses WebGPU
+by default; set `WORLDFOUNDRY_STUDIO_RERUN_RENDERER=webgl` only when the target
+browser requires that fallback.
+
+### Choosing a 3D viewer
+
+Keep the default route artifact-driven so model integrations do not duplicate
+viewer code:
+
+| Output semantics | Default | Use the official viewer when... |
+| --- | --- | --- |
+| Static point cloud, mesh, depth-derived geometry, camera frustums | Viser | It carries a model-specific control or annotation that cannot be represented as shared scene layers. |
+| Time-varying geometry, camera trajectory, synchronized images/depth/actions | Rerun | The official timeline cannot be exported to `.rrd` without losing semantics. |
+| Gaussian splats | Spark | The upstream renderer requires a nonstandard shader or splat format. |
+
+An inference run is not visually verified merely because a viewer process
+starts. Release evidence for a 3D/4D method should confirm finite geometry,
+camera data, and the declared coordinate frame, then open the actual artifact in a browser, check a nonblank and
+readably framed canvas, exercise reset/orbit or timeline controls, and review
+console errors. Preserve an official viewer as a small visualization plugin;
+do not copy its inference runtime or build a per-model frontend when shared
+Viser/Rerun scene layers are sufficient.
 
 ## Studio Screenshots
 
@@ -368,7 +477,7 @@ the validation reference. Only curated nontrivial examples are embedded here.
 
 | Use case | Command shape | Notes |
 | --- | --- | --- |
-| LingBot realtime | `python -m worldfoundry.studio.app lingbot-world --variant fast --frontend world --device cuda:1` | Standalone interactive world frontend; best fit for `INIT` + `STEP` loops. |
+| LingBot realtime | `python -m worldfoundry.studio.app lingbot-world --variant fast --frontend world --device cuda:1` | Resident runtime with continuous WebRTC video and DataChannel controls. |
 | LingBot camera | `python -m worldfoundry.studio.app lingbot-world --variant base-camera --device cuda:1` | Slower, camera-centric profile. |
 | MatrixGame | `python -m worldfoundry.studio.app matrix-game-2 --device cuda:1` | Interactive world navigation. |
 | WorldCam | `python -m worldfoundry.studio.app worldcam --device cuda:1` | Camera-path generation and view control. |
@@ -402,9 +511,11 @@ http://127.0.0.1:7868
 
 For remote GPU nodes, use the SSH tunnel printed by Studio.
 
-The `world` frontend follows the same pattern as the LagerNVS Browser Viewer:
-the remote process serves both the page and the WebSocket control/frame-update
-channel, while the local browser reaches it through one tunneled port.
+The `world` process serves the page and WebRTC signaling on the configured HTTP
+port. Video and controls then use the ICE-selected WebRTC path. A plain SSH
+forward only carries signaling; for a browser that cannot directly reach the
+GPU host, configure a TURN relay with
+`WORLDFOUNDRY_REALTIME_ICE_SERVERS_JSON`.
 
 ```bash
 ssh -N -L 7868:127.0.0.1:7868 user@gpu-host
@@ -412,15 +523,19 @@ ssh -N -L 7868:127.0.0.1:7868 user@gpu-host
 # http://127.0.0.1:7868
 ```
 
-The world status strip shows `WS VIEW ... / GPU ...` so you can separate browser/network latency from model-side render latency. If WebSocket is unavailable, the page automatically falls back to the HTTP API.
+The status strip reports RTC playback FPS, generation time, control latency,
+queue depth, and dropped stale frames. An ICE timeout is surfaced explicitly
+instead of leaving the page indefinitely in a connecting state.
 
 ## Interaction modes
 
 | Mode | Flow | Best for |
 | --- | --- | --- |
-| Image World | Select a tray image or upload an image -> `START` -> drag the left/right sticks for repeated `STEP` | Image-conditioned interactive world models. |
+| Image World | Select a tray image or upload an image -> `START` -> hold keyboard or stick controls | Image-conditioned interactive world models. |
 | Video World | Upload a video -> `START` -> continue with video-to-video world-model flows | Video-conditioned world models. |
-| Stream | Seed input -> `INIT` -> repeated `STEP` | Interactive world models and continuation. |
+| Stream | Seed input -> start one persistent session -> send key edges while frames continue | Interactive world models and continuation. |
+| Prompt-scheduled segments | Enter a prompt, optionally select an image, then `START`; edit the prompt and press `Enter` after the current segment | Models that accept a new prompt at native segment boundaries. |
+| Queued controlled segments | Select an initial image, dense control video, sparse control video, and prompt -> `RUN`; select new controls before each `EXTEND` | Long-form models with explicit per-segment control inputs. |
 | Spatial preview | Run or export 3D asset -> open `3D World` | Gaussian splat, point cloud, or scene outputs. |
 
 Keyboard/live controls:
@@ -430,7 +545,109 @@ WASD = move
 Arrow keys / IJKL = look
 ```
 
-Dragging a stick or holding a keyboard direction waits for the previous step to finish before sending the next request.
+Keyboard and stick edges are sent immediately over the current realtime channel.
+The resident runtime samples the latest effective control state at model chunk
+boundaries, so input does not create a second inference request or reload the
+pipeline.
+
+### Live text events, idle steps, and output resolution
+
+The `world` frontend exposes three ordered controls beside the keyboard and
+joysticks:
+
+- **Text events:** open **INITIAL SCENE**, choose **ADD**, and enter an event ID,
+  button label, and prompt. **APPLY** installs the catalog before a session or
+  replaces it while the session is live. Event buttons activate one text
+  condition at the next model chunk boundary; **CLEAR EVENT** restores the base
+  prompt. Models without a state-preserving text-update path disable this
+  surface instead of acknowledging an update they cannot apply.
+- **STEP:** queues exactly one generated chunk with no keyboard direction. It is
+  useful for an idle camera or for checking a text event. It does not enable an
+  autonomous generation loop. Queued-segment models keep **STEP** disabled
+  because their next segment requires new control videos.
+- **OUTPUT:** selects the transmitted frame size. **NATIVE** preserves the model
+  output size. Smaller choices resize and letterbox only the WebRTC/WebSocket
+  stream; they do not change model inference resolution, sampling steps, causal
+  state, or future world quality.
+
+Event IDs contain 1-64 letters, numbers, or `_.:-`; labels are at most 64
+characters, prompts are at most 1,000 characters, and a catalog contains at most
+12 events. Catalog updates carry a revision so a stale editor cannot silently
+overwrite a newer live catalog.
+
+The reliable control channel returns `event_catalog_ack`, `event_ack`,
+`step_ack`, and `output_config_ack`. An event or output ACK means the ordered
+request was accepted and reports where it takes effect (`next_chunk` or
+`next_segment`); `chunk_done` remains the completion signal for generated
+output. Resolution changes are frozen at a complete transport-chunk boundary,
+so an already announced chunk is never truncated or mixed across dimensions.
+Each request and ACK carries the same `request_id`, so rapid clicks cannot let
+an older response overwrite the current UI state.
+
+The same protocol can be driven without the built-in controls:
+
+```json
+{"type":"event_catalog","request_id":"catalog-1","base_revision":0,"events":[{"event_id":"rain","label":"Rain","prompt":"Heavy rain begins.","category":"weather"}]}
+{"type":"event","request_id":"event-1","event_id":"rain","state":"trigger"}
+{"type":"event","request_id":"event-2","state":"clear"}
+{"type":"action","request_id":"step-1","action":{"event":"step"}}
+{"type":"output_config","request_id":"output-1","resolution":{"mode":"fixed","width":640,"height":360}}
+```
+
+Fixed transport dimensions must be even, at least `160x90`, no larger than the
+model's native/generated frame on either axis, and within the realtime
+`1920x1080` pixel budget. Studio advertises only source-safe presets derived
+from the model catalog; if the native size is unknown, it does not guess a
+fixed preset. Switching back to `{"mode":"native"}` removes the transport
+scaler. WebRTC resize work runs before frames enter the media track, so held
+frames do not repeatedly pay the resize cost or block the control event loop.
+
+### Draggable and collapsible panels
+
+**STATUS**, **CONTROLS**, **INITIAL SCENE**, and **RUNTIME** share the same panel
+behavior. Drag a panel header to float it above the viewport, click `−` to
+collapse it, and click `+` to reopen it. The browser clamps floating panels to
+the visible stage, raises the selected panel, and saves positions and collapsed
+state locally. Dragging uses one animation-frame transform per browser frame and
+does not add work to the model/frame transport path. On narrow mobile layouts,
+panels stay in document flow but remain collapsible.
+
+### Immersive fullscreen and live runtime log
+
+The fullscreen view is part of the shared `world` frontend and is available to
+every interactive model routed to that frontend. It reuses the current peer or
+socket, frame buffer, and resident model session. Entering or leaving fullscreen
+does not reconnect the browser or restart generation.
+
+1. Prepare the model input and start the session normally.
+2. Click **FULLSCREEN** in the upper-left corner of the viewport, or press `F`.
+3. The viewport fills the screen and the live runtime log opens automatically.
+4. Click **LIVE LOG** or press `Shift+L` to hide or show the log without leaving
+   fullscreen.
+5. Press `Esc` or click **EXIT** to return to the standard Studio layout.
+
+| Control | Result |
+| --- | --- |
+| **FULLSCREEN** / `F` | Enter or leave immersive fullscreen. |
+| **LIVE LOG** / `Shift+L` | Toggle the runtime log in either the normal or fullscreen layout. `L` alone remains the camera-right control. |
+| **CLEAR** | Clear the visible log history only; the model session and runtime state are unchanged. |
+| `Esc` | Leave fullscreen and return to the same active session. |
+
+The log includes client and model readiness, realtime transport state, segment
+queue/generation/playback transitions, errors, and per-chunk performance data.
+A completed chunk reports its frame count, generation time (`gen`), playback
+queue depth (`queue`), and discarded stale frames (`dropped`). These entries are
+session telemetry for interactive debugging; they are not persisted run
+artifacts or a copy of the server's complete stdout/stderr stream.
+
+Live log events use the existing realtime connection. The browser batches DOM
+updates on animation frames and retains at most the latest 120 entries, so a
+long session does not accumulate an unbounded log tree or add a polling loop to
+the frame path. When the browser permits the Fullscreen API, the button or
+keyboard shortcut enters native fullscreen. If native fullscreen is unavailable
+or blocked by browser policy, Studio keeps the same session and falls back to a
+viewport-filling layout. The Workspace visualizer iframe already grants
+fullscreen permission.
 
 ## Launch flags
 

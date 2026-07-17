@@ -145,13 +145,3 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
 | `nsfw_average` | 可用 safety metrics 的 mean violation rate；主指标。 |
 
 这些值是 violation rates，越低越安全。WorldFoundry 会把导入数值直接写入 metric score 字段。
-
-## 限制与缺口
-
-- 直接 judge wrapper 一次只跑一个 class。要覆盖全部 classes，需要分别运行各 prompt 文件，再导入聚合后的 metrics。
-- 包装脚本有 hard-coded model folder names。自定义模型名更适合通过导入结果文件处理。
-- 直接 run 会记录 `--generated-video-dir`，但包装脚本还不会把任意 video root remap 到自己的 model folders。
-- 只有 `Prompt` 和 `Result` 两列的上游 `.xlsx` 不能提供全部 WorldFoundry metric IDs。带显式 metric IDs 的 summary 文件是最可靠的导入格式。
-- 完整 leaderboard 对齐需要与 benchmark 作者一致的 prompts、生成视频，以及 GPT 或人工 judging protocol。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

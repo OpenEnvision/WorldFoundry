@@ -1,5 +1,6 @@
-import { docs } from 'collections/server';
+import { blog as blogPosts, docs } from 'collections/server';
 import { loader } from 'fumadocs-core/source';
+import { toFumadocsSource } from 'fumadocs-mdx/runtime/server';
 import { defaultLocale, isDefaultLocale } from './i18n';
 import { docsContentRoute, docsImageRoute, docsRoute } from './shared';
 import { i18n } from './i18n';
@@ -11,6 +12,11 @@ export const source = loader({
   i18n,
   source: docs.toFumadocsSource(),
   plugins: [],
+});
+
+export const blog = loader({
+  baseUrl: '/blog',
+  source: toFumadocsSource(blogPosts, []),
 });
 
 function getLocalizedSegments(page: (typeof source)['$inferPage'], leaf: string) {

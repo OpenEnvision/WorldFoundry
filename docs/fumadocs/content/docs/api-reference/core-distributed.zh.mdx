@@ -1,0 +1,45 @@
+---
+title: Core 分布式
+description: Process group 初始化、上下文并行切分聚合、模型并行 group、rank 日志、EMA 广播与 pipeline 调度。
+---
+
+Distributed Core 把 process-group 拓扑和 tensor 移动分开。初始化负责创建全局与模型并行 group；rank/group 查询负责暴露拓扑；collective helper 再完成切分、聚合、广播或同步，模型接入不需要重复处理这些边界情况。
+
+导入这个 package 需要分布式模型 runtime 依赖，包括 Torch 和 Loguru；`dist_init` 还必须有 CUDA。下面展示的 `cp_group=None` 是接口契约示例，并不表示 distributed package 属于最小 CLI 环境。
+
+## 单进程行为是明确契约
+
+上下文并行数据 helper 把 `None` 解释为“并行已关闭”。因此同一份模型代码可以在一个进程和多个进程中使用，不需要在每个调用点手写分支。
+
+```python
+import torch
+
+from worldfoundry.core.distributed import cat_outputs_cp, split_inputs_cp
+
+x = torch.arange(24).reshape(2, 3, 4)
+local = split_inputs_cp(x, seq_dim=1, cp_group=None)
+restored = cat_outputs_cp(local, seq_dim=1, cp_group=None)
+
+assert local is x
+assert restored is x
+```
+
+使用真实 CP group 时，`split_inputs_cp` 要求序列维长度能被 group size 整除。`cat_outputs_cp` 按 rank 顺序聚合等形状本地 tensor。`cat_outputs_cp_with_grad` 会在聚合后恢复本 rank 的 autograd 引用，只有梯度必须穿过本地 shard 时才使用。
+
+## 典型上下文并行顺序
+
+Rank 0 或 group 最小 rank 可以只加载一次输入；`broadcast_split_tensor` 先广播完整形状和数据，再给每个 rank 返回一个 shard；模型本地计算；最后 `cat_outputs_cp` 恢复全局序列。切分和聚合必须使用相同 `seq_dim` 与 process group。
+
+`broadcast` 同时支持 tensor 和 Python object，但 object collective 会序列化数据，不适合高吞吐模型 activation。`find_split` 为 Megatron 兼容 runtime 规划时间与空间 CP 维度，并会更新兼容 parallel state；它不是普通 tensor chunk helper。
+
+## 初始化边界
+
+`dist_init` 是面向 CUDA 推理 runtime 的高层初始化器，配置需要提供 backend、timeout、CP size 和 PP size。它读取 `RANK` 与 `WORLD_SIZE`，绑定本地 CUDA device，验证 `cp_size * pp_size`，初始化模型并行 group，并在需要时创建 pipeline scheduler。
+
+不要在初始化之前调用模型并行 rank/group accessor。在测试或会重建拓扑的常驻 worker 中，应使用 `destroy_model_parallel` 对称清理。`print_rank_0` 在非分布式执行中也安全，适合只应出现一次的日志。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-distributed" locale="zh" />

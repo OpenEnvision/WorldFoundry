@@ -48,24 +48,47 @@ This is useful in scripts or CI pipelines where you need the canonical command w
 
 ## Navigate the TUI
 
-The TUI displays three main panels:
+The TUI is a four-pane dashboard. The left column shows the OpenEnvision branding, active conda environment, and a searchable **Catalogs** table. The right column shows the current mode overview, action toolbar, parameter form, and **Execution Log**.
 
-1. **Model Catalog** — Lists all model-zoo entries with their ids, aliases, maturity levels, and runtime status. Use arrow keys to browse; press Enter to select a model.
+Switch **Mode** in the top-left panel to move between Inference, Studio, and Evaluation. Each mode reuses the same catalog data but exposes different controls and command output.
 
-2. **Benchmark Catalog** — Lists all benchmark-zoo entries with their ids, task scopes, maturity levels, and dataset readiness. Use arrow keys to browse; press Enter to select a benchmark.
+### Inference
 
-3. **Command Output** — The bottom panel dynamically generates the corresponding `worldfoundry-eval run` command based on your selections. You can copy this command to execute later on a GPU node.
+Use Inference to pick a model, fill model-specific inputs, and generate a runnable command. The toolbar provides **Run**, **Stop**, **Copy**, **Cmd**, **Check**, **Files**, **GPU**, and **Sync**.
+
+![TUI Inference mode](/images/tui/tui-inference.png)
+
+Typical fields include prompt, input path, output directory, optional artifact path, and GPU ids. The **Command Preview** section updates as you edit parameters.
+
+### Studio
+
+Use Studio to launch the local Studio web UI from the terminal. Press **Run** to start the server; status and logs appear in the execution log.
+
+![TUI Studio mode](/images/tui/tui-studio.png)
+
+### Evaluation
+
+Use Evaluation to configure benchmark runs. Choose an evaluation intent, select metrics, and set the output directory. The TUI builds the corresponding `worldfoundry-eval` command for the selected model × benchmark pair.
+
+![TUI Evaluation mode](/images/tui/tui-evaluation.png)
+
+Keyboard shortcuts shown in the log: `Ctrl+Q` quit, `r` refresh, `c` copy, `Tab` / `Shift+Tab` navigate.
 
 ### Configuration
 
-After selecting a model and a benchmark, the TUI presents inference parameters you can adjust:
+Evaluation mode exposes two focused intents:
+
+- **Model Benchmark** — Select a model and benchmark; the TUI builds the end-to-end generation plus official benchmark command.
+- **Score Artifact Directory** — Select a benchmark and an existing artifact directory; model selection and metric subsets are hidden because the benchmark's complete protocol is used.
+
+Inference mode presents model-specific parameters such as:
 
 - **Steps / iterations** — Number of denoising or sampling steps.
 - **Guidance scale / cfg** — Classifier-free guidance strength.
 - **Sequence length** — Maximum token or frame count.
 - **Seed** — Deterministic generation seed (optional).
 
-These fields map to the same flags accepted by `worldfoundry-eval run`. Changing a parameter in the TUI updates the generated command in real time.
+Changing a parameter in the TUI updates the generated command in real time. Use the Workspace or `generate-score` CLI when a custom dataset manifest needs more fields than the compact TUI exposes.
 
 ### Readiness indicators
 
@@ -87,19 +110,6 @@ To restore the full interactive TUI, install the `[tui]` extra:
 ```bash
 pip install -e ".[tui]"
 ```
-
-## TUI vs CLI discovery
-
-Both the TUI and the CLI discovery commands read the same catalog manifests. Choose based on your workflow:
-
-| Need | Use |
-| --- | --- |
-| Browse catalogs visually, adjust parameters interactively | TUI (`worldfoundry-eval tui`) |
-| Generate a single command for scripts or CI | TUI with `--print-command` |
-| List all model or benchmark ids as JSON | `worldfoundry-eval zoo models --json` or `zoo benchmarks --json` |
-| Check readiness for a specific model | `worldfoundry-eval zoo model-download --check-local --model-id <id> --json` |
-| Check benchmark/runtime readiness | `worldfoundry-eval preflight runtime --profile <benchmark-id> --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml --output-dir tmp/preflight/runtime/<benchmark-id> --json` |
-| Full environment preflight | Run the per-profile command for each benchmark profile you need to validate. |
 
 ## Next steps
 

@@ -1,0 +1,73 @@
+---
+title: Core 注意力
+description: 精确 SDPA、布局分发、后端策略、RoPE、packed sequence、上下文并行和 block KV cache。
+---
+
+WorldFoundry 把投影层和模型语义留在模型代码中，由 Core 负责那些经常被重复实现、也容易出错的机械工作：多头布局转换、精确后端选择、mask 处理、RoPE 应用、packed sequence 范围、上下文并行通信和滚动 KV 状态。
+
+## 选择最窄的入口
+
+当 Q、K、V 已经是标准的拆头形状时，使用 `scaled_dot_product_attention`。它遵循 PyTorch SDPA 契约，同时增加显式后端上下文、兼容的 GQA 扩展以及精确的 matmul fallback。
+
+当张量是 `(batch, sequence, hidden)`、只缺少 head 拆分时，使用 `flattened_multihead_attention`，让拆头和合头留在一个公共位置。当模型接入有 einops 风格的 QKV 布局，或者需要通过策略选择可选 provider 时，使用 `attention_forward`。传入 mask 或设置 `compatibility_mode=True` 会有意回到 PyTorch 路径。
+
+`NativeAttention` 把 SDPA 封装成 module，也可以绑定上下文并行 group。`ContextParallelAttention`、`UlyssesScheduler` 和 `CSOHelper` 是更底层的分布式机制，只有在模型 runtime 同时掌握对应 split metadata 时才应该直接使用。
+
+## 一个可以在 CPU 或 GPU 上运行的例子
+
+```python
+import torch
+
+from worldfoundry.core import scaled_dot_product_attention
+
+torch.manual_seed(7)
+q = torch.randn(2, 8, 32, 64)
+k = torch.randn(2, 8, 48, 64)
+v = torch.randn(2, 8, 48, 96)
+
+output = scaled_dot_product_attention(
+    q,
+    k,
+    v,
+    dropout_p=0.0,
+    backend="math",  # 本例显式选择确定的 provider
+)
+assert output.shape == (2, 8, 32, 96)
+```
+
+推理时要明确传 `dropout_p=0.0`；PyTorch SDPA 不会从 `module.eval()` 自动推导这个值。布尔 mask 表示哪些 score 可以保留，浮点 mask 则会直接加到 score 矩阵上。
+
+## Block KV cache 的调用顺序
+
+`BlockKVCache` 不是可以随意更新的字典。每个 chunk 都必须遵循 `before_update → update → cached_k/cached_v → after_update`。重复当前 `chunk_idx` 会覆盖同一个逻辑 chunk；递增一会追加或滚动本地窗口；跳过编号会报错。
+
+```python
+import torch
+from worldfoundry.core.attention import BlockKVCache
+
+cache = BlockKVCache(
+    k_shape=(1, 1, 4, 2),
+    v_shape=(1, 1, 4, 3),
+    seq_dim=2,
+    chunk_size=2,
+    window_size=4,
+    device="cpu",
+    dtype=torch.float32,
+)
+
+for chunk_idx in range(3):
+    k = torch.full((1, 1, 2, 2), float(chunk_idx))
+    v = torch.full((1, 1, 2, 3), float(chunk_idx))
+    cache.before_update(chunk_idx)
+    cache.update(k, v)
+    visible_k = cache.cached_k()  # 依次可见 2、4、滚动后的 4 个 token
+    cache.after_update(chunk_idx)
+```
+
+`sink_size` 保留永不淘汰的前缀，`window_size` 描述滚动区域。两者之和必须等于 cache 的序列维长度，并且能够被 `chunk_size` 整除。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-attention" locale="zh" />

@@ -11,13 +11,22 @@ description: 用 benchmark、metric 与可复现 scorecard 对生成产物打分
 
 | 目标 | 命令 |
 | --- | --- |
+| 按已知官方配置复现 model × benchmark | `worldfoundry-eval reproduce --profile <id> ...` |
+| 用新模型跑已有 benchmark | `worldfoundry-eval run --model <id> --model-manifest-dir <dir> --benchmark <id> ...` |
+| 修改已有模型或 benchmark 配置 | `worldfoundry-eval reproduce --recipe <recipe.yaml> ...` |
 | 对已有 JSON/JSONL 结果打分 | `worldfoundry-eval evaluate --mode existing-results ...` |
+| 只复用 metric，不使用 benchmark data | `worldfoundry-eval evaluate --mode existing-results --metric <id> ...` |
 | 从 task 物化 request ledger | `worldfoundry-eval task materialize ...` |
 | 跑单个 benchmark × model | `worldfoundry-eval run --benchmark <id> --model <id> ...` |
 | 导入官方形态结果 | `worldfoundry-eval zoo benchmark-run --mode official-validation ...` |
+| 尝试新的 benchmark manifest | `worldfoundry-eval run --benchmark-manifest-dir <dir> --benchmark <id> ...` |
 | 列出 metric id | `worldfoundry-eval metric list` |
 
 默认用户入口是 `worldfoundry-eval run`。已有物化请求或结果时用 `evaluate`。已集成的外部 benchmark（自备 data root / 生成产物 / 官方结果文件）用 `zoo benchmark-run`。
+
+自定义数据的分数是有用证据，但不能自动与官方榜单比较。同样，bounded official component run 可以证明集成链路可用，却不能证明完整 benchmark 可比性。model × benchmark 计划的 claim 会受到 benchmark catalog 中已提交 evidence 的上限约束；runner 仍可执行并产出诊断分数，但不会因此升级为榜单候选。
+
+模型与 benchmark 只通过标准 artifact 和 manifest 相连。模型 runner 负责生成 `GenerationResult`；benchmark adapter 负责把 artifact 严格映射成官方 layout；official runner 只负责执行和解析指标。新增模型不需要复制 benchmark 代码，新增 benchmark 也不需要在每个模型里加分支。
 
 ## 流程
 

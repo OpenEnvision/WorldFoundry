@@ -1,0 +1,108 @@
+---
+title: Metric 与 task
+description: Metric 输出与实现、task 契约、评测 protocol 和 benchmark specification。
+---
+
+Task 契约描述应该生成什么，metric 契约描述如何给兼容 result 打分。二者分开后，同一套生成 artifact 可以交给多个 metric，而不必重新运行模型。
+
+本页 symbol 均从 `worldfoundry.evaluation.api` 导入。
+
+## `MetricSpec`
+
+`MetricSpec` 是声明式 metadata，记录身份、alias、所需 artifact kind、输出单位、聚合策略和分数方向。`implementation` 可以指向代码，但 spec 本身不会执行代码。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.MetricSpec" locale="zh" />
+
+## `MetricResult`
+
+一个 `MetricResult` 对应一个 sample 与一个 metric。Metric 无法给该 sample 打分时，应使用 `valid=False` 和 `skip_reason`。`coverage` 让部分评测保持可见，避免只平均成功子集却不说明缺失范围。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.MetricResult" locale="zh" />
+
+## `AggregateResult`
+
+Aggregate 同时记录总数、有效数、跳过数与统计量。它是 metric 级结果；是否具备 leaderboard 资格，要到 benchmark 和 scorecard 证据层再判断。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.AggregateResult" locale="zh" />
+
+## `Metric`
+
+Metric 实现通过结构满足这个 protocol。下面故意使用一个只计算 artifact 引用数的简单 metric；它用来展示 API 形态，不是 benchmark 级视频指标。
+
+```python
+from worldfoundry.evaluation.api import AggregateResult, MetricResult
+
+class ArtifactCountMetric:
+    name = "artifact_count_example"
+    version = "1.0"
+    required_artifacts = ()
+    higher_is_better = None
+
+    def compute_sample(self, request, result):
+        value = len(result.artifacts)
+        return MetricResult(
+            sample_id=request.sample_id,
+            metric_id=self.name,
+            raw_value=value,
+            normalized_value=value,
+        )
+
+    def aggregate(self, results):
+        values = [item.raw_value for item in results if item.valid]
+        mean = sum(values) / len(values) if values else None
+        return AggregateResult(
+            metric_id=self.name,
+            n_total=len(results),
+            n_valid=len(values),
+            n_skipped=len(results) - len(values),
+            raw_stats={"mean": mean},
+            normalized_stats={"mean": mean},
+            valid=bool(values),
+        )
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.Metric" locale="zh" />
+
+## `EvaluationProtocolSpec`
+
+Protocol 把 metric ID 与 metric group 组织到一种命名评测行为下。从 catalog 读取的额外 protocol 字段会保留在 `metadata`。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.EvaluationProtocolSpec" locale="zh" />
+
+## `WorldTaskConfig`
+
+这个对象描述一个 task 的输入 key、输出 key、生成默认值和预期 metric。对于动作条件视频，输入可以包含初始图像，controls 携带动作，输出 key 则是 `generated_video`。
+
+```python
+from worldfoundry.evaluation.api import WorldTaskConfig
+
+task = WorldTaskConfig(
+    name="action-conditioned-video",
+    protocol="open_loop",
+    input_keys=("image", "actions"),
+    output_keys=("generated_video",),
+    metric_ids=("artifact_count_example",),
+    generation_defaults={"fps": 12, "seed": 42},
+)
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.WorldTaskConfig" locale="zh" />
+
+## `BenchmarkSpec`
+
+`BenchmarkSpec` 把 task、metric、split 和 dataset metadata 组成进程内 benchmark 描述。仓库中的 benchmark catalog 条目可能更丰富；这个公开 DTO 是面向执行的形态。
+
+```python
+from worldfoundry.evaluation.api import BenchmarkSpec, MetricSpec
+
+benchmark = BenchmarkSpec(
+    name="navigation-smoke-test",
+    tasks=(task,),
+    metrics=(MetricSpec(id="artifact_count_example"),),
+    splits=("validation",),
+)
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.BenchmarkSpec" locale="zh" />
+
+对于 official benchmark integration，这些契约是必要条件，但还不够。[添加基准指南](/zh/docs/guides/add-benchmark)还会处理 dataset、official runner、normalizer、runtime profile、覆盖率与证据 gate。

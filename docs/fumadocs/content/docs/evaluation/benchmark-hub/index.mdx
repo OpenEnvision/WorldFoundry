@@ -1,42 +1,29 @@
 ---
 title: Benchmark Hub
-description: Open benchmark and model inventory for embodied AI, video generation, and world models.
+description: Find a benchmark, inspect its execution boundary, and open its manifest-backed run recipe.
 ---
 
-## About
+<BenchmarkRecipeCatalog />
 
-Index of benchmarks and models tracked by WorldFoundry. Integration status, blockers, metrics, and evidence flags come from machine-readable manifests under `worldfoundry/data/benchmarks/` and `worldfoundry/data/models/`.
+## What a benchmark recipe records
 
-This page does **not** publish leaderboard rankings.
+Each detail page is generated from benchmark catalogs and task manifests rather than a hand-maintained link list. A recipe keeps these claims separate:
 
-## At a glance
+| Record | What it tells you |
+| --- | --- |
+| Catalog | Stable benchmark ID, domains, aliases, official sources, and integration status. |
+| Evaluation surface | Primary metrics, artifact layout, judge requirements, and supported execution path. |
+| Runtime | In-tree evaluator, external result importer, hosted judge, or simulator boundary. |
+| Verification | The strongest checked runner or normalizer evidence currently recorded in the manifest. |
+| Eligibility | Whether available evidence is sufficient for leaderboard-facing claims. |
 
-- **3 families** — Embodied AI · Video Generation · World Models
-- **58 benchmarks** — 22 embodied / 27 video / 9 world models
-- **60 models** in core catalogs (VLA/VA/WAM, open video, world models)
-- **0 leaderboard-valid cells** claimed here → [Leaderboard Eligibility](#leaderboard-eligibility)
+This hub does **not** publish leaderboard rankings. Missing or pending verification remains visible instead of being promoted to a stronger support claim.
 
-```bash
-worldfoundry-eval zoo benchmarks --json   # refresh counts
-```
-
-## Benchmark list
-
-### Embodied AI — 22
-
-Language-conditioned agents, manipulation, sim rollouts, action traces, offline policy eval. All rows currently `leaderboard_valid=false`. VLA/VA/WAM catalog: 15 models.
-
-### Video Generation — 27
-
-T2V / I2V quality, alignment, dynamics, preference judges, safety, physics, and camera control. Open-video catalog: 19 models.
-
-### World Models — 9
-
-Long-horizon / interactive worlds (action, camera, state, memory). World-model catalog: 26 models.
+Before installing benchmark-specific packages, read the [runtime environment matrix](/docs/evaluation/benchmark-hub/runtime-environments). It separates the unified environment, managed dedicated environments, hosted judge services, and dimension-specific native/checkpoint stacks.
 
 ## How to run one benchmark
 
-Use the benchmark-specific page first. The exact prompt file, generated-artifact layout, checkpoint names, judge model, and official result format are benchmark-dependent.
+Open the benchmark recipe first. Prompt files, generated-artifact layouts, checkpoint names, judge models, and official result formats are benchmark-specific.
 
 ### Import official result files
 
@@ -52,18 +39,7 @@ worldfoundry-eval zoo benchmark-run \
 
 ### Score generated artifacts
 
-Use this only when the benchmark page says the in-tree metric runtime can recompute scores from generated artifacts and the required metric checkpoints are staged.
-
-```bash
-worldfoundry-eval run \
-  --benchmark <benchmark-id> \
-  --model <model-id> \
-  --mode official-run \
-  --output-dir tmp/<benchmark-id>/<model-id> \
-  --json
-```
-
-If generated artifacts already exist:
+Use `official-run` only when the benchmark recipe says the in-tree runtime can recompute scores from generated artifacts and the required checkpoints are staged.
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -74,77 +50,13 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-Use the per-benchmark page to match the expected artifact layout before scoring: prompt index videos, case id videos, prompt id videos, sampled frame directories, reports, or structured rollout traces.
+To generate artifacts with a registered model before scoring:
 
-{/* benchmark-subpages */}
-
-## Benchmarks
-
-Each page describes the concrete assets, output layout, and supported runner commands for that benchmark.
-
-### Embodied AI
-
-- [AI2-THOR](/docs/evaluation/benchmark-hub/ai2thor)
-- [BEHAVIOR-1K](/docs/evaluation/benchmark-hub/behavior1k)
-- [BridgeData V2](/docs/evaluation/benchmark-hub/bridgedata-v2)
-- [CALVIN](/docs/evaluation/benchmark-hub/calvin)
-- [Kinetix](/docs/evaluation/benchmark-hub/kinetix)
-- [LIBERO](/docs/evaluation/benchmark-hub/libero)
-- [LIBERO-Mem](/docs/evaluation/benchmark-hub/libero-mem)
-- [LIBERO-Para](/docs/evaluation/benchmark-hub/libero-para)
-- [LIBERO-Plus](/docs/evaluation/benchmark-hub/libero-plus)
-- [LIBERO-Pro](/docs/evaluation/benchmark-hub/libero-pro)
-- [ManiSkill](/docs/evaluation/benchmark-hub/maniskill)
-- [ManiSkill2](/docs/evaluation/benchmark-hub/maniskill2)
-- [Meta-World](/docs/evaluation/benchmark-hub/metaworld)
-- [MiKASA-Robo](/docs/evaluation/benchmark-hub/mikasa)
-- [MolmoSpaces-Bench](/docs/evaluation/benchmark-hub/molmospaces)
-- [RLBench](/docs/evaluation/benchmark-hub/rlbench)
-- [RoboCasa](/docs/evaluation/benchmark-hub/robocasa)
-- [RoboCerebra](/docs/evaluation/benchmark-hub/robocerebra)
-- [RoboMME](/docs/evaluation/benchmark-hub/robomme)
-- [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin)
-- [SimplerEnv](/docs/evaluation/benchmark-hub/simpler-env)
-- [VLABench](/docs/evaluation/benchmark-hub/vlabench)
-
-### Video Generation
-
-- [VBench](/docs/evaluation/benchmark-hub/vbench)
-- [VBench++](/docs/evaluation/benchmark-hub/vbench-plus-plus)
-- [VBench-2.0](/docs/evaluation/benchmark-hub/vbench-2.0)
-- [Video-Bench](/docs/evaluation/benchmark-hub/video-bench)
-- [VMBench](/docs/evaluation/benchmark-hub/vmbench)
-- [T2V-CompBench](/docs/evaluation/benchmark-hub/t2v-compbench)
-- [VideoScore](/docs/evaluation/benchmark-hub/videoscore)
-- [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench)
-- [EvalCrafter](/docs/evaluation/benchmark-hub/evalcrafter)
-- [FETV](/docs/evaluation/benchmark-hub/fetv)
-- [AIGCBench](/docs/evaluation/benchmark-hub/aigcbench)
-- [MiraBench](/docs/evaluation/benchmark-hub/mirabench)
-- [DEVIL Dynamics](/docs/evaluation/benchmark-hub/devil-dynamics)
-- [GenAI-Bench](/docs/evaluation/benchmark-hub/genai-bench)
-- [T2VSafetyBench](/docs/evaluation/benchmark-hub/t2v-safety-bench)
-- [CameraBench](/docs/evaluation/benchmark-hub/camerabench)
-- [VideoVerse](/docs/evaluation/benchmark-hub/videoverse)
-- [PhysVidBench](/docs/evaluation/benchmark-hub/physvidbench)
-- [PhyGenBench](/docs/evaluation/benchmark-hub/phygenbench)
-- [VideoPhy](/docs/evaluation/benchmark-hub/videophy)
-- [VideoPhy2](/docs/evaluation/benchmark-hub/videophy2)
-- [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq)
-- [IPV-Bench](/docs/evaluation/benchmark-hub/ipv-bench)
-- [VideoScience-Bench](/docs/evaluation/benchmark-hub/videoscience-bench)
-- [PhyEduVideo](/docs/evaluation/benchmark-hub/phyeduvideo)
-- [PhyGround](/docs/evaluation/benchmark-hub/phyground)
-- [PhyFPS-Bench-Gen](/docs/evaluation/benchmark-hub/phyfps-bench-gen)
-
-### World Models
-
-- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench)
-- [WorldScore](/docs/evaluation/benchmark-hub/worldscore)
-- [WorldBench](/docs/evaluation/benchmark-hub/worldbench)
-- [WBench](/docs/evaluation/benchmark-hub/wbench)
-- [iWorld-Bench](/docs/evaluation/benchmark-hub/iworld-bench)
-- [T2VWorldBench](/docs/evaluation/benchmark-hub/t2vworldbench)
-- [WorldArena](/docs/evaluation/benchmark-hub/worldarena)
-- [World-in-World](/docs/evaluation/benchmark-hub/world-in-world)
-- [EWMBench](/docs/evaluation/benchmark-hub/ewmbench)
+```bash
+worldfoundry-eval run \
+  --benchmark <benchmark-id> \
+  --model <model-id> \
+  --mode official-run \
+  --output-dir tmp/<benchmark-id>/<model-id> \
+  --json
+```

@@ -1,0 +1,71 @@
+---
+title: Core API
+description: How to choose and compose WorldFoundry's shared attention, configuration, I/O, loading, distributed, inference, and acceleration primitives.
+---
+
+`worldfoundry.core` is the reusable layer below model integrations. It contains operations that many world models need but that do not belong to one model identity: attention dispatch, checkpoint loading, logical paths, media I/O, distributed collectives, transformer shape helpers, memory policies, and inference process setup.
+
+This reference documents 236 callable or class-level Core symbols. The top-level facade is discovered directly from `worldfoundry/core/__init__.py`; a smaller set of heavily reused package-level APIs, such as Lazy Config and context-parallel splitting, is included as well. Every signature, method, parameter default, return annotation, and source line is regenerated from Python source during the docs build.
+
+The documentation generator is import-free, but calling a Core API still requires the runtime dependencies for that subsystem. The minimal package install intentionally does not pull Torch, OmegaConf, Loguru, video codecs, or every model stack. Use the environment documented by the selected model; each category below calls out its important dependency boundary.
+
+## What this section should help you decide
+
+After reading it, you should be able to answer concrete implementation questions. If you already have split attention heads, use `scaled_dot_product_attention`; if a model has a custom QKV layout and optional fused providers, use `attention_forward`. If you need checkpoint tensors, choose between `load_torch_checkpoint`, `load_state_dict`, `DiskMap`, and `load_model` according to how much construction and placement policy you want Core to own. If a path appears in a manifest, resolve its WorldFoundry token rather than embedding a machine-specific absolute directory.
+
+The reference also records lifecycle rules. `BlockKVCache` has a prepare/write/finalize sequence. Context parallelism has a split/compute/gather sequence. VRAM wrappers move through offload, onload, preparing, and computation placements. Those state transitions matter more than the spelling of a function name, so the category pages explain them before listing symbols.
+
+## Import boundary
+
+Prefer the lazy top-level facade when a symbol is exported there:
+
+```python
+from worldfoundry.core import (
+    load_state_dict,
+    resolve_attention_backend,
+    scaled_dot_product_attention,
+)
+```
+
+Use a public subpackage when the operation is intentionally scoped there:
+
+```python
+from worldfoundry.core.configuration import LazyCall, instantiate
+from worldfoundry.core.distributed import cat_outputs_cp, split_inputs_cp
+from worldfoundry.core.io.paths import checkpoint_root_path
+```
+
+Avoid importing underscore-prefixed helpers or a vendor implementation directly. Those are implementation details behind the dispatch and compatibility layers documented here.
+
+## A small cross-cutting example
+
+This example resolves a portable checkpoint path, records a lightweight config, and fingerprints a state-dict layout. It illustrates why Core exists: callers can reuse one path policy, one serialization policy, and one checkpoint-identity policy across model integrations.
+
+```python
+import torch
+
+from worldfoundry.core import dump_serialized, hash_state_dict_keys
+from worldfoundry.core.io.paths import checkpoint_root_path
+
+checkpoint = checkpoint_root_path("matrix-game-2", env={
+    "WORLDFOUNDRY_CKPT_DIR": "/srv/worldfoundry/checkpoints",
+})
+state_dict = {
+    "transformer.proj.weight": torch.zeros(4, 8),
+    "transformer.proj.bias": torch.zeros(4),
+}
+
+manifest = {
+    "checkpoint": str(checkpoint),
+    "layout_id": hash_state_dict_keys(state_dict, with_shape=True),
+}
+print(dump_serialized(manifest, file_format="json", indent=2))
+```
+
+The hash above identifies key names and shapes, not tensor contents. It is useful for loader routing, not for security or artifact integrity. That distinction is documented on the model-loading page alongside `hash_model_file`.
+
+## Continue by responsibility
+
+Read [Attention](/docs/api-reference/core-attention) for SDPA, backend dispatch, RoPE, packed sequences, and KV cache. [Configuration](/docs/api-reference/core-configuration) covers deferred object graphs. [I/O and media](/docs/api-reference/core-io-media) covers logical paths, URI storage, serialization, images, and video. [Model loading](/docs/api-reference/core-model-loading) covers checkpoint trust, state dictionaries, disk maps, and model construction.
+
+[Distributed](/docs/api-reference/core-distributed) explains collective no-op behavior and split/gather symmetry. [Inference runtime](/docs/api-reference/core-runtime) covers task specs, process setup, compilation, and timers. [Neural network and math](/docs/api-reference/core-nn-math) collects model-independent tensor transformations. [Acceleration and memory](/docs/api-reference/core-acceleration-memory) explains approximation policies and placement state. [Foundations](/docs/api-reference/core-foundations) covers registries, utility normalization, image composition, and safety guardrail contracts.

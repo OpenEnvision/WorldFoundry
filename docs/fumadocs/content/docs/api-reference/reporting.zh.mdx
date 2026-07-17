@@ -1,0 +1,86 @@
+---
+title: 报告与证据
+description: Environment evidence、run manifest、scorecard、紧凑 summary 与可读报告的构建 API。
+---
+
+Reporting 把执行状态转成持久证据。Builder 返回普通 dictionary，便于组合与测试；writer 则补充规范文件名并写入磁盘。Environment 或 config 进入 manifest 前，疑似 secret 的值会先被脱敏。
+
+本页 symbol 均从 `worldfoundry.evaluation.reporting` 导入。
+
+## `build_env_requirements`
+
+这个 builder 记录所需环境变量名和本地路径是否存在，但不会记录 secret 值。可选依赖组则通过 `required_extras` 保持显式。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_env_requirements" locale="zh" />
+
+## `build_environment`
+
+Environment payload 记录 Python、已安装 package 版本、git metadata 与相关 cache 路径。完整环境清单过大时，可以用 `package_names` 限定收集范围。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_environment" locale="zh" />
+
+## `build_run_manifest`
+
+这个函数会在 runner 的 base manifest 上补充脱敏配置、环境证据、revision、cache path、复现字段与稳定 manifest hash。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_run_manifest" locale="zh" />
+
+## `write_run_manifest_artifacts`
+
+自定义 runner 需要一次性写出标准 manifest 三件套时，使用这个 writer。
+
+```python
+from worldfoundry.evaluation.reporting import write_run_manifest_artifacts
+
+paths = write_run_manifest_artifacts(
+    output_dir="tmp/custom_run",
+    base_manifest={
+        "run": {"run_id": "custom-0001", "status": "succeeded"},
+        "model": {"model_id": "my-model", "revision": "abc123"},
+        "dataset": {"dataset_id": "my-samples", "split": "validation"},
+    },
+    config={"seed": 42, "device": "cuda:0"},
+    required_env=("HF_TOKEN",),
+    required_paths=("/data/my-samples",),
+    required_extras=("video",),
+    seed=42,
+)
+
+print(paths["run_manifest"])
+```
+
+如果 `HF_TOKEN` 或 dataset 路径缺失，输出会把它们记录为缺失证据；函数不会暴露 token，也不会虚构路径存在。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.write_run_manifest_artifacts" locale="zh" />
+
+## `build_scorecard`
+
+Scorecard 汇总 run identity、模型、benchmark、dataset、生成、metric、artifact、provenance 与被跳过工作。它的 leaderboard gate 是保守的：metric 成功计算本身不能证明完整 official evidence。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_scorecard" locale="zh" />
+
+## `write_scorecard`
+
+这个 convenience function 使用相同 keyword arguments 构建 scorecard，再写成 JSON，同时把自身绝对路径记录到 `artifacts.scorecard`。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.write_scorecard" locale="zh" />
+
+## `build_run_summary`
+
+Summary 保留 scorecard 中适合比较的子集：identity、fidelity、sample 数、leaderboard 值、eligibility 与 artifact 路径。它适合 run index 和跨 run 比较。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_run_summary" locale="zh" />
+
+## `build_markdown_report`
+
+这个 renderer 把紧凑 summary 转成供人阅读的 `report.md`，不会重新计算分数，也不会改变 eligibility。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_markdown_report" locale="zh" />
+
+## `write_run_report_artifacts`
+
+输入内存 scorecard 或 `scorecard.json` 路径后，这个 writer 会同时生成 `summary.json` 与 `report.md`。
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.write_run_report_artifacts" locale="zh" />
+
+正常 CLI 和 `run_worldfoundry` 流程会自动调用这些 writer。只有外部 runtime 或自定义编排层需要输出相同证据 layout 时，才需要直接使用它们。

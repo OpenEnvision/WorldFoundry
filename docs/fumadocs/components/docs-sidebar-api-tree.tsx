@@ -4,7 +4,7 @@ import { DocsSidebarNavTree } from '@/components/docs-sidebar-nav-tree';
 import type { Locale } from '@/lib/i18n';
 import type { SidebarNavItem, SidebarNavPage } from '@/lib/docs-sidebar-shared';
 
-type DocsSidebarBenchmarkTreeProps = {
+type DocsSidebarApiTreeProps = {
   hub: SidebarNavPage;
   items: SidebarNavItem[];
   currentUrl: string;
@@ -14,12 +14,12 @@ type DocsSidebarBenchmarkTreeProps = {
   collapseLabel: string;
 };
 
-export function DocsSidebarBenchmarkTree(props: DocsSidebarBenchmarkTreeProps) {
+export function DocsSidebarApiTree(props: DocsSidebarApiTreeProps) {
   return (
     <DocsSidebarNavTree
       {...props}
-      panelId="benchmark-hub-sidebar-panel"
-      showBadges
+      panelId="api-sidebar-panel"
+      showBadges={false}
     />
   );
 }

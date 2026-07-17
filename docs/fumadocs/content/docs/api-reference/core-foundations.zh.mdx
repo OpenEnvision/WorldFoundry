@@ -1,0 +1,60 @@
+---
+title: Core 基础能力
+description: Typed registry、规范化 helper、确定性工具、图像组合与可复用安全 guardrail protocol。
+---
+
+基础 Core API 看起来很小，但它们定义了许多大型系统共同使用的约定：标识符规范化、确定性 registry、环境 flag、精确整除、list 归一化、图像物化与组合、随机种子和安全接口。
+
+## Typed registry 示例
+
+```python
+from worldfoundry.core import TypedRegistry
+
+metrics = TypedRegistry()
+metrics.register(
+    "temporal-consistency",
+    object(),
+    aliases=("temporal", "tc"),
+    metadata={"direction": "higher-is-better"},
+)
+
+assert metrics.get("TC") is metrics.get("temporal-consistency")
+assert metrics.keys() == ("temporal-consistency",)
+```
+
+Key 和 alias 会经过 strip 与 case-fold 后查找，但 `RegistryItem` 会保留原始公开 key。注册冲突会显式报错，不会静默覆盖；枚举顺序是确定的，因此生成 manifest 和测试结果也稳定。
+
+## Guardrail 组合示例
+
+```python
+from worldfoundry.core.safety import GuardrailRunner
+
+class RejectEmptyPrompt:
+    def is_safe(self, value):
+        prompt = str(value).strip()
+        return (bool(prompt), "prompt is empty" if not prompt else "")
+
+runner = GuardrailRunner(
+    safety_models=[RejectEmptyPrompt()],
+    generic_block_msg="Request rejected",
+)
+
+assert runner.run_safety_check("walk through a snowy forest")[0] is True
+assert runner.run_safety_check("") == (False, "Request rejected")
+```
+
+`ContentSafetyGuardrail` 和 `PostprocessingGuardrail` 是结构化 protocol：实现只需要提供文档声明的方法。`GuardrailRunner` 在第一个不安全 classifier 处停止，并在需要时按顺序应用 postprocessor。classifier list 为空时，它会告警并返回安全；生产策略必须明确决定这种 fail-open 行为是否可接受。
+
+Safety package 会从模型 runtime 环境导入 NumPy 和基于 Loguru 的 rank-aware logging。Registry 示例本身只使用 import-light 的 Core 顶层 facade。
+
+## 工具边界
+
+`env_is_true` 只识别有限的 truthy 词表，并不是通用 parser。`divide` 会断言精确整除，适合形状或 group invariant。`as_list` 在 API 边界把标量或 sequence 规范成 list。`set_random_seed` 会协调常见随机后端，但仅靠它不能保证 CUDA kernel 完全确定。
+
+图像 helper 会在各自文档声明的范围内接受路径、PIL image、array 或 tensor。`compose_horizontal_views` 和 `split_horizontal_views` 会遵守指定 view 顺序；应让这个顺序与 artifact 一起保存，不要让后续 reader 猜测。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-foundations" locale="zh" />

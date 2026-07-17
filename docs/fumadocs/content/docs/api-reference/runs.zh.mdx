@@ -1,0 +1,107 @@
+---
+title: Run 与 benchmark
+description: Existing artifact、模型推理、单个 model × benchmark cell 和 suite 的统一进程内调度。
+---
+
+`run_worldfoundry` 是宽入口。它检查一个 typed request，再分发到 existing-results、模型生成、单个 model × benchmark 或 suite runner。若生成 artifact 已经存在，只需要运行 official evaluator 或 normalizer，则应使用更窄的 benchmark facade。
+
+本页 symbol 均从 `worldfoundry.evaluation.public` 导入。
+
+## 一个完整的无 GPU run
+
+这个例子创建一份很小的 trajectory artifact，写出 request/result ledger，再用内置 `artifact_count` metric 评测已有结果。它会经过真实 run 与 reporting 路径，但不会加载模型。
+
+```python
+from pathlib import Path
+
+from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evaluation.public import WorldFoundryRunRequest, run_worldfoundry
+
+root = Path("tmp/python_api_example")
+trace_path = root / "artifacts" / "trajectory.json"
+trace_path.parent.mkdir(parents=True, exist_ok=True)
+trace_path.write_text('{"actions":["forward","left"]}\n', encoding="utf-8")
+
+request = GenerationRequest(sample_id="nav-0001", task_name="navigation-trace")
+result = GenerationResult(
+    sample_id=request.sample_id,
+    model_id="existing-trace",
+    artifacts={
+        "trajectory": ArtifactRef.from_path(trace_path, kind="trajectory"),
+    },
+)
+
+requests_path = root / "requests.jsonl"
+results_path = root / "results.jsonl"
+requests_path.write_text(request.to_json() + "\n", encoding="utf-8")
+results_path.write_text(result.to_json() + "\n", encoding="utf-8")
+
+outcome = run_worldfoundry(
+    WorldFoundryRunRequest(
+        output_dir=root / "evaluation",
+        requests_path=requests_path,
+        results_path=results_path,
+        metrics=("artifact_count",),
+    )
+)
+
+assert outcome.ok
+print(outcome.to_dict()["scorecard_path"])
+```
+
+输出目录包含对齐后的 ledger、execution plan、metric row、`run_manifest.json`、`summary.json`、`report.md` 和 `scorecard.json`。这个 run 可以证明 existing-results artifact check 成功，但不会因此变成 official benchmark 或 leaderboard 结果。
+
+## `WorldFoundryRunRequest`
+
+这个 request 刻意覆盖多个 mode。`results_path` 选择 existing-results；只有 model ID 时选择模型执行；model 与 benchmark ID 同时存在时选择一个 benchmark cell；多个选择或 suite ID 会进入矩阵 runner。`execute=False` 可以先规划兼容 cell，不立即消耗计算资源。
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.WorldFoundryRunRequest" locale="zh" />
+
+## `WorldFoundryRunResult`
+
+Wrapper 提供共同的 status、exit code、输出目录与 mode-specific delegate。`to_dict()` 会把常用 manifest 和 scorecard 路径提升到顶层，因此自动化代码不必为每种 run kind 单独分支。
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.WorldFoundryRunResult" locale="zh" />
+
+## `run_worldfoundry`
+
+可以传 typed request、mapping 或 keyword arguments。推荐 typed request，因为编辑器能补全字段，拼错字段也能在执行前暴露。
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.run_worldfoundry" locale="zh" />
+
+## `list_video_benchmarks`
+
+这个发现 helper 返回仓库 video benchmark catalog 中的 ID。返回列表并不表示所有 benchmark 都已在本机可运行；readiness 与资产需要单独检查。
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.list_video_benchmarks" locale="zh" />
+
+## `run_benchmark`
+
+Artifact 已经物化、需要进入 benchmark 专属路径时使用这个 facade。`official-run` 调用配置的官方 runtime，`official-validation` 执行 bounded validation，`normalizer` 导入调用者提供的 official-shaped result。
+
+```python
+result = run_benchmark(
+    "vbench",
+    output_dir="tmp/vbench_run",
+    generated_artifact_dir="runs/generated_videos",
+    mode="official-run",
+)
+```
+
+上面是实际 API 形态，但运行需要满足当前 VBench manifest 报告的资产、依赖、prompt 覆盖率与环境。Runner 可用不代表 leaderboard ready。
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.run_benchmark" locale="zh" />
+
+## `normalize_upstream_results`
+
+上游 evaluator 已经生成结果文件时使用这个函数。它会围绕该文件创建 WorldFoundry 证据，但不会反过来证明 WorldFoundry 曾执行官方 evaluator。
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.normalize_upstream_results" locale="zh" />
+
+## `benchmark_integration_spec`
+
+当 in-tree integration specification 存在时，这个 lookup 会返回它。Catalog 条目可以先于 integration spec 存在，所以返回 `None` 是正常的发现结果。
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.benchmark_integration_spec" locale="zh" />
+
+调用 official runtime 前，请先在 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)查看 protocol 专属输入与 blocker。

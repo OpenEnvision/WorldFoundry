@@ -1,0 +1,41 @@
+---
+title: 模型配方
+description: 选择模型，检查运行时，并复制与你的机器匹配的命令。
+---
+
+<ModelRecipeCatalog locale="zh" />
+
+## 每个配方记录什么
+
+详情页直接由仓库 manifest 生成，而不是人工维护一张宣传表。每个配方会把下面几类声明分开呈现：
+
+| 记录 | 可以确认什么 |
+| --- | --- |
+| Catalog | 稳定 model ID、任务、官方来源、别名和集成状态。 |
+| Runtime profile | 输入契约、artifact 契约、backend stage 和运行时就绪状态。 |
+| Environment | Python、CUDA tier、固定依赖、验证 import，以及独立/统一环境路由。 |
+| Pipeline binding | WorldFoundry 使用的 runner 与具体 pipeline target。 |
+| Evidence | 原生 demo 与 WorldFoundry runner 的 parity；只有 catalog 记录并不代表 GPU 已验证。 |
+
+缺失值会明确显示为 **未记录**。没有 runtime 或 evidence 记录时，WorldFoundry 不会把 catalog 条目升级成更强的“已支持”声明。
+
+## 常用命令
+
+```bash
+# 检查完整 catalog manifest。
+worldfoundry-eval zoo model-show \
+  --model-id <model-id> \
+  --include-manifest \
+  --json
+
+# 不下载，只解析 checkpoint、凭据与本地资产 blocker。
+worldfoundry-eval zoo model-download \
+  --model-id <model-id> \
+  --check-local \
+  --json
+
+# 为一个 runtime profile 解析并安装环境 manifest。
+bash scripts/setup/model_env_install.sh --model <model-id>
+```
+
+完整的 request 文件与 artifact 流程见[运行推理](/zh/docs/guides/inference)；环境路由策略见[环境参考](/zh/docs/reference/environments)。

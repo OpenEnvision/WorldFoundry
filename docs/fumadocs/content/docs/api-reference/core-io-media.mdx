@@ -1,0 +1,59 @@
+---
+title: Core I/O and media
+description: Logical paths, local and remote URIs, serialization, image/video normalization, and tiled media processing.
+---
+
+Core I/O gives model integrations one contract for where data lives and how it is represented. Path helpers resolve logical WorldFoundry locations; storage helpers operate on local paths and supported URI schemes; serialization chooses a format explicitly or from a suffix; media helpers normalize common image/video inputs before model-specific preprocessing begins.
+
+## Resolve logical paths, do not hard-code hosts
+
+`worldfoundry_path_tokens` computes roots for checkpoints, datasets, models, artifacts, caches, source repositories, and Conda environments. Explicit environment values win; otherwise the resolver uses predictable WorldFoundry cache or repository-adjacent defaults.
+
+```python
+from worldfoundry.core.io.paths import (
+    checkpoint_root_path,
+    resolve_worldfoundry_path,
+    worldfoundry_path_tokens,
+)
+
+env = {
+    "WORLDFOUNDRY_HOME": "/srv/wf",
+    "WORLDFOUNDRY_CKPT_DIR": "/models/checkpoints",
+}
+
+tokens = worldfoundry_path_tokens(env)
+assert tokens["WORLDFOUNDRY_CKPT_DIR"] == "/models/checkpoints"
+assert checkpoint_root_path("matrix-game-2", env=env) == \
+    resolve_worldfoundry_path("${WORLDFOUNDRY_CKPT_DIR}/matrix-game-2", env)
+```
+
+Passing an `env` mapping makes path resolution testable without mutating the process environment. `resolve_data_path` is different: it points inside package-owned static data and should not be used for downloaded datasets.
+
+## Serialization round trip
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from worldfoundry.core import dump_serialized, load_serialized
+
+with TemporaryDirectory() as directory:
+    path = Path(directory) / "request.yaml"
+    dump_serialized({"seed": 42, "actions": ["forward", "left"]}, path)
+    payload = load_serialized(path)
+    assert payload["seed"] == 42
+```
+
+When `file_format` is omitted, the suffix selects JSON, YAML, JSONL, pickle/gzip, NumPy, Torch, image, video, CSV/Pandas, or tar handling. When no file is supplied, text and binary formats return their serialized value. Pickle and unrestricted Torch checkpoints are executable formats; do not load them from an untrusted source.
+
+## Video shape boundary
+
+`coerce_video_frames` is the normalization boundary for paths, Torch tensors, NumPy arrays, PIL frame lists, and tensor frame lists. It returns a uint8 NumPy array in `T × H × W × C` layout. `video_tensor_to_uint8_frames` handles normalized `C × T × H × W` or single-batch tensors and makes the value range explicit. `read_video` adds decoder metadata, while `load_frames_from_video` is for selected frame indices.
+
+Use `materialize_video_input` when a subprocess or external runtime requires a local filename. Use `TileProcessor` only for codec/model functions that explicitly support overlapping spatiotemporal tiles; it changes execution layout but blends overlaps back into one output.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-io-media" />

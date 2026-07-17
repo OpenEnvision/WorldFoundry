@@ -1,0 +1,39 @@
+---
+title: Python API Reference
+description: Source-driven reference for WorldFoundry Core primitives, evaluation contracts, runners, metrics, orchestration, and runtime utilities.
+---
+
+The Python API is the programmatic form of the same system used by the CLI and Studio. Pages combine a short choice guide with signatures generated from source. Model-specific implementations, vendored upstream code, and benchmark internals stay outside this reference.
+
+<PythonApiCatalog />
+
+## Import policy
+
+Prefer public facades over private modules:
+
+```python
+from worldfoundry.evaluation.api import (
+    ArtifactRef,
+    GenerationRequest,
+    GenerationResult,
+    Metric,
+    WorldModelRunner,
+)
+from worldfoundry.evaluation.public import WorldFoundryRunRequest, run_worldfoundry
+from worldfoundry.evaluation.reporting import build_scorecard
+from worldfoundry.core import scaled_dot_product_attention
+```
+
+`worldfoundry.core` lazily exports shared primitives. Evaluation contracts live in `worldfoundry.evaluation.api`, orchestration in `worldfoundry.evaluation.public`, evidence builders in `worldfoundry.evaluation.reporting`, and path/asset helpers in `worldfoundry.runtime.*`.
+
+## How pages are built
+
+Signatures, parameters, methods, and source links are regenerated from Python AST during the docs build (no Torch/CUDA import). Choice guides and examples are written by hand.
+
+```bash
+cd docs/fumadocs
+npm run api:generate
+npm run api:check
+```
+
+For workflows beyond signatures, continue to the [design guide](/docs/overview/design), [inference guide](/docs/guides/inference), or [evaluation overview](/docs/evaluation).

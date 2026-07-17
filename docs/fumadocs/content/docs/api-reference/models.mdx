@@ -1,0 +1,81 @@
+---
+title: Models and runners
+description: Public model metadata, construction, execution protocols, and the shared pipeline surface.
+---
+
+WorldFoundry exposes two related extension boundaries. `WorldModelRunner` is the evaluation-facing protocol: it accepts normalized requests and returns normalized results. `PipelineABC` is the model-facing convenience layer: it owns loading and native inference behavior. An integration may implement both, or use an adapter between them.
+
+## `WorldModelManifest`
+
+The public manifest is a compact DTO for model identity and capability. It is not the full catalog YAML and it is not runtime proof; it carries the fields that runner resolution and evaluation need after catalog loading.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelManifest" />
+
+## `WorldModelConfig`
+
+`WorldModelConfig` is the construction payload passed to a runner. Put model-native knobs in `parameters`, execution placement or endpoint settings in `runtime`, and preserve the resolved public manifest when one is available.
+
+```python
+from worldfoundry.evaluation.api import WorldModelConfig
+
+config = WorldModelConfig(
+    model_id="matrix-game-2",
+    runner="worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+    variant="matrix-game-2-universal-action-validation",
+    parameters={"num_output_frames": 15, "fps": 12},
+    runtime={"device": "cuda:0"},
+    seed=42,
+)
+```
+
+The target above is the current Matrix-Game 2 catalog binding. Runtime bindings can evolve, so production code should still resolve the current model manifest rather than hard-coding a documentation example.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelConfig" />
+
+## `WorldModelRunner`
+
+This runtime-checkable protocol is intentionally small. A local checkpoint class, hosted API client, simulator policy, or subprocess bridge can all satisfy it without sharing an inheritance hierarchy.
+
+```python
+from worldfoundry.evaluation.api import GenerationResult, WorldModelRunner
+
+class ExistingArtifactRunner:
+    model_id = "existing-artifact"
+    capabilities = {"video_generation"}
+
+    @classmethod
+    def from_config(cls, config):
+        return cls()
+
+    def generate(self, requests):
+        return [
+            GenerationResult(
+                sample_id=request.sample_id,
+                model_id=self.model_id,
+                status="failed",
+                error="No generation implementation was configured.",
+            )
+            for request in requests
+        ]
+
+    def cleanup(self):
+        pass
+
+assert isinstance(ExistingArtifactRunner(), WorldModelRunner)
+```
+
+The example returns explicit failures to demonstrate the contract; a real runner must materialize artifacts and populate them in each successful result.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelRunner" />
+
+## `PipelineABC`
+
+`PipelineABC` gives model integrations a shared loading and call shape while preserving native behavior. `from_pretrained` constructs components, `process` normalizes inputs, `__call__` runs one inference, and `stream` exposes the same operation to interactive surfaces. Production pipelines may override any of these methods.
+
+<PythonApiReference symbol="worldfoundry.pipelines.pipeline_utils.PipelineABC" />
+
+## Which boundary should an integration implement?
+
+Implement `WorldModelRunner` when the goal is benchmark execution, batching normalized samples, caching, or producing evaluation ledgers. Implement or subclass `PipelineABC` when the goal is a reusable model-native inference object for scripts or Studio. If both are needed, keep checkpoint loading and native calls in the pipeline, then let the runner/operator translate `GenerationRequest` into pipeline inputs and pipeline output into `GenerationResult`.
+
+For a complete repository integration, API conformance is only one step. The [add a model guide](/docs/guides/add-model) also covers catalog identity, assets, runtime binding, bounded validation, and documentation.

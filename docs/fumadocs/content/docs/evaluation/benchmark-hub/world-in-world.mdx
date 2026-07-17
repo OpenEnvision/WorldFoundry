@@ -204,13 +204,3 @@ the same prefix, for example `WORLDFOUNDRY_WORLD_IN_WORLD_SAM2_WORKER_CKPT_PATH`
 `WORLDFOUNDRY_WORLD_IN_WORLD_SAM2_WORKER_CFG_PATH`,
 `WORLDFOUNDRY_WORLD_IN_WORLD_FTWAN21_WORKER_LORA_PATH`, and
 `WORLDFOUNDRY_WORLD_IN_WORLD_NWM_WORKER_CKPT_PATH`.
-
-## Limitations
-
-- The current WorldFoundry runner is a result-summary adapter. It does not launch closed-loop rollout servers, VLM policy servers, SAM2 services, Habitat-sim, or manipulation simulation.
-- Only AEQA OpenEQA prompt lists are bundled in tree. AR and IGNav episode files, scene datasets, and manipulation assets must be prepared locally when you need those task families.
-- Leaderboard parity requires complete official task summaries from AR, IGNav, AEQA, and Manipulation plus matching generated videos or rollout artifacts.
-- AEQA scoring in the upstream workflow can depend on an LLM judge credential. WorldFoundry imports the finished score summary rather than calling that judge from this page's commands.
-- `interaction_trace_consistency` is reported only when the provided result summary includes trace-consistency evidence or a direct metric value.
-
-[← Benchmark Hub](/docs/evaluation/benchmark-hub)

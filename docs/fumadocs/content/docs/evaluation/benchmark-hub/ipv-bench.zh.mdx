@@ -148,12 +148,3 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
 | `ipv_bench_average` | 可用 IPV-Bench component metrics 的平均值；如果导入文件直接提供 aggregate，则使用导入值。 |
 
 所有指标都会归一到 `[0, 1]`，越高越好。
-
-## 限制与缺口
-
-- WorldFoundry 不生成 human annotations。generation 分数需要导入 annotations 或 judge outputs。
-- 直接 `--run-official` 路径本质上是 artifact importer：它查找已有 IPV 结果文件，并对生成视频计算覆盖率。
-- 完整 leaderboard 对齐仍依赖官方 prompt suite、完整生成视频，以及论文使用的同一人工或 judge protocol。
-- Open-ended QA 质量取决于导入分数。当前 exact-match fallback 很简单，不能充分代表语义答案质量。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

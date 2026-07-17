@@ -18,6 +18,7 @@ WorldFoundry includes the runnable PhyGenBench code under `worldfoundry/evaluati
 | Paper | [arXiv:2410.05363](https://arxiv.org/abs/2410.05363) |
 | GitHub | [github.com/OpenGVLab/PhyGenBench](https://github.com/OpenGVLab/PhyGenBench) |
 | In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py` |
+
 ## Prepare Assets
 
 - Prompt suite: bundled at `worldfoundry/data/benchmarks/assets/phygenbench/PhyGenBench/prompts.json`.
@@ -112,12 +113,3 @@ The output directory contains:
 - `per_sample_scores.jsonl`: prompt-level rows with stage scores when available.
 - `phygenbench_results.json`: written by the in-tree scoring wrapper.
 - `specialized_normalizer_stdout.log` and `specialized_normalizer_stderr.log` when invoked through `worldfoundry-eval zoo benchmark-run`.
-
-## Limitations
-
-- The default local backend is deterministic fixture scoring for integration validation, not a leaderboard result.
-- Full PhyGenBench parity requires generated videos for all 160 prompts plus VQAScore, order-verification, and video-naturalness judge outputs.
-- The in-tree `official` backend dispatches the bundled `PhyGenEval/overall.py`, but it expects upstream-style intermediate result files to already exist.
-- `leaderboard_valid` remains false unless the full judge stack and prompt coverage are supplied.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)

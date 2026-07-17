@@ -1,128 +1,365 @@
 ---
-title: CLI
-description: Command map for discovery, evaluation, readiness checks, and reporting.
+title: CLI Reference
+description: Complete command map, execution modes, output contracts, and automation conventions for worldfoundry-eval.
 ---
 
-## Introduction
+`worldfoundry-eval` is the canonical command-line entrypoint for WorldFoundry. It covers catalog discovery, readiness checks, typed model inference, benchmark execution, result normalization, reporting, and validation. Use the [Quickstart](/docs/quickstart) for the first clone-to-run walkthrough; use this page when choosing a command or checking its contract.
 
-`worldfoundry-eval` is the public command entrypoint. Prefer it over direct scripts unless a page names a lower-level helper. Activate the unified env first (`source tmp/worldfoundry_unified_env.sh`), then run the commands below. For a first run, start with [Usage](/docs/quickstart); use this page for flags and modes.
+<Callout type="info" title="Safe to inspect">
+  Help, catalog discovery, `--model-status`, `--print-config`, `--plan-only`, and local asset checks do not load model weights. They are the right place to start on a CPU-only machine or before allocating a GPU job.
+</Callout>
 
-## Discovery
+## Install and verify
+
+Run commands from the repository root after activating the unified environment.
+
+<Tabs items={['Recommended', 'Editable install', 'Module fallback']}>
+  <Tab>
 
 ```bash
-worldfoundry-eval tasks list
-worldfoundry-eval tasks list --flat
-worldfoundry-eval models list
-worldfoundry-eval zoo models --json
-worldfoundry-eval zoo benchmarks --json
-worldfoundry-eval zoo model-show --model-id <model-id> --include-manifest --json
-worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --include-spec --json
-worldfoundry-eval tasks catalog --source-kind benchmark_zoo --json
+bash scripts/setup/bootstrap_worldfoundry.sh
+source tmp/worldfoundry_unified_env.sh
+conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
+worldfoundry-eval --help
 ```
 
-Use grouped output for humans; use `--flat` or `--json` for automation.
+  </Tab>
+  <Tab>
 
-## TUI
-
-```bash
-worldfoundry-eval tui
-worldfoundry-eval tui --model-id openvla --benchmark-id libero --print-command
-```
-
-The TUI reads the same zoo manifests as discovery, prints unified `run` commands, and streams the spawned process. It does not bypass readiness or runner validation. See also [TUI](/docs/guides/tui).
-
-## MCP
+For catalog and core CLI development in an existing Python environment:
 
 ```bash
+python -m pip install -e .
+
+# Add an optional surface only when needed.
+python -m pip install -e ".[tui]"
 python -m pip install -e ".[mcp]"
-worldfoundry-eval mcp
 ```
 
-Exposes catalog discovery and evaluate/run tools to MCP clients. `worldfoundry.mcp.MCPClient` can export OpenAI-compatible function definitions for agent integrations.
+Model and benchmark runtimes can still require the environments and assets declared by their profiles.
 
-## Evaluation
+  </Tab>
+  <Tab>
 
-Commands write a reviewable output directory: run manifest, per-sample rows, metric summaries, and `scorecard.json`. Keep the command line and `--output-dir` together when reproducing a score.
-
-Score existing results:
+If the console script is not on `PATH`, the module entrypoint uses the same parser:
 
 ```bash
-worldfoundry-eval evaluate \
-  --results-path tmp/results.jsonl \
-  --output-dir tmp/worldfoundry_evaluate \
-  --metric artifact_count \
-  --required-artifact video \
+python -m worldfoundry --help
+python -m worldfoundry zoo models --json
+```
+
+  </Tab>
+</Tabs>
+
+Running `worldfoundry-eval` with no arguments prints a short first-run banner. Add `--help` for the complete top-level command list.
+
+## Entrypoints
+
+| Entrypoint | Use |
+| --- | --- |
+| `worldfoundry-eval` | Canonical CLI used throughout the documentation. |
+| `worldfoundry` | Alias of `worldfoundry-eval`; it dispatches to the same `main()` function. |
+| `python -m worldfoundry` | Module fallback when an editable install or console-script `PATH` is unavailable. |
+| `worldfoundry-tui` | Dedicated alias for the terminal UI; equivalent to `worldfoundry-eval tui`. |
+| `worldfoundry-mcp` | Dedicated MCP server entrypoint; `worldfoundry-eval mcp` reaches the same surface. |
+| `worldfoundry-studio` | Separate Studio launcher. See the [Studio guide](/docs/guides/studio). |
+
+Examples below use `worldfoundry-eval` so shell history, job scripts, and bug reports share one spelling.
+
+## Help at every level
+
+Append `--help` after the command whose flags you need. Options belong to the leaf command, so `--json` is written after `zoo models`, not before it.
+
+```bash
+worldfoundry-eval --help
+worldfoundry-eval zoo --help
+worldfoundry-eval zoo model-show --help
+worldfoundry-eval run --help
+```
+
+![Terminal output of worldfoundry-eval --help](/images/cli/worldfoundry-eval-help.png)
+
+<p className="text-sm text-fd-muted-foreground">
+  Captured from the current CLI. The screenshot can be regenerated with <code>npm run cli:screenshots</code> in <code>docs/fumadocs</code>.
+</p>
+
+### Model-specific help
+
+The positional form `run MODEL` loads that model's inference schema and adds typed `--pipeline.*`, `--pipeline.load.*`, and `--runtime.*` options to its help page.
+
+```bash
+worldfoundry-eval run self-forcing --help
+worldfoundry-eval run self-forcing --model-status
+worldfoundry-eval run self-forcing --print-config --json
+```
+
+- `--pipeline.*` controls request inputs and generation defaults.
+- `--pipeline.load.*` controls checkpoint and model-loading fields.
+- `--runtime.*` controls the execution device and runner settings.
+- `--model-status` and `--print-config` resolve metadata only; they do not load weights.
+
+![Terminal output showing one model-zoo readiness record](/images/cli/model-readiness.png)
+
+## Choose the right command
+
+Several commands can reach the evaluation core, but they start from different user inputs.
+
+| Goal | Prefer | Why |
+| --- | --- | --- |
+| Browse stable model or benchmark IDs | `zoo models`, `zoo benchmarks`, `zoo model-show`, `zoo benchmark-show` | Reads the release catalogs and surfaces readiness, aliases, needs, and next actions. |
+| Run one model directly | `run MODEL` | Adds model-specific typed inference flags. |
+| Run one or many model × benchmark cells | `run --model ... --benchmark ...` | Unified facade for a cell, repeated IDs, named suites, resume, cache, and plan-only execution. |
+| Score an artifact directory with a benchmark | `score --benchmark ... --artifacts ...` | User-oriented scoring intent with a complete benchmark protocol. |
+| Score WorldFoundry result rows with explicit metrics | `score --results ... --metric ...` | Compact existing-results workflow. |
+| Execute a materialized run plan or use eval-core fields directly | `evaluate` (alias `eval`) | Lower-level deterministic path for requests/results ledgers and model-mode evaluation. |
+| Generate from a dataset manifest, then score | `generate-score` | One intent owns dataset materialization, generation, cache, and metrics. |
+| Import or execute one benchmark's official surface | `zoo benchmark-run` | Exposes benchmark-specific modes and parameters. Follow that benchmark's Hub page. |
+| Re-run a checked-in profile or recipe | `reproduce` | Resolves a named profile, benchmark default, or recipe YAML. |
+| Build indexes, comparisons, or contract checks | `index-runs`, `compare-runs`, `validate-artifact` | Operates on durable run outputs without rerunning a model. |
+
+## Complete command map
+
+### Discovery and interactive surfaces
+
+| Command | Subcommands / role |
+| --- | --- |
+| `tui` | Interactive catalog browser and command builder. |
+| `zoo` | `models`, `model-specs`, `model-show`, `model-download`, `embodied-assets`, `benchmarks`, `benchmark-specs`, `benchmark-show`, `benchmark-run`. |
+| `tasks` | `list`, `show`, `catalog` for registered benchmark tasks. |
+| `suites` | `list`, `show` for named model × benchmark presets. |
+| `models` | `list`, `runtime-runners`, `visualizations`, `assets`, `visualize`. |
+
+### Execution and scoring
+
+| Command | Role |
+| --- | --- |
+| `run` | Direct typed inference, one model × benchmark cell, or a suite/matrix. |
+| `score` | Score an artifact directory with a benchmark, or result rows with selected metrics. |
+| `generate-score` | Run an in-tree model over a dataset manifest and score the results. |
+| `reproduce` | Execute a checked-in profile, a benchmark default profile, or custom recipe YAML. |
+| `evaluate` / `eval` | Deterministic eval-core execution for materialized results, run plans, or model mode. |
+| `embodied` | `plan`, `run`, `serve`, `merge` for simulator-backed closed-loop evaluation. |
+
+### Data, plans, and validation
+
+| Command | Subcommands / role |
+| --- | --- |
+| `task` | `list`, `show`, `validate`, `materialize` filesystem task YAML. |
+| `dataset` | `create`, `show`, `validate`, `materialize` dataset manifests and request rows. |
+| `config` | `list`, `run` checked-in workflow templates. |
+| `plan` | `create`, `show`, `validate` stable `worldfoundry-run-plan` JSON. |
+| `metric` | `list`, `show`, `validate` executable metric IDs. |
+| `preflight runtime` | Check imports, environment variables, paths, CUDA, and declared validation gaps without running a benchmark. |
+| `validate` | Validate legacy benchmark metadata loading with a concrete task/data selector. |
+
+### Reports and integrations
+
+| Command | Role |
+| --- | --- |
+| `index-runs` | Build `index.json`, `index.jsonl`, and an optional dependency-free HTML browser. |
+| `compare-runs` | Compare explicit run directories or select runs from an index. |
+| `validate-artifact` | Validate summary, scorecard, index, comparison, and suite schemas. |
+| `mcp` | Start the MCP server for agent-driven discovery and evaluation. |
+
+The parser is the source of truth for flags. Use `worldfoundry-eval <command> [<subcommand>] --help` instead of copying flags from an unrelated model or benchmark recipe.
+
+## Common workflows
+
+### 1. Discover and check readiness
+
+```bash
+worldfoundry-eval zoo models
+worldfoundry-eval zoo benchmarks --ready-now
+
+worldfoundry-eval zoo model-show \
+  --model-id <model-id> \
+  --include-manifest \
+  --json
+
+worldfoundry-eval zoo benchmark-show \
+  --benchmark-id <benchmark-id> \
+  --include-spec \
+  --json
+
+# Checks the local cache; it does not download.
+worldfoundry-eval zoo model-download \
+  --model-id <model-id> \
+  --check-local \
   --json
 ```
 
-Run one benchmark × model:
+Use human tables while exploring. Add `--json` only when another program will consume the result.
+
+### 2. Run one model directly
+
+Inspect the resolved fields before allocating GPU resources:
 
 ```bash
-worldfoundry-eval run \
-  --benchmark <benchmark-id> \
-  --model <model-zoo-id> \
-  --output-dir tmp/worldfoundry_benchmark_run \
-  --mode official-run \
-  --json
+worldfoundry-eval run self-forcing --model-status
+worldfoundry-eval run self-forcing --print-config --json
 ```
 
-Plan a large matrix before executing:
+Then provide only the overrides for this run:
+
+```bash
+worldfoundry-eval run self-forcing \
+  --pipeline.prompt "A paper boat moving down a forest stream" \
+  --pipeline.num-output-frames 33 \
+  --pipeline.seed 7 \
+  --pipeline.load.ckpt-path /path/to/self_forcing_dmd.pt \
+  --runtime.device cuda \
+  --output-dir tmp/self_forcing_run
+```
+
+Entries marked `runnable_runner` can execute directly. `runner_candidate` and `listed_only` entries remain inspectable but stop before model loading with a readiness explanation.
+
+### 3. Plan or execute model × benchmark runs
+
+Plan a potentially large matrix first:
 
 ```bash
 worldfoundry-eval run \
   --all-benchmarks \
-  --model <model-zoo-id> \
+  --model <model-id> \
   --plan-only \
-  --output-dir tmp/worldfoundry_all_benchmarks_plan \
+  --output-dir tmp/worldfoundry_plan \
   --json
 ```
 
-Named suite / single cell:
+Execute one cell after its assets and environment pass readiness checks:
 
 ```bash
 worldfoundry-eval run \
-  --suite <suite-id> \
-  --output-dir tmp/worldfoundry_suite \
+  --benchmark <benchmark-id> \
+  --model <model-id> \
+  --mode official-run \
+  --output-dir tmp/worldfoundry_run \
   --json
 ```
 
-`run` expands to a suite writes `suite_manifest.json`, `suite_report.md`, and one child directory per cell. Use `--generation-cache-dir` with `--generation-cache-mode read-write` for deterministic model outputs (SQLite + `audit.jsonl`; hits are recorded in the run manifest).
+Repeat `--model` or `--benchmark` to create a matrix, or use `--suite <suite-id>`. Add `--resume` to reuse completed cells whose fingerprints still match.
 
-Import official-shaped results (normalizer path; not a leaderboard claim):
+### 4. Score existing artifacts or result rows
+
+For a benchmark-owned artifact layout:
+
+```bash
+worldfoundry-eval score \
+  --benchmark <benchmark-id> \
+  --artifacts /path/to/generated-artifacts \
+  --mode official-run \
+  --output-dir tmp/score/<benchmark-id> \
+  --plan-only \
+  --json
+```
+
+Remove `--plan-only` after the prepared intent reports `ready: true`.
+
+For already materialized WorldFoundry result rows:
+
+```bash
+worldfoundry-eval score \
+  --results tmp/results.jsonl \
+  --metric artifact_count \
+  --metric required_artifacts_present \
+  --required-artifact video \
+  --output-dir tmp/score/results \
+  --json
+```
+
+`evaluate` exposes the same deterministic core with lower-level request, task, runner, cache, and model-mode fields:
+
+```bash
+worldfoundry-eval evaluate \
+  --results-path tmp/results.jsonl \
+  --metric artifact_count \
+  --required-artifact video \
+  --output-dir tmp/worldfoundry_evaluate \
+  --json
+```
+
+### 5. Import official-shaped benchmark results
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-validation \
-  --official-results-path <official_results.json> \
-  --generated-artifact-dir <generated_artifacts> \
-  --output-dir tmp/benchmark_zoo/official_validation/<benchmark-id> \
+  --official-results-path /path/to/official-results.json \
+  --generated-artifact-dir /path/to/generated-artifacts \
+  --output-dir tmp/<benchmark-id>/official-validation \
   --json
 ```
 
-Benchmark-specific flags and layouts (PhyGround data root, EvalCrafter video naming, CameraBench `--score-dir`, and so on) live on each [Benchmark Hub](/docs/evaluation/benchmark-hub) page.
+Benchmark-specific inputs such as data roots, score directories, prompt manifests, judge credentials, and metric subsets live on the corresponding [Benchmark Hub](/docs/evaluation/benchmark-hub) page.
 
-## Readiness and reports
+## Benchmark modes
+
+| Mode | Meaning |
+| --- | --- |
+| `official-run` | Execute the benchmark runtime declared by the manifest against prepared artifacts. Use only when the required evaluator, data, checkpoints, and services are ready. |
+| `official-validation` | Import official-shaped results through the benchmark runner and record framework integration evidence. |
+| `normalizer` | Normalize provided result files into WorldFoundry artifacts without claiming that WorldFoundry executed the official scorer. |
+| `contract` | Exercise wiring/contracts only. It is not scoring evidence and cannot be leaderboard evidence. |
+
+<Callout type="warn" title="A successful command is not automatically a leaderboard result">
+  Read `score_valid`, `leaderboard_valid`, `normalizer_only`, fidelity, and blocker fields in `scorecard.json`. Exit code 0 only means the requested CLI operation completed under its contract.
+</Callout>
+
+## Outputs and reproducibility
+
+Evaluation commands write durable files below `--output-dir`. Exact benchmark-owned extras vary, but the shared run surface uses these artifacts:
+
+| Artifact | Purpose |
+| --- | --- |
+| `run_manifest.json` | Resolved run identity, status, counts, paths, cache evidence, and execution metadata. |
+| `requests.jsonl` / `results.jsonl` | Per-sample inputs and normalized generation results when that runner materializes ledgers. |
+| `metrics/summary.json` | Aggregate metrics and failure counts. |
+| `artifacts.jsonl` | Optional index of generated artifacts; disable with `--no-artifacts-index` where supported. |
+| `scorecard.json` | Metrics, fidelity, eligibility, leaderboard state, and blockers. |
+| `summary.json` / `report.md` | Compact reporting views when the selected runner emits them. |
+| `suite_manifest.json` / `suite_report.md` | Matrix identity and aggregate report for suite runs, plus one child directory per cell. |
+
+Keep the command, environment/profile identity, catalog revision, and output directory together when reproducing a score. See [Validation](/docs/reference/validation) for schema checks and release evidence.
+
+For deterministic model outputs, configure the generation cache explicitly:
 
 ```bash
-worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
-worldfoundry-eval models assets --list --json
-worldfoundry-eval preflight runtime \
-  --profile <benchmark-id> \
-  --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml \
-  --output-dir tmp/preflight/runtime/<benchmark-id> \
-  --json
-worldfoundry-eval index-runs tmp/worldfoundry_suite/runs \
-  --output-dir tmp/worldfoundry_suite/index \
-  --output-html tmp/worldfoundry_suite/index/index.html \
+worldfoundry-eval run \
+  --suite <suite-id> \
+  --generation-cache-dir tmp/generation-cache \
+  --generation-cache-mode read-write \
+  --output-dir tmp/worldfoundry_suite \
   --json
 ```
 
-| Command | Role |
+The cache uses SQLite plus `audit.jsonl`; hits are recorded in the run manifest. Cache reuse does not override model or benchmark compatibility checks.
+
+## Automation conventions
+
+- Put `--json` on the leaf command: `worldfoundry-eval zoo models --json`.
+- Repeat list flags instead of comma-joining unless that command explicitly accepts comma-separated values: for example, `--metric a --metric b` and `--model a --model b`.
+- `KEY=VALUE` flags such as `--model-parameter`, `--model-runtime`, `--benchmark-parameter`, and `--env` parse JSON-compatible values where documented by `--help`.
+- Use stable catalog IDs in scripts. Aliases are convenient interactively, but canonical IDs make stored commands easier to audit.
+- Use `NO_COLOR=1` for plain redirected help, or `FORCE_COLOR=1` to keep ANSI color in a compatible terminal capture.
+- Do not parse human tables. Use a command's `--json` output or the durable files under `--output-dir`.
+- Add `--fail-on-sample-error` when partial sample failure must fail a batch or CI job.
+
+### Exit status
+
+| Code | General meaning |
 | --- | --- |
-| `zoo model-download --check-local` | Check HF checkpoint declarations against the local cache without downloading. |
-| `models assets` | List reusable base-model / metric asset stacks. |
-| `preflight runtime` | Report imports, env vars, paths, and official-validation gaps for one profile. |
-| `index-runs` | Write `index.json` / `index.jsonl` and optional `index.html`. |
-| `run --plan-only` | Review a large matrix before execution. |
-| `--fail-on-sample-error` | Fail the run when any generation or metric sample failed. |
+| `0` | The requested operation completed. Inspect the output contract for score/leaderboard validity. |
+| `1` | A validation, metric, sample, prepared intent, or run result failed under a command that distinguishes domain failure. |
+| `2` | Invalid CLI input, missing required files/environment, preflight failure, or another execution/setup error. |
+| `130` | Interrupted with `Ctrl+C`. |
+
+Individual commands document stricter behavior in `--help`. Flags such as `--fail-on-issue`, `--fail-on-sample-error`, and `--fail-on-skipped` intentionally change when non-success exits are returned.
+
+## Next steps
+
+<Cards>
+  <Card title="Quickstart" description="Go from a fresh clone to a reviewable first run." href="/docs/quickstart" />
+  <Card title="Evaluation" description="Understand benchmark assets, official modes, and scorecards." href="/docs/evaluation" />
+  <Card title="TUI" description="Build the same commands interactively in the terminal." href="/docs/guides/tui" />
+  <Card title="Validation" description="Validate artifacts and release evidence." href="/docs/reference/validation" />
+</Cards>

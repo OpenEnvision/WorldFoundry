@@ -203,13 +203,3 @@ worker command 默认使用当前 Python 解释器和仓内相对脚本。使用
 `WORLDFOUNDRY_WORLD_IN_WORLD_SAM2_WORKER_CFG_PATH`、
 `WORLDFOUNDRY_WORLD_IN_WORLD_FTWAN21_WORKER_LORA_PATH` 和
 `WORLDFOUNDRY_WORLD_IN_WORLD_NWM_WORKER_CKPT_PATH`。
-
-## 限制
-
-- 当前 WorldFoundry runner 是 result-summary adapter。它不会启动 closed-loop rollout servers、VLM policy servers、SAM2 services、Habitat-sim 或 manipulation simulation。
-- 仓内只 bundled AEQA OpenEQA prompt lists。需要 AR、IGNav episode files、scene datasets 和 manipulation assets 时必须在本地准备。
-- leaderboard parity 需要 AR、IGNav、AEQA、Manipulation 的完整官方 task summaries，以及匹配的 generated videos 或 rollout artifacts。
-- 上游 workflow 的 AEQA scoring 可能依赖 LLM judge credential。这里的 WorldFoundry 命令导入已完成的 score summary，而不是调用该 judge。
-- `interaction_trace_consistency` 只有在提供的 result summary 包含 trace-consistency evidence 或直接 metric value 时才会报告。
-
-[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

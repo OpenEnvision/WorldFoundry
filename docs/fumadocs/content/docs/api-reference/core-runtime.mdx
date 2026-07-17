@@ -1,0 +1,55 @@
+---
+title: Core inference runtime
+description: Model inference specs, task/variant contracts, process-wide policy, autocast, compilation, torchrun commands, devices, and timers.
+---
+
+Core runtime makes a model's runnable surface explicit before loading its implementation. `ModelInferenceSpec` describes model-family identity, variants, checkpoints, task profiles, fields, artifacts, streaming support, and supported call parameters. The process helpers then apply shared execution policy without embedding one model's behavior in Core.
+
+## Build or retrieve an inference spec
+
+```python
+from worldfoundry.core import model_inference_spec
+
+spec = model_inference_spec(
+    model_family_id="my-world-model",
+    display_name="My World Model",
+    default_model_ref="org/my-world-model",
+    workload_type="video",
+    supported_call_params=("prompt", "seed", "num_frames"),
+)
+
+assert spec.model_family_id == "my-world-model"
+assert spec.variant().variant_id == "default"
+assert spec.task().task_id
+```
+
+For a curated built-in family, `model_inference_spec` returns the registered spec. For an unknown family it builds a generic spec from the supplied hints. Use `get_model_inference_spec` when “not registered” must remain distinguishable from a fallback.
+
+## Process-wide inference policy
+
+`install_worldfoundry_inference_infra` configures attention policy, float32 matmul precision, TF32 flags, and an optional SDPA compatibility patch. It is idempotent process state, not a per-request object. `worldfoundry_inference_context` installs that state and runs under `torch.no_grad()`.
+
+`autocast_context` returns a CUDA autocast manager only for CUDA devices; CPU and unavailable-Torch cases return a no-op context. `compile_module_if_enabled` is explicitly opt-in and returns the original module if compilation is disabled, unsupported, or fails in non-strict mode.
+
+```python
+from torch import nn
+from worldfoundry.core import compile_module_if_enabled, torchrun_module_command
+
+module = nn.Linear(4, 2)
+assert compile_module_if_enabled(module, enabled=False) is module
+
+command = torchrun_module_command(
+    "my_package.worker",
+    nproc_per_node=4,
+    args=("--checkpoint", "/models/run-42"),
+)
+print(command)  # builds the command; it does not start a process
+```
+
+Use `run_torchrun_module` only when the current process should own launching and capturing a bounded single-node job. It returns `CompletedProcess` even on a non-zero child exit, so callers must inspect `returncode` and logs.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-runtime" />

@@ -14,6 +14,7 @@ description: 面向生成视频物理常识的 action-centric benchmark，包含
 | HF 测试集 | [videophysics/videophy2_test](https://huggingface.co/datasets/videophysics/videophy2_test) |
 | AutoEval 权重 | [videophysics/videophy_2_auto](https://huggingface.co/videophysics/videophy_2_auto) |
 | 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py` |
+
 ## 简介
 
 VideoPhy-2 是面向 text-to-video 生成的 action-centric 物理常识评测。它不只是判断视频是否“看起来合理”，而是检查生成动作是否符合 caption，以及场景中隐含或显式给出的物理规则。官方发布包含 200 个 diverse actions、详细合成 prompts、人类评测标注，以及用于自动评分的 VideoPhy-2-AutoEval。

@@ -1,0 +1,59 @@
+---
+title: Core I/O 与媒体
+description: 逻辑路径、本地和远程 URI、序列化、图像视频规范化以及分块媒体处理。
+---
+
+Core I/O 为模型接入提供统一的“数据在哪里、以什么形态存在”契约。路径 helper 解析 WorldFoundry 逻辑位置；storage helper 操作本地路径和受支持的 URI scheme；序列化根据显式格式或后缀选择实现；媒体 helper 在进入模型专属预处理之前规范化常见图像和视频输入。
+
+## 解析逻辑路径，不要写死机器路径
+
+`worldfoundry_path_tokens` 会计算 checkpoint、dataset、model、artifact、cache、源码仓库和 Conda 环境根目录。显式环境变量优先，否则使用可预测的 WorldFoundry cache 或仓库相邻目录。
+
+```python
+from worldfoundry.core.io.paths import (
+    checkpoint_root_path,
+    resolve_worldfoundry_path,
+    worldfoundry_path_tokens,
+)
+
+env = {
+    "WORLDFOUNDRY_HOME": "/srv/wf",
+    "WORLDFOUNDRY_CKPT_DIR": "/models/checkpoints",
+}
+
+tokens = worldfoundry_path_tokens(env)
+assert tokens["WORLDFOUNDRY_CKPT_DIR"] == "/models/checkpoints"
+assert checkpoint_root_path("matrix-game-2", env=env) == \
+    resolve_worldfoundry_path("${WORLDFOUNDRY_CKPT_DIR}/matrix-game-2", env)
+```
+
+传入 `env` mapping 可以在不修改进程环境的情况下测试路径解析。`resolve_data_path` 的职责不同：它指向 package 自带的静态数据，不应该用于下载的数据集。
+
+## 序列化往返示例
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from worldfoundry.core import dump_serialized, load_serialized
+
+with TemporaryDirectory() as directory:
+    path = Path(directory) / "request.yaml"
+    dump_serialized({"seed": 42, "actions": ["forward", "left"]}, path)
+    payload = load_serialized(path)
+    assert payload["seed"] == 42
+```
+
+没有传 `file_format` 时，文件后缀会选择 JSON、YAML、JSONL、pickle/gzip、NumPy、Torch、图像、视频、CSV/Pandas 或 tar。没有传文件时，文本和二进制格式会直接返回序列化结果。Pickle 和不受限制的 Torch checkpoint 是可执行格式，不要从不可信来源加载。
+
+## 视频形状边界
+
+`coerce_video_frames` 是路径、Torch tensor、NumPy array、PIL frame list 和 tensor frame list 的统一规范化入口，返回 `T × H × W × C` 布局的 uint8 NumPy array。`video_tensor_to_uint8_frames` 处理规范化的 `C × T × H × W` 或单 batch tensor，并明确 value range。`read_video` 还会返回 decoder metadata，`load_frames_from_video` 则适合只读取指定 frame index。
+
+当 subprocess 或外部 runtime 必须得到本地文件名时，使用 `materialize_video_input`。只有 codec 或模型函数明确支持重叠时空 tile 时才使用 `TileProcessor`；它会改变执行布局，但最后把重叠区融合回单一输出。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-io-media" locale="zh" />

@@ -10,7 +10,7 @@ export default function BlogPage() {
   return (
     <EcosystemPage
       active="blog"
-      comingSoon="We are preparing technical notes, release updates, and integration writeups. Check back soon."
+      comingSoon="Updates, technical notes, and release highlights will be posted here soon."
       description="Updates, technical notes, and release highlights from the WorldFoundry team."
       footerLabel="Blog"
       label="Project notes"

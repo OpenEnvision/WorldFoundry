@@ -17,20 +17,22 @@ import { DocsPagination } from '@/components/docs-pagination';
 import { DocsRelatedLinks } from '@/components/docs-related-links';
 import { DocsInlineToc } from '@/components/docs-inline-toc';
 import { DocsMobileNavToggle } from '@/components/docs-mobile-nav';
+import { DocsPageActions } from '@/components/docs-page-actions';
 import { DocsReadingProgress } from '@/components/docs-reading-progress';
 import { DocsScrollBridge } from '@/components/docs-scroll-bridge';
+import { DocsSidebarApiTree } from '@/components/docs-sidebar-api-tree';
 import { DocsSidebarArchitectureTree } from '@/components/docs-sidebar-architecture-tree';
-import { DocsSidebarBenchmarkTree } from '@/components/docs-sidebar-benchmark-tree';
 import { DocsSidebarMetricsTree } from '@/components/docs-sidebar-metrics-tree';
 import { DocsTocRail } from '@/components/docs-toc-rail';
-import { WorldFoundryWordmark, WorldFoundryWordmarkLink } from '@/components/worldfoundry-wordmark';
+import { DocsWelcomeHero } from '@/components/docs-welcome-hero';
+import { WorldFoundryWordmarkLink } from '@/components/worldfoundry-wordmark';
 import { getDocsLastUpdated } from '@/lib/docs-last-updated';
 import { getDocsPagination } from '@/lib/docs-pagination';
 import { getDocsRelatedLinks } from '@/lib/docs-related-links';
 import {
   getDocsSidebarGroups,
+  isApiReferenceSidebarOpen,
   isArchitectureSidebarOpen,
-  isBenchmarkHubSidebarOpen,
   isMetricsSidebarOpen,
   isSidebarGroupActive,
   isSidebarItemActive,
@@ -82,12 +84,14 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
       ? getBenchmarkBadges(page.slugs[2])
       : [];
   const lastUpdated = getDocsLastUpdated(page.path, normalized);
+  const isWelcomePage = page.slugs.length === 0;
   const showToc = toc.length > 0;
 
   return (
     <main
       className={[
         'pi-doc-shell',
+        isWelcomePage ? 'pi-doc-shell-welcome' : '',
         usesWideTableLayout ? 'pi-doc-shell-table-wide' : '',
         usesWideTableLayout && showToc ? 'pi-doc-shell-table-wide-has-toc' : '',
       ]
@@ -105,7 +109,13 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
           </div>
           <div className="pi-doc-header-tools ml-auto">
             <SiteNav
-              active="docs"
+              active={
+                page.slugs[0] === 'guides' && page.slugs[1] === 'supported-models'
+                  ? 'models'
+                  : page.slugs[0] === 'evaluation' && page.slugs[1] === 'benchmark-hub'
+                    ? 'benchmarks'
+                    : 'docs'
+              }
               ariaLabel={t.nav}
               docsHref={docsHref}
               docsLabel={t.docs}
@@ -146,17 +156,17 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
                     <span>{t.navGroups[group.id]}</span>
                   </p>
                   {group.items.map((item) => {
-                    if (item.type === 'benchmark-hub-tree') {
+                    if (item.type === 'api-tree') {
                       return (
-                        <DocsSidebarBenchmarkTree
+                        <DocsSidebarApiTree
                           hub={item.hub}
                           items={item.items}
                           currentUrl={page.url}
                           locale={normalized}
-                          defaultOpen={isBenchmarkHubSidebarOpen(page.slugs)}
-                          expandLabel={t.expandBenchmarkList}
-                          collapseLabel={t.collapseBenchmarkList}
-                          key="benchmark-hub-tree"
+                          defaultOpen={isApiReferenceSidebarOpen(page.slugs)}
+                          expandLabel={t.expandApiList}
+                          collapseLabel={t.collapseApiList}
+                          key="api-tree"
                         />
                       );
                     }
@@ -237,66 +247,98 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
 
         <div className="pi-doc-main">
           <article className="pi-doc-article">
-            <div className="pi-doc-article-inner">
-              {breadcrumbs.length > 1 ? <DocsBreadcrumb items={breadcrumbs} /> : null}
+            {isWelcomePage ? (
+              <>
+                <DocsWelcomeHero
+                  description={page.data.description ?? ''}
+                  locale={normalized}
+                />
+                <div className="pi-doc-article-inner pi-doc-welcome-body">
+                  <DocsPageActions
+                    editLabel={t.editPage}
+                    githubUrl={githubUrl}
+                    lastUpdated={lastUpdated}
+                    lastUpdatedLabel={t.lastUpdated}
+                    markdownLabel={t.markdown}
+                    markdownUrl={markdownUrl}
+                  />
 
-              <div className="pi-doc-title-row">
-                {page.slugs.length === 0 ? (
-                  <WorldFoundryWordmark as="h1" variant="doc-hero" />
-                ) : (
-                  <h1>{page.data.title}</h1>
-                )}
-                {pageBadges.length > 0 ? (
-                  <div className="pi-doc-title-badges">
-                    {pageBadges.map((kind) => (
-                      <BenchmarkBadge kind={kind} locale={normalized} key={kind} />
-                    ))}
+                  {showToc ? (
+                    <DocsInlineToc items={toc} pageKey={page.url} slugs={page.slugs} title={t.onThisPage} />
+                  ) : null}
+
+                  <div className="pi-doc-content">
+                    <MDX
+                      components={getMDXComponents({
+                        a: createRelativeLink(source, page),
+                      })}
+                    />
                   </div>
-                ) : null}
-              </div>
 
-              {page.data.description ? (
-                <p className="pi-doc-description">{page.data.description}</p>
-              ) : null}
-
-              <div className="pi-doc-actions" aria-label="Document actions">
-                <div className="pi-doc-actions-links">
-                  <a href={markdownUrl}>{t.markdown}</a>
-                  <a href={githubUrl}>{t.source}</a>
+                  <DocsPagination
+                    next={pagination.next}
+                    nextLabel={t.nextPage}
+                    prev={pagination.prev}
+                    previousLabel={t.previousPage}
+                  />
                 </div>
-                {lastUpdated ? (
-                  <p className="pi-doc-last-updated">
-                    <time dateTime={lastUpdated.iso}>
-                      {t.lastUpdated}: {lastUpdated.formatted}
-                    </time>
-                  </p>
+              </>
+            ) : (
+              <div className="pi-doc-article-inner">
+                {breadcrumbs.length > 1 ? <DocsBreadcrumb items={breadcrumbs} /> : null}
+
+                <div className="pi-doc-title-row">
+                  <h1>{page.data.title}</h1>
+                  {pageBadges.length > 0 ? (
+                    <div className="pi-doc-title-badges">
+                      {pageBadges.map((kind) => (
+                        <BenchmarkBadge kind={kind} locale={normalized} key={kind} />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                {page.data.description ? (
+                  <p className="pi-doc-description">{page.data.description}</p>
                 ) : null}
-              </div>
 
-              {showToc ? <DocsInlineToc title={t.onThisPage} items={toc} /> : null}
+                <DocsPageActions
+                  editLabel={t.editPage}
+                  githubUrl={githubUrl}
+                  lastUpdated={lastUpdated}
+                  lastUpdatedLabel={t.lastUpdated}
+                  markdownLabel={t.markdown}
+                  markdownUrl={markdownUrl}
+                />
 
-              <div className="pi-doc-content">
-                <MDX
-                  components={getMDXComponents({
-                    // this allows you to link to other pages with relative file paths
-                    a: createRelativeLink(source, page),
-                  })}
+                {showToc ? (
+                  <DocsInlineToc items={toc} pageKey={page.url} slugs={page.slugs} title={t.onThisPage} />
+                ) : null}
+
+                <div className="pi-doc-content">
+                  <MDX
+                    components={getMDXComponents({
+                      a: createRelativeLink(source, page),
+                    })}
+                  />
+                </div>
+
+                <DocsRelatedLinks links={relatedLinks} title={t.relatedPages} />
+
+                <DocsPagination
+                  next={pagination.next}
+                  nextLabel={t.nextPage}
+                  prev={pagination.prev}
+                  previousLabel={t.previousPage}
                 />
               </div>
-
-              <DocsRelatedLinks title={t.relatedPages} links={relatedLinks} />
-
-              <DocsPagination
-                prev={pagination.prev}
-                next={pagination.next}
-                previousLabel={t.previousPage}
-                nextLabel={t.nextPage}
-              />
-            </div>
+            )}
           </article>
         </div>
 
-        {showToc ? <DocsTocRail title={t.onThisPage} items={toc} /> : null}
+        {showToc ? (
+          <DocsTocRail key={page.url} items={toc} pageKey={page.url} slugs={page.slugs} title={t.onThisPage} />
+        ) : null}
       </div>
     </main>
   );

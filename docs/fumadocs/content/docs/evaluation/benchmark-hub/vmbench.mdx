@@ -207,13 +207,3 @@ The official VMBench README publishes a leaderboard with scores on a 0–100 sty
 The upstream README also reports roughly **6 hours 45 minutes** of GPU evaluation time for all five metrics on 1,050 CogVideoX-5B videos (49 frames, 8 FPS), with TCS and MSS as the slowest stages.
 
 WorldFoundry scorecards are local evidence. Leaderboard parity requires exactly `0001.mp4` through `1050.mp4` aligned with the bundled prompt order.
-
-## Known Limitations
-
-- Full recomputation is heavyweight. The upstream README reports multi-hour runtime for 1,050 videos, and the WorldFoundry path still needs CUDA, PyTorch video/perception packages, and all metric checkpoints.
-- The `cas` metric uses `torchrun` by default. Set `WORLDFOUNDRY_VMBENCH_USE_TORCHRUN=0` if you need single-process execution.
-- The in-tree runtime stops after the first metric process failure, then writes a partial scorecard showing which metric IDs were unavailable.
-- Leaderboard parity requires exactly 1,050 generated videos named `0001.mp4` through `1050.mp4`, matching the bundled prompt order.
-- Hugging Face access for checkpoint files can vary by environment. Mirror the files locally and set the environment variables above when shared cache paths differ.
-
-[← Benchmark Hub](/docs/evaluation/benchmark-hub)

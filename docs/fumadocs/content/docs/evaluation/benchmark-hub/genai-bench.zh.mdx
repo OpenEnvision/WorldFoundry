@@ -140,12 +140,3 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
 | `genai_bench_average` | 可用 task-level preference accuracy 的平均值；主指标。 |
 
 所有指标都会归一到 `[0, 1]`，越高越好。
-
-## 限制与缺口
-
-- WorldFoundry 当前页面面向 pairwise preference rows，不复现完整上游 model-submission workflow。
-- 完整 leaderboard 对齐仍需要官方 human-preference split、真实生成产物，以及真实 judge 或 VQAScore backend。
-- `mock` backend 只用于本地连通性验证。
-- VQAScore backend 需要可用的视频解码、对应 checkpoint，以及足够的 GPU 显存。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -1,0 +1,83 @@
+---
+title: 契约与 artifact
+description: 连接模型执行与评测的可序列化 request、result 和 artifact 类型。
+---
+
+这些契约是只依赖标准库的 dataclass，可以通过 JSON 跨进程、跨环境传递。正因为存在这个边界，评测才能消费模型输出，而不必 import 生成该输出的模型 runtime。
+
+本页 symbol 均从 `worldfoundry.evaluation.api` 导入。
+
+## `ArtifactRef`
+
+`ArtifactRef` 指向输出，但不把文件字节塞进记录。`kind` 表示 artifact 的语义角色，`sha256`、`size_bytes`、MIME 与媒体 metadata 则让本地输出可以检查和审计。
+
+```python
+artifact = ArtifactRef.from_uri(
+    "runs/matrix-game-2/generated.mp4",
+    kind="generated_video",
+    media_metadata={"fps": 12, "width": 640, "height": 352},
+)
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.ArtifactRef" locale="zh" />
+
+## `local_path_for_uri`
+
+把 URI 当作本地文件之前应先使用这个 helper。HTTP、对象存储、Hugging Face 和内存 URI 返回 `None`；相对本地路径可以通过 `base_dir` 解析。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.local_path_for_uri" locale="zh" />
+
+## `enrich_artifact_ref`
+
+当引用能解析到真实本地文件时，这个函数会补上 hash 和文件大小。远程或缺失 artifact 保持原样，不会被假装成已验证文件。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.enrich_artifact_ref" locale="zh" />
+
+## `GenerationRequest`
+
+一个 request 表示一个 sample，而不是整个 batch。源媒体或文字放入 `inputs`，动作或相机路径放入 `controls`，seed、FPS 等原生采样设置放入 `generation_kwargs`，期望输出形态放入 `output_schema`。
+
+例如，两个模型可以接收相同的 `sample_id` 和动作序列，即使各自 operator 最终把这些控制量转换成完全不同的原生参数名。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.GenerationRequest" locale="zh" />
+
+## `GenerationResult`
+
+Result 记录对应 sample 实际发生了什么。成功输出写入 `artifacts`，执行信息进入 `timings` 与 `metadata`；失败则保留 `status` 和 `error`，而不是创建占位 artifact 冒充成功。
+
+```python
+result = GenerationResult(
+    sample_id=request.sample_id,
+    model_id="matrix-game-2",
+    artifacts={"generated_video": artifact},
+    timings={"generation_seconds": 49.75},
+)
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.GenerationResult" locale="zh" />
+
+## `normalize_generation_status`
+
+不同 runner 可能返回 `success`、`completed` 或 `done` 等近义状态。这个 helper 先归一化文字，再交给成功判定；它不会检查引用文件是否真实存在。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.normalize_generation_status" locale="zh" />
+
+## `is_generation_result_successful`
+
+当归一化状态属于成功集合且 `error` 为空时，result 被视为执行成功。Artifact 是否存在、benchmark 是否完整、结果是否具备 leaderboard 资格仍是独立检查。
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.is_generation_result_successful" locale="zh" />
+
+## 序列化往返
+
+三个契约类都继承共享 JSON contract 方法。Ledger 行可以用 `to_json()` 写出，再用 `from_json()` 或 `from_dict()` 恢复。
+
+```python
+payload = result.to_json()
+restored = GenerationResult.from_json(payload)
+
+assert restored.sample_id == result.sample_id
+assert restored.artifacts["generated_video"].kind == "generated_video"
+```
+
+序列化成功只证明记录形态有效，并不证明模型确实运行、视频视觉正确或结果具备 leaderboard 资格。更强的声明需要 runtime validation 与 scorecard 证据。

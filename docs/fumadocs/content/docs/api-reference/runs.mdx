@@ -1,0 +1,107 @@
+---
+title: Runs and benchmarks
+description: Canonical in-process dispatch for existing artifacts, model inference, benchmark cells, and suites.
+---
+
+`run_worldfoundry` is the broad public entrypoint. It examines one typed request and dispatches to the narrow existing-results, model-generation, single model × benchmark, or suite runner. Use the narrower benchmark facade when the generated artifacts already exist and only an official evaluator or normalizer should run.
+
+Import the symbols on this page from `worldfoundry.evaluation.public`.
+
+## A complete no-GPU run
+
+This example creates one small trajectory artifact, writes request and result ledgers, and evaluates the existing result with the built-in `artifact_count` metric. It exercises the real run/reporting path without loading a model.
+
+```python
+from pathlib import Path
+
+from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evaluation.public import WorldFoundryRunRequest, run_worldfoundry
+
+root = Path("tmp/python_api_example")
+trace_path = root / "artifacts" / "trajectory.json"
+trace_path.parent.mkdir(parents=True, exist_ok=True)
+trace_path.write_text('{"actions":["forward","left"]}\n', encoding="utf-8")
+
+request = GenerationRequest(sample_id="nav-0001", task_name="navigation-trace")
+result = GenerationResult(
+    sample_id=request.sample_id,
+    model_id="existing-trace",
+    artifacts={
+        "trajectory": ArtifactRef.from_path(trace_path, kind="trajectory"),
+    },
+)
+
+requests_path = root / "requests.jsonl"
+results_path = root / "results.jsonl"
+requests_path.write_text(request.to_json() + "\n", encoding="utf-8")
+results_path.write_text(result.to_json() + "\n", encoding="utf-8")
+
+outcome = run_worldfoundry(
+    WorldFoundryRunRequest(
+        output_dir=root / "evaluation",
+        requests_path=requests_path,
+        results_path=results_path,
+        metrics=("artifact_count",),
+    )
+)
+
+assert outcome.ok
+print(outcome.to_dict()["scorecard_path"])
+```
+
+The output directory contains aligned ledgers, an execution plan, metric rows, `run_manifest.json`, `summary.json`, `report.md`, and `scorecard.json`. The run is valid as an existing-results artifact check; it does not become an official benchmark or leaderboard result.
+
+## `WorldFoundryRunRequest`
+
+The request intentionally covers several modes. `results_path` selects existing-results evaluation. A model ID without benchmark IDs selects model execution. Model and benchmark IDs together select a benchmark cell; multiple selections or suite IDs select the matrix runner. `execute=False` plans compatible cells without spending compute.
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.WorldFoundryRunRequest" />
+
+## `WorldFoundryRunResult`
+
+The wrapper exposes common status, exit code, output directory, and a mode-specific delegate. `to_dict()` lifts commonly needed manifest and scorecard paths from that delegate so automation does not need a branch for every run kind.
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.WorldFoundryRunResult" />
+
+## `run_worldfoundry`
+
+Pass either a typed request, a mapping, or keyword arguments. A typed request is preferred for editor support and for catching misspelled fields before execution.
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.run_worldfoundry" />
+
+## `list_video_benchmarks`
+
+This discovery helper returns IDs from the checked-in video benchmark catalog. It does not claim that every returned benchmark is locally runnable; inspect readiness and assets separately.
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.list_video_benchmarks" />
+
+## `run_benchmark`
+
+Use this facade when artifacts are already materialized and a benchmark-specific path should run. `official-run` invokes the configured official runtime, `official-validation` executes its bounded validation path, and `normalizer` imports caller-provided official-shaped results.
+
+```python
+result = run_benchmark(
+    "vbench",
+    output_dir="tmp/vbench_run",
+    generated_artifact_dir="runs/generated_videos",
+    mode="official-run",
+)
+```
+
+The call above is a real API shape, but it requires the assets, dependencies, generated prompt coverage, and environment reported by the current VBench manifest. Runner availability alone does not guarantee leaderboard readiness.
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.run_benchmark" />
+
+## `normalize_upstream_results`
+
+Use this function when the upstream evaluator has already produced a result file. It creates WorldFoundry evidence around that file; it does not retroactively prove that WorldFoundry executed the official evaluator.
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.normalize_upstream_results" />
+
+## `benchmark_integration_spec`
+
+This lookup returns the registered in-tree integration specification when one exists. A catalog entry can exist without a corresponding integration spec, so `None` is a normal discovery result.
+
+<PythonApiReference symbol="worldfoundry.evaluation.public.benchmark_integration_spec" />
+
+Use the [Benchmark Hub](/docs/evaluation/benchmark-hub) to understand protocol-specific inputs and blockers before calling an official runtime.

@@ -1,0 +1,45 @@
+---
+title: Core distributed
+description: Process-group setup, context-parallel split/gather, model-parallel groups, rank-aware logging, EMA broadcast, and pipeline scheduling.
+---
+
+Distributed Core separates process-group topology from tensor movement. Initialization creates global and model-parallel groups. Rank/group queries expose that topology. Collective helpers then split, gather, broadcast, or synchronize tensors without forcing each model integration to reproduce edge cases.
+
+Importing this package requires the distributed model runtime dependencies, including Torch and Loguru. `dist_init` additionally requires CUDA; the `cp_group=None` behavior shown below is a contract example, not a claim that the distributed package belongs to the minimal CLI environment.
+
+## Single-process behavior is intentional
+
+The context-parallel data helpers accept `None` as “parallelism disabled.” This makes the same model code usable in one process and many processes without branching at every call site.
+
+```python
+import torch
+
+from worldfoundry.core.distributed import cat_outputs_cp, split_inputs_cp
+
+x = torch.arange(24).reshape(2, 3, 4)
+local = split_inputs_cp(x, seq_dim=1, cp_group=None)
+restored = cat_outputs_cp(local, seq_dim=1, cp_group=None)
+
+assert local is x
+assert restored is x
+```
+
+With a real CP group, `split_inputs_cp` requires the sequence dimension to be divisible by the group size. `cat_outputs_cp` gathers equal-shaped local tensors in rank order. `cat_outputs_cp_with_grad` restores the local rank's autograd reference after gathering; use it only when gradients must flow through the local shard.
+
+## Typical context-parallel sequence
+
+Rank zero or the minimum rank can load an input once, `broadcast_split_tensor` broadcasts its full shape/data and returns one shard per rank, the model computes locally, and `cat_outputs_cp` restores the global sequence. The split and gather must use the same `seq_dim` and process group.
+
+`broadcast` supports tensors and Python objects, but object collectives serialize data and are inappropriate for high-volume model activations. `find_split` plans temporal/spatial CP dimensions for Megatron-compatible runtimes and mutates the compatibility parallel state; it is not a generic tensor chunker.
+
+## Initialization boundary
+
+`dist_init` is the high-level CUDA inference initializer for runtimes whose config supplies backend, timeout, CP size, and PP size. It reads `RANK` and `WORLD_SIZE`, binds the local CUDA device, verifies `cp_size * pp_size`, initializes model-parallel groups, and creates a pipeline scheduler when needed.
+
+Do not call model-parallel rank/group accessors before initialization. Pair lifecycle teardown with `destroy_model_parallel` in tests or long-lived workers that rebuild topology. `print_rank_0` is safe outside distributed execution and is preferable for messages that should appear once.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-distributed" />

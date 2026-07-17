@@ -1,0 +1,52 @@
+---
+title: Why WorldFoundry
+description: The practical benefits of using WorldFoundry for multi-model discovery, execution, and evaluation.
+---
+
+WorldFoundry is most valuable when work spans **more than one model, one benchmark, or one execution surface**. Its main benefit is not making a single-model demo a few lines shorter. It reduces repeated integration work and preserves comparable evidence as a research project grows.
+
+## One operational vocabulary
+
+Stable model and benchmark IDs replace repository nicknames and handwritten path conventions. Requests, results, artifacts, manifests, and scorecards give researchers, infrastructure engineers, and reviewers a shared way to describe a run.
+
+That shared vocabulary makes vague questions concrete. Was the model only cataloged, or did a runner execute? Which checkpoint revision and runtime profile were used? Were all benchmark samples covered? Was a score merely normalized from an existing file, computed by an official runner, or validated for leaderboard use?
+
+The benefit is not cosmetic consistency. It is the ability to hand a run to another person or machine without relying on the original operator’s memory.
+
+## Less repeated glue
+
+Environment bootstrap, checkpoint lookup, input shaping, output naming, job records, previews, and metric aggregation are common needs across model families. WorldFoundry centralizes these concerns so adding a second model does not require recreating the whole workflow.
+
+Model-specific code still exists, but it lives in pipelines and operators. Benchmark-specific code remains in benchmark runners and metrics. Shared concerns remain shared. This division reduces duplication while keeping upstream behavior visible enough to debug.
+
+## Artifacts that can be reused
+
+Generated output is not trapped inside a UI session or a temporary Python object. A normalized run records artifact locations and metadata, so the same output can be visually inspected in Studio, scored by compatible metrics, converted into a benchmark-specific layout, compared with another run, or audited later without loading the model again.
+
+This becomes especially useful when generation is expensive and evaluation evolves faster than checkpoints. A team can preserve a costly set of outputs and apply a new metric or reporting rule later instead of repeating inference.
+
+For example, suppose a team generates 20 Matrix-Game 2 videos on Monday with fixed seeds and action sequences, then completes visual review. On Wednesday it adds a new temporal-consistency metric. As long as the result ledger and artifacts remain available, the same video hashes can be rescored without loading the checkpoint again. If the action sequence or generation parameters change, that is when a new generation run should be created rather than overwriting the old evidence.
+
+## Reproducibility beyond a command string
+
+A runnable command is necessary but insufficient. The same command can behave differently after a checkpoint, package, dataset, prompt set, or upstream evaluator changes. WorldFoundry records the request ledger, result ledger, model and benchmark identity, output paths, metric summaries, blockers, and scorecard.
+
+The resulting evidence explains both **what ran** and **what the result is allowed to claim**. A failed sample remains visible. Missing official coverage remains a blocker. A normalizer import is not promoted into an official benchmark run simply because it produced a JSON score.
+
+## Multiple interfaces without multiple backends
+
+The TUI helps new users discover IDs and print commands. The CLI serves scripts and batch jobs. Studio provides model-aware forms and visual review. Python and MCP enable custom or agent-driven orchestration. These surfaces reuse catalogs and runtime contracts instead of implementing separate model backends.
+
+A command printed by the TUI can therefore be placed in a job script, and an artifact generated from the CLI can later be opened in Studio or consumed by evaluation. The interface changes; the run identity and durable outputs do not.
+
+## When it is a good fit
+
+WorldFoundry fits teams that maintain or compare several world-model families, separate generation from evaluation, reuse expensive artifacts across reviews or metrics, or need stable machine-readable discovery for people and agents. It is also a natural home for a model or benchmark integration that should be shared across a research organization rather than remain a private launch script.
+
+The framework becomes more valuable as the number of models, benchmarks, machines, contributors, or review steps increases. If another person needs to understand the run later, explicit contracts and evidence usually pay for their additional setup.
+
+## Continue
+
+WorldFoundry is useful if you need to run more than one model family, preserve repeatable inference rather than a single visual demo, score outputs, explain a run to another person or machine, or answer truthfully what is actually ready. It is even more useful if you expect models, benchmarks, metrics, and user surfaces to grow over time.
+
+Continue with the [Quickstart](/docs/quickstart) for the first working path. To inspect the concrete subsystems and support boundaries, read [What's included](/docs/overview/capabilities).

@@ -1,0 +1,81 @@
+---
+title: Runtime and assets
+description: Environment paths, local asset manifests, readiness inspection, and bounded subprocess execution.
+---
+
+Runtime helpers make machine-specific state explicit. They resolve shared roots, inspect locally staged assets, redact credentials for manifests, and turn timeout-prone subprocesses into structured results. They do not download protected data or silently replace missing assets.
+
+## `RequiredEnvReport`
+
+This report separates present and missing variable names. Values are deliberately absent so it can be included in logs and preflight responses.
+
+<PythonApiReference symbol="worldfoundry.runtime.env.RequiredEnvReport" />
+
+## `WorldFoundryEnv`
+
+`WorldFoundryEnv` provides one object-oriented view over the path-resolution and preflight functions in `worldfoundry.runtime.env`.
+
+```python
+from worldfoundry.runtime.env import WorldFoundryEnv
+
+env = WorldFoundryEnv.from_os()
+print(env.resolve_model_dir())
+print(env.resolve_data_dir())
+print(env.resolve_artifact_dir())
+
+report = env.check_required(("HF_TOKEN", "WORLDFOUNDRY_DATA_DIR"))
+if not report.ok:
+    print("missing:", report.missing)
+```
+
+The check reports presence only. Use `redact_for_manifest()` rather than copying `os.environ` into a run record.
+
+<PythonApiReference symbol="worldfoundry.runtime.env.WorldFoundryEnv" />
+
+## `LocalAsset`
+
+A local asset combines a stable manifest identity with its resolved path and current `ready` state. Readiness means the path exists; it does not prove that a checkpoint is complete, a dataset license was accepted, or a runtime can load the contents.
+
+<PythonApiReference symbol="worldfoundry.runtime.assets.LocalAsset" />
+
+## `expand_worldfoundry_path`
+
+This helper expands supported `$WORLDFOUNDRY_*` tokens using the same root conventions as bootstrap and preflight commands. Relative results are anchored to the repository root.
+
+<PythonApiReference symbol="worldfoundry.runtime.assets.expand_worldfoundry_path" />
+
+## `load_local_assets`
+
+The loader reads the selected local asset manifest and returns resolved `LocalAsset` objects. This makes a small readiness script possible without invoking any GPU runtime.
+
+```python
+from worldfoundry.runtime.assets import load_local_assets
+
+assets = load_local_assets()
+missing = [asset for asset in assets if not asset.ready]
+
+for asset in missing[:10]:
+    print(asset.asset_id, asset.path or asset.canonical_path)
+```
+
+<PythonApiReference symbol="worldfoundry.runtime.assets.load_local_assets" />
+
+## `run_bounded_command`
+
+Official evaluators and simulators sometimes hang inside native code. This helper starts a separate process group, enforces a hard timeout, captures stdout and stderr, and returns timeout state in a dictionary rather than losing it in an uncaught traceback.
+
+```python
+from worldfoundry.runtime.jobs import run_bounded_command
+
+completed = run_bounded_command(
+    ["python", "-c", "print('preflight ok')"],
+    timeout=30,
+)
+assert completed["returncode"] == 0
+```
+
+Do not pass untrusted user-controlled commands through this function. It bounds process lifetime; it is not a security sandbox.
+
+<PythonApiReference symbol="worldfoundry.runtime.jobs.run_bounded_command" />
+
+For root-directory conventions and setup commands, see the [environment reference](/docs/reference/environments) and [local assets guide](/docs/guides/local-assets).

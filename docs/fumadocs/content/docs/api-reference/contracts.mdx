@@ -1,0 +1,83 @@
+---
+title: Contracts and artifacts
+description: Serializable request, result, and artifact types used across model execution and evaluation.
+---
+
+These contracts are stdlib-only dataclasses. They can cross process and environment boundaries as JSON, which is why evaluation can consume outputs without importing the model runtime that produced them.
+
+Import the symbols on this page from `worldfoundry.evaluation.api`.
+
+## `ArtifactRef`
+
+`ArtifactRef` points to an output without embedding its bytes. `kind` describes the semantic role, while `sha256`, `size_bytes`, MIME information, and media metadata make a local artifact inspectable and auditable.
+
+```python
+artifact = ArtifactRef.from_uri(
+    "runs/matrix-game-2/generated.mp4",
+    kind="generated_video",
+    media_metadata={"fps": 12, "width": 640, "height": 352},
+)
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.ArtifactRef" />
+
+## `local_path_for_uri`
+
+Use this helper before treating a URI as a local file. HTTP, object-store, Hugging Face, and in-memory URIs return `None`; relative local paths can be resolved against `base_dir`.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.local_path_for_uri" />
+
+## `enrich_artifact_ref`
+
+This function adds hash and size evidence when an artifact reference resolves to an existing local file. Remote or missing artifacts remain unchanged.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.enrich_artifact_ref" />
+
+## `GenerationRequest`
+
+A request represents one sample, not an entire batch. Put source media or text in `inputs`, actions or camera paths in `controls`, native sampling settings such as seed and FPS in `generation_kwargs`, and expected artifact shape in `output_schema`.
+
+For example, two models can receive the same `sample_id` and action sequence even if their operators translate those controls into different native argument names.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.GenerationRequest" />
+
+## `GenerationResult`
+
+A result records what happened for the corresponding sample. Successful output belongs in `artifacts`; execution details belong in `timings` and `metadata`; a failure keeps its `status` and `error` instead of creating a placeholder artifact.
+
+```python
+result = GenerationResult(
+    sample_id=request.sample_id,
+    model_id="matrix-game-2",
+    artifacts={"generated_video": artifact},
+    timings={"generation_seconds": 49.75},
+)
+```
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.GenerationResult" />
+
+## `normalize_generation_status`
+
+Runners may use nearby status words such as `success`, `completed`, or `done`. This helper normalizes text before the success predicate is applied; it does not inspect whether a referenced file exists.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.normalize_generation_status" />
+
+## `is_generation_result_successful`
+
+A result is considered successful when its normalized status is in the accepted success set and `error` is empty. Artifact existence and benchmark eligibility are separate checks.
+
+<PythonApiReference symbol="worldfoundry.evaluation.api.is_generation_result_successful" />
+
+## Serialization round trip
+
+All three contract classes inherit the shared JSON contract methods. Use `to_json()` for a ledger row and `from_json()` or `from_dict()` when loading it again.
+
+```python
+payload = result.to_json()
+restored = GenerationResult.from_json(payload)
+
+assert restored.sample_id == result.sample_id
+assert restored.artifacts["generated_video"].kind == "generated_video"
+```
+
+Serialization proves that the record is well formed. It does not prove that the model ran, the artifact is visually correct, or the result is leaderboard eligible; those stronger claims come from runtime validation and scorecard evidence.

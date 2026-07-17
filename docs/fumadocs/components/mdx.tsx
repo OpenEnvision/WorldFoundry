@@ -1,12 +1,28 @@
-import defaultMdxComponents from 'fumadocs-ui/mdx';
+import * as CalloutComponents from 'fumadocs-ui/components/callout';
+import * as CardComponents from 'fumadocs-ui/components/card';
 import * as AccordionComponents from 'fumadocs-ui/components/accordion';
 import * as FilesComponents from 'fumadocs-ui/components/files';
 import * as StepsComponents from 'fumadocs-ui/components/steps';
+import { Tab, Tabs } from '@/components/docs-tabs';
 import * as TabsComponents from 'fumadocs-ui/components/tabs';
+import defaultMdxComponents from 'fumadocs-ui/mdx';
+import { DocsWelcomeAcknowledgements } from '@/components/docs-welcome-acknowledgements';
+import { BenchmarkRecipeCatalog } from '@/components/benchmark-recipe-catalog';
 import { CallChainDiagram } from '@/components/call-chain-diagram';
 import { MetricQuickNav } from '@/components/metric-quick-nav';
+import { ModelRecipeCatalog } from '@/components/model-recipe-catalog';
+import { ModelRecipeHeader } from '@/components/model-recipe-header';
+import {
+  PythonApiCatalog,
+  PythonApiGroupReference,
+  PythonApiReference,
+} from '@/components/python-api-reference';
 import { StudioVisualizerGallery } from '@/components/studio-visualizer-gallery';
 import { TeaserImage } from '@/components/teaser-image';
+import {
+  WorldFoundryArchitecture,
+  WorldFoundryWorkflow,
+} from '@/components/worldfoundry-system-map';
 import { withBasePath, withMediaPath } from '@/lib/site-path';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 import type { MDXComponents } from 'mdx/types';
@@ -57,18 +73,31 @@ function DocsVideo({ src, ...props }: ComponentPropsWithoutRef<'video'>) {
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
+    ...CalloutComponents,
+    ...CardComponents,
     ...defaultMdxComponents,
     ...AccordionComponents,
     ...FilesComponents,
     ...StepsComponents,
     ...TabsComponents,
+    Tab,
+    Tabs,
+    BenchmarkRecipeCatalog,
     CallChainDiagram,
+    DocsWelcomeAcknowledgements,
     MetricQuickNav,
+    ModelRecipeCatalog,
+    ModelRecipeHeader,
+    PythonApiCatalog,
+    PythonApiGroupReference,
+    PythonApiReference,
     img: DocsImage,
     StudioVisualizerGallery,
     TeaserImage,
     TypeTable,
     Video: DocsVideo,
+    WorldFoundryArchitecture,
+    WorldFoundryWorkflow,
     video: DocsVideo,
     ...components,
   } satisfies MDXComponents;

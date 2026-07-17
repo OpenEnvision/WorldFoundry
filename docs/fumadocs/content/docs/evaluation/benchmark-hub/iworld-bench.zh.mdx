@@ -85,7 +85,7 @@ ${WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT}/
 ```bash
 export WORLDFOUNDRY_IWORLD_BENCH_RUNTIME_BACKEND=official
 export VIPE_ROOT="${VIPE_ROOT:-$PWD/worldfoundry/base_models/three_dimensions/general_3d/vipe}"
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:?请先设置本次运行使用的 GPU}"
 ```
 
 不要用默认 mock backend 报告结果。它只用于本地链路联通，不是可报告分数。

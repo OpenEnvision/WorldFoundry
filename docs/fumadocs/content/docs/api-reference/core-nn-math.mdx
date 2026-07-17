@@ -1,0 +1,52 @@
+---
+title: Core neural network and math
+description: Reusable transformer shapes, patching, layers, normalization, gradients, schedulers, and camera geometry.
+---
+
+This group contains model-independent tensor operations and small modules. They encode shape contracts that otherwise drift between integrations: attention head width, MLP width, head split/merge, causal masks, image patch grids, normalization, stochastic depth, gradient clipping, rotation conversion, and diffusion scheduling.
+
+## Prefer reversible helpers for shape changes
+
+`patchify_image` returns both token data and a `PatchGridSpec`. Keep the spec with the tokens; it records the original layout, batch dimensions, patch size, grid, and channel count needed for a checked inverse.
+
+```python
+import torch
+
+from worldfoundry.core import patchify_image, unpatchify_image
+
+image = torch.arange(2 * 3 * 8 * 12).reshape(2, 3, 8, 12)
+tokens, grid = patchify_image(image, patch_size=(4, 3), layout="nchw")
+
+assert tokens.shape == (2, 8, 36)
+restored = unpatchify_image(tokens, grid)
+assert torch.equal(restored, image)
+```
+
+`unpatchify_image` validates the exact token count and vector width instead of silently reshaping incompatible data. `split_attention_heads` and `merge_attention_heads` follow the same reversible principle for `(..., sequence, hidden)` tensors.
+
+## Derive dimensions in one place
+
+```python
+from worldfoundry.core import transformer_shape_spec
+
+shape = transformer_shape_spec(
+    hidden_size=1536,
+    num_heads=24,
+    mlp_ratio=8 / 3,
+    multiple_of=256,
+)
+assert shape.head_dim == 64
+assert shape.mlp_hidden_size % 256 == 0
+```
+
+Use these helpers in config validation and construction, not in a hot per-token loop. They reject non-positive or non-divisible dimensions early and keep model code from carrying slightly different rounding formulas.
+
+## Layers versus functional primitives
+
+`Mlp`, `SwiGLUFFN`, `PatchEmbed`, `DropPath`, and `LayerScale` are reusable modules. Functional counterparts such as `drop_path`, `rms_norm`, `layer_scale`, and `causal_attention_mask` are useful when a model already owns parameters or needs a custom wrapper. Camera/rotation functions state their convention in the name; do not mix ZYX, OpenCV, and WXYZ quaternion conventions without an explicit conversion.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-nn-math" />

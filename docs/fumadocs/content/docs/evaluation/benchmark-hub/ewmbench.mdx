@@ -140,13 +140,3 @@ Set `WORLDFOUNDRY_EWMBENCH_CONFIG_PATH` only when you need to override the main
 EWMBench runtime config. `json_repair` and `fastdtw` remain optional: the runner
 falls back to the Python `json` module for strict JSON and to a deterministic
 NumPy DTW implementation when `fastdtw` is not installed.
-
-## Limitations
-
-- The bundled task manifest is intentionally small. Use the Hugging Face dataset for full benchmark coverage.
-- The default direct scorer backend is not a leaderboard scorer; it is deterministic placeholder scoring for local wiring checks.
-- The `official` backend expects EWMBench-style preprocessed directories and checkpoint paths in `config.yaml`. It does not convert arbitrary flat videos into the full EWMBench dataset layout.
-- The public CLI route imports existing result rows. Generated videos alone do not produce EWMBench metrics.
-- Leaderboard-equivalent claims require the full dataset, preprocessing, DINOv2, YOLO-World, Qwen, CLIP checkpoints, and upstream-compatible result tables.
-
-[← Benchmark Hub](/docs/evaluation/benchmark-hub)

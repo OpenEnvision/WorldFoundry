@@ -11,12 +11,11 @@ import {
   type SharedProps,
 } from 'fumadocs-ui/components/dialog/search';
 import { createContentHighlighter, type SortedResult } from 'fumadocs-core/search';
-import { useDocsSearch } from 'fumadocs-core/search/client';
 import { oramaStaticClient } from 'fumadocs-core/search/client/orama-static';
 import { create } from '@orama/orama';
 import { I18nProvider } from 'fumadocs-ui/contexts/i18n';
 import { usePathname } from 'next/navigation';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { i18n, localeNames, type Locale } from '@/lib/i18n';
 import { stripBasePath, withBasePath } from '@/lib/site-path';
 
@@ -121,7 +120,6 @@ function createSearchClient(locale: Locale) {
   });
 
   return {
-    deps: [locale],
     async search(query: string) {
       const results = await client.search(query);
 
@@ -132,11 +130,83 @@ function createSearchClient(locale: Locale) {
   };
 }
 
+function useDebouncedValue(value: string, delayMs: number) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    if (delayMs === 0) {
+      setDebounced(value);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [delayMs, value]);
+
+  return delayMs === 0 ? value : debounced;
+}
+
+function useDocsSearchEffect(client: ReturnType<typeof createSearchClient>) {
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<SortedResult[] | 'empty'>('empty');
+  const [error, setError] = useState<unknown>();
+  const [isLoading, setIsLoading] = useState(false);
+  const debouncedSearch = useDebouncedValue(search, 100);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (debouncedSearch.length === 0) {
+        if (!cancelled) {
+          setResults('empty');
+          setError(undefined);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        const data = await client.search(debouncedSearch);
+        if (!cancelled) {
+          setResults(data);
+          setError(undefined);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, debouncedSearch]);
+
+  return useMemo(
+    () => ({
+      search,
+      setSearch,
+      query: {
+        isLoading,
+        data: results,
+        error,
+      },
+    }),
+    [search, isLoading, results, error],
+  );
+}
+
 export default function DefaultSearchDialog(props: SharedProps) {
   const pathname = stripBasePath(usePathname());
   const locale: Locale = pathname === '/zh' || pathname.startsWith('/zh/') ? 'zh' : 'en';
   const searchClient = useMemo(() => createSearchClient(locale), [locale]);
-  const { search, setSearch, query } = useDocsSearch({ client: searchClient });
+  const { search, setSearch, query } = useDocsSearchEffect(searchClient);
 
   return (
     <I18nProvider

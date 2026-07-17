@@ -150,9 +150,3 @@ WorldFoundry writes these files under `--output-dir`:
 - `per_sample_scores.jsonl`: normalized sample rows when present in the input.
 - `raw_metric_table.jsonl`: metric rows with raw and normalized scores.
 - `upstream/worldbench_results.json`: only when `--run-official` materializes artifact scores.
-
-## Limitations
-
-WorldFoundry does not currently include a source-confirmed upstream WorldBench evaluator. The runner is useful for local scorecard production from existing result files or WorldFoundry artifact scores, but it does not by itself compute physical correctness from raw videos. The dataset license was not resolved in the recorded metadata, and full video-to-video/VQA split mapping still depends on the result files or artifact-score directory you provide. Leaderboard parity remains false until the complete upstream scoring process and submission requirements are audited.
-
-[← Benchmark Hub](/docs/evaluation/benchmark-hub)

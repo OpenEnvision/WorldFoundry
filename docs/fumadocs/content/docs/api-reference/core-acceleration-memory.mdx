@@ -1,0 +1,56 @@
+---
+title: Core acceleration and memory
+description: Cross-step caches, token pruning, fused kernels, VRAM lifecycle wrappers, disk maps, and memory stores.
+---
+
+Core separates exact implementation acceleration from approximation policy. Fused kernels and placement changes aim to preserve model semantics. Cross-step caches and token pruning intentionally trade computation for an approximation and therefore expose thresholds, retained ratios, events, and reset boundaries that integrations can evaluate.
+
+## Cross-step cache example
+
+```python
+import torch
+
+from worldfoundry.core.acceleration import FixedStepCache
+
+cache = FixedStepCache(
+    skip_steps={1, 3},
+    dense_first=1,
+    dense_last=1,
+    total_steps=5,
+)
+calls = []
+
+with torch.no_grad():
+    outputs = []
+    for step in range(5):
+        def compute(step=step):
+            calls.append(step)
+            return torch.tensor([float(step)])
+
+        outputs.append(cache.run(step, compute))
+
+assert calls == [0, 2, 4]  # boundary steps remain dense
+assert [event.hit for event in cache.events] == [False, True, False, True, False]
+```
+
+Caches disable replay while autograd is enabled. Call `reset()` between independent denoising trajectories; otherwise prior residuals become state for the next request. Treat the event stream as evidence during latency/quality evaluation rather than assuming requested skip steps were all used.
+
+## Token pruning lifecycle
+
+`select_token_indices` is stateless. `prune_tokens` returns compact data plus `TokenPruneState`, and `restore_tokens` scatters processed tokens back, filling dropped positions from compensation or zeros. `TokenPruner` adds previous-step compensation: its first call records a dense segment, later calls can prune, and every `prune` must be paired with `restore` under the same key.
+
+## VRAM placement state
+
+`enable_vram_management` replaces classes listed in `module_map` with wrappers such as `AutoWrappedLinear`. Each wrapper can use separate offload, onload, preparing, and computation dtype/device pairs. Disk-backed wrappers resolve parameter names through `DiskMap`; ordinary wrappers move or copy tensors between devices.
+
+This transformation mutates module identity and should normally run once during model construction. The module-map order matters for overlapping classes. A placement configuration is not automatically safe for a new architecture: validate peak memory, transfer overlap, output equality/tolerance, and behavior when the configured VRAM limit is reached.
+
+## Memory records versus VRAM
+
+The `BaseMemory` and `MemoryStore` APIs represent retrievable world-model memory records. They do not manage GPU allocation. VRAM wrappers manage parameter placement but do not provide semantic retrieval. Keeping those meanings separate prevents a “memory” setting from being applied at the wrong layer.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-acceleration-memory" />

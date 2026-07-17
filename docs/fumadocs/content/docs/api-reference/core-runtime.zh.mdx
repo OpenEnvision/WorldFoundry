@@ -1,0 +1,55 @@
+---
+title: Core 推理 Runtime
+description: 模型推理 spec、task/variant 契约、进程策略、autocast、编译、torchrun 命令、device 与计时器。
+---
+
+Core runtime 在加载模型实现之前，先把模型可运行表面明确描述出来。`ModelInferenceSpec` 记录模型家族身份、variant、checkpoint、task profile、字段、artifact、流式支持和可接受调用参数。进程 helper 再应用共享执行策略，而不会把某个模型的行为塞进 Core。
+
+## 构造或获取 inference spec
+
+```python
+from worldfoundry.core import model_inference_spec
+
+spec = model_inference_spec(
+    model_family_id="my-world-model",
+    display_name="My World Model",
+    default_model_ref="org/my-world-model",
+    workload_type="video",
+    supported_call_params=("prompt", "seed", "num_frames"),
+)
+
+assert spec.model_family_id == "my-world-model"
+assert spec.variant().variant_id == "default"
+assert spec.task().task_id
+```
+
+对于已有内置家族，`model_inference_spec` 返回注册过的 spec；对于未知家族，它根据传入提示构造 generic spec。当“未注册”必须与 fallback 区分时，使用 `get_model_inference_spec`。
+
+## 进程级推理策略
+
+`install_worldfoundry_inference_infra` 配置注意力策略、float32 matmul precision、TF32 flag 和可选 SDPA 兼容 patch。它是幂等的进程状态，不是每个 request 一个的对象。`worldfoundry_inference_context` 会安装该状态，并在 `torch.no_grad()` 下执行。
+
+`autocast_context` 只为 CUDA device 返回 autocast manager；CPU 或 Torch 不可用时返回 no-op context。`compile_module_if_enabled` 必须显式开启；编译关闭、不受支持或在非 strict 模式失败时，都会返回原 module。
+
+```python
+from torch import nn
+from worldfoundry.core import compile_module_if_enabled, torchrun_module_command
+
+module = nn.Linear(4, 2)
+assert compile_module_if_enabled(module, enabled=False) is module
+
+command = torchrun_module_command(
+    "my_package.worker",
+    nproc_per_node=4,
+    args=("--checkpoint", "/models/run-42"),
+)
+print(command)  # 这里只构造命令，不会启动进程
+```
+
+只有当前进程确实应当负责启动并捕获一个单机 job 时，才使用 `run_torchrun_module`。即使子进程非零退出，它也会返回 `CompletedProcess`，调用方必须检查 `returncode` 与日志。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-runtime" locale="zh" />

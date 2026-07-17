@@ -1,0 +1,63 @@
+---
+title: 包含什么
+description: WorldFoundry 的 catalog、runtime、使用界面、评测工具、输出与支持状态。
+---
+
+WorldFoundry 不只是论文列表，也不只是评测 wrapper。仓库包含 catalog 层、执行层、检查层和证据层。每一层都可以单独使用，但它们共同构成一条完整工作流。
+
+## Catalog：先知道系统中有什么
+
+**Model Zoo** 为世界模型系统分配稳定 ID 和 alias。一个模型 manifest 可以记录任务、上游来源、checkpoint 引用、variant、runtime binding、安装 profile、硬件预期、验证说明和已知 blocker。仓库当前收录了 200 多个模型条目，但这个数字描述的是 catalog 覆盖，不是统一的 runtime 成熟度。
+
+这些条目分布在五个操作家族中。视频目录覆盖文本、图像和视频条件生成、编辑、动画与音视频系统；世界模型目录关注交互世界、导航、动作或相机条件生成与 simulator；3D/4D 目录包含重建、深度、点云、scene 表征和动态几何；VLA/VA/WAM 目录覆盖具身 policy 与 world-action 系统；托管 API 目录则表示不在本地加载权重的 provider-backed 系统。
+
+**Benchmark Zoo** 为评测 protocol 提供相同的声明层。当前 60 多个 manifest 覆盖生成视频质量、物理与动态一致性、相机和 3D/4D 行为、世界模型能力、安全、记忆与具身控制。Benchmark manifest 可以声明 dataset、生成输出 layout、metric 资产、官方命令、normalizer、runtime profile、eligibility 条件和 blocker。
+
+在下载任何资产之前，先查询 catalog：
+
+```bash
+worldfoundry-eval zoo models --json
+worldfoundry-eval zoo benchmarks --json
+worldfoundry-eval zoo model-show --model-id <model-id> --include-manifest --json
+worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --json
+```
+
+模型的详细索引见[模型目录](/zh/docs/guides/supported-models)，benchmark 的真实要求和当前执行路径见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)。
+
+## Runtime：把声明变成实际工作
+
+模型执行由树内 pipeline 与 operator、本地 checkpoint loader、托管 API adapter、subprocess launcher 和独立环境 dispatch 共同实现。Pipeline 尽量贴近模型原生实现，operator 则把该实现适配到 WorldFoundry request 与 artifact。
+
+因此，WorldFoundry 可以容纳输入输出差异很大的模型，而不需要把它们压缩成失真的最小公共接口。文本生成视频模型可以公开 prompt 和采样控制，camera-conditioned 模型可以接收 trajectory，3D 系统可以输出几何，robot policy 可以产出动作或 trace。它们的原生差异保持可见，但执行状态和输出会进入相同的报告系统。
+
+有些 runtime 可以在统一环境中工作，另一些需要独立 conda profile、官方上游环境、simulator container 或 API 凭据。[环境配置](/zh/docs/reference/environments)解释 profile 的选择方式，[本地资产指南](/zh/docs/guides/local-assets)则说明 checkpoint、dataset 和 metric 权重的位置。
+
+## 使用界面：操作同一个核心的不同方式
+
+**TUI** 是引导式入口。它与 CLI 读取相同 manifest，帮助用户选择 ID，并且可以在昂贵任务启动前先打印最终命令。
+
+**CLI** 是自动化界面。它覆盖发现、资产检查、task 与 dataset 物化、run plan、推理/评测、reporting、比较、验证和机器可读 JSON 输出。
+
+**Studio** 是浏览器 workspace。它提供模型感知的 job 表单、推理历史、gallery，以及面向媒体、几何、timeline、simulator 和交互模型输出的 visualizer。Studio 不会把结果困在 UI 中；job 会写出可持久化输出，之后仍然可以进行评测。
+
+**Python API** 向研究代码公开 request、result、run、metric 与 reporting contract。**MCP server** 则为 agent-driven 工作流提供边界明确的发现和评测工具。对于不适合放进通用命令的上游或环境细节，仓库仍保留受支持的 shell helper。
+
+## 评测：从 artifact 走到证据
+
+评测核心可以给已有 result ledger 打分，可以让注册模型执行物化 request，可以运行一个 model × benchmark cell，也支持部分 resume/cache、run 比较和 suite 级报告。可复用 metric 与完整 benchmark protocol 被分开维护，因此 scorer 可以用于兼容 artifact，而不会因此声称完整复现了官方 benchmark。
+
+Benchmark integration 可以分阶段成熟。有些只提供 metadata 与 asset plan；有些可以归一化已有官方形态结果；有些公开树内 metric 或 official runner facade；更少的一部分拥有 bounded runtime evidence。只有 protocol 专属数据、覆盖率、凭据和 validation gate 同时满足时，才可能形成完整 leaderboard 资格。
+
+这种分阶段模型是刻意设计的。它允许有价值的 catalog 和 normalization 工作先进入仓库，又不会夸大当前可运行或官方支持范围。
+
+## 报告：一次 run 结束后还留下什么
+
+WorldFoundry 把 run 目录当作研究记录，而不是一次性 cache。典型 run 会保留描述身份和配置的 manifest、记录实际 sample 或条件的 request ledger，以及包含逐样本状态、耗时、错误和 artifact 引用的 result ledger。
+
+生成 artifact 可以是视频、frame、图像、几何、点云、trajectory、动作、trace 或结构化行。Metric summary 保留机器可读聚合结果，`report.md` 和 `summary.json` 分别服务人工阅读和紧凑程序读取，`scorecard.json` 则在分数之外加入覆盖率、provenance、blocker、validation 状态与 eligibility。
+
+精确文件取决于 run mode 和 integration。共同契约是：不可用的工作必须保持不可用，scorecard 不应该把缺失 dataset、跳过 sample 或未验证官方路径伪装成成功。
+
+## 下一步
+
+浏览系统时继续阅读[模型目录](/zh/docs/guides/supported-models)和 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)。要生成 artifact，请进入[运行推理](/zh/docs/guides/inference)；要给已有或新生成输出打分，请阅读[评测概览](/zh/docs/evaluation)；要扩展覆盖，则使用[添加模型](/zh/docs/guides/add-model)或[添加基准](/zh/docs/guides/add-benchmark)。

@@ -144,28 +144,31 @@ conda env without touching checkpoints.
 | Model | Dedicated env | Setup command | Notes |
 | --- | --- | --- | --- |
 | `ac3d` | `ac3d` | `bash scripts/inference/prepare_model_infer.sh ac3d --download` | Official runtime pins Python 3.10, PyTorch 2.4, and CUDA 12.4. Runtime code is in tree under `worldfoundry/synthesis/visual_generation/ac3d/ac3d_runtime`; only checkpoints/assets are external. |
-| `gen3c` | `gen3c` | `bash scripts/inference/prepare_model_infer.sh gen3c --download` | Cosmos Predict1 stack with Python 3.10, CUDA 12.4, torch 2.6, Transformer Engine, Apex, and MoGe. The setup script patches Transformer Engine links and builds Apex from source against the conda CUDA toolchain. |
-| `lyra-1` | `lyra` | `bash scripts/inference/prepare_model_infer.sh lyra-1 --download` | Uses the same Cosmos Predict1 / Transformer Engine / Apex family as GEN3C. |
+| `cosmos3` | `worldfoundry-cosmos3-cu128` | `bash scripts/inference/prepare_model_infer.sh cosmos3 --download` | Cosmos3 needs torch 2.10, torchvision 0.25, Diffusers 0.39, and Cosmos Guardrail. The exact Cosmos3 pipeline/transformer/AVAE inference delta is in tree; setup installs released packages and never clones source repositories. |
+| `gen3c` | `gen3c` | `bash scripts/inference/prepare_model_infer.sh gen3c --download` | Inference-only Cosmos Predict1 stack with Python 3.10, CUDA 12.4, torch 2.6, Transformer Engine, and MoGe. Setup applies the Transformer Engine link patch from released packages; it does not clone or build the training-only Apex repository. |
+| `lyra-1` | `lyra` | `bash scripts/inference/prepare_model_infer.sh lyra-1 --download` | Uses the same inference-only Cosmos Predict1 / Transformer Engine family as GEN3C. |
 | `magi-1` | `magi-official-cu124` | `bash scripts/inference/prepare_model_infer.sh magi-1 --download` | Official stack is Python 3.10.12 with PyTorch 2.4 / CUDA 12.4. Keep flash-attn and flashinfer in this env because their wheels are ABI-sensitive. |
 | `warp-as-history` | `warp-as-history` | `bash scripts/inference/prepare_model_infer.sh warp-as-history --download` | Pins Python 3.10, torch 2.5.0+cu121, diffusers 0.36, transformers 4.51, and peft 0.17. |
 | `hunyuanvideo-t2v` | `HunyuanVideo` | `bash scripts/inference/prepare_model_infer.sh hunyuanvideo-t2v --download` | Original HunyuanVideo T2V CLI stack with older diffusers/xfuser compatibility. HunyuanVideo-1.5 is not part of this exception and runs in the unified env. |
 | `hunyuanvideo-i2v` | `HunyuanVideo` | `bash scripts/inference/prepare_model_infer.sh hunyuanvideo-i2v --download` | Shares the original HunyuanVideo env with T2V. The I2V runtime uses the in-tree official image-to-video script and its own I2V checkpoint layout. |
 | `kairos-sensenova` | `kairos-sensenova` | `bash scripts/inference/prepare_model_infer.sh kairos-sensenova --download` | Uses the official torch/CUDA 12.6-class stack and native attention packages such as SageAttention. Use this env when unified CUDA does not provide the Kairos attention stack. |
-| `lingbot-world` | `lingbot-world` | `bash scripts/inference/prepare_model_infer.sh lingbot-world --download` | Parity requires exact torch and flash-attn pins. The unified env produced invalid near-black act2cam output in upstream-style tests. |
+| `lingbot-world`, `lingbot-world-act` | `lingbot-world` | `bash scripts/inference/prepare_model_infer.sh lingbot-world --download` | Base-Cam and the independently cataloged public Base-Act checkpoint share the in-tree runtime. Parity requires exact torch and flash-attn pins; the unified env produced invalid near-black act2cam output in upstream-style tests. |
 | `wonderworld` | `wonderworld` | `bash scripts/inference/prepare_model_infer.sh wonderworld --download` | Inference imports PyTorch3D CUDA extensions. Build or install PyTorch3D wheels compatible with this env before running the official path. |
 | `wonderjourney` | `wonderworld` | `bash scripts/inference/prepare_model_infer.sh wonderjourney --download` | Shares the WonderWorld PyTorch3D extension environment and uses in-tree WonderJourney runtime code. |
-| `hunyuan-game-craft` | `HYGameCraft` | `bash scripts/inference/prepare_model_infer.sh hunyuan-game-craft --download` | Official inference relies on HYGameCraft plus torchrun sequence parallelism. Set `cuda_visible_devices` / `torchrun_nproc_per_node` explicitly on shared GPU machines. |
+| `hunyuan-game-craft` | `HYGameCraft` | `bash scripts/inference/prepare_model_infer.sh hunyuan-game-craft --download` | Official inference relies on HYGameCraft plus torchrun sequence parallelism. The dedicated env includes the CUDA 12.4 toolkit and builds the pinned flash-attn 2.6.3 PyPI release without cloning its Git repository. Set `cuda_visible_devices` / `torchrun_nproc_per_node` explicitly on shared GPU machines. |
 | `octo` | `worldfoundry-octo-jax` | `bash scripts/inference/prepare_model_infer.sh octo --download` | JAX CUDA 11.8, Flax 0.7.5, TensorFlow, dlimp, and Octo tokenizer assets are isolated from the PyTorch CUDA env. |
+| `lapa` | `worldfoundry-lapa-jax-cu118` | `bash scripts/inference/prepare_model_infer.sh lapa --download` | Uses the official Python 3.10, JAX 0.4.25 CUDA 11/cuDNN 8.6, Flax 0.8.2, Tux 0.0.2, and Transformers 4.40 inference stack. It stays isolated because Transformers 5 removed the Flax generation modules required by LAPA. |
 | `openvla-oft` | `worldfoundry-vla-openvla-compat-cu121` | `bash scripts/inference/prepare_model_infer.sh openvla-oft --download` | Prismatic/OpenVLA-compatible stack with older transformers/timm/tokenizers. Use this env for LIBERO/ALOHA OpenVLA-OFT inference. |
-| `cogact` | `worldfoundry-vla-openvla-compat-cu121` | `HF_TOKEN=<token> bash scripts/inference/prepare_model_infer.sh cogact --download` | Shares the OpenVLA compatibility env. Real inference also needs gated `meta-llama/Llama-2-7b-hf` config/tokenizer access through `HF_TOKEN` or `HUGGING_FACE_HUB_TOKEN`. |
+| `cogact` | `worldfoundry-vla-openvla-compat-cu121` | `bash scripts/inference/prepare_model_infer.sh cogact --download` | Shares the OpenVLA compatibility env and reuses a staged OpenVLA Llama tokenizer for inference-only loading. A token is only needed when no compatible local tokenizer or complete Llama-2 mirror exists. |
 | `lingbot-va` | `lingbot-va` | `bash scripts/inference/prepare_model_infer.sh lingbot-va --download` | Prepare-only profile for the official Python 3.10, torch 2.9, CUDA 12.6, flash-attn stack; stage the LingBot-VA base/posttrain checkpoints before rollout. |
 | `being-h05` | `beingh` | `bash scripts/inference/prepare_model_infer.sh being-h05 --download` | Prepare-only profile. Stage all Being-H0.5 checkpoints; full `get_action` parity needs the upstream policy stack and more headroom than a single 80GB GPU profile. |
 | `dreamdojo` | `dreamdojo` | `bash scripts/inference/prepare_model_infer.sh dreamdojo --download` | Prepare-only profile for the official torchcodec/CUDA 12.8 setup on H100-class hosts. Stage the GR-1 eval dataset before enabling real command templates. |
 
 </div>
 
-EvalCrafter is the only current benchmark metric exception rather than a
-generation model exception; see the benchmark section below.
+EvalCrafter is the only benchmark with a WorldFoundry-managed dedicated metric
+profile. Other benchmark-specific native stacks are listed below and are not
+claimed as configured until their own preflight passes.
 
 ## Unified Environment With Extra Runtime Requirements
 
@@ -175,12 +178,13 @@ These are not reasons to clone an external repository; the code path is in-tree.
 
 | Model or family | Extra requirement | Notes |
 | --- | --- | --- |
+| Unified-env WRBench camera/world integrations (EasyAnimate, Hunyuan WorldPlay, HunyuanWorld-Voyager, InSpatio-World, Matrix-Game 2/3, ReCamMaster, SANA-WM, ATI, HyDRA, Spatia, minWM, MagicWorld, LiveWorld, VerseCrafter, VideoX-Fun camera variants, and the HY-World renderer) | Hugging Face checkpoints declared by each profile; Spatia's default MapAnything checkpoint is non-commercial research only. | These resolve to `worldfoundry-unified-<cuda-tier>`. Every model keeps an independent in-tree inference binding. Reusable Wan2.1, MapAnything, UniCeption, Uni3C, Depth Pro, STream3R, SAM3 video segmentation, Qwen3-VL entity extraction, and point-cloud projection components live under `base_models`; runtime config lives under `worldfoundry/data`. Runtime setup never clones source repositories. AC3D, Cosmos3, GEN3C, Hunyuan GameCraft, and both LingBot routes use the dedicated environments listed above. |
 | SkyReels V3 | CUDA compiler, flash-attn, and torchao for the official 8-GPU USP path. | Use `unified_install.sh` without `--skip-flash-attn` or build flash-attn through `scripts/setup/install_flash_attn.sh`. |
 | Matrix-Game-3 | Flash-attn. | FA3 may be requested by config; FA2 fallback is acceptable on A100 validation hosts. |
 | HunyuanWorld-Mirror | CUDA/PyTorch-matched `gsplat` wheel. | Remains a unified-env model when the wheel matches the active torch stack. |
 | pixelSplat | Local Gaussian rasterization extension and `re10k.ckpt`. | The model wrapper is in tree; only the extension/checkpoint are local prerequisites. |
 | LingBot-Map | Optional FlashInfer. | The wrapper defaults to SDPA, so FlashInfer is not mandatory for baseline inference. |
-| OpenPI / LAPA / MME-VLA | JAX policy dependencies, `gsutil` for some OpenPI checkpoint shards, and optional OpenPI-style websocket or robot-simulator services for full policy rollout. | WorldFoundry keeps code in tree; these requirements are runtime services or checkpoint-transfer tools, not external repo clones. |
+| OpenPI / MME-VLA | JAX policy dependencies, `gsutil` for some OpenPI checkpoint shards, and optional OpenPI-style websocket or robot-simulator services for full policy rollout. | WorldFoundry keeps code in tree; these requirements are runtime services or checkpoint-transfer tools, not external repo clones. LAPA uses the isolated environment listed above. |
 | Solaris | JAX/Orbax checkpoint loading and official HF evaluation fixtures. | Uses the unified env in WorldFoundry; document the dataset/checkpoint layout rather than a separate conda env. |
 
 ## Benchmark Metric Environments
@@ -190,37 +194,57 @@ unified environment. Full official metric suites can require a separate conda
 profile when their dependency stack would disturb model inference. Install those
 profiles through the same public setup entrypoint:
 
+The complete per-benchmark mapping for all 42 Video Generation and World Model
+entries is in the [benchmark runtime environment matrix](/docs/evaluation/benchmark-hub/runtime-environments).
+That matrix also records external API services, native extensions, checkpoint
+stacks, and the currently verified scope; `needs_new_env: false` alone is not a
+full-suite readiness claim.
+
 ```bash
 bash scripts/setup/model_env_install.sh --model evalcrafter
 ```
 
-EvalCrafter is the current benchmark exception. Normalizing an existing
-`final_result.txt` works in `worldfoundry-unified-<tier>`. Running the full
-official metric suite needs `worldfoundry-evalcrafter-metrics` because the
-official scorer combines TensorFlow/DeepFace, PaddleOCR, DOVER/scikit-video,
-PyTorch video metrics, and MMAction2/MMCV action recognition.
+EvalCrafter's supported three-metric CLIP path and `final_result.txt` import run
+in `worldfoundry-unified-<tier>`. The separate
+`worldfoundry-evalcrafter-metrics` profile mirrors the official revision's
+Python 3.9.17, pip 23.2.1, Torch 2.0.1, torchvision 0.15.2, TensorFlow 2.12.0,
+PaddlePaddle-GPU 2.5.1, MMCV 2.0.1, and MMAction2 1.1.0 package pins. It exists
+to prepare the upstream dependency surface, not to imply that WorldFoundry
+orchestrates the full scorer.
 
-The in-tree code keeps reusable foundation models under `worldfoundry/base_models`:
+| Benchmark family | Environment boundary | Verified scope |
+| --- | --- | --- |
+| EvalCrafter | Unified env for the three official CLIP-derived metrics and result import; official legacy environment for preparing the external full stack. | The bounded metric path is verified. Environment preparation is documented, but complete 17-metric recomputation and leaderboard output remain unsupported. |
+| iWorld-Bench | Unified env, including the pinned in-tree ViPE native sources and CUDA build. `WORLDFOUNDRY_IWORLD_BENCH_PYTHON` is only an optional override for a non-standard ABI-compatible Python. | One real 16-frame video passed the official `memory_ability` component path. The bundled three-prompt coverage and all nine component metrics were not run, so full-suite and leaderboard validity remain false. |
+| VBench / VBench-2.0 / VBench++ | Unified env plus dimension-specific checkpoints and optional perception packages. | Bounded official dimensions only; each selected dimension must pass preflight. |
+| T2V-SafetyBench | Unified client environment plus a user-provided judge API endpoint/key. | API failure is fail-closed; no judge API result is claimed from local fixture tests. |
+
+A separate environment is never inferred from a successful import. The catalog
+and runtime profile must name its Python executable or setup command, assets,
+and verified scope. If no reproducible environment recipe exists, the affected
+metric remains blocked rather than being reported through a fallback score.
+
+The in-tree code keeps reusable foundation models under `worldfoundry/base_models`.
+These components are available for future full-suite work; their presence does
+not mean the bounded EvalCrafter runner currently executes them:
 
 | Component | In-tree location | Notes |
 | --- | --- | --- |
-| DeepFace runtime | `worldfoundry/base_models/perception_core/face/deepface` | Reused by EvalCrafter celebrity identity scoring; benchmark celebrity assets stay under the EvalCrafter runner. |
-| DOVER runtime | `worldfoundry/base_models/perception_core/video_quality/dover` | Reused by video-quality metrics; checkpoints resolve from `WORLDFOUNDRY_DOVER_CKPT`, `WORLDFOUNDRY_EVALCRAFTER_CHECKPOINTS_DIR`, or `WORLDFOUNDRY_CKPT_DIR`. |
+| DeepFace runtime | `worldfoundry/base_models/perception_core/face/deepface` | Available for future celebrity identity integration; the supported CLIP subset does not execute it. |
+| DOVER runtime | `worldfoundry/base_models/perception_core/video_quality/dover` | Available for future video-quality integration; the supported CLIP subset does not execute it. |
 | VideoMAE action recipe | `worldfoundry/base_models/perception_core/action_recognition/videomae_mmaction` | Only the EvalCrafter-used VideoMAEv2 config and Kinetics-400 label map are vendored. MMAction2 is installed as an environment dependency, not copied as framework source. |
 
-Stage EvalCrafter metric assets under the standard checkpoint root or set
-explicit variables:
+For the supported subset, stage CLIP ViT-B/32 under the standard checkpoint
+root or set its explicit override:
 
 ```bash
-export WORLDFOUNDRY_EVALCRAFTER_ROOT=worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter
-export WORLDFOUNDRY_EVALCRAFTER_CHECKPOINTS_DIR="${WORLDFOUNDRY_CKPT_DIR}/evalcrafter"
-export WORLDFOUNDRY_DOVER_CKPT="${WORLDFOUNDRY_EVALCRAFTER_CHECKPOINTS_DIR}/DOVER/pretrained_weights/DOVER.pth"
-export WORLDFOUNDRY_VIDEOMAE_K400_CKPT="${WORLDFOUNDRY_EVALCRAFTER_CHECKPOINTS_DIR}/VideoMAE/vit-base-p16_videomaev2-vit-g-dist-k710-pre_16x4x1_kinetics-400_20230510-3e7f93b2.pth"
+export WORLDFOUNDRY_CLIP_VIT_B32_MODEL_DIR="${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-base-patch32"
 ```
 
-The full EvalCrafter official run also needs the generated-video directory to
-contain direct `0000.mp4` through `0699.mp4` files. The runner rejects outer
-dataset roots before invoking the official metrics.
+See the [EvalCrafter benchmark page](/docs/evaluation/benchmark-hub/evalcrafter)
+for the no-proxy download and smoke command. The complete upstream suite also
+expects direct `0000.mp4` through `0699.mp4` files, but WorldFoundry does not
+currently claim that full path.
 
 ## Embodied Simulator Environments
 

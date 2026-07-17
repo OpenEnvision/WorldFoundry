@@ -1,0 +1,44 @@
+---
+title: Core 模型加载
+description: 安全 checkpoint 读取、state dict 发现、结构身份、惰性 DiskMap 与模型构造。
+---
+
+模型加载被分成多层，让调用方决定 Core 应当负责多少策略。`load_torch_checkpoint` 默认以 weights-only 安全模式读取一个 PyTorch 对象；`load_state_dict` 理解文件、目录、多路径、safetensors 和分片 index；`DiskMap` 按参数名惰性暴露 checkpoint tensor；`load_model` 还会构造 module、转换 key、分配权重、安装可选显存管理、移动 placement 并切换 eval 模式。
+
+## 一个安全的本地 state dict 示例
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import torch
+
+from worldfoundry.core import hash_state_dict_keys, load_torch_state_dict
+
+with TemporaryDirectory() as directory:
+    checkpoint = Path(directory) / "weights.pt"
+    expected = {"linear.weight": torch.arange(8).reshape(2, 4)}
+    torch.save(expected, checkpoint)
+
+    loaded = load_torch_state_dict(checkpoint, map_location="cpu")
+    assert torch.equal(loaded["linear.weight"], expected["linear.weight"])
+    print(hash_state_dict_keys(loaded, with_shape=True))
+```
+
+`hash_state_dict_keys` 是参数名及可选形状的路由指纹，它有意忽略 tensor 值，因此架构相同的两个 checkpoint 可以得到相同 digest。需要确认文件内容身份时，应使用读取字节的 `hash_model_file`。
+
+## 如何选择加载层级
+
+已知文件就是 PyTorch checkpoint，并且需要保留原始外层结构时，用 `load_torch_checkpoint`。输入可能是目录、分片 index、safetensors 或多个路径，并且希望得到一个合并 mapping 时，用 `load_state_dict`。一次加载所有 tensor 会超过 host 内存时，用 `DiskMap`；safetensors 能提供最佳惰性行为，而二进制文件会走内存兼容 reader。
+
+只有当共享构造路径符合模型时才使用 `load_model`。它会在 meta device 初始化上下文中构造，支持 state dict converter、DeepSpeed ZeRO-3 专属分配路径，并能按 `module_map` 安装 wrapper。参数物化方式特殊的模型应在自己的 runner 中控制这一层，并复用更低层的 Core 函数。
+
+## Checkpoint 信任边界
+
+`load_torch_checkpoint` 默认使用 `weights_only=True`。可选的 `allow_unsafe_pickle_fallback=True` 可能执行 pickle payload，绝不能对不可信文件启用。Safetensors 没有这类 pickle 执行风险。远程 URI 会先经过 Core storage helper 本地化，再交给 reader。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-model-loading" locale="zh" />

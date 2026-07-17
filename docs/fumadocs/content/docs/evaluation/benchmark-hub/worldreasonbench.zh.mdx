@@ -1,0 +1,136 @@
+---
+title: WorldReasonBench
+description: WorldReasonBench — 指标、依赖与运行命令。
+---
+
+## 简介
+
+World-state reasoning QA and reward-model evaluation for generated videos.
+
+**WorldFoundry 评测路径:** 导入已有的官方 / 上游结果并归一化为 WorldFoundry scorecard；当前集成不能从原始生成视频完整重跑官方协议。
+
+## 集成状态
+
+| 项目 | 当前状态 |
+| --- | --- |
+| Catalog integration | `integrated` |
+| Runner verification | `normalizer_only` |
+| Leaderboard | 暂不可用于 leaderboard 声明 |
+
+## 指标
+
+### Task YAML
+
+`worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml`
+
+### Primary
+
+- `score_pr`
+
+| Metric | 关注点 |
+| --- | --- |
+| `score_pr` | Geometric combination of QA accuracy and dynamic reasoning score. |
+| `qa_accuracy` | 预测动作、状态或结果相对 benchmark 成功标准的正确性。 |
+| `state_score` | 官方 State Score 指标在 benchmark 协议中的计分结果。 |
+| `process_score` | 官方 Process Score 指标在 benchmark 协议中的计分结果。 |
+| `fidelity_score` | 官方 Fidelity Score 指标在 benchmark 协议中的计分结果。 |
+| `mechanism_score` | 官方 Mechanism Score 指标在 benchmark 协议中的计分结果。 |
+| `static_outcome_score` | 官方 Static Outcome Score 指标在 benchmark 协议中的计分结果。 |
+| `dynamic_reasoning_score` | 官方 Dynamic Reasoning Score 指标在 benchmark 协议中的计分结果。 |
+| `reasoning_gap` | Static outcome score minus dynamic reasoning score; lower values indicate less outcome hacking. |
+| `pointwise_score` | 官方 Pointwise S(v) 指标在 benchmark 协议中的计分结果。 |
+| `reasoning_correctness` | 官方 Reasoning Correctness 指标在 benchmark 协议中的计分结果。 |
+| `content_fidelity` | 官方 Content Fidelity 指标在 benchmark 协议中的计分结果。 |
+| `visual_aesthetics` | 官方 Visual Aesthetics 指标在 benchmark 协议中的计分结果。 |
+| `pointwise_spearman` | 官方 Pointwise Spearman Correlation 指标在 benchmark 协议中的计分结果。 |
+| `induced_pairwise_accuracy` | 预测动作、状态或结果相对 benchmark 成功标准的正确性。 |
+| `pairwise_accuracy_with_ties` | 预测动作、状态或结果相对 benchmark 成功标准的正确性。 |
+| `pairwise_accuracy_without_ties` | 预测动作、状态或结果相对 benchmark 成功标准的正确性。 |
+
+## 环境准备
+
+### 运行环境
+
+- **Conda 环境：** `worldfoundry-unified-cu128`。
+- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
+- Result normalization uses the unified WorldFoundry environment and has no GPU dependency.
+- Real evaluation reuses the unified environment when it provides openai, opencv-python, numpy, Pillow, and tqdm.
+- The judge model server is an external OpenAI-compatible service and may use its own serving environment.
+
+### 测评数据
+
+- 待测模型输出目录：设置 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 指向生成视频或 rollout artifact 根目录。
+- `worldfoundry/evaluation/tasks/execution/runners/worldreasonbench`
+- `worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml`
+
+### Checkpoint 与资产
+
+- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
+
+### 关键环境变量
+
+- `WORLDFOUNDRY_WORLDREASONBENCH_ROOT`
+- `WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH`
+- `WORLDFOUNDRY_WORLDREASONBENCH_PROTOCOL`
+- `WORLDFOUNDRY_WORLDREASONBENCH_QA_JSON`
+- `WORLDFOUNDRY_WORLDREASONBENCH_PAIRS_JSON`
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+- `OPENAI_BASE_URL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `HF_ENDPOINT`
+
+## 运行评测
+
+准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
+
+### 设置候选产物目录
+
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
+```
+
+### 导入已有官方结果
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id worldreasonbench \
+  --mode normalizer \
+  --official-results-path /path/to/official/results-or-report \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/worldreasonbench/normalizer \
+  --json
+```
+
+### 校验或归一化已有结果
+
+```bash
+worldfoundry-eval zoo benchmark-run --benchmark-id worldreasonbench --mode official-validation --official-results-path <official_results_dir> --output-dir <out> --json
+```
+
+## 依赖与产物
+
+### Inputs
+
+- WORLDFOUNDRY_WORLDREASONBENCH_ROOT for official execution
+- OPENAI_BASE_URL and a compatible multimodal judge
+
+### Environment
+
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+
+### Outputs
+
+- `scorecard.json`
+- `raw_metric_table.jsonl`
+- `protocol_results.json`
+- `benchmark_contract.json`
+
+## 官方资料
+
+- [GitHub](https://github.com/UniX-AI-Lab/WorldReasonBench)
+- [Paper](https://arxiv.org/abs/2605.10434)
+- [Project page](https://unix-ai-lab.github.io/WorldReasonBench/)
+- [Hugging Face dataset](https://huggingface.co/datasets/WorldReasonBench)
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

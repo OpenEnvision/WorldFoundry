@@ -18,6 +18,7 @@ The benchmark code used by WorldFoundry is already in this repository under `wor
 | Paper | [arXiv:2501.09038](https://arxiv.org/abs/2501.09038) |
 | GitHub | [github.com/google-deepmind/physics-IQ-benchmark](https://github.com/google-deepmind/physics-IQ-benchmark) |
 | In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py` |
+
 ## Prepare Assets
 
 - Prompt descriptions: bundled at `worldfoundry/data/benchmarks/assets/physics-iq/descriptions/descriptions.csv`; override with `WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS` or `--descriptions-file`.
@@ -117,12 +118,3 @@ The output directory contains:
 - `per_sample_scores.jsonl`: per-scenario rows when the input file contains scenario-level fields.
 - `physics_iq_results.csv` or `physics_iq_results.json`: copied result file when the scoring wrapper imports one.
 - `specialized_normalizer_stdout.log` and `specialized_normalizer_stderr.log` when invoked through `worldfoundry-eval zoo benchmark-run`.
-
-## Limitations
-
-- The in-tree runner does not generate masks or run the full Physics-IQ media scorer from raw videos. It imports a result CSV/JSON and validates generated-video coverage.
-- Full leaderboard parity requires the external Physics-IQ dataset media, binary masks, exactly 198 generated 5-second clips, and the upstream scoring workflow.
-- `official-run` is useful for WorldFoundry pipeline integration evidence, but `leaderboard_valid` remains false until the full media-scoring assets and outputs are supplied.
-- Coverage checks match only flat video filenames in the generated-artifact directory; nested video trees should be materialized into the flat layout first.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)

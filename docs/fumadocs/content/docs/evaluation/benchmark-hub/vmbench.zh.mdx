@@ -175,13 +175,3 @@ tmp/vmbench/direct-official-run/
 ```
 
 公开 CLI 导入也会在指定输出目录下写出 `scorecard.json`、`raw_metric_table.jsonl`、`per_sample_metrics.jsonl` 和 runner log files。
-
-## 限制
-
-- 完整重算很重。上游 README 给出的 1,050 个视频评测耗时是数小时级，WorldFoundry 路径仍然需要 CUDA、PyTorch video/perception packages 和全部 metric checkpoints。
-- `cas` 指标默认使用 `torchrun`。需要单进程运行时设置 `WORLDFOUNDRY_VMBENCH_USE_TORCHRUN=0`。
-- 仓内 runtime 遇到第一个 metric process failure 会停止后续指标，并写出显示缺失 metric ID 的部分 scorecard。
-- leaderboard parity 要求完整 1,050 个视频，命名为 `0001.mp4` 到 `1050.mp4`，且顺序与 bundled prompt 一致。
-- Hugging Face checkpoint 文件的可访问性取决于运行环境。共享 cache 路径不一致时，把文件镜像到本地并设置上面的环境变量。
-
-[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

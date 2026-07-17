@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     template: '%s | WorldFoundry',
   },
   description:
-    'Inference-first framework for generative world models, video models, 3D/4D generation, evaluation, and optional training.',
+    'Open-source infrastructure to discover, run, inspect, and evaluate video, 3D/4D, interactive-world, and embodied models.',
   icons: {
     icon: [{ url: faviconPath, type: 'image/svg+xml' }],
     shortcut: faviconPath,

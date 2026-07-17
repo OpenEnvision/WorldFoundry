@@ -21,6 +21,7 @@ The official benchmark defines a taxonomy with 4 domains and 14 categories, plus
 | GitHub | [github.com/showlab/Impossible-Videos](https://github.com/showlab/Impossible-Videos) |
 | HF dataset | [showlab/ImpossibleVideos](https://huggingface.co/datasets/showlab/ImpossibleVideos) |
 | In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py` |
+
 ## Prepare Data And Assets
 
 Checked-in assets:
@@ -148,12 +149,3 @@ For a custom prompt file, add:
 | `ipv_bench_average` | Mean of available IPV-Bench component metrics unless an imported result file supplies the aggregate directly. |
 
 All metrics are normalized to `[0, 1]`, and higher is better.
-
-## Limitations And Gaps
-
-- WorldFoundry does not generate human annotations. Generation scores need imported annotations or judge outputs.
-- The direct `--run-official` path is an artifact importer: it searches for existing IPV result files and computes coverage against generated videos.
-- Full leaderboard parity still depends on the official prompt suite, complete generated videos, and the same human or judge protocol used by the paper.
-- Open-ended QA is only as strong as the imported score. The current exact-match fallback is simple and may not reflect semantic answer quality.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)

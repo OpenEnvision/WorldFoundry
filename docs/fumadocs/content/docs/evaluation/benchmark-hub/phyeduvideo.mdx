@@ -18,6 +18,7 @@ WorldFoundry includes the runnable PhyEduVideo integration under `worldfoundry/e
 | Paper | [arXiv:2601.00943](https://arxiv.org/abs/2601.00943) |
 | GitHub | [github.com/meghamariamkm/PhyEduVideo](https://github.com/meghamariamkm/PhyEduVideo) |
 | In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py` |
+
 ## Prepare Assets
 
 - Prompt suite: `worldfoundry/data/benchmarks/assets/phyeduvideo/Prompts/Prompts.json` contains 60 concepts and 205 teaching-point prompts.
@@ -115,12 +116,3 @@ The output directory contains:
 - `per_sample_scores.jsonl`: concept/teaching-point rows when the input result file contains sample-level fields.
 - `phyeduvideo_results.csv` or `phyeduvideo_results.json`: copied result file when the in-tree wrapper imports one.
 - `specialized_normalizer_stdout.log` and `specialized_normalizer_stderr.log` when invoked through `worldfoundry-eval zoo benchmark-run`.
-
-## Limitations
-
-- The in-tree scoring wrapper currently imports already-computed result files. It does not run the full InternVL / CLIP / VQA judge stack end to end.
-- Full leaderboard parity requires generated videos for all 205 teaching points and upstream judge outputs for semantic, physics, motion, and flicker metrics.
-- The bundled prompt/rubric assets are sufficient for request materialization and result aggregation, but not for recomputing every upstream metric from raw videos.
-- `leaderboard_valid` remains false until complete judge evidence and full prompt coverage are supplied.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)

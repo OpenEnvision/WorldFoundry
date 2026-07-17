@@ -14,6 +14,7 @@ description: 面向 text-to-video 生成物理常识的评测，包含仓内 pro
 | HF 测试集 | [videophysics/videophy_test_public](https://huggingface.co/datasets/videophysics/videophy_test_public) |
 | VideoCon-Physics | [videophysics/videocon_physics](https://huggingface.co/videophysics/videocon_physics) |
 | 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py` |
+
 ## 简介
 
 VideoPhy 评估 text-to-video 模型生成的视频是否同时满足输入 caption 和日常物理常识。它包含 688 条 captions，覆盖 solid-solid、solid-fluid、fluid-fluid 等真实材料交互。原论文指出，很多强 T2V 模型的问题并不只是画质，而是没有正确呈现动作、违反直觉物理，或者两者同时发生。

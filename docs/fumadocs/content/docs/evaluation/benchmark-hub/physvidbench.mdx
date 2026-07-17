@@ -19,6 +19,7 @@ WorldFoundry includes the runnable PhysVidBench runner under `worldfoundry/evalu
 | GitHub | [github.com/ensanli/PhysVidBenchCode](https://github.com/ensanli/PhysVidBenchCode) |
 | HF dataset | [Anonymousny/PhysVidBench](https://huggingface.co/datasets/Anonymousny/PhysVidBench) |
 | In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py` |
+
 ## Prepare Assets
 
 - Prompt/question CSV: bundled fixture at `worldfoundry/data/benchmarks/assets/physvidbench/prompts_questions.csv`; override with `WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST` or `--prompt-manifest`.
@@ -128,12 +129,3 @@ The output directory contains:
 - `raw_metric_table.jsonl`: one row per declared metric.
 - `per_sample_scores.jsonl`: question-level rows copied from the QA result.
 - `specialized_normalizer_stdout.log` and `specialized_normalizer_stderr.log` when invoked through `worldfoundry-eval zoo benchmark-run`.
-
-## Limitations
-
-- The bundled prompt/caption assets in this checkout are not a full 383-prompt benchmark pack; they are enough to document and exercise the wiring. Use the HF dataset or explicit overrides for full evaluation.
-- The in-tree QA runner consumes captions; it does not run AuroraCap over videos. You must prepare the eight caption tracks yourself.
-- The default non-mock backend requires Gemini API access and `google-genai`.
-- Full leaderboard parity requires full prompt coverage, complete caption tracks, generated videos, and normalized QA output.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)

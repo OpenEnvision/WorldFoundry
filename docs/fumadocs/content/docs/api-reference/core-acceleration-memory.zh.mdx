@@ -1,0 +1,56 @@
+---
+title: Core 加速与内存
+description: 跨步 cache、token pruning、融合 kernel、显存生命周期 wrapper、DiskMap 与 memory store。
+---
+
+Core 把精确实现加速与近似策略分开。融合 kernel 和 placement 调整的目标是保持模型语义；跨步 cache 和 token pruning 则明确用近似换计算量，因此会暴露 threshold、保留比例、event 和 reset 边界，让模型接入能够实际评测。
+
+## 跨步 cache 示例
+
+```python
+import torch
+
+from worldfoundry.core.acceleration import FixedStepCache
+
+cache = FixedStepCache(
+    skip_steps={1, 3},
+    dense_first=1,
+    dense_last=1,
+    total_steps=5,
+)
+calls = []
+
+with torch.no_grad():
+    outputs = []
+    for step in range(5):
+        def compute(step=step):
+            calls.append(step)
+            return torch.tensor([float(step)])
+
+        outputs.append(cache.run(step, compute))
+
+assert calls == [0, 2, 4]  # 边界 step 会保持完整计算
+assert [event.hit for event in cache.events] == [False, True, False, True, False]
+```
+
+Autograd 开启时 cache 会关闭 replay。独立 denoising trajectory 之间必须调用 `reset()`，否则上一请求的 residual 会成为下一请求的状态。评测延迟与质量时，应把 event stream 当作实际证据，而不是假设配置的 skip step 都命中了。
+
+## Token pruning 生命周期
+
+`select_token_indices` 是无状态函数；`prune_tokens` 返回紧凑数据和 `TokenPruneState`；`restore_tokens` 再把处理后的 token scatter 回去，用 compensation 或零填充被丢弃位置。`TokenPruner` 增加上一时刻 compensation：第一次调用记录 dense segment，后续调用才可以 prune；每个 `prune` 都必须在相同 key 下与 `restore` 配对。
+
+## 显存 placement 状态
+
+`enable_vram_management` 会把 `module_map` 列出的类替换成 `AutoWrappedLinear` 等 wrapper。每个 wrapper 可以分别设置 offload、onload、preparing 和 computation 的 dtype/device。磁盘 wrapper 通过 `DiskMap` 解析参数名，普通 wrapper 则在 device 之间移动或复制 tensor。
+
+这个变换会改变 module identity，通常只应在模型构造时执行一次。存在继承重叠时，module-map 顺序会影响结果。一套 placement 配置不会自动适合新架构：需要验证峰值显存、传输重叠、输出一致性或容差，以及达到配置显存上限时的行为。
+
+## 语义 Memory 与 VRAM 的区别
+
+`BaseMemory` 和 `MemoryStore` 表示可以检索的世界模型 memory record，并不管理 GPU 分配。VRAM wrapper 管理参数放置，但不提供语义检索。把两层含义分开，才能避免把“memory”配置放到错误的系统层。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-acceleration-memory" locale="zh" />

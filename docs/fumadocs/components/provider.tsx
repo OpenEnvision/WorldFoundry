@@ -5,7 +5,7 @@ import { type ReactNode } from 'react';
 
 export function Provider({ children }: { children: ReactNode }) {
   return (
-    <RootProvider search={{ SearchDialog }} theme={{ enabled: false }}>
+    <RootProvider search={{ SearchDialog, preload: false }} theme={{ enabled: false }}>
       {children}
     </RootProvider>
   );

@@ -1,8 +1,16 @@
 import Link from 'next/link';
 
-import { WORLDFOUNDRY_GITHUB_REPO } from '@/lib/site-links';
+import { WORLDFOUNDRY_SLACK_INVITE } from '@/lib/site-links';
 
-export type SiteNavItemId = 'home' | 'docs' | 'blog' | 'events' | 'community' | 'openenvision';
+export type SiteNavItemId =
+  | 'home'
+  | 'docs'
+  | 'models'
+  | 'benchmarks'
+  | 'blog'
+  | 'events'
+  | 'community'
+  | 'openenvision';
 
 type SiteNavItem = {
   id: SiteNavItemId;
@@ -37,7 +45,7 @@ export function SiteNav({
     { id: 'events', href: '/events', label: 'Events' },
     {
       id: 'community',
-      href: WORLDFOUNDRY_GITHUB_REPO,
+      href: WORLDFOUNDRY_SLACK_INVITE,
       label: 'Community',
       external: true,
     },

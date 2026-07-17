@@ -1,0 +1,60 @@
+---
+title: Core foundations
+description: Typed registries, normalization helpers, deterministic utilities, image composition, and reusable safety guardrail protocols.
+---
+
+Foundational Core APIs are small, but they define conventions shared by many larger systems: normalized identifiers, deterministic registries, environment flags, exact division, common list conversion, image materialization/composition, random seeding, and safety interfaces.
+
+## Typed registry example
+
+```python
+from worldfoundry.core import TypedRegistry
+
+metrics = TypedRegistry()
+metrics.register(
+    "temporal-consistency",
+    object(),
+    aliases=("temporal", "tc"),
+    metadata={"direction": "higher-is-better"},
+)
+
+assert metrics.get("TC") is metrics.get("temporal-consistency")
+assert metrics.keys() == ("temporal-consistency",)
+```
+
+Keys and aliases use stripped, case-folded lookup, while the original public key remains in `RegistryItem`. Registration rejects collisions instead of silently overwriting them. Enumeration is deterministic, which makes generated manifests and tests stable.
+
+## Guardrail composition example
+
+```python
+from worldfoundry.core.safety import GuardrailRunner
+
+class RejectEmptyPrompt:
+    def is_safe(self, value):
+        prompt = str(value).strip()
+        return (bool(prompt), "prompt is empty" if not prompt else "")
+
+runner = GuardrailRunner(
+    safety_models=[RejectEmptyPrompt()],
+    generic_block_msg="Request rejected",
+)
+
+assert runner.run_safety_check("walk through a snowy forest")[0] is True
+assert runner.run_safety_check("") == (False, "Request rejected")
+```
+
+`ContentSafetyGuardrail` and `PostprocessingGuardrail` are structural protocols: implementations only need the documented method. `GuardrailRunner` stops at the first unsafe classifier, then applies postprocessors sequentially when requested. An empty classifier list returns safe with a warning; production policy should decide explicitly whether that fail-open behavior is acceptable.
+
+The safety package imports NumPy and rank-aware Loguru logging from the model runtime environment. The registry example itself uses only the import-light top-level Core facade.
+
+## Utility boundaries
+
+`env_is_true` recognizes a bounded truthy vocabulary; it is not a general parser. `divide` asserts exact divisibility and is intended for shape/group invariants. `as_list` normalizes a scalar or sequence at API boundaries. `set_random_seed` coordinates common random backends but does not by itself guarantee deterministic CUDA kernels.
+
+Image helpers accept paths, PIL images, arrays, or tensors where documented. `compose_horizontal_views` and `split_horizontal_views` preserve a named view ordering; keep that ordering with the resulting artifact instead of relying on a later reader to guess it.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-foundations" />

@@ -1,0 +1,134 @@
+---
+title: Benchmark 运行环境
+description: 42 个 Video Generation 与 World Model benchmark 的环境、服务、checkpoint 和验证边界。
+---
+
+## Artifact 是模型与 benchmark 的边界
+
+生成模型和 evaluator 是两个独立 runtime。模型可以在自己的 conda 环境里生成视频并退出，然后把普通文件交给另一个环境中的 benchmark。Benchmark 不应 import 待测模型，也不应把 evaluator 的依赖强塞进模型环境。
+
+下面 42 个 Video Generation / World Model 条目中，`needs_new_env: false` 只表示 WorldFoundry wrapper 或结果 importer 默认从统一环境启动；它**不表示**所有 official metric checkpoint、API credential、native extension 和完整数据都已经安装。`environment_id` 表示真正执行所用的 base environment，runner role 应记录在 status/capability metadata；只有同时写明 `needs_new_env: true` 和公开 setup 命令时，才是仓库管理的独立环境。
+
+表中的环境类型：
+
+- **U** — `worldfoundry-unified-<cuda-tier>`。
+- **U + service** — 统一 client 环境，加用户提供的 API 或 model server；server 可以在另一台机器或另一个环境中。
+- **U + metric stack** — 统一环境，加 dimension-specific checkpoint、package 或 CUDA extension；只有单独通过 preflight 的 dimension 才可用。
+- **Dedicated** — 仓库提供公开安装入口的 benchmark 专用 conda profile。
+
+## 基础配置
+
+统一环境只创建一次：
+
+```bash
+bash scripts/setup/bootstrap_worldfoundry.sh
+source tmp/worldfoundry_unified_env.sh
+```
+
+查看单个 benchmark 的数据、checkpoint、环境变量与命令计划：
+
+```bash
+python scripts/setup/prepare_benchmark_assets.py \
+  --benchmark-id <benchmark-id> \
+  --json
+```
+
+这条命令只是 **asset plan**，不是 runtime 验证证据。只有真实 evaluator 路径执行后，catalog 和 scorecard 记录的那一小段 scope 才算 verified。只跑 importer 或 fixture 不能证明可以从原始视频重算 official metric。
+
+真实 scoring 前，运行 runtime profile 声明的 fail-closed dependency check：
+
+```bash
+PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" -m \
+  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight \
+  --profile <benchmark-id> \
+  --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml \
+  --output-dir tmp/worldfoundry_preflight/<benchmark-id> \
+  --json
+```
+
+`ready: true` 只表示 profile 声明的 Python import、path、环境变量和 device requirement 已就绪；它**不表示** official benchmark 或 full metric suite 已经执行并通过验证。
+
+EvalCrafter 是目前唯一由仓库管理的 benchmark 独立 conda 环境。显式固定环境根目录，确保安装、preflight 和后续命令解析到同一个 prefix：
+
+```bash
+export WORLDFOUNDRY_HOME="${WORLDFOUNDRY_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/worldfoundry}"
+export WORLDFOUNDRY_CONDA_ENVS_ROOT="${WORLDFOUNDRY_CONDA_ENVS_ROOT:-$WORLDFOUNDRY_HOME/conda_envs}"
+
+bash scripts/setup/model_env_install.sh \
+  --model evalcrafter \
+  --env-root "$WORLDFOUNDRY_CONDA_ENVS_ROOT"
+bash scripts/setup/model_env_install.sh \
+  --model evalcrafter \
+  --env-root "$WORLDFOUNDRY_CONDA_ENVS_ROOT" \
+  --verify-only
+
+EVALCRAFTER_PYTHON="$WORLDFOUNDRY_CONDA_ENVS_ROOT/worldfoundry-evalcrafter-metrics/bin/python"
+test -x "$EVALCRAFTER_PYTHON"
+```
+
+直接调用 `"$EVALCRAFTER_PYTHON"` 就是切换环境，不要求激活 shell。该 profile 现在逐项对齐固定 revision 的官方环境：Python 3.9.17、pip 23.2.1、Torch 2.0.1、torchvision 0.15.2、TensorFlow 2.12.0、PaddlePaddle-GPU 2.5.1、MMCV 2.0.1 和 MMAction2 1.1.0。官方 RAFT native extension 和 checkpoint 树仍要另外准备；环境安装或 import 验证不能证明完整 700 视频套件已跑通。固定 upstream checkout、CUDA 11.7 说明、checkpoint 布局、bounded raw-video 命令和官方结果导入都见 [EvalCrafter 页面](/zh/docs/evaluation/benchmark-hub/evalcrafter)。
+
+## Video Generation benchmarks — 30
+
+| Benchmark | 环境边界与额外配置 | 已验证范围 / 当前 blocker |
+| --- | --- | --- |
+| [VBench](/zh/docs/evaluation/benchmark-hub/vbench) | **U + metric stack**；按所选 dimension 准备 checkpoint。Detectron2 维度可能需要与 CUDA/Torch 匹配的构建。 | 已验证一个真实视频的 `aesthetic_quality` 组件；完整 16 维和 leaderboard coverage 未验证。 |
+| [VBench++](/zh/docs/evaluation/benchmark-hub/vbench-plus-plus) | **U + metric stack**；I2V、long-video、trustworthiness track 的资产不同。 | 已验证 bounded long-video 组件；完整套件未验证。 |
+| [VBench-2.0](/zh/docs/evaluation/benchmark-hub/vbench-2.0) | **U + metric stack**；需要 VBench2 checkpoint/data，相关维度可选 RetinaFace。 | 已验证 bounded diversity 组件；完整套件未验证。 |
+| [Video-Bench](/zh/docs/evaluation/benchmark-hub/video-bench) | **U + service**；提供生成视频、annotation 和 official GPT judge 所需的 `OPENAI_API_KEY`。 | Credential-gated runner 路径存在；不声明已完成带真实 credential 的 release run。 |
+| [VMBench](/zh/docs/evaluation/benchmark-hub/vmbench) | **U + metric stack**；完整重算按指标需要 checkpoint，以及 MMDetection/MMPose/DeepSpeed 等 package。 | Runtime/result wiring 已有；完整 CUDA metric 重算未验证。 |
+| [T2V-CompBench](/zh/docs/evaluation/benchmark-hub/t2v-compbench) | **U + metric stack**；已验证 numeracy 路径需要本地 GroundingDINO/BERT，完整 suite 还需要 LLaVA、depth/SAM 和 DOT 资产。 | 严格 artifact bridge 与一个真实 sample 的官方 `generative_numeracy` run 已验证；1,400-video suite 和 leaderboard parity 尚未验证。 |
+| [VideoScore](/zh/docs/evaluation/benchmark-hub/videoscore) | **U + metric stack**；准备 VideoScore/Mantis 权重与规定的 sampled-frame tree。 | 已验证 bounded official scorer GPU run；SPCC/pairwise 完整协议未验证。 |
+| [ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench) | **U + metric stack**；CHScore 需要 CoTracker/checkpoint，MTScore 还需要 judge/API 资产。 | 已验证 bounded CHScore 组件；完整 benchmark 未验证。 |
+| [EvalCrafter](/zh/docs/evaluation/benchmark-hub/evalcrafter) | **U** 可从视频运行三个官方 CLIP 派生指标并导入 `final_result.txt`；独立 `worldfoundry-evalcrafter-metrics` profile 对齐官方旧版环境，用于准备外部完整 scorer。 | 三项 bounded raw-video 指标与结果导入可用；完整 17 指标 raw-video 生产仍未集成和验证。 |
+| [FETV](/zh/docs/evaluation/benchmark-hub/fetv) | **U + metric stack**；完整 FID/FVD/CLIP/BLIP 需要 reference frames 与官方 model/package 组合。 | 已有 frame preparation 与结果归一化；完整 metric 执行未验证。 |
+| [AIGCBench](/zh/docs/evaluation/benchmark-hub/aigcbench) | **U** 只用于导入已经产生的 metric artifacts；完整 scoring 还需要 official prompts、references 和 metric outputs。 | 只有 importer；不声明仓内可从 raw video 完整重算。 |
+| [MiraBench](/zh/docs/evaluation/benchmark-hub/mirabench) | **U** 用于结果归一化；完整运行需要 AMT、ViCLIP、MUSIQ、FVD/FID/KID 和 3D consistency 资产。 | 只有 normalizer；完整 upstream scorer 待接通。 |
+| [DEVIL Dynamics](/zh/docs/evaluation/benchmark-hub/devil-dynamics) | **U**，加生成 artifacts 以及协议所选的 official metric result/checkpoint。 | Official-result 路径已集成；full-suite/leaderboard 证据待补。 |
+| [GenAI-Bench](/zh/docs/evaluation/benchmark-hub/genai-bench) | **U** 用于结果归一化；raw scoring 需要官方 human labels 和 GPU VQAScore checkpoint。 | 只有 normalizer；raw-video scorer 待接通。 |
+| [T2VSafetyBench](/zh/docs/evaluation/benchmark-hub/t2v-safety-bench) | **U + service**；安装声明的 OpenAI client package，并提供 OpenAI-compatible judge endpoint/key。 | API 失败会 fail closed；本地 fixture 不算真实 judge 结果。 |
+| [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) | **U** 用于 score normalization；完整 camera evaluation 需要 benchmark data 与 camera-geometry/VLM score outputs。 | Normalizer/component import 可用；raw-video evaluator parity 待验证。 |
+| [VideoVerse](/zh/docs/evaluation/benchmark-hub/videoverse) | **U + service**；使用 Gemini credential 或显式配置的 local VLM，并提供视频和 prompt manifest。 | Official path 已集成，但未声明完整 credentialed suite 已通过 release 验证。 |
+| [PhysVidBench](/zh/docs/evaluation/benchmark-hub/physvidbench) | **U + service**；真实 QA 需要八路 AuroraCap caption 文件和 Gemini/Google GenAI client。 | Result import 可用；mock 不算证据，runner 不负责生成 AuroraCap caption。 |
+| [PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench) | **U** 用于结果归一化；完整评测需要各 stage judge、checkpoint/API 和生成 artifacts。 | 只有 normalizer；完整 official stage 执行待接通。 |
+| [VideoPhy](/zh/docs/evaluation/benchmark-hub/videophy) | **U + metric stack**；准备 VideoCon-Physics checkpoint 和生成视频。 | Official scoring path 存在；完整 688 prompts 复现待完成。 |
+| [VideoPhy2](/zh/docs/evaluation/benchmark-hub/videophy2) | **U + metric stack**；准备 VideoPhy-2-AutoEval checkpoint。 | Official scoring path 存在；完整 200 prompts 复现待完成。 |
+| [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq) | **U**；提供 Original benchmark root 和符合 official view 命名的生成视频。 | 已验证真实 bounded 三视角 official score；不是完整 benchmark 复现。 |
+| [Physics-IQ Verified](/zh/docs/evaluation/benchmark-hub/physics-iq-verified) | **U**；提供 Verified dataset root 与生成视频。 | Runtime 已集成，但当前准备的数据缺少完整 benchmark media。 |
+| [IPV-Bench](/zh/docs/evaluation/benchmark-hub/ipv-bench) | **U** 用于结果归一化；完整 scoring 需要官方 labels、judge outputs 和生成 artifacts。 | 只有 normalizer；official judge runtime 待接通。 |
+| [VideoScience-Bench](/zh/docs/evaluation/benchmark-hub/videoscience-bench) | 真实 VLM judge 使用 **U + service**；配置 provider/model 与 credential。 | Result normalization 和 judge wiring 已有；不声明完整 credentialed upstream run。 |
+| [PhyEduVideo](/zh/docs/evaluation/benchmark-hub/phyeduvideo) | **U** 用于 result import；完整 scoring 需要 upstream judge/checkpoint runtime 和完整 prompt artifacts。 | 只有 importer；raw-video judge 待接通。 |
+| [PhyGround](/zh/docs/evaluation/benchmark-hub/phyground) | **U + service**；消费 PhyJudge/vLLM 或 API judge score，并提供 official data root。 | 可导入 `scores.json`；完整 judge run 未在仓内验证。 |
+| [PhyFPS-Bench-Gen](/zh/docs/evaluation/benchmark-hub/phyfps-bench-gen) | **U + metric stack**；准备 Visual Chronometer FPS predictor checkpoint。 | Official runtime path 已集成；完整 benchmark 证据待补。 |
+| [Visual Chronometer](/zh/docs/evaluation/benchmark-hub/visual-chronometer) | **U + metric stack**；准备 `vc_common_10_60fps.ckpt`，或导入兼容 `results.csv`。 | Runtime/normalizer surface 存在；不声明 full official run 已通过 release 验证。 |
+| [MemoBench](/zh/docs/evaluation/benchmark-hub/memobench) | **U + service/metric stack**；Step 1 用本地指标，完整 ORS/VQA 需要 SAM-3 和 Gemini-compatible judge。 | 只有 Step 1 可运行，不能报告成完整 MemoBench suite。 |
+
+## World Model benchmarks — 12
+
+| Benchmark | 环境边界与额外配置 | 已验证范围 / 当前 blocker |
+| --- | --- | --- |
+| [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) | **U + metric stack**；提供 350-instance data root 和 VILA-compatible judge checkpoint/model id。 | 已验证 result import 与 manifest coverage；完整 judge checkpoint 执行未验证。 |
+| [WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore) | **U + metric stack**；完整指标需要 DROID/`lietorch`、GroundingDINO、SAM、optical-flow/interpolation、Mamba 和匹配的 checkpoint/extension。 | 已验证 bounded dynamic 组件；完整 metric tree 未验证。 |
+| [WorldBench](/zh/docs/evaluation/benchmark-hub/worldbench) | **U**，但只做 official-result normalization。 | 仓内没有确认可再分发的 official raw-video evaluator；不能从视频执行 `official-run`。 |
+| [WBench](/zh/docs/evaluation/benchmark-hub/wbench) | **U + metric stack**；完整 multi-turn scoring 需要 WBench metric assets 和 official case layout。 | 已验证真实单视频 temporal-flicker 组件；289-case multi-turn protocol 未验证。 |
+| [iWorld-Bench](/zh/docs/evaluation/benchmark-hub/iworld-bench) | Pixel 和 trajectory 组件使用 **U + 仓内 ViPE CUDA 构建**。`WORLDFOUNDRY_IWORLD_BENCH_PYTHON` 是可选的兼容 Python 覆盖，不是独立环境要求。 | 一个真实 16 帧视频已跑通 official `memory_ability`。Bundled 三条 prompt 和全部九个组件指标仍未完整覆盖；full-suite 和 leaderboard validity 为 false。 |
+| [T2VWorldBench](/zh/docs/evaluation/benchmark-hub/t2vworldbench) | **U** 用于结果归一化；完整执行需要 Drive 数据和 upstream VLM runtime。 | 已归一化 official result fields；完整 raw-video/VLM 评测待验证。 |
+| [WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena) | **U** 用于 prepared Track 1 hierarchy；完整 benchmark 还需要 metric checkpoints 与 embodied runtime assets。 | 已验证一个真实 prepared-data PSNR 组件；完整 Track 1 和 embodied tracks 尚未验证。 |
+| [World-in-World](/zh/docs/evaluation/benchmark-hub/world-in-world) | **U** 用于结果归一化；完整评测需要 closed-loop rollout assets 和 upstream evaluator stack。 | 只有 normalizer；closed-loop runtime parity 待完成。 |
+| [EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench) | **U** 用于结果归一化；完整评测需要 official judge assets、result files 和完整生成输出。 | 只有 normalizer；upstream judge execution 待完成。 |
+| [4DWorldBench](/zh/docs/evaluation/benchmark-hub/4dworldbench) | **U + metric stack/service**；所选维度可能需要 Keye-VL、DROID/`lietorch`、FAST-VQA、Qwen utilities 或 OpenAI-compatible judge。 | Official runtime path 存在，但真实数据 full-suite validation 待完成。 |
+| [WorldReasonBench](/zh/docs/evaluation/benchmark-hub/worldreasonbench) | **U + service**；真实 QA/reward 评测需要受限 official assets 和 OpenAI-compatible multimodal endpoint；server 自有环境。 | Result normalization/QA 组件代码存在；不声明完整 official judge run。 |
+| [WRBench](/zh/docs/evaluation/benchmark-hub/wrbench) | **U + metric stack**；完整 D1–D6 scoring 需要 runtime config 指向 VGGT-Omega、DINOv2、Qwen3.5 和 Qwen3-VL checkpoint。 | Natural-25 request materialization 与结果归一化可用；完整 D1–D6 未验证。 |
+
+## 何时才增加独立环境
+
+不能因为少一个 import 就随意新建 benchmark 环境。只有 runtime profile 记录了真实 ABI/framework 冲突，并同时提供以下信息时，才应使用独立环境：
+
+1. 可复现的公开 setup 命令与 Python executable。
+2. CUDA/Torch/Python compatibility 边界。
+3. 必需数据、checkpoint、native build 与 service 变量。
+4. 真实 verified scope 和明确剩余 blocker。
+
+缺少这些条件时，对应 metric 必须保持 blocked；不能静默退回 fixture、mock judge、zero-match score 或 imported aggregate，却把结果标成 official run。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

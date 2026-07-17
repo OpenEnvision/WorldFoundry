@@ -1,0 +1,39 @@
+---
+title: Python API 参考
+description: WorldFoundry Core primitive、评测契约、runner、metric、编排和 runtime 工具的源码驱动参考。
+---
+
+Python API 是 CLI 与 Studio 所操作的同一套系统的程序化形态。各页先给出简短选型说明，再展示从源码生成的签名。模型专属实现、vendored 上游代码与 benchmark 内部细节不在本参考范围内。
+
+<PythonApiCatalog locale="zh" />
+
+## Import 约定
+
+优先使用公开 facade，避免直接依赖私有模块：
+
+```python
+from worldfoundry.evaluation.api import (
+    ArtifactRef,
+    GenerationRequest,
+    GenerationResult,
+    Metric,
+    WorldModelRunner,
+)
+from worldfoundry.evaluation.public import WorldFoundryRunRequest, run_worldfoundry
+from worldfoundry.evaluation.reporting import build_scorecard
+from worldfoundry.core import scaled_dot_product_attention
+```
+
+`worldfoundry.core` 惰性导出共享 primitive；评测契约在 `worldfoundry.evaluation.api`，编排在 `worldfoundry.evaluation.public`，证据构建在 `worldfoundry.evaluation.reporting`，路径与资产工具在 `worldfoundry.runtime.*`。
+
+## 页面如何生成
+
+签名、参数、方法和源码链接在文档构建时由 Python AST 重新生成（不 import Torch/CUDA）。选型说明与示例由人工编写。
+
+```bash
+cd docs/fumadocs
+npm run api:generate
+npm run api:check
+```
+
+若需要签名之外的工作流说明，请继续阅读[设计文档](/zh/docs/overview/design)、[推理指南](/zh/docs/guides/inference)和[评测概览](/zh/docs/evaluation)。

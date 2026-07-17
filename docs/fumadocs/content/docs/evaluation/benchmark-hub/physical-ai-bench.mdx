@@ -1,0 +1,40 @@
+---
+title: Physical AI Bench
+description: Run PAI-Bench-G and PAI-Bench-C evaluation fully in tree.
+---
+
+## Integration
+
+WorldFoundry contains independent inference-only integrations of SHI-Labs PAI-Bench-G and PAI-Bench-C.
+
+| Track | Runtime |
+| --- | --- |
+| PAI-Bench-G | Reuses the in-tree VBench and VBench++ I2V evaluators; binary VQA uses predictions or a Qwen-compatible judge. |
+| PAI-Bench-C | Implements Canny, blur SSIM, depth SI-RMSE, segmentation matching, and aggregation; reuses shared DOVER, LPIPS, Video-Depth-Anything, GroundingDINO, and SAM2. |
+
+No upstream repository, vendored `third_party` directory, or `SOURCE.json` is needed at runtime. Configuration, prompt templates, and provenance are under `worldfoundry/data/benchmarks/assets/physical-ai-bench`.
+
+## Run
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner \
+  --track conditional-generation --run-official \
+  --dataset-root /path/to/physical-ai-bench-conditional-generation \
+  --generated-video-dir /path/to/generated/videos \
+  --allow-trusted-pickle \
+  --output-dir outputs/physical-ai-bench-c --json
+```
+
+Use `--track generation` for PAI-Bench-G. Its binary VQA accepts `--prediction-manifest`; it can alternatively use `--judge-backend local-qwen` or `--judge-backend openai-compatible`. The official conditional-generation masks are pickle files, so loading them requires the explicit `--allow-trusted-pickle` opt-in shown above.
+
+## Environment
+
+The benchmark runtime uses `worldfoundry-unified-cu128`. CPU metrics and result normalization need no additional environment. A 72B Qwen judge may be served by vLLM in a separate serving environment when it does not fit the unified process; pass the server through `--judge-base-url`. Only the model server is external to the unified process—the benchmark implementation and scoring remain in tree.
+
+## Official references
+
+- [SHI-Labs/physical-ai-bench](https://github.com/SHI-Labs/physical-ai-bench)
+- [Generation dataset](https://huggingface.co/datasets/shi-labs/physical-ai-bench-generation)
+- [Conditional-generation dataset](https://huggingface.co/datasets/shi-labs/physical-ai-bench-conditional-generation)
+
+Local scorecards are not official SHI-Labs leaderboard submissions. Full-dataset parity, especially on the large conditional-generation dataset, remains to be audited.

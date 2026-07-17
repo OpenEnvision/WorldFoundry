@@ -1,0 +1,139 @@
+---
+title: WRBench
+description: WRBench — metrics, requirements, and run commands.
+---
+
+## About
+
+Natural-25 camera intervention benchmark for persistent visual world state.
+
+**WorldFoundry evaluation path:** Executes or normalizes the official benchmark pipeline from in-tree vendored sources on generated outputs. Candidate outputs are read from the generated-artifact directory.
+
+## Integration status
+
+| Item | Current state |
+| --- | --- |
+| Catalog integration | `integrated` |
+| Runner verification | `pending` |
+| Leaderboard | not yet eligible for leaderboard claims |
+
+## Metrics
+
+### Task YAML
+
+`worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`
+
+### Primary
+
+- `wrbench_average`
+
+| Metric | Focus |
+| --- | --- |
+| `d1_cam_prec` | Value reported for Requested-camera precision (D1-CamPrec) under the official benchmark protocol. |
+| `d1_cam_align_common_yaw` | Value reported for Prompt-camera alignment (common yaw) under the official benchmark protocol. |
+| `d1_cam_align_static_hold` | Value reported for Prompt-camera alignment (static hold) under the official benchmark protocol. |
+| `d2_visual_integrity` | Value reported for Visual integrity (D2) under the official benchmark protocol. |
+| `d3_visible_spatial_consistency` | Value reported for Visible spatial consistency (D3) under the official benchmark protocol. |
+| `d4_visible_state_consistency` | Value reported for Visible state consistency (D4) under the official benchmark protocol. |
+| `d5_reobservation_spatial_consistency` | Value reported for Re-observation spatial consistency (D5) under the official benchmark protocol. |
+| `d6_reobservation_state_consistency` | Value reported for Re-observation state consistency (D6) under the official benchmark protocol. |
+| `wrbench_average` | Aggregate benchmark score summarizing the underlying WRBench diagnostic average component metrics. |
+
+## Environment setup
+
+### Runtime environment
+
+- **Conda env:** `worldfoundry-unified-cu128`.
+- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
+- Contract, Natural-25 request materialization, published-result normalization, and WRBench source are available in-tree.
+- Full D1-D6 execution requires external checkpoint paths in WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG.
+
+### Evaluation data
+
+- `worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench`
+- `worldfoundry/data/benchmarks/assets/wrbench/natural25`
+- `worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`
+
+### Checkpoints & assets
+
+- Base-model / metric dependencies: `vggt_omega`, `dinov2`, `qwen3_5_vl`, `qwen3_vl`.
+- Default metric-checkpoint paths and override env vars are listed in the [local assets guide](/docs/guides/local-assets).
+
+### Key environment variables
+
+- `WORLDFOUNDRY_WRBENCH_ROOT`
+- `WORLDFOUNDRY_WRBENCH_ASSETS_ROOT`
+- `WORLDFOUNDRY_WRBENCH_RESULTS_PATH`
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+- `WORLDFOUNDRY_WRBENCH_VIDEO_MANIFEST`
+- `WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG`
+
+### Verify setup
+
+```bash
+PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py --run-fixture --output-dir tmp/worldfoundry_preflight/wrbench --json
+```
+
+## Run Evaluation
+
+After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
+
+### Set Candidate Artifacts
+
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
+```
+
+### Import Official Results
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id wrbench \
+  --mode normalizer \
+  --official-results-path /path/to/official/results-or-report \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/wrbench/normalizer \
+  --json
+```
+
+### Score Generated Artifacts
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id wrbench \
+  --mode official-run \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/wrbench/official-run \
+  --json
+```
+
+### Direct In-Tree Runner
+
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON:-python} worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py --benchmark-id wrbench --run-official --output-dir "$WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR" --generated-artifact-dir "$WORLDFOUNDRY_GENERATED_ARTIFACT_DIR" --json
+```
+
+## Requirements
+
+### Inputs
+
+- in-tree WRBench runtime and Natural-25 assets
+- generated videos and camera sidecars for a new model evaluation
+- WRBench scorer runtime configuration for full D1-D6 execution
+
+### Outputs
+
+- `scorecard.json`
+- `benchmark_contract.json`
+- `raw_metric_table.jsonl`
+- `per_sample_scores.jsonl`
+- `generation_requests.jsonl`
+
+## Official references
+
+- [GitHub](https://github.com/JinPLu/WRBench)
+- [Paper](https://arxiv.org/abs/2606.20545)
+- [Project page](https://jinplu.github.io/WRBench/)
+- [Hugging Face dataset](https://huggingface.co/datasets/WRBench/wrbench-natural25)
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

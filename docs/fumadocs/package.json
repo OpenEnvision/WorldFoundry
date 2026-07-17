@@ -3,9 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "api:check": "python3 scripts/generate-python-api.py --check",
+    "api:generate": "python3 scripts/generate-python-api.py",
     "build": "next build --webpack",
+    "cli:screenshots": "python3 scripts/capture-cli-screenshots.py",
     "dev": "next dev --hostname 0.0.0.0 --webpack",
-    "start": "serve out",
+    "dev:fast": "WF_DOCS_FAST_CACHE=1 next dev --hostname 0.0.0.0 --webpack",
+    "dev:local": "bash scripts/dev-local-ssd.sh dev",
+    "mdx:generate": "fumadocs-mdx",
+    "models:generate": "python3 scripts/generate-model-recipes.py",
+    "prebuild": "npm run mdx:generate && npm run api:generate",
+    "predev": "npm run mdx:generate && npm run api:generate",
+    "pretypes:check": "npm run api:generate",
+    "start": "node scripts/serve-static.mjs",
     "types:check": "fumadocs-mdx && next typegen && tsc --noEmit"
   },
   "dependencies": {

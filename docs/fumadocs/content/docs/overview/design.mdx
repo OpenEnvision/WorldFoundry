@@ -1,0 +1,105 @@
+---
+title: Design
+description: The layers, contracts, data flow, and design choices that make WorldFoundry extensible and auditable.
+---
+
+WorldFoundry follows one primary design rule: **separate model execution from benchmark evaluation, and connect them with explicit artifacts and evidence**. This allows very different systems to share one research workflow without placing model-loading code inside metrics or benchmark assumptions inside model pipelines.
+
+## Architecture at a glance
+
+<WorldFoundryArchitecture />
+
+The four layers have different responsibilities and different rates of change.
+
+The **surface layer** is how people and agents operate the system. TUI supports guided discovery, CLI supports automation, Studio supports visual job creation and review, and Python or MCP supports programmatic orchestration. These surfaces may collect different inputs, but they should not contain private model implementations or scoring logic.
+
+The **control plane** answers what exists, what can run, what it needs, and how it should be dispatched. Model and benchmark catalogs, aliases, asset declarations, runtime profiles, readiness fields, and run plans live here. This layer describes and routes work; it does not execute GPU kernels or compute benchmark scores.
+
+The **execution layer** contains model pipelines and operators on one side, and benchmark runners and metrics on the other. Model code owns checkpoint loading and generation. Benchmark code owns protocol-specific scoring and result normalization. Neither side should reach through the artifact boundary and take over the other side’s responsibility.
+
+The **contract and evidence layer** is what survives a process. Requests, results, artifact references, manifests, reports, and scorecards are serializable. They make a run understandable after the Python process has exited and allow generation and scoring to occur in different environments, on different machines, or at different times.
+
+## End-to-end data flow
+
+<WorldFoundryWorkflow />
+
+A run begins with declarative identities. A model manifest and benchmark manifest record source provenance, intended capabilities, requirements, runtime bindings, and known blockers. User input, task metadata, or a dataset sample is then normalized into a `GenerationRequest`.
+
+A `WorldModelRunner` resolves the requested model and dispatches to the correct pipeline/operator or external runtime. The runner returns a `GenerationResult` that describes status, timing, errors, metadata, and durable outputs. Those outputs may be videos, images, frames, geometry, point clouds, actions, trajectories, traces, or structured data.
+
+Evaluation consumes the result rather than the checkpoint. Reusable metrics or benchmark-specific runners read the generated artifacts, produce per-sample metric rows, and aggregate them according to the selected protocol. Reporting then consolidates run identity, provenance, coverage, blockers, and scores into artifacts such as `run_manifest.json`, `report.md`, and `scorecard.json`.
+
+The file boundary is intentional. A costly generation job can finish once, be visually inspected, and later be evaluated by a new metric without loading the model again. A benchmark can also run in a dedicated environment without forcing its dependencies into every model runtime.
+
+### Example: one Matrix-Game 2 output crossing the boundary
+
+The checked-in Matrix-Game 2 universal example uses the initial image at `worldfoundry/data/test_cases/matrix-game-2/universal/0000.png` together with an action-conditioned configuration. The operator translates those inputs into the native model call, the pipeline owns checkpoint execution, and the output side writes video and metadata. Conceptually, the flow is:
+
+```text
+initial image + action sequence + seed/fps
+  -> Matrix-Game 2 operator
+  -> Matrix-Game 2 pipeline / checkpoint
+  -> generated_video + metadata
+  -> ArtifactRef inside GenerationResult
+  -> visual review or a compatible metric that reads generated_video
+```
+
+Evaluation only needs the artifact kind, URI, and sample identity; it does not need to know how Matrix-Game 2 loads its weights. Conversely, the pipeline does not import a benchmark evaluator. If generation succeeds but the benchmark's required prompt set is incomplete, the `GenerationResult` can still be valid while leaderboard eligibility in the scorecard remains false.
+
+## The contracts that hold the system together
+
+### Manifests describe intent and requirements
+
+Model and benchmark manifests answer what an entry is, where it came from, which aliases and capabilities it exposes, what assets it needs, and which runtime should handle it. They are reviewable declarations, not proof that the declared path works on every host.
+
+### Requests and results normalize the execution boundary
+
+`GenerationRequest` carries sample identity, input media, text or task conditions, and parameters. `GenerationResult` records what happened for that sample and points to its outputs. Local checkpoints, hosted APIs, and simulator-facing policies can therefore keep their native implementations while exposing a stable result shape to evaluation and reporting.
+
+### Artifacts make results durable
+
+Artifact manifests and request/result ledgers record which files or URIs belong to a run. The artifact can outlive the process that created it and can be reviewed, copied into an official layout, rescored, compared, or audited later.
+
+### Scorecards and result claims
+
+Metric summaries answer how results were scored. A scorecard adds coverage, provenance, blockers, validation state, and eligibility. This prevents a framework-level success, an imported official-shaped file, and a fully reproduced official benchmark from being treated as the same achievement.
+
+## Pipelines and operators
+
+A **pipeline** owns model construction, checkpoint loading, device placement, and the native inference call. An **operator** adapts normalized WorldFoundry inputs to that pipeline and converts native outputs into durable artifacts.
+
+This split keeps input shaping, output naming, and result normalization from being duplicated across Studio, CLI, scripts, and evaluation jobs. It also preserves model-native behavior: a camera-conditioned world model, a diffusion video model, and a robot policy should not pretend they accept identical arguments simply to satisfy an abstraction.
+
+## Catalogs and runtimes
+
+A catalog entry can be useful before a full runtime integration exists. It can preserve a stable ID, upstream source, license, checkpoint reference, task family, and known requirements. But metadata must not be mistaken for execution evidence.
+
+WorldFoundry therefore tracks catalog state, runner binding, local asset readiness, bounded validation, official runtime evidence, and leaderboard eligibility separately. The CLI derives next actions from those fields instead of collapsing them into one ambiguous “supported” value.
+
+## Assets outside git
+
+Model weights, datasets, metric checkpoints, credentials, generated media, and simulator assets are large, licensed, private, or machine-specific. WorldFoundry keeps code, manifests, small fixtures, and documentation in the repository. Bootstrap scripts define explicit local roots so runs can reuse external assets without copying them into every upstream project.
+
+This design also makes missing state observable. A run should report the absent checkpoint, dataset, metric weight, credential, or simulator instead of silently falling back to a different implementation.
+
+## Where the layers live
+
+Model identities and requirements live under `worldfoundry/data/models/catalog/`. Model execution is implemented across `worldfoundry/pipelines/`, `worldfoundry/operators/`, and `worldfoundry/synthesis/`. Benchmark metadata, assets, tasks, and runtime profiles live under `worldfoundry/data/benchmarks/`, while public evaluation contracts, runners, metrics, reports, and scorecards live under `worldfoundry/evaluation/`.
+
+The browser workspace and visualizers live under `worldfoundry/studio/`. Discovery, planning, execution, validation, and reporting commands live under `worldfoundry/cli/`. Supported operational helpers are grouped under `scripts/setup/`, `scripts/inference/`, and `scripts/workspace/`.
+
+For source-level call chains and extension boundaries, continue to the [maintainer architecture guide](/docs/maintainers/architecture).
+
+## Principles used when making changes
+
+**Evidence comes before claims.** A manifest records intent; runtime and scorecard evidence justify readiness.
+
+**Artifacts are first-class.** Results remain inspectable and reusable after the process exits.
+
+**Explicit blockers beat silent fallback.** Missing assets, credentials, coverage, or official parity must remain visible.
+
+**One core supports multiple surfaces.** TUI, CLI, Studio, Python, scripts, and MCP reuse the same catalogs and execution paths.
+
+**Model differences are preserved.** WorldFoundry normalizes subsystem boundaries and evidence, not every native parameter or representation.
+
+**Official validation is not official reproduction.** Importing official-shaped results proves the normalization path; it does not prove full benchmark parity.

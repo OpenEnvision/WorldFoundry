@@ -176,9 +176,3 @@ WorldFoundry writes these files under `--output-dir`:
 - `per_sample_metrics.jsonl`: one row per discovered sample or imported sample metric row.
 - `raw_metric_table.jsonl`: metric rows with availability, raw score, normalized score, and source.
 - `official_stdout.log` and `official_stderr.log` for direct official-runtime execution.
-
-## Limitations
-
-WorldFoundry has recorded bounded GPU validation for one dynamic sample, not full 3,000-example leaderboard parity. Full runs need complete `evaluation.json` trees, the WorldScore metric checkpoint stack, CUDA-capable dependencies, and enough GPU time to execute DROID-SLAM, segmentation, optical-flow, and frame-interpolation metrics. The runner evaluates already-generated outputs; it does not adapt 3D, 4D, or video models for generation.
-
-[← Benchmark Hub](/docs/evaluation/benchmark-hub)

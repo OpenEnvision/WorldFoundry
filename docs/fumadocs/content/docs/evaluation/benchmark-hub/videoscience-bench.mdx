@@ -18,6 +18,7 @@ WorldFoundry uses the checked-in runner at `worldfoundry/evaluation/tasks/execut
 | GitHub | [github.com/hao-ai-lab/VideoScience](https://github.com/hao-ai-lab/VideoScience) |
 | HF dataset | [lmgame/VideoScienceBench](https://huggingface.co/datasets/lmgame/VideoScienceBench) |
 | In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/run_videoscience_bench_official_runner.py` |
+
 ## Prepare Data And Assets
 
 Checked-in assets:
@@ -177,13 +178,3 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
 | `videoscience_average` | Mean aggregate over available VideoScience metrics; primary metric. |
 
 The judge rubric is 1-4. WorldFoundry normalizes rubric scores to `[0, 1]` with `(score - 1) / 3`, and higher is better.
-
-## Limitations And Gaps
-
-- The public catalog command imports existing judge outputs. Use the direct runner for in-tree VLM judge execution.
-- Direct judge runs require provider credentials and can be slow or costly.
-- Missing generated videos are skipped. A run with no evaluated videos fails.
-- The in-tree runtime focuses on VLM grading over sampled frames. Optional CV evidence described by the upstream README is not fully mirrored in the current WorldFoundry runner.
-- Full leaderboard parity requires the same prompt selection, generated videos, provider/model settings, and judge behavior used for the reference evaluation.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)

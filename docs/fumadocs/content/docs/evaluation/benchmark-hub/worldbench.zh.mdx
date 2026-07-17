@@ -150,9 +150,3 @@ WorldFoundry 会在 `--output-dir` 下写入：
 - `per_sample_scores.jsonl`：输入中存在 per-sample rows 时的规范化样例分数。
 - `raw_metric_table.jsonl`：包含 raw 和 normalized scores 的指标表。
 - `upstream/worldbench_results.json`：仅在 `--run-official` 聚合 artifact scores 时写入。
-
-## 限制
-
-WorldFoundry 当前不包含已确认来源的上游 WorldBench evaluator。runner 适合从已有结果文件或 WorldFoundry artifact scores 生成本地 scorecard，但不会独立从 raw videos 计算物理正确性。记录到的 dataset license 尚未解析，完整 video-to-video/VQA split mapping 仍取决于你提供的结果文件或 artifact-score directory。leaderboard parity 仍为 false，直到完整上游 scoring 流程和提交要求被审计。
-
-[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

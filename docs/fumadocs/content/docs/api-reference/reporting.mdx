@@ -1,0 +1,86 @@
+---
+title: Reporting
+description: Builders for environment evidence, run manifests, scorecards, compact summaries, and human-readable reports.
+---
+
+Reporting converts execution state into durable evidence. Builders return ordinary dictionaries for composition and testing; writer functions add canonical filenames and persist them. Secret-like values are redacted before environment or configuration data enters a manifest.
+
+Import the symbols on this page from `worldfoundry.evaluation.reporting`.
+
+## `build_env_requirements`
+
+This builder records whether required environment variable names and local paths are present without recording secret values. Optional dependency groups remain explicit in `required_extras`.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_env_requirements" />
+
+## `build_environment`
+
+The environment payload captures Python, installed package versions, git metadata, and relevant cache paths. Passing `package_names` narrows package collection when a full environment inventory would be excessive.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_environment" />
+
+## `build_run_manifest`
+
+This function enriches a runner's base manifest with redacted configuration, environment evidence, revisions, cache paths, reproducibility fields, and a stable manifest hash.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_run_manifest" />
+
+## `write_run_manifest_artifacts`
+
+Use the writer when a custom runner should emit the standard manifest trio in one operation.
+
+```python
+from worldfoundry.evaluation.reporting import write_run_manifest_artifacts
+
+paths = write_run_manifest_artifacts(
+    output_dir="tmp/custom_run",
+    base_manifest={
+        "run": {"run_id": "custom-0001", "status": "succeeded"},
+        "model": {"model_id": "my-model", "revision": "abc123"},
+        "dataset": {"dataset_id": "my-samples", "split": "validation"},
+    },
+    config={"seed": 42, "device": "cuda:0"},
+    required_env=("HF_TOKEN",),
+    required_paths=("/data/my-samples",),
+    required_extras=("video",),
+    seed=42,
+)
+
+print(paths["run_manifest"])
+```
+
+An absent `HF_TOKEN` or dataset path is recorded as missing evidence; the function does not reveal the token or invent the path.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.write_run_manifest_artifacts" />
+
+## `build_scorecard`
+
+The scorecard combines run identity, model, benchmark, dataset, generation, metrics, artifacts, provenance, and skipped work. Its leaderboard gate is conservative: successful metric computation alone does not establish complete official evidence.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_scorecard" />
+
+## `write_scorecard`
+
+This convenience function builds a scorecard with the same keyword arguments and writes it as JSON. It also indexes its own resolved path under `artifacts.scorecard`.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.write_scorecard" />
+
+## `build_run_summary`
+
+A summary keeps the comparison-oriented subset of a scorecard: identities, fidelity, sample counts, leaderboard values, eligibility, and artifact paths. It is suitable for indexes and cross-run comparisons.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_run_summary" />
+
+## `build_markdown_report`
+
+This renderer converts a compact summary into the human-readable `report.md`. It does not recompute scores or change eligibility.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.build_markdown_report" />
+
+## `write_run_report_artifacts`
+
+Given an in-memory scorecard or a `scorecard.json` path, this writer produces `summary.json` and `report.md` together.
+
+<PythonApiReference symbol="worldfoundry.evaluation.reporting.write_run_report_artifacts" />
+
+In normal CLI and `run_worldfoundry` flows these writers are called for you. Use them directly when an external runtime or custom orchestration layer must emit the same evidence layout.

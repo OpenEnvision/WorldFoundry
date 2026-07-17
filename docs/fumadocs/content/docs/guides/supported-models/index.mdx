@@ -1,0 +1,41 @@
+---
+title: Model recipes
+description: Pick a model, inspect its runtime, and copy a command that matches your machine.
+---
+
+<ModelRecipeCatalog />
+
+## What a recipe records
+
+Each detail page is assembled from the repository manifests rather than a hand-maintained marketing table. A recipe keeps these claims separate:
+
+| Record | What it tells you |
+| --- | --- |
+| Catalog | Stable model ID, tasks, official sources, aliases, and integration status. |
+| Runtime profile | Input contract, artifact contract, backend stage, and runtime readiness. |
+| Environment | Python, CUDA tier, pinned packages, validation imports, and dedicated vs. unified routing. |
+| Pipeline binding | The runner and concrete pipeline target used by WorldFoundry. |
+| Evidence | Native-demo and WorldFoundry-runner parity; a catalog entry alone is not proof of a successful GPU run. |
+
+Unknown values remain **Not recorded**. WorldFoundry does not turn a catalog entry into a stronger “supported” claim without runtime or evidence records.
+
+## Common commands
+
+```bash
+# Inspect the complete catalog manifest.
+worldfoundry-eval zoo model-show \
+  --model-id <model-id> \
+  --include-manifest \
+  --json
+
+# Resolve checkpoints, credentials, and local asset blockers without downloading.
+worldfoundry-eval zoo model-download \
+  --model-id <model-id> \
+  --check-local \
+  --json
+
+# Resolve and install the environment manifest for one runtime profile.
+bash scripts/setup/model_env_install.sh --model <model-id>
+```
+
+For the full request-file and artifact flow, continue to [Run inference](/docs/guides/inference). For environment routing policy, see [Environment reference](/docs/reference/environments).

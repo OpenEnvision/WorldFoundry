@@ -1,0 +1,40 @@
+---
+title: Physical AI Bench
+description: 在 WorldFoundry tree 内运行 PAI-Bench-G 与 PAI-Bench-C 评测。
+---
+
+## 集成方式
+
+WorldFoundry 独立、in-tree 集成了 SHI-Labs PAI-Bench-G 与 PAI-Bench-C，并且只保留推理与评测代码。
+
+| Track | 实现 |
+| --- | --- |
+| PAI-Bench-G | 复用 tree 内 VBench 与 VBench++ I2V；二分类 VQA 可读取预测或调用 Qwen-compatible judge。 |
+| PAI-Bench-C | 本地实现 Canny、blur SSIM、depth SI-RMSE、分割匹配与聚合；复用共享 DOVER、LPIPS、Video-Depth-Anything、GroundingDINO 与 SAM2。 |
+
+运行时不需要上游 repo、`third_party` 目录或 `SOURCE.json`。配置、prompt 与 provenance 全部位于 `worldfoundry/data/benchmarks/assets/physical-ai-bench`。
+
+## 运行
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner \
+  --track conditional-generation --run-official \
+  --dataset-root /path/to/physical-ai-bench-conditional-generation \
+  --generated-video-dir /path/to/generated/videos \
+  --allow-trusted-pickle \
+  --output-dir outputs/physical-ai-bench-c --json
+```
+
+PAI-Bench-G 使用 `--track generation`。其二分类 VQA 可通过 `--prediction-manifest` 读取预测，也支持 `local-qwen` 和 `openai-compatible` judge。官方 conditional-generation mask 是 pickle 文件，因此需要像上面的命令一样显式传入 `--allow-trusted-pickle`。
+
+## 环境
+
+benchmark runtime 使用 `worldfoundry-unified-cu128`。CPU metric 与结果归一化不需要额外环境。若 72B Qwen 无法放入统一进程，可以在单独的 vLLM serving 环境启动 OpenAI-compatible 服务，并通过 `--judge-base-url` 连接；benchmark code 与计分逻辑仍然全部在 tree 内。
+
+## 官方链接
+
+- [SHI-Labs/physical-ai-bench](https://github.com/SHI-Labs/physical-ai-bench)
+- [Generation dataset](https://huggingface.co/datasets/shi-labs/physical-ai-bench-generation)
+- [Conditional-generation dataset](https://huggingface.co/datasets/shi-labs/physical-ai-bench-conditional-generation)
+
+本地 scorecard 不等同于 SHI-Labs 官方 leaderboard submission；特别是大体量 conditional-generation dataset 的全量数值一致性仍待验证。

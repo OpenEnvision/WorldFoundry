@@ -1,0 +1,135 @@
+---
+title: Physics-IQ Verified
+description: Physics-IQ Verified — 指标、依赖与运行命令。
+---
+
+## 简介
+
+Recommended Physics-IQ protocol with verified data, prompts, masks, and per-view scoring.
+
+**WorldFoundry 评测路径:** 使用仓内 official metric runtime，对 caller 提供的生成产物运行官方指标栈（本地 checkpoint / evaluator）。 候选模型输出从 generated-artifact 目录读取。
+
+## 集成状态
+
+| 项目 | 当前状态 |
+| --- | --- |
+| Catalog integration | `integrated` |
+| Runner verification | `in_tree_raw_video_evaluator` |
+| Leaderboard | 暂不可用于 leaderboard 声明 |
+
+### 集成说明
+
+- Shares the official mask/raw-metric engine with Original and selects only the Verified score adapter.
+- The bundled default is the upstream base best-practice prompt; model-specific prompt files may override it.
+- End-to-end execution evidence is pending a complete authorized download of the Verified media and masks.
+## 指标
+
+### Task YAML
+
+`worldfoundry/data/benchmarks/tasks/external/physics-iq-verified.yaml`
+
+### Primary
+
+- `physics_iq_verified_score`
+
+| Metric | 关注点 |
+| --- | --- |
+| `physics_iq_verified_score` | Arithmetic mean after per-scenario, per-view physical-variance normalization. |
+| `physics_iq_verified_spatiotemporal` | 官方 Verified Spatiotemporal Score 指标在 benchmark 协议中的计分结果。 |
+| `physics_iq_verified_spatial` | 官方 Verified Spatial Score 指标在 benchmark 协议中的计分结果。 |
+| `physics_iq_verified_weighted_spatial` | 官方 Verified Weighted Spatial Score 指标在 benchmark 协议中的计分结果。 |
+| `physics_iq_verified_mse` | 官方 Verified MSE Score 指标在 benchmark 协议中的计分结果。 |
+
+## 环境准备
+
+### 运行环境
+
+- **Conda 环境：** `worldfoundry-unified-cu128`。
+- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
+
+### 测评数据
+
+- `worldfoundry/data/benchmarks/assets/physics-iq-verified/descriptions/descriptions_base.csv`
+- `worldfoundry/data/benchmarks/tasks/external/physics-iq-verified.yaml`
+
+### Checkpoint 与资产
+
+- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
+
+### 关键环境变量
+
+- `WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT`
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+- `WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_DESCRIPTIONS`
+- `WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH`
+
+### 环境检查
+
+```bash
+PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile physics-iq-verified --manifest worldfoundry/data/benchmarks/runtime_profiles/official/physics-iq-verified.yaml --output-dir tmp/worldfoundry_preflight/physics-iq-verified --json
+```
+
+## 运行评测
+
+准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
+
+### 设置候选产物目录
+
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
+```
+
+### 导入已有官方结果
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id physics-iq-verified \
+  --mode normalizer \
+  --official-results-path /path/to/official/results-or-report \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/physics-iq-verified/normalizer \
+  --json
+```
+
+### 从生成产物重新打分
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id physics-iq-verified \
+  --mode official-run \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/physics-iq-verified/official-run \
+  --json
+```
+
+### 直接调用仓内 runner
+
+```bash
+PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py --benchmark-id physics-iq-verified --protocol verified --run-official --dataset-root "${WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT}" --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
+```
+
+## 依赖与产物
+
+### Inputs
+
+- Official Physics-IQ-Verified media directory from Hugging Face
+- 198 generated five-second videos per run; four runs are recommended for leaderboard claims
+
+### Outputs
+
+- `scorecard.json`
+- `benchmark_contract.json`
+- `raw_metrics.csv`
+- `official_metrics.json`
+- `results_summary.csv`
+- `raw_metric_table.jsonl`
+- `per_sample_scores.jsonl`
+
+## 官方资料
+
+- [GitHub](https://github.com/google-deepmind/physics-IQ-benchmark)
+- [Paper](https://arxiv.org/abs/2606.18943)
+- [Project page](https://physics-iq-verified.anates.ai/)
+- [Dataset](https://huggingface.co/datasets/Anates-Labs-Research/Physics-IQ-Verified)
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -1,37 +1,55 @@
 ---
 title: WorldFoundry
-description: Open-source framework for world model inference and benchmark evaluation.
+description: Unified World Model Inference & Evaluation Infrastructure
 ---
 
-> This repository is still under active development. We will keep updating it regularly. Feel free to open an issue if you encounter any problem.
+WorldFoundry is open-source infrastructure for running and evaluating world models. It does not propose one new model architecture. It brings model discovery, runtime preparation, inference, artifact inspection, benchmark execution, and evidence reporting into one workflow across video, 3D/4D, interactive-world, and embodied systems:
 
-<div className="pi-doc-hub-intro">
+> Discover a model, prepare its runtime and assets, generate inspectable artifacts, evaluate those artifacts, and preserve the result as reviewable evidence.
 
-WorldFoundry is an open-source framework for world models. It treats world modeling as faithful simulation of environment dynamics rather than mere reproduction of observed appearances, and provides a shared stack for model runners, local assets, inference, and benchmark evaluation. Recent progress in generative video, 3D, emerging 4D representations, and embodied policies has made it easy to confuse perceptual realism with genuine simulation competence: a system may look convincing while still failing under action, camera change, long-horizon rollouts, or closed-loop control. WorldFoundry starts from that distinction and asks what infrastructure is required once “looking real” is no longer enough.
+That distinction matters. A model catalog is not the same thing as a working runtime. A convincing demo is not the same thing as benchmark evidence. A successfully imported score is not automatically leaderboard parity. WorldFoundry keeps those states separate and visible.
 
-In practice, world-model research fragments across families. Video generators, reconstruction stacks, interactive worlds, and VLA policies rarely share checkpoint staging, artifact layouts, preview surfaces, or scoring contracts. Teams re-implement the same glue—environment setup, local asset paths, one-off launch scripts, and ad hoc metric notebooks—until small divergences become irreproducible leaderboard gaps. WorldFoundry collapses that glue into one workflow: stage checkpoints and datasets, launch generation through the TUI or CLI, inspect artifacts in Studio, then score outputs with in-tree metrics and reproducible scorecards. The same normalized run contract is meant to serve both interactive debugging and batch evaluation.
+It is built for a practical research problem: every upstream project can produce something useful, but each uses different environments, checkpoints, inputs, launch commands, output layouts, and evaluation protocols. WorldFoundry preserves those native differences while standardizing the boundaries around them.
 
-</div>
+<TeaserImage alt="WorldFoundry unifies world-model discovery, inference, inspection, and evaluation" />
 
-<TeaserImage alt="WorldFoundry: a unified infrastructure and large-scale arena for world models" />
+## The problem it solves
 
-<div className="pi-doc-hub-intro">
+World-model projects usually arrive as independent repositories. Each one makes different choices for environments, checkpoints, input schemas, launch scripts, output layouts, preview tools, and evaluation code. A team that wants to compare several systems ends up rebuilding the same integration layer for every model.
 
-1. Follow the [main workflow](/docs/quickstart) to install the environment, prepare local assets, choose the TUI or CLI, run inference, and score outputs.
-2. Set up [environments](/docs/reference/environments) for the unified CUDA baseline and model- or benchmark-specific runtime requirements.
-3. Stage Hugging Face checkpoints, datasets, metric weights, and outputs with the [local assets guide](/docs/guides/local-assets).
-4. Browse models and benchmarks in the [TUI](/docs/guides/tui).
-5. Run discovery, inference, scoring, and reports from the [CLI](/docs/reference/cli).
+The fragmentation begins with discovery. The same model may be referred to by a paper name, a repository name, a checkpoint name, or a local folder. WorldFoundry gives models and benchmarks stable IDs and declarative manifests so the source, intended capability, runtime binding, required assets, and known blockers can be inspected before anything expensive runs.
 
-</div>
+It continues through execution. Instead of placing checkpoints and datasets wherever an upstream script happens to expect them, WorldFoundry defines reusable local asset roots and model-specific runtime profiles. Pipelines and operators keep native model differences explicit while presenting a consistent request, result, and artifact boundary to the rest of the system.
+
+Finally, it affects evaluation. Videos, meshes, actions, and traces should not disappear into custom folders or one-off notebooks. WorldFoundry preserves what was requested, what ran, what was produced, how it was scored, which samples were covered, and which conditions still block an official claim.
+
+The goal is not to hide every model difference behind one tiny API. The goal is to keep those differences in the correct layer while making the end-to-end research workflow consistent.
+
+## How the project works
+
+<WorldFoundryWorkflow />
+
+The central boundary is the **artifact**. A model runner turns a normalized request into a result containing videos, geometry, action traces, or other outputs. A benchmark runner consumes those outputs and produces metrics and evidence. This separation lets one model output be inspected, reused, or scored by more than one compatible benchmark without coupling the model implementation to evaluator internals.
+
+Catalogs form the control plane around that boundary. They describe what exists, where it came from, what it needs, how it can be dispatched, and what evidence supports its current readiness. TUI, CLI, Studio, Python, and MCP are different ways to operate the same underlying system rather than separate implementations.
+
+### A concrete run: Matrix-Game 2
+
+For a first `matrix-game-2` run, let catalog and local-asset checks answer which model is selected and whether its checkpoint is ready, then generate one small result:
+
+```bash
+bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
+python -m worldfoundry.evaluation zoo model-download \
+  --model-id matrix-game-2 --check-local --json
+
+bash scripts/inference/test_nav_video_gen.sh matrix-game-2 \
+  --output-dir tmp/matrix_game2_first_run
+```
+
+The last command runs the model with action-conditioned input and writes the video plus its run records to the selected directory. At this point the justified claim is that this configuration produced an inspectable artifact. The motion and continuity can be reviewed in Studio or a local player, and compatible metrics can consume the artifact. One video alone does not establish that a complete benchmark ran. This is why WorldFoundry separates generation, inspection, scoring, and eligibility.
+
+Read [Design](/docs/overview/design) for the layers, contracts, and rationale behind this workflow.
 
 ## Acknowledgements
 
-We also thank the following open-source projects for their design, runtime, and evaluation ideas that informed WorldFoundry:
-
-| Project | Contribution |
-| --- | --- |
-| [FlashDreams](https://github.com/NVIDIA/flashdreams) | High-performance inference and serving for interactive autoregressive video and world models |
-| [FastVideo](https://github.com/hao-ai-lab/FastVideo) | A unified inference and post-training framework for accelerated video generation |
-| [OpenWorldLib](https://github.com/OpenDCAI/OpenWorldLib) | A unified codebase for advanced world models |
-| [VLA Evaluation Harness](https://github.com/allenai/vla-evaluation-harness) | One framework to evaluate VLA models on robot simulation benchmarks |
+<DocsWelcomeAcknowledgements locale="en" />

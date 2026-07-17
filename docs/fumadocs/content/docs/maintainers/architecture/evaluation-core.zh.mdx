@@ -37,6 +37,12 @@ report = runner.write_scorecard_and_report(metrics)
 
 `evaluate.py` 中的 facade 保持薄：校验输入、选择 delegate、转换结果。所有文件写入、sample ledger 与 manifest 更新都在 delegate runner 内完成。
 
+面向用户的 CLI、TUI 与 Workspace 都从 `execution/orchestration/service.py` 进入。该模块校验五种 intent，并编译为已有的 `ModelBenchmarkRunRequest` 或 `EvaluateRunRequest`；前端不能重复实现 generation、artifact materialization、benchmark dispatch 或 metric execution。
+
+三层 planning 边界必须保持清晰：`PreparedEvaluation` 是面向用户的编译结果，负责 preflight diagnostics 与 protocol-fidelity policy；`RunPlan` 是单个 generation/evaluate stage 的低层计划；`ModelBenchmarkRunRequest` 是 generation 加 official evaluator 的两阶段请求。不要再包一层新的 recipe executor，reproduction profile 和 UI intent 都应编译到这些已有 request type。
+
+Prepared evaluation 分别记录 generation、data、evaluation、runtime 与 reference fidelity，再由这些字段推导 claim：完全锁定的官方运行才可能是 `exact_reproduction`；官方 data 与 evaluation 未修改时可为 `benchmark_comparable`；custom-data 或 metric-only 运行只能是 `diagnostic`。对于 model × benchmark 计划，仓内 benchmark evidence 还会继续限制 claim 上限：只验证过 bounded component 的 runner 仍然允许执行，但在 catalog 建立完整 official-suite evidence 前，计划必须降级为 `diagnostic`。调用方布尔参数只能收紧策略，不能把 diagnostic run 提升为榜单候选。`score_valid` 表示 evaluator 是否产出可用分数；`leaderboard_valid` 还必须满足可比 provenance 与 benchmark runner evidence。
+
 ## 公开契约
 
 `evaluation/api/` 模块定义 runner、CLI、tests、docs 导出与 validation 共用的形状。此处改动应视为 semver 敏感：下游假设 `to_dict()` / `from_dict()` 可往返且磁盘 field 名稳定。

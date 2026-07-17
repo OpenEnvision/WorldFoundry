@@ -56,6 +56,10 @@ Join the **WorldFoundry Community** [Slack / Wechat] for discussions, announceme
 ## Links
 
 - [Documentation](docs/fumadocs/content/docs/index.mdx)
+- [Project overview](docs/fumadocs/content/docs/overview/index.mdx)
+- [Design and architecture](docs/fumadocs/content/docs/overview/design.mdx)
+- [What is included](docs/fumadocs/content/docs/overview/capabilities.mdx)
+- [Why WorldFoundry](docs/fumadocs/content/docs/overview/why-worldfoundry.mdx)
 - [Quickstart](docs/fumadocs/content/docs/quickstart.mdx)
 - [Environment reference](docs/fumadocs/content/docs/reference/environments.mdx)
 - [Local asset preparation](docs/fumadocs/content/docs/guides/local-assets.mdx)
@@ -63,6 +67,7 @@ Join the **WorldFoundry Community** [Slack / Wechat] for discussions, announceme
 - [Inference guide](docs/fumadocs/content/docs/guides/inference.mdx)
 - [Studio guide](docs/fumadocs/content/docs/guides/studio.mdx)
 - [CLI reference](docs/fumadocs/content/docs/reference/cli.mdx)
+- [Python API reference](docs/fumadocs/content/docs/api-reference/index.mdx)
 - [Supported models](docs/fumadocs/content/docs/guides/supported-models.mdx)
 - [Benchmark hub](docs/fumadocs/content/docs/evaluation/benchmark-hub/index.mdx)
 - [Contributing](CONTRIBUTING.md)
@@ -443,7 +448,8 @@ worldfoundry-eval run --plan-only --json
 For release audits, use public CLI surfaces only:
 
 ```bash
-worldfoundry-eval validate-artifact --json
+worldfoundry-eval validate-artifact tmp/benchmark-run/scorecard.json \
+  --kind scorecard --check-artifacts --json
 ```
 
 Contract runs, normalizer-only imports, partial dataset runs, and missing-official-runner checks are not leaderboard evidence. A public claim needs the full official data/runtime path and a scorecard whose eligibility fields explicitly support the claim.
@@ -525,9 +531,8 @@ If you use WorldFoundry or its benchmark/model integrations in research, cite th
 
 WorldFoundry integrates and wraps a large set of upstream world-model, video-generation, perception, reconstruction, and embodied-action projects. See the method-specific runtime profiles and the docs appendix for upstream project pointers and licenses.
 
-We also thank the following open-source projects for their design, runtime, and evaluation ideas that informed WorldFoundry:
+We also thank the following open-source projects for their model, runtime, and evaluation work:
 
-- [FlashDreams](https://github.com/NVIDIA/flashdreams) — high-performance inference and serving for interactive autoregressive video and world models
 - [FastVideo](https://github.com/hao-ai-lab/FastVideo) — a unified inference and post-training framework for accelerated video generation
 - [OpenWorldLib](https://github.com/OpenDCAI/OpenWorldLib) — a unified codebase for advanced world models
 - [VLA Evaluation Harness](https://github.com/allenai/vla-evaluation-harness) — one framework to evaluate VLA models on robot simulation benchmarks

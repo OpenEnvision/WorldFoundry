@@ -1,11 +1,22 @@
 ---
-title: Usage
+title: Quickstart
 description: Configure the environment, prepare assets, use the TUI or CLI, then run inference and evaluation.
 ---
 
-This page is the user-facing path for running WorldFoundry. It keeps the day-one workflow in one place; deeper pages are for details and edge cases.
+This guide walks through the shortest complete path from a clone to a reviewable WorldFoundry run:
 
-Most runs follow the same shape even when the model or benchmark changes. First make the Python environment importable, then put checkpoints and benchmark assets in local cache directories, then generate artifacts, and only then score those artifacts.
+- [Environment](#1-environment)
+- [Assets](#2-assets)
+- [TUI](#3-tui)
+- [CLI inference](#4-cli)
+- [Artifact inspection](#5-inference)
+- [Evaluation](#6-evaluation)
+
+Most runs follow the same shape even when the model or benchmark changes: make the Python environment importable, discover stable IDs, prepare only the required checkpoints and benchmark assets, generate artifacts, inspect them, and only then score them.
+
+<Callout type="idea" title="Tip">
+  You do not need a GPU or model weights to browse catalogs and inspect readiness. Complete environment and discovery checks, read the reported blockers, and stop before asset download if you are only evaluating coverage.
+</Callout>
 
 ## Workflow
 
@@ -24,9 +35,22 @@ Most runs follow the same shape even when the model or benchmark changes. First 
   </Step>
 </Steps>
 
+## Prerequisites
+
+- **OS:** Linux recommended for GPU inference and most benchmark runners
+- **Python:** 3.10+ through the WorldFoundry unified conda environment
+- **Optional:** CUDA-capable GPU, Hugging Face token for gated checkpoints
+
+<Callout type="info" title="Note">
+  Catalog browsing and readiness inspection work without weights. The expensive path begins only when you choose a concrete model run and download assets.
+</Callout>
+
 ## 1. Environment
 
-The bootstrap step creates the default WorldFoundry runtime and writes a local shell file with the paths used by the CLI, Studio, and evaluation runners. Always source that file before running commands in a new shell; it is the piece that tells WorldFoundry where your cache, datasets, checkpoints, conda envs, and outputs live.
+The bootstrap step creates the default WorldFoundry runtime and writes a local shell file with the paths used by the CLI, Studio, and evaluation runners. Always source that file before running commands in a new shell.
+
+<Tabs items={['Default', 'Shared paths', 'Verify']}>
+  <Tab>
 
 Start from the repository root:
 
@@ -39,7 +63,10 @@ source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 ```
 
-On shared machines, keep datasets, checkpoints, and outputs outside git. This keeps the repository clean for open source release, avoids accidental commits of generated media, and lets multiple benchmark runs reuse the same local asset roots:
+  </Tab>
+  <Tab>
+
+On shared machines, keep datasets, checkpoints, and outputs outside git:
 
 ```bash
 bash scripts/setup/bootstrap_worldfoundry.sh \
@@ -49,22 +76,33 @@ bash scripts/setup/bootstrap_worldfoundry.sh \
   --artifact-root /path/to/worldfoundry-artifacts
 ```
 
-Verify an existing machine before a run. This is useful after logging into a fresh shell, moving to another GPU node, or changing CUDA/PyTorch packages:
+  </Tab>
+  <Tab>
+
+Verify an existing machine before a run:
 
 ```bash
 bash scripts/setup/bootstrap_worldfoundry.sh --verify-only
 worldfoundry-eval --help
 ```
 
-Detailed environment mapping by model and benchmark lives in [Environment](/docs/reference/environments). Use that page when a model needs an extra conda profile or a benchmark evaluator depends on a metric package that is not part of the unified runtime.
+  </Tab>
+</Tabs>
+
+<Callout title="Next">
+  Detailed environment mapping by model and benchmark lives in [Environment](/docs/reference/environments). Use that page when a model needs an extra conda profile or a benchmark evaluator depends on a metric package outside the unified runtime.
+</Callout>
 
 ## 2. Assets
 
-WorldFoundry keeps executable code in tree. Checkpoints, datasets, metric weights, reference files, and generated outputs are staged locally, usually through Hugging Face. The important distinction is that missing assets are expected to be downloaded or mounted.
+WorldFoundry keeps executable code in tree. Checkpoints, datasets, metric weights, reference files, and generated outputs are staged locally, usually through Hugging Face.
 
-Model assets and benchmark assets are separate. A model checkpoint lets you generate candidate artifacts; benchmark assets define what to generate, how outputs should be named, and which files or metric weights are needed to compute scores.
+<Callout type="warn" title="Important">
+  Model assets and benchmark assets are separate. A model checkpoint lets you generate candidate artifacts; benchmark assets define what to generate, how outputs should be named, and which files or metric weights are needed to compute scores.
+</Callout>
 
-For a model:
+<Tabs items={['Model', 'Benchmark']}>
+  <Tab>
 
 ```bash
 bash scripts/inference/prepare_model_infer.sh <model-id> --verify-env-only
@@ -72,7 +110,10 @@ bash scripts/inference/prepare_model_infer.sh <model-id> --download
 worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
 ```
 
-For a benchmark, start by asking WorldFoundry to print the asset plan. The plan shows the local paths, required environment variables, and the real evaluation command for that benchmark without downloading secrets or writing credentials:
+  </Tab>
+  <Tab>
+
+Start by asking WorldFoundry to print the asset plan:
 
 ```bash
 python scripts/setup/prepare_benchmark_assets.py \
@@ -87,24 +128,27 @@ python scripts/setup/prepare_benchmark_assets.py \
 source "${WORLDFOUNDRY_HOME:-${HOME}/.cache/worldfoundry}/<benchmark-id>.env"
 ```
 
-Use `HF_TOKEN` only for gated assets whose terms you have accepted. Public checkpoints and datasets should work without a token; gated Hugging Face assets still require accepting the upstream license first:
+  </Tab>
+</Tabs>
+
+Use `HF_TOKEN` only for gated assets whose terms you have accepted:
 
 ```bash
 export HF_TOKEN=<your-huggingface-token>
 ```
 
-Full cache and path conventions are in [Local assets](/docs/guides/local-assets). If a command complains about a missing dataset, checkpoint, metric model, or generated output directory, that page explains where the file should live and which environment variable controls it.
+Full cache and path conventions are in [Local assets](/docs/guides/local-assets).
 
 ## 3. TUI
 
-Use the TUI when you do not want to remember ids and flags. It is the best first-run path because it reads the same model and benchmark manifests as the CLI, shows the available choices, and can print the final command before anything expensive runs.
+Use the TUI when you do not want to remember ids and flags. It reads the same manifests as the CLI, shows available choices, and can print the final command before anything expensive runs.
 
 ```bash
 python -m pip install -e ".[tui]"
 worldfoundry-eval tui
 ```
 
-Generate a command without entering the interactive session. This is useful when you want the TUI to resolve ids and defaults, but you still want to paste the command into a job script or terminal multiplexer:
+Generate a command without entering the interactive session:
 
 ```bash
 worldfoundry-eval tui \
@@ -113,13 +157,13 @@ worldfoundry-eval tui \
   --print-command
 ```
 
-The TUI does not bypass missing checkpoint, dataset, license, or environment requirements. If it prints a command for a benchmark whose assets are not staged yet, run the benchmark asset preparation step first and then retry the generated command.
+<Callout type="info" title="Note">
+  The TUI does not bypass missing checkpoint, dataset, license, or environment requirements. If it prints a command for a benchmark whose assets are not staged yet, run the benchmark asset preparation step first.
+</Callout>
 
 ## 4. CLI
 
-Use the CLI for scripts, batch jobs, and reproducible notes. Start with discovery commands instead of guessing ids: model ids, benchmark ids, and download declarations come from manifests, and the JSON output is easier to copy into automation.
-
-Common discovery commands:
+Use the CLI for scripts, batch jobs, and reproducible notes. Start with discovery commands instead of guessing ids:
 
 ```bash
 worldfoundry-eval zoo models --json
@@ -127,7 +171,7 @@ worldfoundry-eval zoo benchmarks --json
 worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
 ```
 
-Run model inference from the command line. The output directory is intentionally explicit because later evaluation commands need to know where generated videos, frames, trajectories, or result files were written:
+Run model inference from the command line:
 
 ```bash
 python -m worldfoundry.studio.workspace_job infer \
@@ -137,7 +181,7 @@ python -m worldfoundry.studio.workspace_job infer \
   --device cuda
 ```
 
-For image-to-video or other conditioned models, pass an input file or directory along with the prompt and generation parameters. The exact supported flags depend on the selected model runner, so use this as the common shape and check the model page or TUI output for model-specific options:
+For image-to-video or other conditioned models:
 
 ```bash
 python -m worldfoundry.studio.workspace_job infer \
@@ -150,13 +194,17 @@ python -m worldfoundry.studio.workspace_job infer \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
-The full command map is in [CLI](/docs/reference/cli). Use it as a reference after the main workflow is clear, not as the first page to read.
+The full command map is in [CLI](/docs/reference/cli).
 
 ## 5. Inference
 
-Inference produces artifacts. It does not produce benchmark evidence by itself. A generated video can look correct in Studio and still fail a benchmark run if the filenames, prompt coverage, split, or metadata do not match what the benchmark runner expects.
+Inference produces artifacts. It does not produce benchmark evidence by itself.
 
-The practical loop is: generate a small batch, inspect the outputs, confirm the directory layout, and then scale to the full prompt set required by the target benchmark. This avoids spending GPU time on outputs that cannot be scored later.
+<Callout type="warn" title="Important">
+  A generated video can look correct in Studio and still fail a benchmark run if filenames, prompt coverage, split, or metadata do not match what the benchmark runner expects.
+</Callout>
+
+The practical loop is: generate a small batch, inspect the outputs, confirm the directory layout, and then scale to the full prompt set required by the target benchmark.
 
 For repeated visual review, start the workspace:
 
@@ -164,19 +212,13 @@ For repeated visual review, start the workspace:
 bash scripts/workspace/run_workspace.sh
 ```
 
-Open:
-
-```text
-http://127.0.0.1:7870/
-```
-
-Inspect the output directory or workspace gallery before scoring:
+Open `http://127.0.0.1:7870/` and inspect outputs before scoring:
 
 ```bash
 find tmp/worldfoundry_infer/<model-id> -maxdepth 2 -type f | head
 ```
 
-More inference details are in [Run inference](/docs/guides/inference) and [Studio](/docs/guides/studio). Use Studio for visual review and the filesystem path for evaluation handoff.
+More details: [Run inference](/docs/guides/inference) and [Studio](/docs/guides/studio).
 
 ## 6. Evaluation
 
@@ -188,7 +230,10 @@ A benchmark run needs three concrete inputs. If any one is missing, the runner s
 | Candidate artifacts | Videos, frames, rollouts, traces, or official-shaped result dumps produced by the model. |
 | Runner mode | `official-validation` imports existing official-shaped results; `official-run` computes scores from generated artifacts. |
 
-If the official benchmark already produced a result file, import it. This path is for normalizing and recording official-shaped results inside WorldFoundry without rerunning the upstream evaluator:
+<Tabs items={['Official validation', 'Official run', 'One-shot run']}>
+  <Tab>
+
+If the official benchmark already produced a result file, import it:
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -200,7 +245,10 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-If generated artifacts are ready and the in-tree runner can compute metrics, run the integrated evaluator. This is the preferred path for benchmarks whose scoring code has been vendored and cleaned into WorldFoundry:
+  </Tab>
+  <Tab>
+
+If generated artifacts are ready and the in-tree runner can compute metrics:
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -211,7 +259,10 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-If a model-zoo model and benchmark-zoo runner support the one-cell path, WorldFoundry can launch the generation-and-scoring run from a single command. Use this only after assets and environment are known to be ready; otherwise it is harder to tell whether a failure came from generation or scoring:
+  </Tab>
+  <Tab>
+
+If model-zoo and benchmark-zoo support the one-cell path:
 
 ```bash
 worldfoundry-eval run \
@@ -222,11 +273,14 @@ worldfoundry-eval run \
   --json
 ```
 
-Open `scorecard.json` first. Public leaderboard claims require complete assets, complete generated artifacts, and the benchmark-specific eligibility flags. For debugging, also check the run manifest, per-sample results, and metric summaries written under the output directory.
+  </Tab>
+</Tabs>
+
+<Callout type="idea" title="Tip">
+  Open `scorecard.json` first. Public leaderboard claims require complete assets, complete generated artifacts, and benchmark-specific eligibility flags.
+</Callout>
 
 ## Where Details Live
-
-This page is intentionally the common path. Once you know which model or benchmark you are running, jump to the specific page below for exact data layout, metric checkpoints, simulator notes, and model-specific arguments.
 
 <Cards>
   <Card title="Environment" description="Conda profiles and setup scripts by model and benchmark family." href="/docs/reference/environments" />

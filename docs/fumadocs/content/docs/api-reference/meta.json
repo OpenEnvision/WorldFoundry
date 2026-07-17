@@ -1,0 +1,23 @@
+{
+  "title": "Python API Reference",
+  "defaultOpen": false,
+  "pages": [
+    "index",
+    "core",
+    "core-attention",
+    "core-configuration",
+    "core-io-media",
+    "core-model-loading",
+    "core-distributed",
+    "core-runtime",
+    "core-nn-math",
+    "core-acceleration-memory",
+    "core-foundations",
+    "contracts",
+    "models",
+    "metrics-tasks",
+    "runs",
+    "reporting",
+    "runtime"
+  ]
+}

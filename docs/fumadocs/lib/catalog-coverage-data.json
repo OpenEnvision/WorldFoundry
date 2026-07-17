@@ -1,0 +1,2304 @@
+{
+  "modelsTotal": 225,
+  "modelsListed": 224,
+  "benchmarksTotal": 64,
+  "modelFamilies": [
+    {
+      "id": "video",
+      "label": "Video",
+      "blurb": "Text-, image-, and video-conditioned generation, editing, and audio-video systems.",
+      "count": 52,
+      "entries": [
+        {
+          "id": "allegro",
+          "name": "Allegro",
+          "status": "integrated",
+          "aliases": [
+            "allegro"
+          ]
+        },
+        {
+          "id": "animatediff",
+          "name": "AnimateDiff",
+          "status": "integrated",
+          "aliases": [
+            "animatediff"
+          ]
+        },
+        {
+          "id": "bernini",
+          "name": "Bernini",
+          "status": "integrated",
+          "aliases": [
+            "bernini"
+          ]
+        },
+        {
+          "id": "bernini-r-1.3b",
+          "name": "Bernini-R 1.3B",
+          "status": "integrated",
+          "aliases": [
+            "bernini-r-1.3b"
+          ]
+        },
+        {
+          "id": "bernini-r-14b",
+          "name": "Bernini-R 14B",
+          "status": "integrated",
+          "aliases": [
+            "bernini-r-14b"
+          ]
+        },
+        {
+          "id": "cogvideox",
+          "name": "CogVideoX",
+          "status": "integrated",
+          "aliases": [
+            "cogvideox"
+          ]
+        },
+        {
+          "id": "dynamicrafter",
+          "name": "DynamiCrafter",
+          "status": "integrated",
+          "aliases": [
+            "dynamicrafter"
+          ]
+        },
+        {
+          "id": "easyanimate",
+          "name": "EasyAnimate",
+          "status": "integrated",
+          "aliases": [
+            "easyanimate"
+          ]
+        },
+        {
+          "id": "emu3.5",
+          "name": "Emu 3.5",
+          "status": "integrated",
+          "aliases": [
+            "emu3.5"
+          ]
+        },
+        {
+          "id": "framepack",
+          "name": "FramePack",
+          "status": "verified",
+          "aliases": [
+            "framepack"
+          ]
+        },
+        {
+          "id": "helios",
+          "name": "Helios",
+          "status": "integrated",
+          "aliases": [
+            "helios"
+          ]
+        },
+        {
+          "id": "hunyuanvideo",
+          "name": "HunyuanVideo",
+          "status": "integrated",
+          "aliases": [
+            "hunyuanvideo"
+          ]
+        },
+        {
+          "id": "hunyuanvideo-1.5",
+          "name": "HunyuanVideo 1.5",
+          "status": "integrated",
+          "aliases": [
+            "hunyuanvideo-1.5"
+          ]
+        },
+        {
+          "id": "i2vgen-xl",
+          "name": "I 2VGen-XL",
+          "status": "integrated",
+          "aliases": [
+            "i2vgen-xl"
+          ]
+        },
+        {
+          "id": "krea-realtime-video",
+          "name": "Krea Realtime Video 14B",
+          "status": "integrated",
+          "aliases": [
+            "krea-realtime-video"
+          ]
+        },
+        {
+          "id": "lingbot-video",
+          "name": "LingBot-Video",
+          "status": "integrated",
+          "aliases": [
+            "lingbot-video"
+          ]
+        },
+        {
+          "id": "longcat-video",
+          "name": "LongCat-Video",
+          "status": "integrated",
+          "aliases": [
+            "longcat-video"
+          ]
+        },
+        {
+          "id": "longvie-1",
+          "name": "LongVie",
+          "status": "integrated",
+          "aliases": [
+            "longvie-1"
+          ]
+        },
+        {
+          "id": "longvie-2",
+          "name": "LongVie 2",
+          "status": "integrated",
+          "aliases": [
+            "longvie-2"
+          ]
+        },
+        {
+          "id": "ltx-2.x",
+          "name": "LTX-2.x",
+          "status": "integrated",
+          "aliases": [
+            "ltx-2.x"
+          ]
+        },
+        {
+          "id": "ltx-video",
+          "name": "LTX-Video",
+          "status": "integrated",
+          "aliases": [
+            "ltx-video"
+          ]
+        },
+        {
+          "id": "magi-1",
+          "name": "MAGI-1",
+          "status": "integrated",
+          "aliases": [
+            "magi-1"
+          ]
+        },
+        {
+          "id": "mmaudio",
+          "name": "MMAudio",
+          "status": "integrated",
+          "aliases": [
+            "mmaudio"
+          ]
+        },
+        {
+          "id": "mochi-1",
+          "name": "Mochi-1",
+          "status": "integrated",
+          "aliases": [
+            "mochi-1"
+          ]
+        },
+        {
+          "id": "modelscope-t2v",
+          "name": "ModelScopeT 2V",
+          "status": "integrated",
+          "aliases": [
+            "modelscope-t2v"
+          ]
+        },
+        {
+          "id": "omnivinci",
+          "name": "OmniVinci",
+          "status": "integrated",
+          "aliases": [
+            "omnivinci"
+          ]
+        },
+        {
+          "id": "open-magvit2",
+          "name": "Open-MAGVIT 2",
+          "status": "integrated",
+          "aliases": [
+            "open-magvit2"
+          ]
+        },
+        {
+          "id": "open-sora",
+          "name": "Open-Sora",
+          "status": "integrated",
+          "aliases": [
+            "open-sora"
+          ]
+        },
+        {
+          "id": "open-sora-plan",
+          "name": "Open-Sora-Plan",
+          "status": "integrated",
+          "aliases": [
+            "open-sora-plan"
+          ]
+        },
+        {
+          "id": "pusa-vidgen",
+          "name": "Pusa VidGen",
+          "status": "integrated",
+          "aliases": [
+            "pusa-vidgen"
+          ]
+        },
+        {
+          "id": "qwen2.5-omni",
+          "name": "Qwen 2.5-Omni",
+          "status": "integrated",
+          "aliases": [
+            "qwen2.5-omni"
+          ]
+        },
+        {
+          "id": "sama-14b",
+          "name": "SAMA 14B",
+          "status": "integrated",
+          "aliases": [
+            "sama-14b"
+          ]
+        },
+        {
+          "id": "sana",
+          "name": "Sana",
+          "status": "runtime_ported",
+          "aliases": [
+            "sana"
+          ]
+        },
+        {
+          "id": "show-o",
+          "name": "Show-o",
+          "status": "runtime_ported",
+          "aliases": [
+            "show-o"
+          ]
+        },
+        {
+          "id": "skyreels-v3",
+          "name": "SkyReels V 3",
+          "status": "integrated",
+          "aliases": [
+            "skyreels-v3"
+          ]
+        },
+        {
+          "id": "skyreels-v2",
+          "name": "SkyReels-V 2",
+          "status": "integrated",
+          "aliases": [
+            "skyreels-v2"
+          ]
+        },
+        {
+          "id": "spatial-ladder",
+          "name": "SpatialLadder",
+          "status": "integrated",
+          "aliases": [
+            "spatial-ladder"
+          ]
+        },
+        {
+          "id": "spatial-reasoner",
+          "name": "SpatialReasoner",
+          "status": "integrated",
+          "aliases": [
+            "spatial-reasoner"
+          ]
+        },
+        {
+          "id": "step-video-t2v",
+          "name": "Step-Video-T 2V",
+          "status": "planned",
+          "aliases": [
+            "step-video-t2v"
+          ]
+        },
+        {
+          "id": "t2v_turbo_t2v",
+          "name": "T 2V Turbo",
+          "status": "runtime_ported",
+          "aliases": [
+            "t2v_turbo_t2v"
+          ]
+        },
+        {
+          "id": "thinksound",
+          "name": "ThinkSound",
+          "status": "metadata_only",
+          "aliases": [
+            "thinksound"
+          ]
+        },
+        {
+          "id": "unianimate-dit",
+          "name": "UniAnimate-DiT",
+          "status": "integrated",
+          "aliases": [
+            "unianimate-dit"
+          ]
+        },
+        {
+          "id": "vchitect-2-t2v",
+          "name": "Vchitect-2.0",
+          "status": "integrated",
+          "aliases": [
+            "vchitect-2-t2v"
+          ]
+        },
+        {
+          "id": "videocrafter",
+          "name": "VideoCrafter",
+          "status": "integrated",
+          "aliases": [
+            "videocrafter"
+          ]
+        },
+        {
+          "id": "videocrafter1",
+          "name": "VideoCrafter 1",
+          "status": "integrated",
+          "aliases": [
+            "videocrafter1-i2v",
+            "videocrafter1-t2v"
+          ]
+        },
+        {
+          "id": "videocrafter2-t2v",
+          "name": "VideoCrafter 2",
+          "status": "integrated",
+          "aliases": [
+            "videocrafter2-t2v"
+          ]
+        },
+        {
+          "id": "vmem",
+          "name": "VMem",
+          "status": "verified",
+          "aliases": [
+            "vmem"
+          ]
+        },
+        {
+          "id": "wan2.1",
+          "name": "Wan 2.1",
+          "status": "integrated",
+          "aliases": [
+            "wan2.1"
+          ]
+        },
+        {
+          "id": "wan2.1-vace",
+          "name": "Wan 2.1 VACE",
+          "status": "integrated",
+          "aliases": [
+            "wan2.1-vace"
+          ]
+        },
+        {
+          "id": "wan2.2",
+          "name": "Wan 2.2",
+          "status": "integrated",
+          "aliases": [
+            "wan2.2"
+          ]
+        },
+        {
+          "id": "warp-as-history",
+          "name": "Warp-as-History",
+          "status": "verified",
+          "aliases": [
+            "warp-as-history"
+          ]
+        },
+        {
+          "id": "zeroscope",
+          "name": "ZeroScope",
+          "status": "integrated",
+          "aliases": [
+            "zeroscope"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world_models",
+      "label": "World models",
+      "blurb": "Interactive worlds, camera/action conditioning, navigation, and simulator-shaped systems.",
+      "count": 72,
+      "entries": [
+        {
+          "id": "ac3d",
+          "name": "AC 3D",
+          "status": "integrated",
+          "aliases": [
+            "ac3d"
+          ]
+        },
+        {
+          "id": "adaworld",
+          "name": "AdaWorld",
+          "status": "blocked",
+          "aliases": [
+            "adaworld"
+          ]
+        },
+        {
+          "id": "astra",
+          "name": "Astra",
+          "status": "integrated",
+          "aliases": [
+            "astra"
+          ]
+        },
+        {
+          "id": "cameractrl",
+          "name": "CameraCtrl",
+          "status": "verified",
+          "aliases": [
+            "cameractrl"
+          ]
+        },
+        {
+          "id": "causal-forcing",
+          "name": "Causal-Forcing",
+          "status": "integrated",
+          "aliases": [
+            "causal-forcing"
+          ]
+        },
+        {
+          "id": "cosmos3",
+          "name": "Cosmos 3",
+          "status": "in_tree_plan_ready",
+          "aliases": [
+            "cosmos3"
+          ]
+        },
+        {
+          "id": "cosmos-predict-2.5",
+          "name": "Cosmos Predict 2.5",
+          "status": "runtime_ported",
+          "aliases": [
+            "cosmos-predict-2.5"
+          ]
+        },
+        {
+          "id": "cosmos-transfer-2.5",
+          "name": "Cosmos Transfer 2.5",
+          "status": "runtime_ported",
+          "aliases": [
+            "cosmos-transfer-2.5"
+          ]
+        },
+        {
+          "id": "ctrl-world",
+          "name": "Ctrl-World",
+          "status": "runtime_ported",
+          "aliases": [
+            "ctrl-world"
+          ]
+        },
+        {
+          "id": "diamond",
+          "name": "DIAMOND",
+          "status": "integrated",
+          "aliases": [
+            "diamond"
+          ]
+        },
+        {
+          "id": "dino-wm",
+          "name": "DINO-WM",
+          "status": "integrated",
+          "aliases": [
+            "dino-wm"
+          ]
+        },
+        {
+          "id": "dreamdojo",
+          "name": "DreamDojo",
+          "status": "planned",
+          "aliases": [
+            "dreamdojo"
+          ]
+        },
+        {
+          "id": "dreamx-world-5b",
+          "name": "DreamX-World 5B AR",
+          "status": "integrated",
+          "aliases": [
+            "dreamx-world-5b"
+          ]
+        },
+        {
+          "id": "dreamx-world-5b-cam",
+          "name": "DreamX-World 5B Cam",
+          "status": "integrated",
+          "aliases": [
+            "dreamx-world-5b-cam"
+          ]
+        },
+        {
+          "id": "droid-w",
+          "name": "DROID-W",
+          "status": "runtime_ported",
+          "aliases": [
+            "droid-w"
+          ]
+        },
+        {
+          "id": "dualcamctrl",
+          "name": "DualCamCtrl",
+          "status": "integrated",
+          "aliases": [
+            "dualcamctrl"
+          ]
+        },
+        {
+          "id": "echo-infinity",
+          "name": "Echo-Infinity",
+          "status": "integrated",
+          "aliases": [
+            "echo-infinity"
+          ]
+        },
+        {
+          "id": "egowm",
+          "name": "EgoWM",
+          "status": "runtime_ported",
+          "aliases": [
+            "egowm"
+          ]
+        },
+        {
+          "id": "gamma-world",
+          "name": "Gamma-World",
+          "status": "integrated",
+          "aliases": [
+            "gamma-world"
+          ]
+        },
+        {
+          "id": "gen3c",
+          "name": "GEN 3C",
+          "status": "verified_official_8gpu_workspace",
+          "aliases": [
+            "gen3c"
+          ]
+        },
+        {
+          "id": "genie-envisioner",
+          "name": "Genie Envisioner",
+          "status": "runtime_ported",
+          "aliases": [
+            "genie-envisioner"
+          ]
+        },
+        {
+          "id": "giga-world-0",
+          "name": "GigaWorld-0",
+          "status": "runtime_ported",
+          "aliases": [
+            "giga-world-0"
+          ]
+        },
+        {
+          "id": "happyoyster",
+          "name": "HappyOyster",
+          "status": "runtime_ported",
+          "aliases": [
+            "happyoyster"
+          ]
+        },
+        {
+          "id": "hma",
+          "name": "HMA",
+          "status": "runtime_ported",
+          "aliases": [
+            "hma"
+          ]
+        },
+        {
+          "id": "hunyuan-game-craft",
+          "name": "Hunyuan Game Craft",
+          "status": "runtime_ported",
+          "aliases": [
+            "hunyuan-game-craft"
+          ]
+        },
+        {
+          "id": "hunyuanworld-1",
+          "name": "HunyuanWorld 1.0",
+          "status": "runtime_ported",
+          "aliases": [
+            "hunyuanworld-1"
+          ]
+        },
+        {
+          "id": "hunyuanworld-mirror",
+          "name": "HunyuanWorld-Mirror",
+          "status": "integrated",
+          "aliases": [
+            "hunyuanworld-mirror"
+          ]
+        },
+        {
+          "id": "hunyuanworld-voyager",
+          "name": "HunyuanWorld-Voyager",
+          "status": "integrated",
+          "aliases": [
+            "hunyuanworld-voyager"
+          ]
+        },
+        {
+          "id": "hy-world-2.0",
+          "name": "HY-World 2.0",
+          "status": "component_verified",
+          "aliases": [
+            "hy-world-2.0"
+          ]
+        },
+        {
+          "id": "hy-worldplay",
+          "name": "HY-WorldPlay",
+          "status": "integrated",
+          "aliases": [
+            "hy-worldplay"
+          ]
+        },
+        {
+          "id": "infinite-world",
+          "name": "Infinite-World",
+          "status": "integrated",
+          "aliases": [
+            "infinite-world"
+          ]
+        },
+        {
+          "id": "inspatio-world",
+          "name": "InSpatio-World",
+          "status": "verified",
+          "aliases": [
+            "inspatio-world"
+          ]
+        },
+        {
+          "id": "worldfm",
+          "name": "InSpatio-WorldFM",
+          "status": "verified",
+          "aliases": [
+            "worldfm"
+          ]
+        },
+        {
+          "id": "irasim",
+          "name": "IRASim",
+          "status": "planned",
+          "aliases": [
+            "irasim"
+          ]
+        },
+        {
+          "id": "iris",
+          "name": "IRIS",
+          "status": "blocked",
+          "aliases": [
+            "iris"
+          ]
+        },
+        {
+          "id": "kairos-sensenova",
+          "name": "Kairos Sensenova",
+          "status": "verified",
+          "aliases": [
+            "kairos-sensenova"
+          ]
+        },
+        {
+          "id": "leworldmodel",
+          "name": "LeWorldModel",
+          "status": "runtime_ported",
+          "aliases": [
+            "leworldmodel"
+          ]
+        },
+        {
+          "id": "lingbot-world",
+          "name": "LingBot-World",
+          "status": "verified",
+          "aliases": [
+            "lingbot-world"
+          ]
+        },
+        {
+          "id": "lingbot-world-v2",
+          "name": "LingBot-World-V 2",
+          "status": "implemented_checkpoint_pending",
+          "aliases": [
+            "lingbot-world-v2"
+          ]
+        },
+        {
+          "id": "matrix-game-1",
+          "name": "Matrix-Game 1.0",
+          "status": "integrated",
+          "aliases": [
+            "matrix-game-1"
+          ]
+        },
+        {
+          "id": "matrix-game-2",
+          "name": "Matrix-Game 2.0",
+          "status": "integrated",
+          "aliases": [
+            "matrix-game-2"
+          ]
+        },
+        {
+          "id": "matrix-game-3",
+          "name": "Matrix-Game 3.0",
+          "status": "integrated",
+          "aliases": [
+            "matrix-game-3"
+          ]
+        },
+        {
+          "id": "mineworld",
+          "name": "MineWorld",
+          "status": "runtime_ported",
+          "aliases": [
+            "mineworld"
+          ]
+        },
+        {
+          "id": "mosaicmem",
+          "name": "MosaicMem",
+          "status": "runtime_ported",
+          "aliases": [
+            "mosaicmem"
+          ]
+        },
+        {
+          "id": "motionbricks",
+          "name": "MotionBricks",
+          "status": "runtime_ported",
+          "aliases": [
+            "motionbricks"
+          ]
+        },
+        {
+          "id": "motionctrl",
+          "name": "MotionCtrl",
+          "status": "integrated",
+          "aliases": [
+            "motionctrl"
+          ]
+        },
+        {
+          "id": "multiworld",
+          "name": "MultiWorld",
+          "status": "planned",
+          "aliases": [
+            "multiworld"
+          ]
+        },
+        {
+          "id": "nwm",
+          "name": "Navigation World Models",
+          "status": "runtime_ported",
+          "aliases": [
+            "nwm"
+          ]
+        },
+        {
+          "id": "oasis-500m",
+          "name": "Oasis 500M",
+          "status": "runtime_ported",
+          "aliases": [
+            "oasis-500m"
+          ]
+        },
+        {
+          "id": "omniforcing",
+          "name": "OmniForcing",
+          "status": "runtime_ported",
+          "aliases": [
+            "omniforcing"
+          ]
+        },
+        {
+          "id": "pandora",
+          "name": "Pandora",
+          "status": "planned",
+          "aliases": [
+            "pandora"
+          ]
+        },
+        {
+          "id": "pointworld",
+          "name": "PointWorld",
+          "status": "runtime_ported",
+          "aliases": [
+            "pointworld"
+          ]
+        },
+        {
+          "id": "sana-wm",
+          "name": "SANA-WM",
+          "status": "runnable",
+          "aliases": [
+            "sana-wm"
+          ]
+        },
+        {
+          "id": "scope",
+          "name": "SCOPE",
+          "status": "verified",
+          "aliases": [
+            "scope"
+          ]
+        },
+        {
+          "id": "self-forcing",
+          "name": "Self-Forcing",
+          "status": "integrated",
+          "aliases": [
+            "self-forcing"
+          ]
+        },
+        {
+          "id": "shotstream",
+          "name": "ShotStream",
+          "status": "runtime_ported",
+          "aliases": [
+            "shotstream"
+          ]
+        },
+        {
+          "id": "simworld",
+          "name": "SimWorld",
+          "status": "runtime_ported",
+          "aliases": [
+            "simworld"
+          ]
+        },
+        {
+          "id": "solaris",
+          "name": "Solaris",
+          "status": "integrated",
+          "aliases": [
+            "solaris"
+          ]
+        },
+        {
+          "id": "starwm",
+          "name": "StarWM",
+          "status": "runtime_ported",
+          "aliases": [
+            "starwm"
+          ]
+        },
+        {
+          "id": "tesseract",
+          "name": "TesserAct",
+          "status": "runtime_ported",
+          "aliases": [
+            "tesseract"
+          ]
+        },
+        {
+          "id": "uwm",
+          "name": "Unified World Models",
+          "status": "runtime_ported",
+          "aliases": [
+            "uwm"
+          ]
+        },
+        {
+          "id": "vggt-world",
+          "name": "VGGT-World",
+          "status": "runtime_ported",
+          "aliases": [
+            "vggt-world"
+          ]
+        },
+        {
+          "id": "vid2world",
+          "name": "Vid 2World",
+          "status": "runtime_ported",
+          "aliases": [
+            "vid2world"
+          ]
+        },
+        {
+          "id": "viewcrafter",
+          "name": "ViewCrafter",
+          "status": "runtime_ported",
+          "aliases": [
+            "viewcrafter"
+          ]
+        },
+        {
+          "id": "wilddet3d",
+          "name": "WildDet 3D",
+          "status": "runtime_ported",
+          "aliases": [
+            "wilddet3d"
+          ]
+        },
+        {
+          "id": "wildworld",
+          "name": "WildWorld",
+          "status": "runtime_ported",
+          "aliases": [
+            "wildworld"
+          ]
+        },
+        {
+          "id": "worldlabs-marble-1.1",
+          "name": "World Labs Marble 1.1",
+          "status": "planned",
+          "aliases": [
+            "worldlabs-marble-1.1"
+          ]
+        },
+        {
+          "id": "worldcam",
+          "name": "WorldCam",
+          "status": "verified",
+          "aliases": [
+            "worldcam"
+          ]
+        },
+        {
+          "id": "worldgrow",
+          "name": "WorldGrow",
+          "status": "runtime_ported",
+          "aliases": [
+            "worldgrow"
+          ]
+        },
+        {
+          "id": "worldmem",
+          "name": "WorldMem",
+          "status": "runtime_ported",
+          "aliases": [
+            "worldmem"
+          ]
+        },
+        {
+          "id": "wow",
+          "name": "WoW",
+          "status": "verified",
+          "aliases": [
+            "wow"
+          ]
+        },
+        {
+          "id": "yume",
+          "name": "YUME",
+          "status": "integrated",
+          "aliases": [
+            "yume"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "three_d_four_d",
+      "label": "3D / 4D",
+      "blurb": "Reconstruction, depth, point clouds, scene representations, and dynamic geometry.",
+      "count": 47,
+      "entries": [
+        {
+          "id": "4d-gs",
+          "name": "4D-GS",
+          "status": "blocked",
+          "aliases": [
+            "4d-gs"
+          ]
+        },
+        {
+          "id": "consistent4d",
+          "name": "Consistent 4D",
+          "status": "blocked",
+          "aliases": [
+            "consistent4d"
+          ]
+        },
+        {
+          "id": "cut3r",
+          "name": "CUT 3R",
+          "status": "runtime_ported",
+          "aliases": [
+            "cut3r"
+          ]
+        },
+        {
+          "id": "d-nerf",
+          "name": "D-NeRF",
+          "status": "blocked",
+          "aliases": [
+            "d-nerf"
+          ]
+        },
+        {
+          "id": "dap",
+          "name": "Depth Any Panoramas",
+          "status": "integrated",
+          "aliases": [
+            "dap"
+          ]
+        },
+        {
+          "id": "depth-anything-v3",
+          "name": "Depth Anything 3",
+          "status": "runtime_ported",
+          "aliases": [
+            "depth-anything-v3"
+          ]
+        },
+        {
+          "id": "depth-anything-v3-prior",
+          "name": "Depth Anything 3 Prior",
+          "status": "integrated",
+          "aliases": [
+            "depth-anything-v3-prior"
+          ]
+        },
+        {
+          "id": "depth-anything-v1",
+          "name": "Depth Anything V 1",
+          "status": "verified",
+          "aliases": [
+            "depth-anything-v1"
+          ]
+        },
+        {
+          "id": "depth-anything-v2-prior",
+          "name": "Depth Anything V 2 Prior",
+          "status": "integrated",
+          "aliases": [
+            "depth-anything-v2-prior"
+          ]
+        },
+        {
+          "id": "dust3r",
+          "name": "DUSt 3R",
+          "status": "verified",
+          "aliases": [
+            "dust3r"
+          ]
+        },
+        {
+          "id": "dust3r-base-model",
+          "name": "DUSt 3R Base Model",
+          "status": "verified",
+          "aliases": [
+            "dust3r-base-model"
+          ]
+        },
+        {
+          "id": "dvlt",
+          "name": "Déjà View Looping Transformer",
+          "status": "integrated",
+          "aliases": [
+            "dvlt"
+          ]
+        },
+        {
+          "id": "fantasyworld",
+          "name": "FantasyWorld",
+          "status": "integrated",
+          "aliases": [
+            "fantasyworld"
+          ]
+        },
+        {
+          "id": "flashworld",
+          "name": "FlashWorld",
+          "status": "integrated",
+          "aliases": [
+            "flashworld"
+          ]
+        },
+        {
+          "id": "gaussianflow",
+          "name": "GaussianFlow",
+          "status": "blocked",
+          "aliases": [
+            "gaussianflow"
+          ]
+        },
+        {
+          "id": "gaussianobject",
+          "name": "GaussianObject",
+          "status": "blocked",
+          "aliases": [
+            "gaussianobject"
+          ]
+        },
+        {
+          "id": "geocalib-prior",
+          "name": "GeoCalib Prior",
+          "status": "integrated",
+          "aliases": [
+            "geocalib-prior"
+          ]
+        },
+        {
+          "id": "geometry-prior",
+          "name": "Geometry Prior",
+          "status": "runtime_ported",
+          "aliases": [
+            "geometry-prior"
+          ]
+        },
+        {
+          "id": "hexplane",
+          "name": "HexPlane",
+          "status": "blocked",
+          "aliases": [
+            "hexplane"
+          ]
+        },
+        {
+          "id": "infinite-vggt",
+          "name": "Infinite VGGT",
+          "status": "runtime_ported",
+          "aliases": [
+            "infinite-vggt"
+          ]
+        },
+        {
+          "id": "k-planes",
+          "name": "K-Planes",
+          "status": "blocked",
+          "aliases": [
+            "k-planes"
+          ]
+        },
+        {
+          "id": "lagernvs",
+          "name": "LagrNVS",
+          "status": "integrated",
+          "aliases": [
+            "lagernvs"
+          ]
+        },
+        {
+          "id": "lingbot-map",
+          "name": "LingBot-Map",
+          "status": "integrated",
+          "aliases": [
+            "lingbot-map"
+          ]
+        },
+        {
+          "id": "loger",
+          "name": "LoGeR",
+          "status": "verified",
+          "aliases": [
+            "loger"
+          ]
+        },
+        {
+          "id": "lyra",
+          "name": "Lyra",
+          "status": "integrated",
+          "aliases": [
+            "lyra"
+          ]
+        },
+        {
+          "id": "metric3d-prior",
+          "name": "Metric 3D Prior",
+          "status": "integrated",
+          "aliases": [
+            "metric3d-prior"
+          ]
+        },
+        {
+          "id": "monst3r",
+          "name": "MonST 3R",
+          "status": "verified",
+          "aliases": [
+            "monst3r"
+          ]
+        },
+        {
+          "id": "mvdiffusion",
+          "name": "MVDiffusion",
+          "status": "integrated",
+          "aliases": [
+            "mvdiffusion"
+          ]
+        },
+        {
+          "id": "neoverse",
+          "name": "NeoVerse",
+          "status": "integrated",
+          "aliases": [
+            "neoverse"
+          ]
+        },
+        {
+          "id": "pi3",
+          "name": "Pi 3",
+          "status": "runtime_ported",
+          "aliases": [
+            "pi3"
+          ]
+        },
+        {
+          "id": "pixelsplat",
+          "name": "pixelSplat",
+          "status": "planned",
+          "aliases": [
+            "pixelsplat"
+          ]
+        },
+        {
+          "id": "prior-depth-anything",
+          "name": "Prior Depth Anything",
+          "status": "integrated",
+          "aliases": [
+            "prior-depth-anything"
+          ]
+        },
+        {
+          "id": "recammaster",
+          "name": "ReCamMaster",
+          "status": "integrated",
+          "aliases": [
+            "recammaster"
+          ]
+        },
+        {
+          "id": "sc-gs",
+          "name": "SC-GS",
+          "status": "blocked",
+          "aliases": [
+            "sc-gs"
+          ]
+        },
+        {
+          "id": "track-anything-prior",
+          "name": "Segment and Track Anything Prior",
+          "status": "integrated",
+          "aliases": [
+            "track-anything-prior"
+          ]
+        },
+        {
+          "id": "shape-of-motion",
+          "name": "Shape of Motion",
+          "status": "blocked",
+          "aliases": [
+            "shape-of-motion"
+          ]
+        },
+        {
+          "id": "splatt3r",
+          "name": "Splatt 3R",
+          "status": "verified",
+          "aliases": [
+            "splatt3r"
+          ]
+        },
+        {
+          "id": "stable-virtual-camera",
+          "name": "Stable Virtual Camera",
+          "status": "integrated",
+          "aliases": [
+            "stable-virtual-camera"
+          ]
+        },
+        {
+          "id": "tineuvox",
+          "name": "TiNeuVox",
+          "status": "blocked",
+          "aliases": [
+            "tineuvox"
+          ]
+        },
+        {
+          "id": "unidepth-v2-prior",
+          "name": "UniDepth V 2 Prior",
+          "status": "integrated",
+          "aliases": [
+            "unidepth-v2-prior"
+          ]
+        },
+        {
+          "id": "unik3d-prior",
+          "name": "UniK 3D Prior",
+          "status": "integrated",
+          "aliases": [
+            "unik3d-prior"
+          ]
+        },
+        {
+          "id": "vggt",
+          "name": "VGGT",
+          "status": "runtime_ported",
+          "aliases": [
+            "vggt"
+          ]
+        },
+        {
+          "id": "vggt-omega",
+          "name": "VGGT-Omega",
+          "status": "integrated",
+          "aliases": [
+            "vggt-omega"
+          ]
+        },
+        {
+          "id": "video-depth-anything-prior",
+          "name": "Video Depth Anything Prior",
+          "status": "integrated",
+          "aliases": [
+            "video-depth-anything-prior"
+          ]
+        },
+        {
+          "id": "wonderjourney",
+          "name": "WonderJourney",
+          "status": "integrated",
+          "aliases": [
+            "wonderjourney"
+          ]
+        },
+        {
+          "id": "wonderworld",
+          "name": "WonderWorld",
+          "status": "integrated",
+          "aliases": [
+            "wonderworld"
+          ]
+        },
+        {
+          "id": "worldgen",
+          "name": "WorldGen",
+          "status": "integrated",
+          "aliases": [
+            "worldgen"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vla_va_wam",
+      "label": "VLA / VA / WAM",
+      "blurb": "Embodied policies, world-action models, and robot control stacks.",
+      "count": 43,
+      "entries": [
+        {
+          "id": "act",
+          "name": "Action Chunking Transformer",
+          "status": "runtime_ported",
+          "aliases": [
+            "act"
+          ]
+        },
+        {
+          "id": "being-h05",
+          "name": "Being-H 0.5",
+          "status": "integrated",
+          "aliases": [
+            "being-h05"
+          ]
+        },
+        {
+          "id": "being-h07",
+          "name": "Being-H 0.7",
+          "status": "runtime_ported",
+          "aliases": [
+            "being-h07"
+          ]
+        },
+        {
+          "id": "cogact",
+          "name": "CogACT",
+          "status": "integrated",
+          "aliases": [
+            "cogact"
+          ]
+        },
+        {
+          "id": "db-cogact",
+          "name": "DB-CogACT / Dexbotic",
+          "status": "checkpoint_backed_runtime_ready",
+          "aliases": [
+            "db-cogact"
+          ]
+        },
+        {
+          "id": "diffusion-policy",
+          "name": "Diffusion Policy",
+          "status": "integrated",
+          "aliases": [
+            "diffusion-policy"
+          ]
+        },
+        {
+          "id": "eo1",
+          "name": "EO-1",
+          "status": "runtime_ported",
+          "aliases": [
+            "eo1"
+          ]
+        },
+        {
+          "id": "fastwam",
+          "name": "FastWAM",
+          "status": "runtime_ported",
+          "aliases": [
+            "fastwam"
+          ]
+        },
+        {
+          "id": "gaussian-actor",
+          "name": "Gaussian Actor",
+          "status": "runtime_ported",
+          "aliases": [
+            "gaussian-actor"
+          ]
+        },
+        {
+          "id": "giga-brain-0",
+          "name": "GigaBrain-0",
+          "status": "integrated",
+          "aliases": [
+            "giga-brain-0"
+          ]
+        },
+        {
+          "id": "hy-embodied",
+          "name": "HY-Embodied",
+          "status": "runtime_ported",
+          "aliases": [
+            "hy-embodied"
+          ]
+        },
+        {
+          "id": "last-r1",
+          "name": "LaST-R 1",
+          "status": "runtime_ported",
+          "aliases": [
+            "last-r1"
+          ]
+        },
+        {
+          "id": "lapa",
+          "name": "Latent Action Pretraining",
+          "status": "runtime_ported",
+          "aliases": [
+            "lapa"
+          ]
+        },
+        {
+          "id": "libero-para",
+          "name": "LIBERO-Para",
+          "status": "runtime_ported",
+          "aliases": [
+            "libero-para"
+          ]
+        },
+        {
+          "id": "lingbot-va",
+          "name": "LingBot-VA",
+          "status": "plan_ready",
+          "aliases": [
+            "lingbot-va"
+          ]
+        },
+        {
+          "id": "lingbot-vla",
+          "name": "LingBot-VLA",
+          "status": "in_tree_vendored_checkpoint_runtime",
+          "aliases": [
+            "lingbot-vla"
+          ]
+        },
+        {
+          "id": "lingbot-vla-v2",
+          "name": "LingBot-VLA 2.0",
+          "status": "in_tree_vendored_checkpoint_runtime",
+          "aliases": [
+            "lingbot-vla-v2"
+          ]
+        },
+        {
+          "id": "mme-vla",
+          "name": "MME-VLA",
+          "status": "in_tree_vendored_import_verified",
+          "aliases": [
+            "mme-vla"
+          ]
+        },
+        {
+          "id": "molmoact2",
+          "name": "MolmoAct 2",
+          "status": "runtime_ported",
+          "aliases": [
+            "molmoact2"
+          ]
+        },
+        {
+          "id": "molmobot",
+          "name": "MolmoBot",
+          "status": "in_tree_vendored_import_verified",
+          "aliases": [
+            "molmobot"
+          ]
+        },
+        {
+          "id": "multi-task-dit",
+          "name": "Multi-task DiT Policy",
+          "status": "runtime_ported",
+          "aliases": [
+            "multi-task-dit"
+          ]
+        },
+        {
+          "id": "dreamzero",
+          "name": "NVIDIA DreamZero",
+          "status": "runtime_ported",
+          "aliases": [
+            "dreamzero"
+          ]
+        },
+        {
+          "id": "gr00t",
+          "name": "NVIDIA GR 00T",
+          "status": "runtime_ported",
+          "aliases": [
+            "gr00t"
+          ]
+        },
+        {
+          "id": "octo",
+          "name": "Octo",
+          "status": "integrated",
+          "aliases": [
+            "octo"
+          ]
+        },
+        {
+          "id": "openpi",
+          "name": "OpenPI",
+          "status": "integrated",
+          "aliases": [
+            "openpi"
+          ]
+        },
+        {
+          "id": "openpie-0.6",
+          "name": "OpenPIE 0.6",
+          "status": "runtime_ported",
+          "aliases": [
+            "openpie-0.6"
+          ]
+        },
+        {
+          "id": "openvla",
+          "name": "OpenVLA",
+          "status": "integrated",
+          "aliases": [
+            "openvla"
+          ]
+        },
+        {
+          "id": "openvla-oft",
+          "name": "OpenVLA-OFT",
+          "status": "checkpoint_backed_runtime_ready",
+          "aliases": [
+            "openvla-oft"
+          ]
+        },
+        {
+          "id": "pi0",
+          "name": "pi 0",
+          "status": "runtime_ported",
+          "aliases": [
+            "pi0"
+          ]
+        },
+        {
+          "id": "pi0-worldfoundry",
+          "name": "PI 0 (WorldFoundry native)",
+          "status": "runtime_ported",
+          "aliases": [
+            "pi0-worldfoundry"
+          ]
+        },
+        {
+          "id": "pi0-fast",
+          "name": "pi 0-FAST",
+          "status": "runtime_ported",
+          "aliases": [
+            "pi0-fast"
+          ]
+        },
+        {
+          "id": "pi05",
+          "name": "pi 0.5",
+          "status": "runtime_ported",
+          "aliases": [
+            "pi05"
+          ]
+        },
+        {
+          "id": "real-time-chunking",
+          "name": "Real-Time Chunking",
+          "status": "runtime_ported",
+          "aliases": [
+            "real-time-chunking"
+          ]
+        },
+        {
+          "id": "roboflamingo",
+          "name": "RoboFlamingo",
+          "status": "integrated",
+          "aliases": [
+            "roboflamingo"
+          ]
+        },
+        {
+          "id": "rt-1",
+          "name": "RT-1",
+          "status": "runtime_ported",
+          "aliases": [
+            "rt-1"
+          ]
+        },
+        {
+          "id": "smolvla",
+          "name": "SmolVLA",
+          "status": "runtime_ported",
+          "aliases": [
+            "smolvla"
+          ]
+        },
+        {
+          "id": "spirit-v1.5",
+          "name": "Spirit-VLA v 1.5",
+          "status": "runtime_ported",
+          "aliases": [
+            "spirit-v1.5"
+          ]
+        },
+        {
+          "id": "starvla",
+          "name": "StarVLA",
+          "status": "integrated",
+          "aliases": [
+            "starvla"
+          ]
+        },
+        {
+          "id": "tdmpc",
+          "name": "TD-MPC",
+          "status": "runtime_ported",
+          "aliases": [
+            "tdmpc"
+          ]
+        },
+        {
+          "id": "vlanext",
+          "name": "VLANeXt",
+          "status": "in_tree_vendored_import_verified",
+          "aliases": [
+            "vlanext"
+          ]
+        },
+        {
+          "id": "vqbet",
+          "name": "VQ-BeT",
+          "status": "runtime_ported",
+          "aliases": [
+            "vqbet"
+          ]
+        },
+        {
+          "id": "wall-oss",
+          "name": "Wall-OSS",
+          "status": "runtime_ported",
+          "aliases": [
+            "wall-oss"
+          ]
+        },
+        {
+          "id": "xvla",
+          "name": "X-VLA",
+          "status": "runtime_ported",
+          "aliases": [
+            "xvla"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hosted_api",
+      "label": "Hosted API",
+      "blurb": "Provider-backed video and world systems that run through API credentials.",
+      "count": 10,
+      "entries": [
+        {
+          "id": "hailuo-2p3",
+          "name": "Hailuo 2.3",
+          "status": "integrated",
+          "aliases": [
+            "hailuo-2p3"
+          ]
+        },
+        {
+          "id": "kling-api",
+          "name": "Kling API",
+          "status": "integrated",
+          "aliases": [
+            "kling-api"
+          ]
+        },
+        {
+          "id": "luma-ray2",
+          "name": "Luma Ray 2",
+          "status": "integrated",
+          "aliases": [
+            "luma-ray2"
+          ]
+        },
+        {
+          "id": "runway-gen4p5",
+          "name": "Runway Gen-4.5",
+          "status": "integrated",
+          "aliases": [
+            "runway-gen4p5"
+          ]
+        },
+        {
+          "id": "sora2",
+          "name": "Sora 2",
+          "status": "integrated",
+          "aliases": [
+            "sora2"
+          ]
+        },
+        {
+          "id": "veo3",
+          "name": "Veo 3",
+          "status": "integrated",
+          "aliases": [
+            "veo3"
+          ]
+        },
+        {
+          "id": "wan-2p5",
+          "name": "Wan 2.5 API",
+          "status": "integrated",
+          "aliases": [
+            "wan-2p5"
+          ]
+        },
+        {
+          "id": "wan-2p6",
+          "name": "Wan 2.6 API",
+          "status": "integrated",
+          "aliases": [
+            "wan-2p6"
+          ]
+        },
+        {
+          "id": "wan-2p7",
+          "name": "Wan 2.7 API",
+          "status": "integrated",
+          "aliases": [
+            "wan-2p7"
+          ]
+        },
+        {
+          "id": "worldlabs",
+          "name": "World Labs API",
+          "status": "integrated",
+          "aliases": [
+            "worldlabs"
+          ]
+        }
+      ]
+    }
+  ],
+  "benchmarkGroups": [
+    {
+      "id": "video",
+      "label": "Video & world",
+      "count": 42,
+      "entries": [
+        {
+          "id": "4dworldbench",
+          "name": "4DWorldBench",
+          "aliases": [
+            "4dworldbench"
+          ]
+        },
+        {
+          "id": "aigcbench",
+          "name": "AIGCBench",
+          "aliases": [
+            "aigcbench"
+          ]
+        },
+        {
+          "id": "camerabench",
+          "name": "CameraBench",
+          "aliases": [
+            "camerabench"
+          ]
+        },
+        {
+          "id": "chronomagic-bench",
+          "name": "ChronoMagic-Bench",
+          "aliases": [
+            "chronomagic-bench"
+          ]
+        },
+        {
+          "id": "devil-dynamics",
+          "name": "DEVIL Dynamics",
+          "aliases": [
+            "devil-dynamics"
+          ]
+        },
+        {
+          "id": "evalcrafter",
+          "name": "EvalCrafter",
+          "aliases": [
+            "evalcrafter"
+          ]
+        },
+        {
+          "id": "ewmbench",
+          "name": "EWMBench",
+          "aliases": [
+            "ewmbench"
+          ]
+        },
+        {
+          "id": "fetv",
+          "name": "FETV",
+          "aliases": [
+            "fetv"
+          ]
+        },
+        {
+          "id": "genai-bench",
+          "name": "GenAI-Bench",
+          "aliases": [
+            "genai-bench"
+          ]
+        },
+        {
+          "id": "ipv-bench",
+          "name": "IPV-Bench",
+          "aliases": [
+            "ipv-bench"
+          ]
+        },
+        {
+          "id": "iworld-bench",
+          "name": "iWorld-Bench",
+          "aliases": [
+            "iworld-bench"
+          ]
+        },
+        {
+          "id": "memobench",
+          "name": "MemoBench",
+          "aliases": [
+            "memobench"
+          ]
+        },
+        {
+          "id": "mirabench",
+          "name": "MiraBench",
+          "aliases": [
+            "mirabench"
+          ]
+        },
+        {
+          "id": "phyeduvideo",
+          "name": "PhyEduVideo",
+          "aliases": [
+            "phyeduvideo"
+          ]
+        },
+        {
+          "id": "phyfps-bench-gen",
+          "name": "PhyFPS-Bench-Gen",
+          "aliases": [
+            "phyfps-bench-gen"
+          ]
+        },
+        {
+          "id": "phygenbench",
+          "name": "PhyGenBench",
+          "aliases": [
+            "phygenbench"
+          ]
+        },
+        {
+          "id": "phyground",
+          "name": "PhyGround",
+          "aliases": [
+            "phyground"
+          ]
+        },
+        {
+          "id": "physics-iq",
+          "name": "Physics-IQ Original",
+          "aliases": [
+            "physics-iq"
+          ]
+        },
+        {
+          "id": "physics-iq-verified",
+          "name": "Physics-IQ Verified",
+          "aliases": [
+            "physics-iq-verified"
+          ]
+        },
+        {
+          "id": "physvidbench",
+          "name": "PhysVidBench",
+          "aliases": [
+            "physvidbench"
+          ]
+        },
+        {
+          "id": "t2v-compbench",
+          "name": "T2V-CompBench",
+          "aliases": [
+            "t2v-compbench"
+          ]
+        },
+        {
+          "id": "t2v-safety-bench",
+          "name": "T2VSafetyBench",
+          "aliases": [
+            "t2v-safety-bench"
+          ]
+        },
+        {
+          "id": "t2vworldbench",
+          "name": "T2VWorldBench",
+          "aliases": [
+            "t2vworldbench"
+          ]
+        },
+        {
+          "id": "vbench",
+          "name": "VBench",
+          "aliases": [
+            "vbench"
+          ]
+        },
+        {
+          "id": "vbench-plus-plus",
+          "name": "VBench++",
+          "aliases": [
+            "vbench-plus-plus"
+          ]
+        },
+        {
+          "id": "vbench-2.0",
+          "name": "VBench-2.0",
+          "aliases": [
+            "vbench-2.0"
+          ]
+        },
+        {
+          "id": "video-bench",
+          "name": "Video-Bench",
+          "aliases": [
+            "video-bench"
+          ]
+        },
+        {
+          "id": "videophy",
+          "name": "VideoPhy",
+          "aliases": [
+            "videophy"
+          ]
+        },
+        {
+          "id": "videophy2",
+          "name": "VideoPhy2",
+          "aliases": [
+            "videophy2"
+          ]
+        },
+        {
+          "id": "videoscience-bench",
+          "name": "VideoScience-Bench",
+          "aliases": [
+            "videoscience-bench"
+          ]
+        },
+        {
+          "id": "videoscore",
+          "name": "VideoScore",
+          "aliases": [
+            "videoscore"
+          ]
+        },
+        {
+          "id": "videoverse",
+          "name": "VideoVerse",
+          "aliases": [
+            "videoverse"
+          ]
+        },
+        {
+          "id": "visual-chronometer",
+          "name": "Visual Chronometer",
+          "aliases": [
+            "visual-chronometer"
+          ]
+        },
+        {
+          "id": "vmbench",
+          "name": "VMBench",
+          "aliases": [
+            "vmbench"
+          ]
+        },
+        {
+          "id": "wbench",
+          "name": "WBench",
+          "aliases": [
+            "wbench"
+          ]
+        },
+        {
+          "id": "world-in-world",
+          "name": "World-in-World",
+          "aliases": [
+            "world-in-world"
+          ]
+        },
+        {
+          "id": "worldarena",
+          "name": "WorldArena",
+          "aliases": [
+            "worldarena"
+          ]
+        },
+        {
+          "id": "worldbench",
+          "name": "WorldBench",
+          "aliases": [
+            "worldbench"
+          ]
+        },
+        {
+          "id": "worldmodelbench",
+          "name": "WorldModelBench",
+          "aliases": [
+            "worldmodelbench"
+          ]
+        },
+        {
+          "id": "worldreasonbench",
+          "name": "WorldReasonBench",
+          "aliases": [
+            "worldreasonbench"
+          ]
+        },
+        {
+          "id": "worldscore",
+          "name": "WorldScore",
+          "aliases": [
+            "worldscore"
+          ]
+        },
+        {
+          "id": "wrbench",
+          "name": "WRBench",
+          "aliases": [
+            "wrbench"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "embodied",
+      "label": "Embodied",
+      "count": 22,
+      "entries": [
+        {
+          "id": "ai2thor",
+          "name": "AI2-THOR",
+          "aliases": [
+            "ai2thor"
+          ]
+        },
+        {
+          "id": "behavior1k",
+          "name": "BEHAVIOR-1K",
+          "aliases": [
+            "behavior1k"
+          ]
+        },
+        {
+          "id": "bridgedata-v2",
+          "name": "BridgeData V2",
+          "aliases": [
+            "bridgedata-v2"
+          ]
+        },
+        {
+          "id": "calvin",
+          "name": "CALVIN",
+          "aliases": [
+            "calvin"
+          ]
+        },
+        {
+          "id": "kinetix",
+          "name": "Kinetix",
+          "aliases": [
+            "kinetix"
+          ]
+        },
+        {
+          "id": "libero",
+          "name": "LIBERO",
+          "aliases": [
+            "libero"
+          ]
+        },
+        {
+          "id": "libero-mem",
+          "name": "LIBERO-Mem",
+          "aliases": [
+            "libero-mem"
+          ]
+        },
+        {
+          "id": "libero-para",
+          "name": "LIBERO-Para",
+          "aliases": [
+            "libero-para"
+          ]
+        },
+        {
+          "id": "libero-plus",
+          "name": "LIBERO-Plus",
+          "aliases": [
+            "libero-plus"
+          ]
+        },
+        {
+          "id": "libero-pro",
+          "name": "LIBERO-Pro",
+          "aliases": [
+            "libero-pro"
+          ]
+        },
+        {
+          "id": "maniskill",
+          "name": "ManiSkill",
+          "aliases": [
+            "maniskill"
+          ]
+        },
+        {
+          "id": "maniskill2",
+          "name": "ManiSkill2",
+          "aliases": [
+            "maniskill2"
+          ]
+        },
+        {
+          "id": "metaworld",
+          "name": "Meta-World",
+          "aliases": [
+            "metaworld"
+          ]
+        },
+        {
+          "id": "mikasa",
+          "name": "MiKASA-Robo",
+          "aliases": [
+            "mikasa"
+          ]
+        },
+        {
+          "id": "molmospaces",
+          "name": "MolmoSpaces-Bench",
+          "aliases": [
+            "molmospaces"
+          ]
+        },
+        {
+          "id": "rlbench",
+          "name": "RLBench",
+          "aliases": [
+            "rlbench"
+          ]
+        },
+        {
+          "id": "robocasa",
+          "name": "RoboCasa",
+          "aliases": [
+            "robocasa"
+          ]
+        },
+        {
+          "id": "robocerebra",
+          "name": "RoboCerebra",
+          "aliases": [
+            "robocerebra"
+          ]
+        },
+        {
+          "id": "robomme",
+          "name": "RoboMME",
+          "aliases": [
+            "robomme"
+          ]
+        },
+        {
+          "id": "robotwin",
+          "name": "RoboTwin 2.0",
+          "aliases": [
+            "robotwin"
+          ]
+        },
+        {
+          "id": "simpler-env",
+          "name": "SimplerEnv",
+          "aliases": [
+            "simpler-env"
+          ]
+        },
+        {
+          "id": "vlabench",
+          "name": "VLABench",
+          "aliases": [
+            "vlabench"
+          ]
+        }
+      ]
+    }
+  ]
+}

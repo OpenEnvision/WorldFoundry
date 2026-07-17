@@ -85,7 +85,7 @@ The in-tree runtime reuses WorldFoundry's VBench and VIPe-related code paths. Fo
 ```bash
 export WORLDFOUNDRY_IWORLD_BENCH_RUNTIME_BACKEND=official
 export VIPE_ROOT="${VIPE_ROOT:-$PWD/worldfoundry/base_models/three_dimensions/general_3d/vipe}"
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:?Set CUDA_VISIBLE_DEVICES to the GPU(s) for this run}"
 ```
 
 Do not use the default mock backend for reported numbers. It only exists so local wiring can run without the full metric stack.

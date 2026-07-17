@@ -158,12 +158,3 @@ VideoScore 主要是 **reward-model / 自动评测指标**，而不是 prompt-su
 VideoScore-Bench 聚合约 **7,000** 个视频，来源包括 [VideoFeedback](https://huggingface.co/datasets/TIGER-Lab/VideoFeedback)、EvalCrafter、GenAI-Bench 和 VBench split。官方 bench config 包括 `video_feedback`、`eval_crafter`、`genaibench`、`vbench`。
 
 WorldFoundry 会把五个 1–4 aspect 分数归一化到 0–1，并报告 `videoscore_average`。benchmark 级证据请使用完整 frame-tree 评测；bounded sample 路径只用于本地验证。
-
-## 已知限制
-
-- 评测消费的是抽帧目录，而不是原始 mp4 文件夹。你需要提供 `--frames-dir`，或让 WorldFoundry 从 `VideoScore-Bench` 物化 bounded frames。
-- 完整 SPCC/pairwise leaderboard 协议仍需要所选 bench split 的完整上游 generated-frame trees。
-- WorldFoundry 目前只有 1 个 `video_feedback` 样本的 bounded official GPU 证据；那是 integration evidence，不是 leaderboard 提交。
-- Reward model 默认使用 [TIGER-Lab/VideoScore-v1.1](https://huggingface.co/TIGER-Lab/VideoScore-v1.1)；训练复现需要单独的 Mantis training stack 和 VideoFeedback 标注。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

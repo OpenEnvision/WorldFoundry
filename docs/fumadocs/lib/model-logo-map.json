@@ -1,0 +1,1476 @@
+{
+  "benchmarkLogos": {
+    "4dworldbench": "yeppp27",
+    "ai2thor": "allenai",
+    "aigcbench": "benchcouncil",
+    "behavior1k": "stanfordvl",
+    "bridgedata-v2": "rail-berkeley",
+    "calvin": "mees",
+    "chronomagic-bench": "pku-yuangroup",
+    "devil-dynamics": "mingxiangl",
+    "evalcrafter": "evalcrafter",
+    "ewmbench": "agibottech",
+    "genai-bench": "tiger-ai-lab",
+    "ipv-bench": "showlab",
+    "iworld-bench": "embodiedcity",
+    "kinetix": "flairox",
+    "larybench": "meituan-longcat",
+    "libero": "lifelong-robot-learning",
+    "libero-mem": "lifelong-robot-learning",
+    "libero-para": "cau-hai-lab",
+    "libero-plus": "lifelong-robot-learning",
+    "libero-pro": "lifelong-robot-learning",
+    "maniskill": "haosulab",
+    "maniskill2": "haosulab",
+    "memobench": "memobench-team",
+    "metaworld": "farama-foundation",
+    "mikasa": "cognitiveaisystems",
+    "mirabench": "mira-space",
+    "molmospaces": "allenai",
+    "phyeduvideo": "meghamariamkm",
+    "phyfps-bench-gen": "taco-group",
+    "phygenbench": "opengvlab",
+    "phyground": "nu-world-model-embodied-ai",
+    "physical-ai-bench": "shi-labs",
+    "physics-iq": "google-deepmind",
+    "physics-iq-verified": "google-deepmind",
+    "physvidbench": "ensanli",
+    "rlbench": "stepjam",
+    "robocasa": "robocasa",
+    "robocerebra": "buaa-colalab",
+    "robomme": "robomme",
+    "robotwin": "robotwin-platform",
+    "simpler-env": "simpler-env",
+    "t2v-compbench": "kaiyuesun98",
+    "t2v-safety-bench": "yibo-miao",
+    "t2vworldbench": "magiclinux",
+    "vbench": "vchitect",
+    "vbench-2.0": "vchitect",
+    "vbench-plus-plus": "vchitect",
+    "video-bench": "video-bench",
+    "videophy": "hritikbansal",
+    "videophy2": "hritikbansal",
+    "videoscience-bench": "hao-ai-lab",
+    "videoscore": "tiger-ai-lab",
+    "videoverse": "zeqing-wang",
+    "visual-chronometer": "taco-group",
+    "vlabench": "openmoss",
+    "vmbench": "amap-ml",
+    "wbench": "meituan-longcat",
+    "world-in-world": "world-in-world",
+    "worldarena": "tsinghua-fib-lab",
+    "worldbench": "worldbenchmark",
+    "worldmodelbench": "worldmodelbench-team",
+    "worldreasonbench": "unix-ai-lab",
+    "worldscore": "haoyi-duan",
+    "wrbench": "jinplu"
+  },
+  "failed": [],
+  "generatedBy": "committed catalog snapshot",
+  "logos": {
+    "2toinf": {
+      "key": "2toinf",
+      "label": "2toinf",
+      "sourceOrg": "2toinf",
+      "src": "/model-logos/2toinf.jpg"
+    },
+    "abdelstark": {
+      "key": "abdelstark",
+      "label": "AbdelStark",
+      "sourceOrg": "AbdelStark",
+      "src": "/model-logos/abdelstark.jpg"
+    },
+    "agibottech": {
+      "key": "agibottech",
+      "label": "AgibotTech",
+      "sourceOrg": "AgibotTech",
+      "src": "/model-logos/agibottech.jpg"
+    },
+    "aigc-apps": {
+      "key": "aigc-apps",
+      "label": "aigc apps",
+      "sourceOrg": "aigc-apps",
+      "src": "/model-logos/aigc-apps.png"
+    },
+    "albertpumarola": {
+      "key": "albertpumarola",
+      "label": "albertpumarola",
+      "sourceOrg": "albertpumarola",
+      "src": "/model-logos/albertpumarola.png"
+    },
+    "ali-vilab": {
+      "key": "ali-vilab",
+      "label": "ali vilab",
+      "sourceOrg": "ali-vilab",
+      "src": "/model-logos/ali-vilab.png"
+    },
+    "alibaba-damo-academy": {
+      "key": "alibaba-damo-academy",
+      "label": "alibaba damo academy",
+      "sourceOrg": "alibaba-damo-academy",
+      "src": "/model-logos/alibaba-damo-academy.jpg"
+    },
+    "allenai": {
+      "key": "allenai",
+      "label": "allenai",
+      "sourceOrg": "allenai",
+      "src": "/model-logos/allenai.png"
+    },
+    "amap-cvlab": {
+      "key": "amap-cvlab",
+      "label": "amap cvlab",
+      "sourceOrg": "amap-cvlab",
+      "src": "/model-logos/amap-cvlab.png"
+    },
+    "amap-ml": {
+      "key": "amap-ml",
+      "label": "AMAP ML",
+      "sourceOrg": "AMAP-ML",
+      "src": "/model-logos/amap-ml.png"
+    },
+    "api": {
+      "key": "api",
+      "label": "Api",
+      "sourceOrg": "Api",
+      "src": "/model-logos/api.png"
+    },
+    "beingbeyond": {
+      "key": "beingbeyond",
+      "label": "BeingBeyond",
+      "sourceOrg": "BeingBeyond",
+      "src": "/model-logos/beingbeyond.png"
+    },
+    "benchcouncil": {
+      "key": "benchcouncil",
+      "label": "BenchCouncil",
+      "sourceOrg": "BenchCouncil",
+      "src": "/model-logos/benchcouncil.jpg"
+    },
+    "btsmart": {
+      "key": "btsmart",
+      "label": "btsmart",
+      "sourceOrg": "btsmart",
+      "src": "/model-logos/btsmart.png"
+    },
+    "buaa-colalab": {
+      "key": "buaa-colalab",
+      "label": "buaa colalab",
+      "sourceOrg": "buaa-colalab",
+      "src": "/model-logos/buaa-colalab.png"
+    },
+    "bytedance": {
+      "key": "bytedance",
+      "label": "ByteDance Seed",
+      "sourceOrg": "ByteDance-Seed",
+      "src": "/model-logos/bytedance.png"
+    },
+    "caoang327": {
+      "key": "caoang327",
+      "label": "Caoang327",
+      "sourceOrg": "Caoang327",
+      "src": "/model-logos/caoang327.jpg"
+    },
+    "cau-hai-lab": {
+      "key": "cau-hai-lab",
+      "label": "cau hai lab",
+      "sourceOrg": "cau-hai-lab",
+      "src": "/model-logos/cau-hai-lab.png"
+    },
+    "cerspense": {
+      "key": "cerspense",
+      "label": "cerspense",
+      "sourceOrg": "cerspense",
+      "src": "/model-logos/cerspense.jpg"
+    },
+    "chen-h01": {
+      "key": "chen-h01",
+      "label": "CHEN H01",
+      "sourceOrg": "CHEN-H01",
+      "src": "/model-logos/chen-h01.jpg"
+    },
+    "cintellifusion": {
+      "key": "cintellifusion",
+      "label": "CIntellifusion",
+      "sourceOrg": "CIntellifusion",
+      "src": "/model-logos/cintellifusion.jpg"
+    },
+    "cognitiveaisystems": {
+      "key": "cognitiveaisystems",
+      "label": "CognitiveAISystems",
+      "sourceOrg": "CognitiveAISystems",
+      "src": "/model-logos/cognitiveaisystems.png"
+    },
+    "cut3r": {
+      "key": "cut3r",
+      "label": "CUT3R",
+      "sourceOrg": "CUT3R",
+      "src": "/model-logos/cut3r.png"
+    },
+    "cvg": {
+      "key": "cvg",
+      "label": "cvg",
+      "sourceOrg": "cvg",
+      "src": "/model-logos/cvg.png"
+    },
+    "cvlab-kaist": {
+      "key": "cvlab-kaist",
+      "label": "cvlab kaist",
+      "sourceOrg": "cvlab-kaist",
+      "src": "/model-logos/cvlab-kaist.png"
+    },
+    "cvmi-lab": {
+      "key": "cvmi-lab",
+      "label": "CVMI Lab",
+      "sourceOrg": "CVMI-Lab",
+      "src": "/model-logos/cvmi-lab.png"
+    },
+    "cynthiazxy123": {
+      "key": "cynthiazxy123",
+      "label": "Cynthiazxy123",
+      "sourceOrg": "Cynthiazxy123",
+      "src": "/model-logos/cynthiazxy123.jpg"
+    },
+    "dcharatan": {
+      "key": "dcharatan",
+      "label": "dcharatan",
+      "sourceOrg": "dcharatan",
+      "src": "/model-logos/dcharatan.png"
+    },
+    "depth-anything": {
+      "key": "depth-anything",
+      "label": "DepthAnything",
+      "sourceOrg": "DepthAnything",
+      "src": "/model-logos/depth-anything.png"
+    },
+    "dexmal": {
+      "key": "dexmal",
+      "label": "Dexmal",
+      "sourceOrg": "Dexmal",
+      "src": "/model-logos/dexmal.jpg"
+    },
+    "doubiiu": {
+      "key": "doubiiu",
+      "label": "Doubiiu",
+      "sourceOrg": "Doubiiu",
+      "src": "/model-logos/doubiiu.png"
+    },
+    "dravenalg": {
+      "key": "dravenalg",
+      "label": "DravenALG",
+      "sourceOrg": "DravenALG",
+      "src": "/model-logos/dravenalg.jpg"
+    },
+    "dreamzero0": {
+      "key": "dreamzero0",
+      "label": "dreamzero0",
+      "sourceOrg": "dreamzero0",
+      "src": "/model-logos/dreamzero0.png"
+    },
+    "drexubery": {
+      "key": "drexubery",
+      "label": "Drexubery",
+      "sourceOrg": "Drexubery",
+      "src": "/model-logos/drexubery.jpg"
+    },
+    "echo-team-joy-future-academy-jd": {
+      "key": "echo-team-joy-future-academy-jd",
+      "label": "Echo Team Joy Future Academy JD",
+      "sourceOrg": "Echo-Team-Joy-Future-Academy-JD",
+      "src": "/model-logos/echo-team-joy-future-academy-jd.jpg"
+    },
+    "eloialonso": {
+      "key": "eloialonso",
+      "label": "eloialonso",
+      "sourceOrg": "eloialonso",
+      "src": "/model-logos/eloialonso.png"
+    },
+    "embodiedcity": {
+      "key": "embodiedcity",
+      "label": "EmbodiedCity",
+      "sourceOrg": "EmbodiedCity",
+      "src": "/model-logos/embodiedcity.png"
+    },
+    "ensanli": {
+      "key": "ensanli",
+      "label": "ensanli",
+      "sourceOrg": "ensanli",
+      "src": "/model-logos/ensanli.jpg"
+    },
+    "envision-research": {
+      "key": "envision-research",
+      "label": "EnVision Research",
+      "sourceOrg": "EnVision-Research",
+      "src": "/model-logos/envision-research.png"
+    },
+    "eo-robotics": {
+      "key": "eo-robotics",
+      "label": "EO Robotics",
+      "sourceOrg": "EO-Robotics",
+      "src": "/model-logos/eo-robotics.png"
+    },
+    "etched-ai": {
+      "key": "etched-ai",
+      "label": "etched ai",
+      "sourceOrg": "etched-ai",
+      "src": "/model-logos/etched-ai.png"
+    },
+    "eternalevan": {
+      "key": "eternalevan",
+      "label": "EternalEvan",
+      "sourceOrg": "EternalEvan",
+      "src": "/model-logos/eternalevan.jpg"
+    },
+    "evalcrafter": {
+      "key": "evalcrafter",
+      "label": "evalcrafter",
+      "sourceOrg": "evalcrafter",
+      "src": "/model-logos/evalcrafter.png"
+    },
+    "exla-ai": {
+      "key": "exla-ai",
+      "label": "exla ai",
+      "sourceOrg": "exla-ai",
+      "src": "/model-logos/exla-ai.png"
+    },
+    "fantasy-amap": {
+      "key": "fantasy-amap",
+      "label": "Fantasy AMAP",
+      "sourceOrg": "Fantasy-AMAP",
+      "src": "/model-logos/fantasy-amap.png"
+    },
+    "farama-foundation": {
+      "key": "farama-foundation",
+      "label": "Farama Foundation",
+      "sourceOrg": "Farama-Foundation",
+      "src": "/model-logos/farama-foundation.png"
+    },
+    "flairox": {
+      "key": "flairox",
+      "label": "FLAIROx",
+      "sourceOrg": "FLAIROx",
+      "src": "/model-logos/flairox.png"
+    },
+    "gaoyuezhou": {
+      "key": "gaoyuezhou",
+      "label": "gaoyuezhou",
+      "sourceOrg": "gaoyuezhou",
+      "src": "/model-logos/gaoyuezhou.png"
+    },
+    "gaussianobject": {
+      "key": "gaussianobject",
+      "label": "GaussianObject",
+      "sourceOrg": "GaussianObject",
+      "src": "/model-logos/gaussianobject.png"
+    },
+    "genmoai": {
+      "key": "genmoai",
+      "label": "genmoai",
+      "sourceOrg": "genmoai",
+      "src": "/model-logos/genmoai.png"
+    },
+    "google-deepmind": {
+      "key": "google-deepmind",
+      "label": "google deepmind",
+      "sourceOrg": "google-deepmind",
+      "src": "/model-logos/google-deepmind.png"
+    },
+    "google-research": {
+      "key": "google-research",
+      "label": "google research",
+      "sourceOrg": "google-research",
+      "src": "/model-logos/google-research.png"
+    },
+    "guandeh17": {
+      "key": "guandeh17",
+      "label": "guandeh17",
+      "sourceOrg": "guandeh17",
+      "src": "/model-logos/guandeh17.jpg"
+    },
+    "guoyww": {
+      "key": "guoyww",
+      "label": "guoyww",
+      "sourceOrg": "guoyww",
+      "src": "/model-logos/guoyww.jpg"
+    },
+    "h-embodvis": {
+      "key": "h-embodvis",
+      "label": "H EmbodVis",
+      "sourceOrg": "H-EmbodVis",
+      "src": "/model-logos/h-embodvis.png"
+    },
+    "hao-ai-lab": {
+      "key": "hao-ai-lab",
+      "label": "hao ai lab",
+      "sourceOrg": "hao-ai-lab",
+      "src": "/model-logos/hao-ai-lab.png"
+    },
+    "haosulab": {
+      "key": "haosulab",
+      "label": "haosulab",
+      "sourceOrg": "haosulab",
+      "src": "/model-logos/haosulab.png"
+    },
+    "haoyi-duan": {
+      "key": "haoyi-duan",
+      "label": "haoyi duan",
+      "sourceOrg": "haoyi-duan",
+      "src": "/model-logos/haoyi-duan.jpg"
+    },
+    "hehao13": {
+      "key": "hehao13",
+      "label": "hehao13",
+      "sourceOrg": "hehao13",
+      "src": "/model-logos/hehao13.jpg"
+    },
+    "hkchengrex": {
+      "key": "hkchengrex",
+      "label": "hkchengrex",
+      "sourceOrg": "hkchengrex",
+      "src": "/model-logos/hkchengrex.jpg"
+    },
+    "hpcaitech": {
+      "key": "hpcaitech",
+      "label": "hpcaitech",
+      "sourceOrg": "hpcaitech",
+      "src": "/model-logos/hpcaitech.jpg"
+    },
+    "hritikbansal": {
+      "key": "hritikbansal",
+      "label": "Hritikbansal",
+      "sourceOrg": "Hritikbansal",
+      "src": "/model-logos/hritikbansal.jpg"
+    },
+    "huggingface": {
+      "key": "huggingface",
+      "label": "huggingface",
+      "sourceOrg": "huggingface",
+      "src": "/model-logos/huggingface.png"
+    },
+    "hustvl": {
+      "key": "hustvl",
+      "label": "hustvl",
+      "sourceOrg": "hustvl",
+      "src": "/model-logos/hustvl.png"
+    },
+    "iamcreateai": {
+      "key": "iamcreateai",
+      "label": "IamCreateAI",
+      "sourceOrg": "IamCreateAI",
+      "src": "/model-logos/iamcreateai.png"
+    },
+    "imlixinyang": {
+      "key": "imlixinyang",
+      "label": "imlixinyang",
+      "sourceOrg": "imlixinyang",
+      "src": "/model-logos/imlixinyang.png"
+    },
+    "inspatio": {
+      "key": "inspatio",
+      "label": "inspatio",
+      "sourceOrg": "inspatio",
+      "src": "/model-logos/inspatio.jpg"
+    },
+    "insta360-research-team": {
+      "key": "insta360-research-team",
+      "label": "Insta360 Research Team",
+      "sourceOrg": "Insta360-Research-Team",
+      "src": "/model-logos/insta360-research-team.png"
+    },
+    "jaylee0301": {
+      "key": "jaylee0301",
+      "label": "jayLEE0301",
+      "sourceOrg": "jayLEE0301",
+      "src": "/model-logos/jaylee0301.jpg"
+    },
+    "ji4chenli": {
+      "key": "ji4chenli",
+      "label": "Ji4chenLi",
+      "sourceOrg": "Ji4chenLi",
+      "src": "/model-logos/ji4chenli.png"
+    },
+    "jinplu": {
+      "key": "jinplu",
+      "label": "JinPLu",
+      "sourceOrg": "JinPLu",
+      "src": "/model-logos/jinplu.png"
+    },
+    "junyi42": {
+      "key": "junyi42",
+      "label": "Junyi42",
+      "sourceOrg": "Junyi42",
+      "src": "/model-logos/junyi42.jpg"
+    },
+    "kairos-agi": {
+      "key": "kairos-agi",
+      "label": "kairos agi",
+      "sourceOrg": "kairos-agi",
+      "src": "/model-logos/kairos-agi.png"
+    },
+    "kaiyuesun98": {
+      "key": "kaiyuesun98",
+      "label": "KaiyueSun98",
+      "sourceOrg": "KaiyueSun98",
+      "src": "/model-logos/kaiyuesun98.png"
+    },
+    "klingairesearch": {
+      "key": "klingairesearch",
+      "label": "KlingAIResearch",
+      "sourceOrg": "KlingAIResearch",
+      "src": "/model-logos/klingairesearch.jpg"
+    },
+    "kovenyu": {
+      "key": "kovenyu",
+      "label": "KovenYu",
+      "sourceOrg": "KovenYu",
+      "src": "/model-logos/kovenyu.jpg"
+    },
+    "krea-ai": {
+      "key": "krea-ai",
+      "label": "krea ai",
+      "sourceOrg": "krea-ai",
+      "src": "/model-logos/krea-ai.png"
+    },
+    "kwaivgi": {
+      "key": "kwaivgi",
+      "label": "KwaiVGI",
+      "sourceOrg": "KwaiVGI",
+      "src": "/model-logos/kwaivgi.png"
+    },
+    "latentactionpretraining": {
+      "key": "latentactionpretraining",
+      "label": "LatentActionPretraining",
+      "sourceOrg": "LatentActionPretraining",
+      "src": "/model-logos/latentactionpretraining.png"
+    },
+    "lifelong-robot-learning": {
+      "key": "lifelong-robot-learning",
+      "label": "Lifelong Robot Learning",
+      "sourceOrg": "Lifelong-Robot-Learning",
+      "src": "/model-logos/lifelong-robot-learning.png"
+    },
+    "lightricks": {
+      "key": "lightricks",
+      "label": "Lightricks",
+      "sourceOrg": "Lightricks",
+      "src": "/model-logos/lightricks.jpg"
+    },
+    "liheyoung": {
+      "key": "liheyoung",
+      "label": "LiheYoung",
+      "sourceOrg": "LiheYoung",
+      "src": "/model-logos/liheyoung.jpg"
+    },
+    "lingbot": {
+      "key": "lingbot",
+      "label": "robbyant",
+      "sourceOrg": "robbyant",
+      "src": "/model-logos/lingbot.png"
+    },
+    "liruiw": {
+      "key": "liruiw",
+      "label": "liruiw",
+      "sourceOrg": "liruiw",
+      "src": "/model-logos/liruiw.jpg"
+    },
+    "little-podi": {
+      "key": "little-podi",
+      "label": "Little Podi",
+      "sourceOrg": "Little-Podi",
+      "src": "/model-logos/little-podi.jpg"
+    },
+    "lllyasviel": {
+      "key": "lllyasviel",
+      "label": "lllyasviel",
+      "sourceOrg": "lllyasviel",
+      "src": "/model-logos/lllyasviel.jpg"
+    },
+    "lpiccinelli-eth": {
+      "key": "lpiccinelli-eth",
+      "label": "lpiccinelli eth",
+      "sourceOrg": "lpiccinelli-eth",
+      "src": "/model-logos/lpiccinelli-eth.jpg"
+    },
+    "lucas-maes": {
+      "key": "lucas-maes",
+      "label": "lucas maes",
+      "sourceOrg": "lucas-maes",
+      "src": "/model-logos/lucas-maes.png"
+    },
+    "lumalabs-ai": {
+      "key": "lumalabs-ai",
+      "label": "lumalabs ai",
+      "sourceOrg": "lumalabs-ai",
+      "src": "/model-logos/lumalabs-ai.png"
+    },
+    "magiclinux": {
+      "key": "magiclinux",
+      "label": "magiclinux",
+      "sourceOrg": "magiclinux",
+      "src": "/model-logos/magiclinux.png"
+    },
+    "maitrix-org": {
+      "key": "maitrix-org",
+      "label": "maitrix org",
+      "sourceOrg": "maitrix-org",
+      "src": "/model-logos/maitrix-org.png"
+    },
+    "mees": {
+      "key": "mees",
+      "label": "mees",
+      "sourceOrg": "mees",
+      "src": "/model-logos/mees.jpg"
+    },
+    "meghamariamkm": {
+      "key": "meghamariamkm",
+      "label": "meghamariamkm",
+      "sourceOrg": "meghamariamkm",
+      "src": "/model-logos/meghamariamkm.png"
+    },
+    "meigen-ai": {
+      "key": "meigen-ai",
+      "label": "MeiGen AI",
+      "sourceOrg": "MeiGen-AI",
+      "src": "/model-logos/meigen-ai.jpg"
+    },
+    "meituan-longcat": {
+      "key": "meituan-longcat",
+      "label": "meituan longcat",
+      "sourceOrg": "meituan-longcat",
+      "src": "/model-logos/meituan-longcat.png"
+    },
+    "memobench-team": {
+      "key": "memobench-team",
+      "label": "MemoBench Team",
+      "sourceOrg": "MemoBench-Team",
+      "src": "/model-logos/memobench-team.png"
+    },
+    "meta": {
+      "key": "meta",
+      "label": "facebook",
+      "sourceOrg": "facebook",
+      "src": "/model-logos/meta.png"
+    },
+    "miccooper9": {
+      "key": "miccooper9",
+      "label": "miccooper9",
+      "sourceOrg": "miccooper9",
+      "src": "/model-logos/miccooper9.png"
+    },
+    "microsoft": {
+      "key": "microsoft",
+      "label": "microsoft",
+      "sourceOrg": "microsoft",
+      "src": "/model-logos/microsoft.png"
+    },
+    "mingxiangl": {
+      "key": "mingxiangl",
+      "label": "MingXiangL",
+      "sourceOrg": "MingXiangL",
+      "src": "/model-logos/mingxiangl.png"
+    },
+    "minimax-ai": {
+      "key": "minimax-ai",
+      "label": "MiniMax AI",
+      "sourceOrg": "MiniMax-AI",
+      "src": "/model-logos/minimax-ai.jpg"
+    },
+    "mira-space": {
+      "key": "mira-space",
+      "label": "mira space",
+      "sourceOrg": "mira-space",
+      "src": "/model-logos/mira-space.jpg"
+    },
+    "mira-wm": {
+      "key": "mira-wm",
+      "label": "mira wm",
+      "sourceOrg": "mira-wm",
+      "src": "/model-logos/mira-wm.png"
+    },
+    "modelscope": {
+      "key": "modelscope",
+      "label": "modelscope",
+      "sourceOrg": "modelscope",
+      "src": "/model-logos/modelscope.png"
+    },
+    "moojink": {
+      "key": "moojink",
+      "label": "moojink",
+      "sourceOrg": "moojink",
+      "src": "/model-logos/moojink.jpg"
+    },
+    "moyangli00": {
+      "key": "moyangli00",
+      "label": "MoyangLi00",
+      "sourceOrg": "MoyangLi00",
+      "src": "/model-logos/moyangli00.jpg"
+    },
+    "naver": {
+      "key": "naver",
+      "label": "naver",
+      "sourceOrg": "naver",
+      "src": "/model-logos/naver.png"
+    },
+    "nicklashansen": {
+      "key": "nicklashansen",
+      "label": "nicklashansen",
+      "sourceOrg": "nicklashansen",
+      "src": "/model-logos/nicklashansen.png"
+    },
+    "nu-world-model-embodied-ai": {
+      "key": "nu-world-model-embodied-ai",
+      "label": "NU World Model Embodied AI",
+      "sourceOrg": "NU-World-Model-Embodied-AI",
+      "src": "/model-logos/nu-world-model-embodied-ai.png"
+    },
+    "nvidia": {
+      "key": "nvidia",
+      "label": "nv tlabs",
+      "sourceOrg": "nv-tlabs",
+      "src": "/model-logos/nvidia.png"
+    },
+    "octo-models": {
+      "key": "octo-models",
+      "label": "octo models",
+      "sourceOrg": "octo-models",
+      "src": "/model-logos/octo-models.png"
+    },
+    "omniforcing": {
+      "key": "omniforcing",
+      "label": "OmniForcing",
+      "sourceOrg": "OmniForcing",
+      "src": "/model-logos/omniforcing.png"
+    },
+    "open-gigaai": {
+      "key": "open-gigaai",
+      "label": "open gigaai",
+      "sourceOrg": "open-gigaai",
+      "src": "/model-logos/open-gigaai.png"
+    },
+    "openai": {
+      "key": "openai",
+      "label": "openai",
+      "sourceOrg": "openai",
+      "src": "/model-logos/openai.png"
+    },
+    "openenvision": {
+      "key": "openenvision",
+      "label": "OpenEnvision",
+      "sourceOrg": "OpenEnvision",
+      "src": "/model-logos/openenvision.png"
+    },
+    "opengvlab": {
+      "key": "opengvlab",
+      "label": "OpenGVLab",
+      "sourceOrg": "OpenGVLab",
+      "src": "/model-logos/opengvlab.jpg"
+    },
+    "openmoss": {
+      "key": "openmoss",
+      "label": "OpenMOSS",
+      "sourceOrg": "OpenMOSS",
+      "src": "/model-logos/openmoss.png"
+    },
+    "openvla": {
+      "key": "openvla",
+      "label": "openvla",
+      "sourceOrg": "openvla",
+      "src": "/model-logos/openvla.png"
+    },
+    "orange-3dv-team": {
+      "key": "orange-3dv-team",
+      "label": "Orange 3DV Team",
+      "sourceOrg": "Orange-3DV-Team",
+      "src": "/model-logos/orange-3dv-team.png"
+    },
+    "physical-intelligence": {
+      "key": "physical-intelligence",
+      "label": "Physical Intelligence",
+      "sourceOrg": "Physical-Intelligence",
+      "src": "/model-logos/physical-intelligence.png"
+    },
+    "pku-yuangroup": {
+      "key": "pku-yuangroup",
+      "label": "PKU YuanGroup",
+      "sourceOrg": "PKU-YuanGroup",
+      "src": "/model-logos/pku-yuangroup.jpg"
+    },
+    "rail-berkeley": {
+      "key": "rail-berkeley",
+      "label": "rail berkeley",
+      "sourceOrg": "rail-berkeley",
+      "src": "/model-logos/rail-berkeley.jpg"
+    },
+    "real-stanford": {
+      "key": "real-stanford",
+      "label": "real stanford",
+      "sourceOrg": "real-stanford",
+      "src": "/model-logos/real-stanford.png"
+    },
+    "rhymes-ai": {
+      "key": "rhymes-ai",
+      "label": "rhymes ai",
+      "sourceOrg": "rhymes-ai",
+      "src": "/model-logos/rhymes-ai.png"
+    },
+    "robert-gyj": {
+      "key": "robert-gyj",
+      "label": "Robert gyj",
+      "sourceOrg": "Robert-gyj",
+      "src": "/model-logos/robert-gyj.jpg"
+    },
+    "robocasa": {
+      "key": "robocasa",
+      "label": "robocasa",
+      "sourceOrg": "robocasa",
+      "src": "/model-logos/robocasa.png"
+    },
+    "roboflamingo": {
+      "key": "roboflamingo",
+      "label": "RoboFlamingo",
+      "sourceOrg": "RoboFlamingo",
+      "src": "/model-logos/roboflamingo.jpg"
+    },
+    "robomme": {
+      "key": "robomme",
+      "label": "RoboMME",
+      "sourceOrg": "RoboMME",
+      "src": "/model-logos/robomme.png"
+    },
+    "robotwin-platform": {
+      "key": "robotwin-platform",
+      "label": "RoboTwin Platform",
+      "sourceOrg": "RoboTwin-Platform",
+      "src": "/model-logos/robotwin-platform.png"
+    },
+    "runjiali-rl": {
+      "key": "runjiali-rl",
+      "label": "runjiali rl",
+      "sourceOrg": "runjiali-rl",
+      "src": "/model-logos/runjiali-rl.jpg"
+    },
+    "runwayml": {
+      "key": "runwayml",
+      "label": "runwayml",
+      "sourceOrg": "runwayml",
+      "src": "/model-logos/runwayml.png"
+    },
+    "sandai-org": {
+      "key": "sandai-org",
+      "label": "SandAI org",
+      "sourceOrg": "SandAI-org",
+      "src": "/model-logos/sandai-org.jpg"
+    },
+    "sarafridov": {
+      "key": "sarafridov",
+      "label": "sarafridov",
+      "sourceOrg": "sarafridov",
+      "src": "/model-logos/sarafridov.jpg"
+    },
+    "shandaai": {
+      "key": "shandaai",
+      "label": "ShandaAI",
+      "sourceOrg": "ShandaAI",
+      "src": "/model-logos/shandaai.png"
+    },
+    "shengshu-ai": {
+      "key": "shengshu-ai",
+      "label": "shengshu ai",
+      "sourceOrg": "shengshu-ai",
+      "src": "/model-logos/shengshu-ai.jpg"
+    },
+    "shi-labs": {
+      "key": "shi-labs",
+      "label": "SHI Labs",
+      "sourceOrg": "SHI-Labs",
+      "src": "/model-logos/shi-labs.jpg"
+    },
+    "showlab": {
+      "key": "showlab",
+      "label": "showlab",
+      "sourceOrg": "showlab",
+      "src": "/model-logos/showlab.png"
+    },
+    "simonsun0810": {
+      "key": "simonsun0810",
+      "label": "SimonSun0810",
+      "sourceOrg": "SimonSun0810",
+      "src": "/model-logos/simonsun0810.png"
+    },
+    "simpler-env": {
+      "key": "simpler-env",
+      "label": "simpler env",
+      "sourceOrg": "simpler-env",
+      "src": "/model-logos/simpler-env.png"
+    },
+    "simworld-ai": {
+      "key": "simworld-ai",
+      "label": "SimWorld AI",
+      "sourceOrg": "SimWorld-AI",
+      "src": "/model-logos/simworld-ai.png"
+    },
+    "skywork": {
+      "key": "skywork",
+      "label": "SkyworkAI",
+      "sourceOrg": "SkyworkAI",
+      "src": "/model-logos/skywork.jpg"
+    },
+    "snap-research": {
+      "key": "snap-research",
+      "label": "snap research",
+      "sourceOrg": "snap-research",
+      "src": "/model-logos/snap-research.png"
+    },
+    "solaris-wm": {
+      "key": "solaris-wm",
+      "label": "solaris wm",
+      "sourceOrg": "solaris-wm",
+      "src": "/model-logos/solaris-wm.png"
+    },
+    "spatialvision": {
+      "key": "spatialvision",
+      "label": "SpatialVision",
+      "sourceOrg": "SpatialVision",
+      "src": "/model-logos/spatialvision.png"
+    },
+    "stability-ai": {
+      "key": "stability-ai",
+      "label": "Stability AI",
+      "sourceOrg": "Stability-AI",
+      "src": "/model-logos/stability-ai.png"
+    },
+    "stanfordvl": {
+      "key": "stanfordvl",
+      "label": "StanfordVL",
+      "sourceOrg": "StanfordVL",
+      "src": "/model-logos/stanfordvl.png"
+    },
+    "starvla": {
+      "key": "starvla",
+      "label": "starVLA",
+      "sourceOrg": "starVLA",
+      "src": "/model-logos/starvla.png"
+    },
+    "stdstu12": {
+      "key": "stdstu12",
+      "label": "stdstu12",
+      "sourceOrg": "stdstu12",
+      "src": "/model-logos/stdstu12.png"
+    },
+    "stepfun-ai": {
+      "key": "stepfun-ai",
+      "label": "stepfun ai",
+      "sourceOrg": "stepfun-ai",
+      "src": "/model-logos/stepfun-ai.png"
+    },
+    "stepjam": {
+      "key": "stepjam",
+      "label": "stepjam",
+      "sourceOrg": "stepjam",
+      "src": "/model-logos/stepjam.png"
+    },
+    "taco-group": {
+      "key": "taco-group",
+      "label": "taco group",
+      "sourceOrg": "taco-group",
+      "src": "/model-logos/taco-group.png"
+    },
+    "tangshitao": {
+      "key": "tangshitao",
+      "label": "Tangshitao",
+      "sourceOrg": "Tangshitao",
+      "src": "/model-logos/tangshitao.png"
+    },
+    "tencent-hunyuan": {
+      "key": "tencent-hunyuan",
+      "label": "Tencent Hunyuan",
+      "sourceOrg": "Tencent-Hunyuan",
+      "src": "/model-logos/tencent-hunyuan.png"
+    },
+    "tencentarc": {
+      "key": "tencentarc",
+      "label": "TencentARC",
+      "sourceOrg": "TencentARC",
+      "src": "/model-logos/tencentarc.png"
+    },
+    "thu-ml": {
+      "key": "thu-ml",
+      "label": "thu ml",
+      "sourceOrg": "thu-ml",
+      "src": "/model-logos/thu-ml.jpg"
+    },
+    "thudm": {
+      "key": "thudm",
+      "label": "THUDM",
+      "sourceOrg": "THUDM",
+      "src": "/model-logos/thudm.png"
+    },
+    "thuml": {
+      "key": "thuml",
+      "label": "thuml",
+      "sourceOrg": "thuml",
+      "src": "/model-logos/thuml.png"
+    },
+    "tiger-ai-lab": {
+      "key": "tiger-ai-lab",
+      "label": "TIGER AI Lab",
+      "sourceOrg": "TIGER-AI-Lab",
+      "src": "/model-logos/tiger-ai-lab.jpg"
+    },
+    "tonyzhaozh": {
+      "key": "tonyzhaozh",
+      "label": "tonyzhaozh",
+      "sourceOrg": "tonyzhaozh",
+      "src": "/model-logos/tonyzhaozh.jpg"
+    },
+    "tsinghua-fib-lab": {
+      "key": "tsinghua-fib-lab",
+      "label": "tsinghua fib lab",
+      "sourceOrg": "tsinghua-fib-lab",
+      "src": "/model-logos/tsinghua-fib-lab.png"
+    },
+    "umass-embodied-agi": {
+      "key": "umass-embodied-agi",
+      "label": "UMass Embodied AGI",
+      "sourceOrg": "UMass-Embodied-AGI",
+      "src": "/model-logos/umass-embodied-agi.png"
+    },
+    "unix-ai-lab": {
+      "key": "unix-ai-lab",
+      "label": "UniX AI Lab",
+      "sourceOrg": "UniX-AI-Lab",
+      "src": "/model-logos/unix-ai-lab.png"
+    },
+    "vchitect": {
+      "key": "vchitect",
+      "label": "Vchitect",
+      "sourceOrg": "Vchitect",
+      "src": "/model-logos/vchitect.jpg"
+    },
+    "video-bench": {
+      "key": "video-bench",
+      "label": "Video Bench",
+      "sourceOrg": "Video-Bench",
+      "src": "/model-logos/video-bench.png"
+    },
+    "videocrafter": {
+      "key": "videocrafter",
+      "label": "VideoCrafter",
+      "sourceOrg": "VideoCrafter",
+      "src": "/model-logos/videocrafter.png"
+    },
+    "vivocameraresearch": {
+      "key": "vivocameraresearch",
+      "label": "vivoCameraResearch",
+      "sourceOrg": "vivoCameraResearch",
+      "src": "/model-logos/vivocameraresearch.png"
+    },
+    "vye16": {
+      "key": "vye16",
+      "label": "vye16",
+      "sourceOrg": "vye16",
+      "src": "/model-logos/vye16.png"
+    },
+    "wan": {
+      "key": "wan",
+      "label": "Wan Video",
+      "sourceOrg": "Wan-Video",
+      "src": "/model-logos/wan.png"
+    },
+    "weirdlabuw": {
+      "key": "weirdlabuw",
+      "label": "WEIRDLabUW",
+      "sourceOrg": "WEIRDLabUW",
+      "src": "/model-logos/weirdlabuw.png"
+    },
+    "world-grow": {
+      "key": "world-grow",
+      "label": "world grow",
+      "sourceOrg": "world-grow",
+      "src": "/model-logos/world-grow.jpg"
+    },
+    "world-in-world": {
+      "key": "world-in-world",
+      "label": "World In World",
+      "sourceOrg": "World-In-World",
+      "src": "/model-logos/world-in-world.png"
+    },
+    "worldbenchmark": {
+      "key": "worldbenchmark",
+      "label": "WorldBenchmark",
+      "sourceOrg": "WorldBenchmark",
+      "src": "/model-logos/worldbenchmark.png"
+    },
+    "worldlabs-ai": {
+      "key": "worldlabs-ai",
+      "label": "worldlabs ai",
+      "sourceOrg": "worldlabs-ai",
+      "src": "/model-logos/worldlabs-ai.png"
+    },
+    "worldmodelbench-team": {
+      "key": "worldmodelbench-team",
+      "label": "WorldModelBench Team",
+      "sourceOrg": "WorldModelBench-Team",
+      "src": "/model-logos/worldmodelbench-team.png"
+    },
+    "wow-world-model": {
+      "key": "wow-world-model",
+      "label": "wow world model",
+      "sourceOrg": "wow-world-model",
+      "src": "/model-logos/wow-world-model.png"
+    },
+    "wzzheng": {
+      "key": "wzzheng",
+      "label": "wzzheng",
+      "sourceOrg": "wzzheng",
+      "src": "/model-logos/wzzheng.jpg"
+    },
+    "x-square-robot": {
+      "key": "x-square-robot",
+      "label": "X Square Robot",
+      "sourceOrg": "X-Square-Robot",
+      "src": "/model-logos/x-square-robot.png"
+    },
+    "xizaoqu": {
+      "key": "xizaoqu",
+      "label": "xizaoqu",
+      "sourceOrg": "xizaoqu",
+      "src": "/model-logos/xizaoqu.png"
+    },
+    "yanqinjiang": {
+      "key": "yanqinjiang",
+      "label": "yanqinJiang",
+      "sourceOrg": "yanqinJiang",
+      "src": "/model-logos/yanqinjiang.png"
+    },
+    "yaofang-liu": {
+      "key": "yaofang-liu",
+      "label": "Yaofang Liu",
+      "sourceOrg": "Yaofang-Liu",
+      "src": "/model-logos/yaofang-liu.jpg"
+    },
+    "yeppp27": {
+      "key": "yeppp27",
+      "label": "yeppp27",
+      "sourceOrg": "yeppp27",
+      "src": "/model-logos/yeppp27.png"
+    },
+    "yibo-miao": {
+      "key": "yibo-miao",
+      "label": "yibo miao",
+      "sourceOrg": "yibo-miao",
+      "src": "/model-logos/yibo-miao.png"
+    },
+    "yuantianyuan01": {
+      "key": "yuantianyuan01",
+      "label": "yuantianyuan01",
+      "sourceOrg": "yuantianyuan01",
+      "src": "/model-logos/yuantianyuan01.jpg"
+    },
+    "yvanyin": {
+      "key": "yvanyin",
+      "label": "YvanYin",
+      "sourceOrg": "YvanYin",
+      "src": "/model-logos/yvanyin.jpg"
+    },
+    "yxzzhang": {
+      "key": "yxzzhang",
+      "label": "yxzzhang",
+      "sourceOrg": "yxzzhang",
+      "src": "/model-logos/yxzzhang.jpg"
+    },
+    "yyfz": {
+      "key": "yyfz",
+      "label": "yyfz",
+      "sourceOrg": "yyfz",
+      "src": "/model-logos/yyfz.jpg"
+    },
+    "z-x-yang": {
+      "key": "z-x-yang",
+      "label": "z x yang",
+      "sourceOrg": "z-x-yang",
+      "src": "/model-logos/z-x-yang.jpg"
+    },
+    "z2tong": {
+      "key": "z2tong",
+      "label": "z2tong",
+      "sourceOrg": "z2tong",
+      "src": "/model-logos/z2tong.png"
+    },
+    "zeqing-wang": {
+      "key": "zeqing-wang",
+      "label": "Zeqing Wang",
+      "sourceOrg": "Zeqing-Wang",
+      "src": "/model-logos/zeqing-wang.jpg"
+    },
+    "zerg-overmind": {
+      "key": "zerg-overmind",
+      "label": "Zerg Overmind",
+      "sourceOrg": "Zerg-Overmind",
+      "src": "/model-logos/zerg-overmind.jpg"
+    },
+    "zhaojingjing713": {
+      "key": "zhaojingjing713",
+      "label": "ZhaoJingjing713",
+      "sourceOrg": "ZhaoJingjing713",
+      "src": "/model-logos/zhaojingjing713.png"
+    },
+    "zichengduan": {
+      "key": "zichengduan",
+      "label": "ZichengDuan",
+      "sourceOrg": "ZichengDuan",
+      "src": "/model-logos/zichengduan.jpg"
+    },
+    "ziyang-xie": {
+      "key": "ziyang-xie",
+      "label": "ZiYang xie",
+      "sourceOrg": "ZiYang-xie",
+      "src": "/model-logos/ziyang-xie.jpg"
+    }
+  },
+  "modelLogos": {
+    "4d-gs": "hustvl",
+    "abot-world-0-5b-lf": "amap-cvlab",
+    "ac3d": "snap-research",
+    "act": "tonyzhaozh",
+    "adaworld": "little-podi",
+    "allegro": "rhymes-ai",
+    "animatediff": "guoyww",
+    "astra": "eternalevan",
+    "ati-wan21-14b": "bytedance",
+    "being-h05": "beingbeyond",
+    "being-h07": "beingbeyond",
+    "bernini": "bytedance",
+    "bernini-r-1.3b": "bytedance",
+    "bernini-r-14b": "bytedance",
+    "cameractrl": "hehao13",
+    "causal-forcing": "thu-ml",
+    "cogact": "microsoft",
+    "cogvideox": "thudm",
+    "consistent4d": "yanqinjiang",
+    "cosmos-predict-2.5": "nvidia",
+    "cosmos-transfer-2.5": "nvidia",
+    "cosmos3": "nvidia",
+    "ctrl-world": "robert-gyj",
+    "cut3r": "cut3r",
+    "d-nerf": "albertpumarola",
+    "dap": "insta360-research-team",
+    "db-cogact": "dexmal",
+    "depth-anything-v1": "liheyoung",
+    "depth-anything-v2-prior": "depth-anything",
+    "depth-anything-v3": "bytedance",
+    "depth-anything-v3-prior": "bytedance",
+    "diamond": "eloialonso",
+    "diffusion-policy": "real-stanford",
+    "dino-wm": "gaoyuezhou",
+    "dreamdojo": "nvidia",
+    "dreamx-world-5b": "amap-ml",
+    "dreamx-world-5b-cam": "amap-ml",
+    "dreamzero": "dreamzero0",
+    "droid-w": "moyangli00",
+    "dualcamctrl": "envision-research",
+    "dust3r": "naver",
+    "dust3r-base-model": "naver",
+    "dvlt": "nvidia",
+    "dynamicrafter": "doubiiu",
+    "easyanimate": "aigc-apps",
+    "echo-infinity": "echo-team-joy-future-academy-jd",
+    "egowm": "miccooper9",
+    "emu3.5": "openenvision",
+    "eo1": "eo-robotics",
+    "fantasyworld": "fantasy-amap",
+    "fastwam": "yuantianyuan01",
+    "flashworld": "imlixinyang",
+    "framepack": "lllyasviel",
+    "gamma-world": "nvidia",
+    "gaussian-actor": "huggingface",
+    "gaussianflow": "zerg-overmind",
+    "gaussianobject": "gaussianobject",
+    "gen3c": "nvidia",
+    "genie-envisioner": "agibottech",
+    "geocalib-prior": "cvg",
+    "geometry-prior": "openenvision",
+    "giga-brain-0": "open-gigaai",
+    "giga-world-0": "open-gigaai",
+    "gr00t": "nvidia",
+    "hailuo-2p3": "minimax-ai",
+    "happyoyster": "api",
+    "helios": "pku-yuangroup",
+    "hexplane": "caoang327",
+    "hma": "liruiw",
+    "hunyuan-game-craft": "tencent-hunyuan",
+    "hunyuanvideo": "tencent-hunyuan",
+    "hunyuanvideo-1.5": "tencent-hunyuan",
+    "hunyuanworld-1": "tencent-hunyuan",
+    "hunyuanworld-mirror": "tencent-hunyuan",
+    "hunyuanworld-voyager": "tencent-hunyuan",
+    "hy-embodied": "tencent-hunyuan",
+    "hy-world-2.0": "tencent-hunyuan",
+    "hy-worldplay": "tencent-hunyuan",
+    "hydra": "h-embodvis",
+    "hyworld-worldgen": "tencent-hunyuan",
+    "i2vgen-xl": "ali-vilab",
+    "infinite-vggt": "wzzheng",
+    "infinite-world": "meigen-ai",
+    "inspatio-world": "inspatio",
+    "irasim": "bytedance",
+    "iris": "eloialonso",
+    "k-planes": "sarafridov",
+    "kairos-sensenova": "kairos-agi",
+    "kling-api": "kwaivgi",
+    "krea-realtime-video": "krea-ai",
+    "lagernvs": "meta",
+    "lapa": "latentactionpretraining",
+    "last-r1": "chen-h01",
+    "leworldmodel": "lucas-maes",
+    "libero-para": "cau-hai-lab",
+    "lingbot-map": "lingbot",
+    "lingbot-va": "lingbot",
+    "lingbot-video": "lingbot",
+    "lingbot-vla": "lingbot",
+    "lingbot-vla-v2": "lingbot",
+    "lingbot-world": "lingbot",
+    "lingbot-world-act": "lingbot",
+    "lingbot-world-v2": "lingbot",
+    "liveworld": "zichengduan",
+    "loger": "junyi42",
+    "longcat-video": "meituan-longcat",
+    "longvie-1": "vchitect",
+    "longvie-2": "vchitect",
+    "ltx-2.x": "lightricks",
+    "ltx-video": "lightricks",
+    "luma-ray2": "lumalabs-ai",
+    "lyra": "nvidia",
+    "magi-1": "sandai-org",
+    "magicworld": "vivocameraresearch",
+    "matrix-game-1": "skywork",
+    "matrix-game-2": "skywork",
+    "matrix-game-3": "skywork",
+    "metric3d-prior": "yvanyin",
+    "mineworld": "microsoft",
+    "minwm-hy-action2v": "shengshu-ai",
+    "minwm-wan-action2v": "shengshu-ai",
+    "mira": "mira-wm",
+    "mmaudio": "hkchengrex",
+    "mme-vla": "robomme",
+    "mochi-1": "genmoai",
+    "modelscope-t2v": "modelscope",
+    "molmoact2": "allenai",
+    "molmobot": "allenai",
+    "monst3r": "junyi42",
+    "mosaicmem": "abdelstark",
+    "motionbricks": "nvidia",
+    "motionctrl": "tencentarc",
+    "moverse": "orange-3dv-team",
+    "multi-task-dit": "huggingface",
+    "multiworld": "cintellifusion",
+    "mvdiffusion": "tangshitao",
+    "neoverse": "iamcreateai",
+    "nwm": "meta",
+    "oasis-500m": "etched-ai",
+    "octo": "octo-models",
+    "omniforcing": "omniforcing",
+    "omnivinci": "openenvision",
+    "open-magvit2": "tencentarc",
+    "open-sora": "hpcaitech",
+    "open-sora-plan": "pku-yuangroup",
+    "openpi": "physical-intelligence",
+    "openpie-0.6": "exla-ai",
+    "openvla": "openvla",
+    "openvla-oft": "moojink",
+    "pandora": "maitrix-org",
+    "pi0": "physical-intelligence",
+    "pi0-fast": "physical-intelligence",
+    "pi0-worldfoundry": "physical-intelligence",
+    "pi05": "physical-intelligence",
+    "pi3": "yyfz",
+    "pixelsplat": "dcharatan",
+    "pointworld": "nvidia",
+    "prior-depth-anything": "spatialvision",
+    "pusa-vidgen": "yaofang-liu",
+    "qwen2.5-omni": "openenvision",
+    "real-time-chunking": "physical-intelligence",
+    "recammaster": "klingairesearch",
+    "roboflamingo": "roboflamingo",
+    "rolling-forcing": "tencentarc",
+    "rt-1": "google-research",
+    "runway-gen4p5": "runwayml",
+    "sama-14b": "cynthiazxy123",
+    "sana": "nvidia",
+    "sana-wm": "nvidia",
+    "sc-gs": "cvmi-lab",
+    "scope": "z2tong",
+    "self-forcing": "guandeh17",
+    "shape-of-motion": "vye16",
+    "shotstream": "klingairesearch",
+    "show-o": "showlab",
+    "simworld": "simworld-ai",
+    "skyreels-v2": "skywork",
+    "skyreels-v3": "skywork",
+    "smolvla": "huggingface",
+    "solaris": "solaris-wm",
+    "sora2": "openai",
+    "spatia": "zhaojingjing713",
+    "spatial-ladder": "openenvision",
+    "spatial-reasoner": "openenvision",
+    "spirit-v1.5": "openenvision",
+    "splatt3r": "btsmart",
+    "stable-virtual-camera": "stability-ai",
+    "starvla": "starvla",
+    "starwm": "yxzzhang",
+    "step-video-t2v": "stepfun-ai",
+    "t2v_turbo_t2v": "ji4chenli",
+    "tdmpc": "nicklashansen",
+    "tesseract": "umass-embodied-agi",
+    "thinksound": "openenvision",
+    "tineuvox": "hustvl",
+    "track-anything-prior": "z-x-yang",
+    "uni3c": "alibaba-damo-academy",
+    "unianimate-dit": "ali-vilab",
+    "unidepth-v2-prior": "lpiccinelli-eth",
+    "unik3d-prior": "lpiccinelli-eth",
+    "uwm": "weirdlabuw",
+    "vchitect-2-t2v": "vchitect",
+    "veo3": "google-deepmind",
+    "versecrafter": "tencentarc",
+    "vggt": "meta",
+    "vggt-omega": "meta",
+    "vggt-world": "simonsun0810",
+    "vid2world": "thuml",
+    "video-depth-anything-prior": "depth-anything",
+    "videocrafter": "videocrafter",
+    "videocrafter1-i2v": "videocrafter",
+    "videocrafter1-t2v": "videocrafter",
+    "videocrafter2-t2v": "videocrafter",
+    "viewcrafter": "drexubery",
+    "vlanext": "dravenalg",
+    "vmem": "runjiali-rl",
+    "vqbet": "jaylee0301",
+    "wall-oss": "x-square-robot",
+    "wan-2p5": "wan",
+    "wan-2p6": "wan",
+    "wan-2p7": "wan",
+    "wan2.1": "wan",
+    "wan2.1-vace": "wan",
+    "wan2.2": "wan",
+    "wan21-fun-14b-cam": "aigc-apps",
+    "wan21-fun-1p3b-cam": "aigc-apps",
+    "wan22-fun-5b-cam": "aigc-apps",
+    "wan22-fun-a14b-cam": "aigc-apps",
+    "warp-as-history": "yyfz",
+    "wilddet3d": "allenai",
+    "wildworld": "shandaai",
+    "wonderjourney": "kovenyu",
+    "wonderworld": "kovenyu",
+    "worldcam": "cvlab-kaist",
+    "worldfm": "inspatio",
+    "worldgen": "ziyang-xie",
+    "worldgrow": "world-grow",
+    "worldlabs": "worldlabs-ai",
+    "worldlabs-marble-1.1": "worldlabs-ai",
+    "worldmem": "xizaoqu",
+    "wow": "wow-world-model",
+    "xvla": "2toinf",
+    "yume": "stdstu12",
+    "zeroscope": "cerspense"
+  }
+}

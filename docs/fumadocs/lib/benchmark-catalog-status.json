@@ -1,582 +1,1663 @@
 {
+  "4dworldbench": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "world-model",
+      "3d-generation",
+      "4d-generation",
+      "physical-realism"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "yeppp27",
+    "metrics": [
+      "four_d_worldbench_average"
+    ],
+    "name": "4DWorldBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "verificationStatus": ""
+  },
   "ai2thor": {
+    "aliases": [
+      "AI2-THOR",
+      "ai2-thor"
+    ],
     "badges": [
       "integrated"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "embodied-action",
+      "navigation",
+      "indoor-scene"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "allenai",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "AI2-THOR",
+    "requiresApi": false,
+    "runtimeKind": "native_closed_loop_simulator",
+    "summary": "Closed-loop simulator rollouts, or normalization of official rollout results",
+    "summaryZh": "\u95ed\u73af\u4eff\u771f rollout\uff0c\u6216\u5f52\u4e00\u5316\u5b98\u65b9 rollout \u7ed3\u679c",
     "verificationStatus": "integration_ready"
   },
   "aigcbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "image-to-video",
+      "motion-quality",
+      "temporal-consistency",
+      "alignment"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "benchcouncil",
+    "metrics": [
+      "aigcbench_average"
+    ],
     "name": "AIGCBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_artifact_metric_importer",
+    "summary": "Imports precomputed metrics and normalizes them into a scorecard",
+    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "in_tree_artifact_import_ready"
   },
   "behavior1k": {
+    "aliases": [
+      "BEHAVIOR-1K",
+      "behavior-1k",
+      "behavior_1k"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "embodied-action",
+      "household"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "stanfordvl",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "BEHAVIOR-1K",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "bridgedata-v2": {
+    "aliases": [
+      "BridgeData",
+      "BridgeData V2",
+      "bridge-data-v2"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "embodied-action",
+      "robot-manipulation",
+      "real-robot",
+      "offline-evaluation"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "rail-berkeley",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "BridgeData V2",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "calvin": {
+    "aliases": [],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "long-horizon"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "mees",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "CALVIN",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "camerabench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "camera-motion",
+      "camera-control",
+      "video-understanding"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "",
+    "metrics": [
+      "camerabench_average"
+    ],
     "name": "CameraBench",
+    "requiresApi": true,
+    "runtimeKind": "",
+    "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
     "verificationStatus": "pending"
   },
   "chronomagic-bench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "time-lapse",
+      "temporal-reasoning",
+      "video-generation-quality"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "pku-yuangroup",
+    "metrics": [
+      "chronomagic_score"
+    ],
     "name": "ChronoMagic-Bench",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
     "verificationStatus": "verified"
   },
   "devil-dynamics": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "dynamics",
+      "motion-quality",
+      "temporal-granularity"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "mingxiangl",
+    "metrics": [
+      "devil_dynamics_average"
+    ],
     "name": "DEVIL Dynamics",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
     "verificationStatus": "pending"
   },
   "evalcrafter": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "video-generation-quality",
+      "text-video-alignment",
+      "motion-quality",
+      "temporal-consistency"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "evalcrafter",
+    "metrics": [
+      "evalcrafter_total"
+    ],
     "name": "EvalCrafter",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime_bounded_clip_metrics",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "verified"
   },
   "ewmbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "embodied-world-model",
+      "scene-consistency",
+      "motion-correctness",
+      "semantic-alignment"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "agibottech",
+    "metrics": [
+      "ewmbench_average"
+    ],
     "name": "EWMBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "pending"
   },
   "fetv": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "fine-grained-alignment",
+      "text-video-generation",
+      "human-evaluation"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "",
+    "metrics": [
+      "fetv_average"
+    ],
     "name": "FETV",
-    "verificationStatus": "pending"
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "verificationStatus": "bounded_official_clipscore_verified"
   },
   "genai-bench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "human-preference",
+      "judge-alignment",
+      "video-generation"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "tiger-ai-lab",
+    "metrics": [
+      "genai_bench_average"
+    ],
     "name": "GenAI-Bench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "pending"
   },
   "ipv-bench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "impossible-videos",
+      "counterfactual-physics",
+      "world-knowledge"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "showlab",
+    "metrics": [
+      "ipv_bench_average"
+    ],
     "name": "IPV-Bench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runner",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "pending"
   },
   "iworld-bench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "embodiedcity",
+    "metrics": [
+      "iworldbench_average"
+    ],
     "name": "iWorld-Bench",
-    "verificationStatus": "verified"
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runner",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "verificationStatus": "official_runtime_ready_real_data_validation_pending"
   },
   "kinetix": {
+    "aliases": [],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "embodied-action",
+      "physics"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "flairox",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "Kinetix",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "libero": {
+    "aliases": [
+      "LIBERO",
+      "libero-10",
+      "libero-spatial",
+      "libero-object",
+      "libero-goal"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "long-horizon"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "lifelong-robot-learning",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "LIBERO",
+    "requiresApi": false,
+    "runtimeKind": "native_closed_loop_simulator",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "libero-mem": {
+    "aliases": [
+      "libero_mem"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "memory"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "lifelong-robot-learning",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "LIBERO-Mem",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "libero-para": {
+    "aliases": [
+      "LIBERO-Para",
+      "libero_para",
+      "libero-paraphrase"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "language-generalization",
+      "paraphrase-generalization"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "cau-hai-lab",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "LIBERO-Para",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "libero-plus": {
+    "aliases": [
+      "libero_plus"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "lifelong-robot-learning",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "LIBERO-Plus",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "libero-pro": {
+    "aliases": [
+      "libero_pro"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "lifelong-robot-learning",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "LIBERO-Pro",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "maniskill": {
+    "aliases": [],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "simulator"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "haosulab",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "ManiSkill",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "maniskill2": {
+    "aliases": [
+      "mani-skill2",
+      "mani-skill"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "simulator"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "haosulab",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "ManiSkill2",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
+  "memobench": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "visual-memory",
+      "object-permanence",
+      "camera-revisit",
+      "3d-consistency"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "memobench-team",
+    "metrics": [
+      "memobench_average"
+    ],
+    "name": "MemoBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "verificationStatus": "pending"
+  },
   "metaworld": {
+    "aliases": [
+      "MetaWorld",
+      "meta-world"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "embodied-action",
+      "robot-manipulation",
+      "simulator",
+      "multi-task",
+      "meta-rl"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "farama-foundation",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "Meta-World",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "mikasa": {
+    "aliases": [
+      "mikasa-robo",
+      "mikasa_robo"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "cognitiveaisystems",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "MiKASA-Robo",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "mirabench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "long-video",
+      "motion-strength",
+      "temporal-consistency",
+      "3d-consistency"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "mira-space",
+    "metrics": [
+      "mirabench_average"
+    ],
     "name": "MiraBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "pending"
   },
   "molmospaces": {
+    "aliases": [
+      "molmo-spaces",
+      "molmospaces-bench"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "embodied-action",
+      "spatial-reasoning"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "allenai",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "MolmoSpaces-Bench",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "phyeduvideo": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "physics",
+      "education",
+      "explanation",
+      "scientific-visualization"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "meghamariamkm",
+    "metrics": [
+      "phyeduvideo_average"
+    ],
     "name": "PhyEduVideo",
-    "verificationStatus": "official_runtime_ready"
+    "requiresApi": false,
+    "runtimeKind": "in_tree_result_importer",
+    "summary": "Imports precomputed metrics and normalizes them into a scorecard",
+    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "verificationStatus": "result_importer_ready"
   },
   "phyfps-bench-gen": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "temporal-consistency",
+      "motion-quality",
+      "chronometric-hallucination"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "taco-group",
+    "metrics": [
+      "phyfps_bench_gen_average"
+    ],
     "name": "PhyFPS-Bench-Gen",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "official_runtime_ready"
   },
   "phygenbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "physics",
+      "physical-commonsense",
+      "physical-law-adherence"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "opengvlab",
+    "metrics": [
+      "phygenbench_average"
+    ],
     "name": "PhyGenBench",
-    "verificationStatus": "official_runtime_ready"
+    "requiresApi": false,
+    "runtimeKind": "in_tree_result_importer_and_bounded_overall_aggregator",
+    "summary": "Imports precomputed metrics and normalizes them into a scorecard",
+    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "verificationStatus": "bounded_component_ready"
   },
   "phyground": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "physics",
+      "physical-reasoning",
+      "solid-body",
+      "fluid-dynamics",
+      "optics"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "nu-world-model-embodied-ai",
+    "metrics": [
+      "phyground_overall"
+    ],
     "name": "PhyGround",
-    "verificationStatus": "official_runtime_ready"
+    "requiresApi": false,
+    "runtimeKind": "in_tree_result_importer",
+    "summary": "Imports precomputed metrics and normalizes them into a scorecard",
+    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "verificationStatus": "result_importer_ready"
   },
   "physics-iq": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "physics",
+      "solid-mechanics",
+      "fluid-dynamics",
+      "optics",
+      "thermodynamics",
+      "magnetism"
+    ],
     "integrationStatus": "integrated",
-    "name": "Physics-IQ",
-    "verificationStatus": "official_runtime_ready"
+    "leaderboardValid": false,
+    "logoKey": "google-deepmind",
+    "metrics": [
+      "physics_iq_score"
+    ],
+    "name": "Physics-IQ Original",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "verificationStatus": "in_tree_raw_video_evaluator"
+  },
+  "physics-iq-verified": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "physics",
+      "solid-mechanics",
+      "fluid-dynamics",
+      "optics",
+      "thermodynamics",
+      "magnetism"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "google-deepmind",
+    "metrics": [
+      "physics_iq_verified_score"
+    ],
+    "name": "Physics-IQ Verified",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "verificationStatus": "in_tree_raw_video_evaluator"
   },
   "physvidbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "physics",
+      "physical-commonsense",
+      "tool-use"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "ensanli",
+    "metrics": [
+      "physvidbench_average"
+    ],
     "name": "PhysVidBench",
-    "verificationStatus": "official_runtime_ready"
+    "requiresApi": false,
+    "runtimeKind": "in_tree_result_importer_and_bounded_caption_qa",
+    "summary": "Imports precomputed metrics and normalizes them into a scorecard",
+    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "verificationStatus": "bounded_caption_qa_ready"
   },
   "rlbench": {
+    "aliases": [
+      "RLBench",
+      "robot-learning-benchmark"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "embodied-action",
+      "robot-manipulation",
+      "simulator",
+      "multi-task",
+      "few-shot"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "stepjam",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "RLBench",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "robocasa": {
+    "aliases": [],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "long-horizon"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "robocasa",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "RoboCasa",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "robocerebra": {
+    "aliases": [],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "buaa-colalab",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "RoboCerebra",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "robomme": {
+    "aliases": [
+      "robo-mme"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "embodied-action",
+      "memory"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "robomme",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "RoboMME",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "robotwin": {
+    "aliases": [
+      "RoboTwin",
+      "RoboTwin2.0",
+      "RoboTwin 2.0",
+      "robotwin-2",
+      "robotwin-2.0",
+      "robotwin2",
+      "robotwin2.0"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "embodied-action",
+      "robot-manipulation",
+      "simulator",
+      "dual-arm",
+      "bimanual",
+      "domain-randomization"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "robotwin-platform",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "RoboTwin 2.0",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "simpler-env": {
+    "aliases": [
+      "simplerenv",
+      "simpler"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "simulator"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "simpler-env",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "SimplerEnv",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "t2v-compbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "kaiyuesun98",
+    "metrics": [
+      "t2v_compbench_average"
+    ],
     "name": "T2V-CompBench",
-    "verificationStatus": "pending"
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "verificationStatus": "bounded_official_generative_numeracy_verified"
   },
   "t2v-safety-bench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "safety",
+      "harmful-content",
+      "temporal-risk",
+      "trustworthiness"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "yibo-miao",
+    "metrics": [
+      "nsfw_average"
+    ],
     "name": "T2VSafetyBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "pending"
   },
   "t2vworldbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "world-knowledge",
+      "commonsense",
+      "video-generation-quality"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "magiclinux",
+    "metrics": [
+      "world_knowledge_average"
+    ],
     "name": "T2VWorldBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "pending"
   },
   "vbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "video-generation-quality",
+      "prompt-alignment",
+      "temporal-consistency"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "vchitect",
+    "metrics": [
+      "overall_quality"
+    ],
     "name": "VBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "verified"
   },
   "vbench-2.0": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "vchitect",
+    "metrics": [
+      "vbench2_total"
+    ],
     "name": "VBench-2.0",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
     "verificationStatus": "verified"
   },
   "vbench-plus-plus": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "vchitect",
+    "metrics": [
+      "vbench_plus_plus_average"
+    ],
     "name": "VBench++",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
     "verificationStatus": "verified"
   },
   "video-bench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "video-bench",
+    "metrics": [
+      "videobench_average"
+    ],
     "name": "Video-Bench",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
     "verificationStatus": "verified"
   },
   "videophy": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "physics",
+      "physical-commonsense",
+      "semantic-adherence"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "hritikbansal",
+    "metrics": [
+      "videophy_average"
+    ],
     "name": "VideoPhy",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_judge_runtime",
+    "summary": "In-tree judge/VLM scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 judge / VLM \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "in_tree_official_runtime_ready"
   },
   "videophy2": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "physics",
+      "physical-commonsense",
+      "actions",
+      "rule-classification"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "hritikbansal",
+    "metrics": [
+      "joint_score"
+    ],
     "name": "VideoPhy2",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_judge_runtime",
+    "summary": "In-tree judge/VLM scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 judge / VLM \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "in_tree_official_runtime_ready"
   },
   "videoscience-bench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "science",
+      "physics",
+      "chemistry",
+      "reasoning"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "hao-ai-lab",
+    "metrics": [
+      "videoscience_average"
+    ],
     "name": "VideoScience-Bench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "pending"
   },
   "videoscore": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "tiger-ai-lab",
+    "metrics": [
+      "videoscore_average"
+    ],
     "name": "VideoScore",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "verified"
   },
   "videoverse": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "world-model",
+      "temporal-causality",
+      "world-knowledge"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "zeqing-wang",
+    "metrics": [
+      "videoverse_average"
+    ],
     "name": "VideoVerse",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_judge_runtime",
+    "summary": "In-tree judge/VLM scores generated videos per prompt; some dimensions may call a hosted API",
+    "summaryZh": "\u4ed3\u5185 judge / VLM \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "verificationStatus": "official_runtime_ready"
+  },
+  "visual-chronometer": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [
+      "temporal-consistency",
+      "motion-quality",
+      "chronometric-hallucination"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "taco-group",
+    "metrics": [
+      "visual_chronometer_average"
+    ],
+    "name": "Visual Chronometer",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "official_runtime_ready"
   },
   "vlabench": {
+    "aliases": [
+      "vla-bench",
+      "vla_bench"
+    ],
     "badges": [
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "Embodied AI",
+    "categoryZh": "\u5177\u8eab AI",
+    "domains": [
+      "vla",
+      "robot-manipulation",
+      "simulator"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "openmoss",
+    "metrics": [
+      "success_rate"
+    ],
     "name": "VLABench",
+    "requiresApi": false,
+    "runtimeKind": "external_official_results_runner",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
     "verificationStatus": "normalizer_only"
   },
   "vmbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "Video Generation",
+    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "domains": [],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "amap-ml",
+    "metrics": [
+      "vmbench_average"
+    ],
     "name": "VMBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "pending"
   },
   "wbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "world-model",
+      "interactive-video",
+      "navigation",
+      "physical-plausibility"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "meituan-longcat",
+    "metrics": [
+      "wbench_average"
+    ],
     "name": "WBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "in_tree_runtime"
   },
   "world-in-world": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "closed-loop",
+      "planning",
+      "embodied-world-model",
+      "action-control"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "world-in-world",
+    "metrics": [
+      "world_in_world_average"
+    ],
     "name": "World-in-World",
-    "verificationStatus": "in_tree_artifact_evaluator"
+    "requiresApi": false,
+    "runtimeKind": "in_tree_result_importer",
+    "summary": "Imports precomputed metrics and normalizes them into a scorecard",
+    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "verificationStatus": "result_importer_ready"
   },
   "worldarena": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "embodied-world-model",
+      "manipulation",
+      "video-quality",
+      "functional-utility"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "tsinghua-fib-lab",
+    "metrics": [
+      "ewm_score"
+    ],
     "name": "WorldArena",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "Closed-loop simulator rollouts, or normalization of official rollout results",
+    "summaryZh": "\u95ed\u73af\u4eff\u771f rollout\uff0c\u6216\u5f52\u4e00\u5316\u5b98\u65b9 rollout \u7ed3\u679c",
     "verificationStatus": "in_tree_video_quality_runtime"
   },
   "worldbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "worldbenchmark",
+    "metrics": [
+      "foreground_miou"
+    ],
     "name": "WorldBench",
-    "verificationStatus": "pending"
+    "requiresApi": false,
+    "runtimeKind": "in_tree_model_backed_evaluator",
+    "summary": "In-tree evaluator scores artifact bundles per the task protocol",
+    "summaryZh": "\u4ed3\u5185 evaluator \u6309 task protocol \u8bc4\u4f30 artifact bundle",
+    "verificationStatus": "bounded_fixture_verified"
   },
   "worldmodelbench": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "world-model",
+      "physical-adherence",
+      "instruction-following",
+      "common-sense"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "worldmodelbench-team",
+    "metrics": [
+      "world_model_average"
+    ],
     "name": "WorldModelBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "verified"
   },
+  "worldreasonbench": {
+    "aliases": [],
+    "badges": [
+      "normalizer"
+    ],
+    "category": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "world-knowledge",
+      "human-centric",
+      "logic-reasoning",
+      "information-based-reasoning"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "unix-ai-lab",
+    "metrics": [
+      "score_pr"
+    ],
+    "name": "WorldReasonBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_protocol_runtime_external_assets",
+    "summary": "Imports official or upstream results into a normalized scorecard",
+    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "verificationStatus": "normalizer_only"
+  },
   "worldscore": {
+    "aliases": [],
     "badges": [
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "world-generation",
+      "camera-control",
+      "3d-generation",
+      "4d-generation"
+    ],
     "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "haoyi-duan",
+    "metrics": [
+      "worldscore_average"
+    ],
     "name": "WorldScore",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
     "verificationStatus": "verified"
+  },
+  "wrbench": {
+    "aliases": [
+      "wr-bench"
+    ],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "domains": [
+      "video-generation",
+      "world-model",
+      "camera-control",
+      "persistent-state"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "jinplu",
+    "metrics": [
+      "wrbench_average"
+    ],
+    "name": "WRBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime scores generated videos per prompt",
+    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "verificationStatus": "pending"
   }
 }

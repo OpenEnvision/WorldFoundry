@@ -166,9 +166,3 @@ runner 会在 `--output-dir` 下写入：
 - `upstream_stdout.log` 和 `upstream_stderr.log`：直接执行 judge 时的日志。
 
 公开 benchmark-zoo 运行还可能写入 `runner_runtime_report.json`。
-
-## 限制
-
-官方没有公开答案和解释，因此本地运行依赖公开 prompt、生成视频和 judge checkpoint。WorldFoundry 能验证 manifest 覆盖与结果形状，但 leaderboard evidence 仍需要走上游提交流程。本版本建议用 direct runner 执行 judge；公开 benchmark-zoo 导入路径可用，但公开 judge 执行路径没有通过 catalog entry 传递全部 runner 参数。
-
-[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

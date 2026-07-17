@@ -1,0 +1,73 @@
+---
+title: Core attention
+description: Exact SDPA, layout dispatch, backend policy, RoPE, packed sequences, context parallelism, and block KV cache.
+---
+
+WorldFoundry keeps attention projection and model semantics in model code, while Core owns the mechanics that are repeatedly implemented incorrectly: head-layout conversion, exact backend selection, mask handling, RoPE application, packed sequence ranges, context-parallel exchange, and rolling KV state.
+
+## Choose the narrowest entry point
+
+Use `scaled_dot_product_attention` when Q, K, and V already have a standard split-head shape. It follows the PyTorch SDPA contract, adds an explicit backend context, supports compatible GQA expansion, and preserves an exact matmul fallback.
+
+Use `flattened_multihead_attention` when tensors are `(batch, sequence, hidden)` and only the head count is missing. It performs the split/merge centrally. Use `attention_forward` when an integration has einops-style QKV layouts or opts into optional providers through the dispatch policy. A mask or `compatibility_mode=True` deliberately returns to the PyTorch path.
+
+`NativeAttention` packages SDPA as a module and can attach a context-parallel group. `ContextParallelAttention`, `UlyssesScheduler`, and `CSOHelper` are lower-level distributed mechanisms; use them only when the model runtime owns the matching split metadata.
+
+## Exact CPU/GPU example
+
+```python
+import torch
+
+from worldfoundry.core import scaled_dot_product_attention
+
+torch.manual_seed(7)
+q = torch.randn(2, 8, 32, 64)
+k = torch.randn(2, 8, 48, 64)
+v = torch.randn(2, 8, 48, 96)
+
+output = scaled_dot_product_attention(
+    q,
+    k,
+    v,
+    dropout_p=0.0,
+    backend="math",  # deterministic explicit provider for this example
+)
+assert output.shape == (2, 8, 32, 96)
+```
+
+At inference time, keep `dropout_p=0.0`; PyTorch SDPA does not infer that value from `module.eval()`. A boolean mask means “keep this score,” while a floating mask is added to the score matrix.
+
+## Block KV cache lifecycle
+
+`BlockKVCache` is not a dictionary that can be updated in arbitrary order. Every chunk follows `before_update → update → cached_k/cached_v → after_update`. Repeating the current `chunk_idx` overwrites the same logical chunk; advancing by one appends or rolls the local window. Skipping an index is an error.
+
+```python
+import torch
+from worldfoundry.core.attention import BlockKVCache
+
+cache = BlockKVCache(
+    k_shape=(1, 1, 4, 2),
+    v_shape=(1, 1, 4, 3),
+    seq_dim=2,
+    chunk_size=2,
+    window_size=4,
+    device="cpu",
+    dtype=torch.float32,
+)
+
+for chunk_idx in range(3):
+    k = torch.full((1, 1, 2, 2), float(chunk_idx))
+    v = torch.full((1, 1, 2, 3), float(chunk_idx))
+    cache.before_update(chunk_idx)
+    cache.update(k, v)
+    visible_k = cache.cached_k()  # 2, then 4, then rolling 4 tokens
+    cache.after_update(chunk_idx)
+```
+
+`sink_size` reserves an immutable prefix and `window_size` describes the rolling region. Their sum must match the cache sequence dimension and be divisible by `chunk_size`.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-attention" />

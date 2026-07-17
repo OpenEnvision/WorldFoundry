@@ -1,0 +1,134 @@
+---
+title: Benchmark runtime environments
+description: Environment, service, checkpoint, and verification boundaries for every Video Generation and World Model benchmark.
+---
+
+## The artifact boundary
+
+The generator and the evaluator are separate runtimes. A model may generate videos in its own conda environment, exit, and hand ordinary files to a benchmark running in another environment. A benchmark must not import the candidate model or force evaluator packages into the model environment.
+
+For the 42 Video Generation and World Model entries below, `needs_new_env: false` means the WorldFoundry wrapper or result importer is expected to start from the unified environment. It does **not** mean that every official metric checkpoint, API credential, native extension, or complete dataset is already installed. `environment_id` names the executable base environment; runner roles belong in status/capability metadata. A separate conda environment is required only when `needs_new_env: true` and a setup command are both documented.
+
+Environment classes used in the tables:
+
+- **U** — `worldfoundry-unified-<cuda-tier>`.
+- **U + service** — unified client plus a user-provided API or model server. The server may use another machine or environment.
+- **U + metric stack** — unified baseline plus dimension-specific checkpoints, packages, or CUDA extensions. Only a dimension that passes its own preflight is usable.
+- **Dedicated** — a repository-managed benchmark conda profile with a public install entrypoint.
+
+## Baseline setup
+
+Create the unified environment once:
+
+```bash
+bash scripts/setup/bootstrap_worldfoundry.sh
+source tmp/worldfoundry_unified_env.sh
+```
+
+Print the data, checkpoint, environment-variable, and command plan for one benchmark:
+
+```bash
+python scripts/setup/prepare_benchmark_assets.py \
+  --benchmark-id <benchmark-id> \
+  --json
+```
+
+This command is an **asset plan**, not runtime evidence. A benchmark is verified only at the scope recorded in its catalog and scorecard after a real evaluator path runs. An import-only or fixture-only pass does not prove raw-video recomputation.
+
+Run the fail-closed dependency check declared by a runtime profile before real scoring:
+
+```bash
+PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" -m \
+  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight \
+  --profile <benchmark-id> \
+  --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml \
+  --output-dir tmp/worldfoundry_preflight/<benchmark-id> \
+  --json
+```
+
+`ready: true` means only that the profile's declared Python imports, paths, environment variables, and device requirements are ready. It does **not** mean the official benchmark or full metric suite has been executed or verified.
+
+EvalCrafter is the only currently managed benchmark-specific conda exception. Keep the environment root explicit so the install, preflight, and later commands resolve the same prefix:
+
+```bash
+export WORLDFOUNDRY_HOME="${WORLDFOUNDRY_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/worldfoundry}"
+export WORLDFOUNDRY_CONDA_ENVS_ROOT="${WORLDFOUNDRY_CONDA_ENVS_ROOT:-$WORLDFOUNDRY_HOME/conda_envs}"
+
+bash scripts/setup/model_env_install.sh \
+  --model evalcrafter \
+  --env-root "$WORLDFOUNDRY_CONDA_ENVS_ROOT"
+bash scripts/setup/model_env_install.sh \
+  --model evalcrafter \
+  --env-root "$WORLDFOUNDRY_CONDA_ENVS_ROOT" \
+  --verify-only
+
+EVALCRAFTER_PYTHON="$WORLDFOUNDRY_CONDA_ENVS_ROOT/worldfoundry-evalcrafter-metrics/bin/python"
+test -x "$EVALCRAFTER_PYTHON"
+```
+
+Calling `"$EVALCRAFTER_PYTHON"` directly is the environment switch; shell activation is not required. This profile now mirrors the official pinned revision: Python 3.9.17, pip 23.2.1, Torch 2.0.1, torchvision 0.15.2, TensorFlow 2.12.0, PaddlePaddle-GPU 2.5.1, MMCV 2.0.1, and MMAction2 1.1.0. The official RAFT native extension and checkpoint tree are separate preparation steps. Environment installation or import verification is not evidence that the full 700-video suite passed. See the [EvalCrafter page](/docs/evaluation/benchmark-hub/evalcrafter) for the pinned upstream checkout, CUDA 11.7 note, checkpoint layout, bounded raw-video command, and official-result import.
+
+## Video Generation benchmarks — 30
+
+| Benchmark | Boundary and extra configuration | Verified scope / current blocker |
+| --- | --- | --- |
+| [VBench](/docs/evaluation/benchmark-hub/vbench) | **U + metric stack**; stage checkpoints for the selected dimension. Detectron2-backed dimensions may need a CUDA/Torch-compatible build. | One real-video `aesthetic_quality` component is verified. Full 16-dimension and leaderboard coverage are not. |
+| [VBench++](/docs/evaluation/benchmark-hub/vbench-plus-plus) | **U + metric stack**; I2V, long-video, and trustworthiness tracks have different assets. | A bounded long-video component is verified; the complete suite is not. |
+| [VBench-2.0](/docs/evaluation/benchmark-hub/vbench-2.0) | **U + metric stack**; requires VBench2 checkpoints/data, with optional RetinaFace for relevant dimensions. | A bounded diversity component is verified; the full suite is not. |
+| [Video-Bench](/docs/evaluation/benchmark-hub/video-bench) | **U + service**; provide generated videos, annotations, and `OPENAI_API_KEY` for the official GPT judge. | Credential-gated runner path is present; no credentialed release run is claimed. |
+| [VMBench](/docs/evaluation/benchmark-hub/vmbench) | **U + metric stack**; full recomputation needs metric checkpoints and packages such as MMDetection/MMPose/DeepSpeed for their respective metrics. | Result/runtime wiring is present; full CUDA metric recomputation is unverified. |
+| [T2V-CompBench](/docs/evaluation/benchmark-hub/t2v-compbench) | **U + metric stack**; the verified numeracy path needs local GroundingDINO/BERT assets, while the complete suite also needs LLaVA, depth/SAM, and DOT assets. | The strict artifact bridge plus a real one-sample official `generative_numeracy` run are verified. The 1,400-video suite and leaderboard parity are not. |
+| [VideoScore](/docs/evaluation/benchmark-hub/videoscore) | **U + metric stack**; stage VideoScore/Mantis weights and the expected sampled-frame tree. | A bounded official scorer GPU run is verified; SPCC/pairwise full-suite parity is not. |
+| [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) | **U + metric stack**; CHScore needs the CoTracker/checkpoint stack. MTScore additionally needs its judge/API assets. | A bounded CHScore component is verified; the complete benchmark is not. |
+| [EvalCrafter](/docs/evaluation/benchmark-hub/evalcrafter) | **U** runs the three official CLIP-derived metrics and imports `final_result.txt`. The dedicated `worldfoundry-evalcrafter-metrics` profile mirrors the official legacy environment for preparing the external full scorer. | Three bounded raw-video metrics and result import are available. Complete 17-metric raw-video production remains unintegrated and unverified. |
+| [FETV](/docs/evaluation/benchmark-hub/fetv) | **U + metric stack**; full FID/FVD/CLIP/BLIP evaluation needs reference frames and the official model/package set. | Frame preparation and result normalization are available; full metric execution remains unverified. |
+| [AIGCBench](/docs/evaluation/benchmark-hub/aigcbench) | **U** for importing already-produced metric artifacts; full scoring additionally needs official prompts, references, and metric outputs. | Importer only; no in-tree raw-video official recomputation claim. |
+| [MiraBench](/docs/evaluation/benchmark-hub/mirabench) | **U** for result normalization; a full run needs AMT, ViCLIP, MUSIQ, FVD/FID/KID, and 3D-consistency assets. | Normalizer only; complete upstream scorer execution is pending. |
+| [DEVIL Dynamics](/docs/evaluation/benchmark-hub/devil-dynamics) | **U** plus generated artifacts and any official metric result files/checkpoints selected by the protocol. | Official-result path is integrated; full-suite/leaderboard evidence is pending. |
+| [GenAI-Bench](/docs/evaluation/benchmark-hub/genai-bench) | **U** for result normalization; raw scoring needs official human labels and GPU VQAScore checkpoints. | Normalizer only; raw-video scorer execution is pending. |
+| [T2VSafetyBench](/docs/evaluation/benchmark-hub/t2v-safety-bench) | **U + service**; install the declared OpenAI client packages and provide an OpenAI-compatible judge endpoint/key. | API failures are fail-closed. No real judge result is claimed from local fixture tests. |
+| [CameraBench](/docs/evaluation/benchmark-hub/camerabench) | **U** for score normalization; full camera evaluation needs benchmark data and camera-geometry/VLM score outputs. | Normalizer/component import is available; raw-video evaluator parity is pending. |
+| [VideoVerse](/docs/evaluation/benchmark-hub/videoverse) | **U + service**; use Gemini credentials or an explicitly configured local VLM, plus generated videos and prompt manifests. | Official path is integrated, but a full credentialed suite is not release-verified. |
+| [PhysVidBench](/docs/evaluation/benchmark-hub/physvidbench) | **U + service**; prepare eight AuroraCap caption tracks and a Gemini/Google GenAI client for real QA judging. | Result import is available; mock runs are not evidence and raw caption production is outside the runner. |
+| [PhyGenBench](/docs/evaluation/benchmark-hub/phygenbench) | **U** for result normalization; full evaluation needs all stage-specific judges, checkpoints/API access, and generated artifacts. | Normalizer only; full official stage execution is pending. |
+| [VideoPhy](/docs/evaluation/benchmark-hub/videophy) | **U + metric stack**; stage the VideoCon-Physics checkpoint and generated videos. | Official scoring path is present; full 688-prompt reproduction is pending. |
+| [VideoPhy2](/docs/evaluation/benchmark-hub/videophy2) | **U + metric stack**; stage the VideoPhy-2-AutoEval checkpoint. | Official scoring path is present; full 200-prompt reproduction is pending. |
+| [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq) | **U**; provide the original benchmark root and generated videos with official view naming. | A real bounded three-view official score is verified; it is not a full benchmark reproduction. |
+| [Physics-IQ Verified](/docs/evaluation/benchmark-hub/physics-iq-verified) | **U**; provide the verified dataset root and generated videos. | Runtime is integrated, but the currently prepared local dataset lacks the complete benchmark media. |
+| [IPV-Bench](/docs/evaluation/benchmark-hub/ipv-bench) | **U** for result normalization; full scoring needs official labels, judge outputs, and generated artifacts. | Normalizer only; official judge runtime is pending. |
+| [VideoScience-Bench](/docs/evaluation/benchmark-hub/videoscience-bench) | **U + service** for real VLM judging; configure the selected provider/model and its credential. | Result normalization and judge wiring exist; no complete credentialed upstream run is claimed. |
+| [PhyEduVideo](/docs/evaluation/benchmark-hub/phyeduvideo) | **U** for result import; full scoring needs the upstream judge/checkpoint runtime and complete prompt artifacts. | Importer only; raw-video judging is pending. |
+| [PhyGround](/docs/evaluation/benchmark-hub/phyground) | **U + service** to consume PhyJudge/vLLM or API judge scores, plus the official data root. | `scores.json` import is available; the full judge run is not verified in-tree. |
+| [PhyFPS-Bench-Gen](/docs/evaluation/benchmark-hub/phyfps-bench-gen) | **U + metric stack**; stage the Visual Chronometer FPS predictor checkpoint. | Official runtime path is integrated; full benchmark evidence is pending. |
+| [Visual Chronometer](/docs/evaluation/benchmark-hub/visual-chronometer) | **U + metric stack**; stage `vc_common_10_60fps.ckpt` or import a compatible `results.csv`. | Runtime/normalizer surfaces exist; no release-verified full official run is claimed. |
+| [MemoBench](/docs/evaluation/benchmark-hub/memobench) | **U + service/metric stack**; Step 1 uses local metrics, while full ORS/VQA needs SAM-3 and Gemini-compatible judge access. | Step 1 only is runnable; this must not be reported as the full MemoBench suite. |
+
+## World Model benchmarks — 12
+
+| Benchmark | Boundary and extra configuration | Verified scope / current blocker |
+| --- | --- | --- |
+| [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) | **U + metric stack**; provide the 350-instance data root and a VILA-compatible judge checkpoint/model id. | Result import and manifest coverage checks are verified; full judge checkpoint execution is not. |
+| [WorldScore](/docs/evaluation/benchmark-hub/worldscore) | **U + metric stack**; full metrics need DROID/`lietorch`, GroundingDINO, SAM, optical-flow/interpolation, Mamba, and matching checkpoints/extensions. | A bounded dynamic component is verified; full metric-tree execution is not. |
+| [WorldBench](/docs/evaluation/benchmark-hub/worldbench) | **U** for official-result normalization only. | No confirmed redistributable official raw-video evaluator is in tree; `official-run` from videos is unavailable. |
+| [WBench](/docs/evaluation/benchmark-hub/wbench) | **U + metric stack**; full multi-turn scoring needs the WBench metric assets and official case layout. | A real single-video temporal-flicker component is verified; the 289-case multi-turn protocol is not. |
+| [iWorld-Bench](/docs/evaluation/benchmark-hub/iworld-bench) | **U + in-tree ViPE CUDA build** for pixel and trajectory components. `WORLDFOUNDRY_IWORLD_BENCH_PYTHON` is an optional compatible-Python override, not a separate-environment requirement. | One real 16-frame video passed official `memory_ability`. Bundled three-prompt coverage and all nine component metrics remain incomplete; full-suite and leaderboard validity are false. |
+| [T2VWorldBench](/docs/evaluation/benchmark-hub/t2vworldbench) | **U** for result normalization; full execution needs staged Drive data and the upstream VLM runtime. | Official result fields are normalized; full raw-video/VLM evaluation is pending. |
+| [WorldArena](/docs/evaluation/benchmark-hub/worldarena) | **U** for the prepared Track 1 hierarchy; the full benchmark also needs metric checkpoints and embodied runtime assets. | One real prepared-data PSNR component is verified. Full Track 1 and the embodied tracks are not. |
+| [World-in-World](/docs/evaluation/benchmark-hub/world-in-world) | **U** for result normalization; full evaluation needs closed-loop rollout assets and the upstream evaluator stack. | Normalizer only; closed-loop runtime parity is pending. |
+| [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) | **U** for result normalization; full evaluation needs official judge assets, result files, and complete generated outputs. | Normalizer only; upstream judge execution is pending. |
+| [4DWorldBench](/docs/evaluation/benchmark-hub/4dworldbench) | **U + metric stack/service**; selected dimensions may need Keye-VL, DROID/`lietorch`, FAST-VQA, Qwen utilities, or an OpenAI-compatible judge. | Official runtime path exists, but real-data full-suite validation is pending. |
+| [WorldReasonBench](/docs/evaluation/benchmark-hub/worldreasonbench) | **U + service**; real QA/reward evaluation needs restricted official assets and an OpenAI-compatible multimodal endpoint. The server has its own environment. | Result normalization/QA component code exists; no complete official judge run is claimed. |
+| [WRBench](/docs/evaluation/benchmark-hub/wrbench) | **U + metric stack**; full D1–D6 scoring needs a runtime config pointing to VGGT-Omega, DINOv2, Qwen3.5, and Qwen3-VL checkpoints. | Natural-25 request materialization and result normalization are available; full D1–D6 execution is unverified. |
+
+## Rules for additional environments
+
+Do not create a benchmark environment merely because one import is missing. Add or use a separate environment only when the runtime profile records a real ABI/framework conflict and provides all of the following:
+
+1. A reproducible public setup command and Python executable.
+2. The CUDA/Torch/Python compatibility boundary.
+3. Required data, checkpoints, native builds, and service variables.
+4. A real verified scope and an explicit remaining blocker.
+
+If those are absent, the affected metric remains blocked. It must not silently fall back to a fixture, mock judge, zero-match score, or imported aggregate while being reported as an official run.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

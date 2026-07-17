@@ -37,6 +37,12 @@ report = runner.write_scorecard_and_report(metrics)
 
 The facade in `evaluate.py` stays thin: it validates input, picks a delegate, and converts the result. All file writing, sample ledgers, and manifest updates happen inside the delegate runners.
 
+User-facing CLI, TUI, and Workspace flows enter through `execution/orchestration/service.py`. That module validates one of five intent dataclasses and compiles it to either `ModelBenchmarkRunRequest` or `EvaluateRunRequest`. Frontends must not duplicate generation, artifact materialization, benchmark dispatch, or metric execution. New UX should normally add an intent-to-request mapping, not another runner.
+
+Keep the three planning boundaries distinct. `PreparedEvaluation` is the user-facing compiler result and owns preflight diagnostics plus protocol-fidelity policy. `RunPlan` is the lower-level plan for one generation/evaluate stage. `ModelBenchmarkRunRequest` is the two-stage generation-plus-official-evaluator request. Do not wrap these in a fourth recipe executor; reproduction profiles and UI intents must compile onto these existing request types.
+
+Prepared evaluations record orthogonal provenance for generation, data, evaluation, runtime, and reference fidelity. Claim level is derived from those fields: a fully pinned official run may be an `exact_reproduction`, unchanged official data and evaluation may be `benchmark_comparable`, and custom-data or metric-only runs are `diagnostic`. For model × benchmark plans, checked-in benchmark evidence is an additional upper bound: a bounded component runner remains executable, but the plan is downgraded to `diagnostic` until the catalog establishes full official-suite evidence. A caller flag can only narrow this policy, never promote a diagnostic run. `score_valid` records whether the selected evaluator produced a usable score; `leaderboard_valid` additionally requires comparable provenance and benchmark-runner evidence.
+
 ## Public Contracts
 
 The `evaluation/api/` modules define the shapes shared by runners, CLI, tests, docs exports, and validation. Treat changes here as semver-sensitive: downstream code assumes `to_dict()` / `from_dict()` round-trips and stable field names on disk.

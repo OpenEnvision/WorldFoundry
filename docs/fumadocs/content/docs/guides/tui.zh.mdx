@@ -48,24 +48,47 @@ worldfoundry-eval tui --model-id openvla --benchmark-id libero --print-command
 
 ## 浏览与操作
 
-TUI 展示三个主要面板：
+TUI 是一个四栏终端面板。左侧显示 OpenEnvision 标识、当前 conda 环境，以及可搜索的 **Catalogs** 模型表；右侧是当前模式的概览、操作工具栏、参数表单和 **Execution Log**。
 
-1. **模型目录** — 列出所有 model-zoo 条目，包含 ID、别名、成熟度等级和运行时状态。使用方向键浏览；按 Enter 选择模型。
+在左上角切换 **Mode**，可在 Inference、Studio、Evaluation 三种模式间切换。三种模式共用同一份 catalog 数据，但提供的控件和生成的命令不同。
 
-2. **基准目录** — 列出所有 benchmark-zoo 条目，包含 ID、任务范围、成熟度等级和数据集就绪状态。使用方向键浏览；按 Enter 选择基准。
+### Inference（推理）
 
-3. **命令输出** — 底部面板根据你的选择动态生成对应的 `worldfoundry-eval run` 命令。你可以复制此命令，稍后在 GPU 节点上执行。
+Inference 用于选择模型、填写模型相关输入，并生成可执行命令。工具栏提供 **Run**、**Stop**、**Copy**、**Cmd**、**Check**、**Files**、**GPU**、**Sync**。
+
+![TUI Inference 模式](/images/tui/tui-inference.png)
+
+常见字段包括 prompt、输入路径、输出目录、可选 artifact 路径和 GPU id。**Command Preview** 会随参数修改实时更新。
+
+### Studio
+
+Studio 用于从终端启动本地 Studio Web UI。按 **Run** 启动服务，状态和日志会显示在下方执行日志中。
+
+![TUI Studio 模式](/images/tui/tui-studio.png)
+
+### Evaluation（评测）
+
+Evaluation 用于配置 benchmark 运行。选择评测意图、metric 和输出目录后，TUI 会为当前模型 × benchmark 组合生成对应的 `worldfoundry-eval` 命令。
+
+![TUI Evaluation 模式](/images/tui/tui-evaluation.png)
+
+执行日志中会提示快捷键：`Ctrl+Q` 退出、`r` 刷新、`c` 复制、`Tab` / `Shift+Tab` 在面板间切换。
 
 ### 参数配置
 
-选择模型和基准后，TUI 展示可调整的推理参数：
+Evaluation 模式提供两个明确的意图：
+
+- **Model Benchmark** — 选择模型和 benchmark，生成从模型推理到官方 benchmark 的端到端命令。
+- **Score Artifact Directory** — 选择 benchmark 和已有 artifact 目录；此时隐藏模型与 metric 子集，因为会执行 benchmark 的完整 protocol。
+
+Inference 模式展示模型相关参数，例如：
 
 - **步数 / 迭代次数** — 去噪或采样步数。
 - **引导系数 / cfg** — 无分类器引导 (classifier-free guidance) 强度。
 - **序列长度** — 最大 token 或帧数。
 - **种子** — 确定性生成种子（可选）。
 
-这些字段映射到 `worldfoundry-eval run` 接受的相同标志。在 TUI 中更改参数会实时更新生成的命令。
+在 TUI 中更改参数会实时更新生成的命令。需要填写更多 custom dataset manifest 字段时，请使用 Workspace 或 `generate-score` CLI。
 
 ### 就绪指示器
 
@@ -87,19 +110,6 @@ TUI 在目录条目旁显示就绪警告：
 ```bash
 pip install -e ".[tui]"
 ```
-
-## TUI 与 CLI 发现
-
-TUI 和 CLI 发现命令读取相同的目录清单。根据你的工作流选择：
-
-| 需求 | 使用 |
-| --- | --- |
-| 可视化浏览目录，交互式调整参数 | TUI (`worldfoundry-eval tui`) |
-| 为脚本或 CI 生成单个命令 | TUI 配合 `--print-command` |
-| 以 JSON 列出所有模型或基准 ID | `worldfoundry-eval zoo models --json` 或 `zoo benchmarks --json` |
-| 检查特定模型就绪状态 | `worldfoundry-eval zoo model-download --check-local --model-id <id> --json` |
-| 检查 benchmark/runtime 就绪状态 | `worldfoundry-eval preflight runtime --profile <benchmark-id> --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml --output-dir tmp/preflight/runtime/<benchmark-id> --json` |
-| 完整环境预检 | 对需要验证的每个 benchmark profile 分别运行上一行的单 profile 命令。 |
 
 ## 下一步
 

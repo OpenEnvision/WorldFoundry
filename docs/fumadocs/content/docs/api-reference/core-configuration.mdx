@@ -1,0 +1,41 @@
+---
+title: Core configuration
+description: Deferred constructor graphs, structured inference config, recursive instantiation, and freeze behavior.
+---
+
+Core configuration separates describing an object graph from constructing expensive model objects. `LazyCall(target)(...)` records a target plus named arguments in an editable OmegaConf node; `instantiate` walks the graph and creates the objects only when the runtime is ready.
+
+This package requires `attrs` and `omegaconf` (provided by the video/model runtime environments, not the minimal CLI install).
+
+## Deferred construction example
+
+```python
+from torch import nn
+
+from worldfoundry.core.configuration import LazyCall, instantiate
+
+Linear = LazyCall(nn.Linear)
+layer_config = Linear(in_features=8, out_features=4, bias=False)
+
+# Config composition can still change the graph without a live module.
+layer_config.out_features = 6
+layer = instantiate(layer_config)
+
+assert isinstance(layer, nn.Linear)
+assert layer.in_features == 8
+assert layer.out_features == 6
+```
+
+`LazyCall` accepts keyword arguments only. Defaults from the target signature are recorded before explicit values are applied. Nested lists and mappings are instantiated recursively unless a config sets `_recursive_=False`; unknown mappings and primitive values pass through unchanged.
+
+## Structured released-model config
+
+`Config` and its nested attrs classes hold the small, shared part of released inference configuration: the deferred model graph, checkpoint source, runtime/CuDNN settings, model-parallel settings, and job identity. Model-specific fields remain in the model's own lazy graph.
+
+`make_freezable` adds a recursive `freeze()` operation to attrs classes declared with `slots=False`. Freezing is a runtime guard against accidental mutation after composition; it does not make referenced PyTorch modules immutable.
+
+## Complete reference
+
+The blocks below are the generated signatures for this category. Use the on-page symbol index to jump; source links open the defining implementation behind each lazy export.
+
+<PythonApiGroupReference group="core-configuration" />

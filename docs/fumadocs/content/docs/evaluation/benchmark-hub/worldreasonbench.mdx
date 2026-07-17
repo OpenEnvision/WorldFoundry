@@ -1,0 +1,136 @@
+---
+title: WorldReasonBench
+description: WorldReasonBench — metrics, requirements, and run commands.
+---
+
+## About
+
+World-state reasoning QA and reward-model evaluation for generated videos.
+
+**WorldFoundry evaluation path:** Imports existing official or upstream results into a WorldFoundry scorecard; this integration cannot yet replay the full official protocol from raw generated videos.
+
+## Integration status
+
+| Item | Current state |
+| --- | --- |
+| Catalog integration | `integrated` |
+| Runner verification | `normalizer_only` |
+| Leaderboard | not yet eligible for leaderboard claims |
+
+## Metrics
+
+### Task YAML
+
+`worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml`
+
+### Primary
+
+- `score_pr`
+
+| Metric | Focus |
+| --- | --- |
+| `score_pr` | Geometric combination of QA accuracy and dynamic reasoning score. |
+| `qa_accuracy` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
+| `state_score` | Value reported for State Score under the official benchmark protocol. |
+| `process_score` | Value reported for Process Score under the official benchmark protocol. |
+| `fidelity_score` | Value reported for Fidelity Score under the official benchmark protocol. |
+| `mechanism_score` | Value reported for Mechanism Score under the official benchmark protocol. |
+| `static_outcome_score` | Value reported for Static Outcome Score under the official benchmark protocol. |
+| `dynamic_reasoning_score` | Value reported for Dynamic Reasoning Score under the official benchmark protocol. |
+| `reasoning_gap` | Static outcome score minus dynamic reasoning score; lower values indicate less outcome hacking. |
+| `pointwise_score` | Value reported for Pointwise S(v) under the official benchmark protocol. |
+| `reasoning_correctness` | Value reported for Reasoning Correctness under the official benchmark protocol. |
+| `content_fidelity` | Value reported for Content Fidelity under the official benchmark protocol. |
+| `visual_aesthetics` | Value reported for Visual Aesthetics under the official benchmark protocol. |
+| `pointwise_spearman` | Value reported for Pointwise Spearman Correlation under the official benchmark protocol. |
+| `induced_pairwise_accuracy` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
+| `pairwise_accuracy_with_ties` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
+| `pairwise_accuracy_without_ties` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
+
+## Environment setup
+
+### Runtime environment
+
+- **Conda env:** `worldfoundry-unified-cu128`.
+- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
+- Result normalization uses the unified WorldFoundry environment and has no GPU dependency.
+- Real evaluation reuses the unified environment when it provides openai, opencv-python, numpy, Pillow, and tqdm.
+- The judge model server is an external OpenAI-compatible service and may use its own serving environment.
+
+### Evaluation data
+
+- Candidate model outputs: set `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` to the generated-video or rollout artifact root.
+- `worldfoundry/evaluation/tasks/execution/runners/worldreasonbench`
+- `worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml`
+
+### Checkpoints & assets
+
+- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
+
+### Key environment variables
+
+- `WORLDFOUNDRY_WORLDREASONBENCH_ROOT`
+- `WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH`
+- `WORLDFOUNDRY_WORLDREASONBENCH_PROTOCOL`
+- `WORLDFOUNDRY_WORLDREASONBENCH_QA_JSON`
+- `WORLDFOUNDRY_WORLDREASONBENCH_PAIRS_JSON`
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+- `OPENAI_BASE_URL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `HF_ENDPOINT`
+
+## Run Evaluation
+
+After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
+
+### Set Candidate Artifacts
+
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
+```
+
+### Import Official Results
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id worldreasonbench \
+  --mode normalizer \
+  --official-results-path /path/to/official/results-or-report \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/worldreasonbench/normalizer \
+  --json
+```
+
+### Validate or Normalize Existing Results
+
+```bash
+worldfoundry-eval zoo benchmark-run --benchmark-id worldreasonbench --mode official-validation --official-results-path <official_results_dir> --output-dir <out> --json
+```
+
+## Requirements
+
+### Inputs
+
+- WORLDFOUNDRY_WORLDREASONBENCH_ROOT for official execution
+- OPENAI_BASE_URL and a compatible multimodal judge
+
+### Environment
+
+- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
+
+### Outputs
+
+- `scorecard.json`
+- `raw_metric_table.jsonl`
+- `protocol_results.json`
+- `benchmark_contract.json`
+
+## Official references
+
+- [GitHub](https://github.com/UniX-AI-Lab/WorldReasonBench)
+- [Paper](https://arxiv.org/abs/2605.10434)
+- [Project page](https://unix-ai-lab.github.io/WorldReasonBench/)
+- [Hugging Face dataset](https://huggingface.co/datasets/WorldReasonBench)
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -176,9 +176,3 @@ WorldFoundry 会在 `--output-dir` 下写入：
 - `per_sample_metrics.jsonl`：每个发现样例或导入样例指标一行。
 - `raw_metric_table.jsonl`：包含 available、raw score、normalized score 和 source 的指标表。
 - `official_stdout.log` 和 `official_stderr.log`：直接执行官方 runtime 时的日志。
-
-## 限制
-
-WorldFoundry 已记录的 GPU 验证范围是一个 dynamic 样例，不是完整 3,000 样例 leaderboard 复现。完整运行需要完整 `evaluation.json` 树、WorldScore 指标 checkpoint stack、CUDA 依赖，以及足够的 GPU 时间执行 DROID-SLAM、分割、光流和插帧指标。runner 只评估已经生成的输出，不负责把 3D、4D 或视频模型改造成生成器。
-
-[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

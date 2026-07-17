@@ -1,0 +1,52 @@
+---
+title: Core 神经网络与数学
+description: 可复用 Transformer 形状、patch、layer、normalization、gradient、scheduler 与相机几何。
+---
+
+这一组收录与模型身份无关的张量操作和小型 module。它们固化那些很容易在不同接入中漂移的形状契约：attention head 宽度、MLP 宽度、head 拆分合并、causal mask、图像 patch grid、normalization、stochastic depth、gradient clipping、旋转转换和 diffusion scheduler。
+
+## 形状变换优先使用可逆 helper
+
+`patchify_image` 同时返回 token 数据和 `PatchGridSpec`。应让 spec 与 token 一起流转，因为它记录了经过检查的逆变换所需的原始布局、batch 维、patch size、grid 和 channel 数。
+
+```python
+import torch
+
+from worldfoundry.core import patchify_image, unpatchify_image
+
+image = torch.arange(2 * 3 * 8 * 12).reshape(2, 3, 8, 12)
+tokens, grid = patchify_image(image, patch_size=(4, 3), layout="nchw")
+
+assert tokens.shape == (2, 8, 36)
+restored = unpatchify_image(tokens, grid)
+assert torch.equal(restored, image)
+```
+
+`unpatchify_image` 会验证准确的 token 数和向量宽度，不会把不兼容数据静默 reshape。`split_attention_heads` 与 `merge_attention_heads` 对 `(..., sequence, hidden)` tensor 采用同样的可逆原则。
+
+## 在一个地方推导维度
+
+```python
+from worldfoundry.core import transformer_shape_spec
+
+shape = transformer_shape_spec(
+    hidden_size=1536,
+    num_heads=24,
+    mlp_ratio=8 / 3,
+    multiple_of=256,
+)
+assert shape.head_dim == 64
+assert shape.mlp_hidden_size % 256 == 0
+```
+
+这些 helper 适合用于配置验证与构造，不要放进每 token 的热循环。它们会提前拒绝非正数或不可整除的维度，并避免不同模型代码各自携带略有差异的 rounding 公式。
+
+## Module 与函数式 primitive
+
+`Mlp`、`SwiGLUFFN`、`PatchEmbed`、`DropPath` 和 `LayerScale` 是可复用 module。当模型已经拥有参数或者需要自定义 wrapper 时，可以使用 `drop_path`、`rms_norm`、`layer_scale` 和 `causal_attention_mask` 等函数式入口。相机与旋转函数会在名称中声明 convention；不要在没有显式转换的情况下混用 ZYX、OpenCV 和 WXYZ quaternion convention。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-nn-math" locale="zh" />

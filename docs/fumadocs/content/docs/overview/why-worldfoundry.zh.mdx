@@ -1,0 +1,63 @@
+---
+title: 为什么使用 WorldFoundry
+description: 多模型、多 benchmark 场景下，WorldFoundry 能帮你省去哪些重复工作。
+---
+
+WorldFoundry 面向**跨模型、跨 benchmark、跨界面**的工作流。它的价值不在于把某个单模型 demo 再缩短几行，而在于把环境准备、运行、检查与评测串成一条可复用的路径，让结果能留下来、能对得上、能交给他人或自动化流程继续处理。
+
+## 统一的运行语义
+
+上游仓库各有各的叫法：论文名、仓库名、checkpoint 别名、本地路径。WorldFoundry 用稳定的 model ID 与 benchmark ID，配合 request、result、artifact、manifest、scorecard，描述同一次 run 时不再依赖口头约定。
+
+因此许多关键问题可以直接落到记录上，而不是事后回忆：
+
+- 模型是仅被 catalog 收录，还是 runner 已实际执行？
+- 使用了哪个 checkpoint 与 runtime profile？
+- benchmark 覆盖了哪些 sample？
+- 分数来自导入、计算，还是已满足 leaderboard 所需条件？
+
+这套语义的价值在于**降低交接成本**：换一个人、换一台机器，仍能读懂同一份 run，而不必回到原始操作者的上下文。
+
+## 集成只做一次
+
+环境准备、checkpoint 查找、输入输出整理、job 记录、预览与 metric 汇总，是跨模型家族的共性步骤。WorldFoundry 把这些共性收拢到统一路径里，接入新模型时不必从零搭建整条流水线。
+
+模型差异保留在 pipeline 与 operator；benchmark 差异保留在 runner 与 metric；共享逻辑只维护一份。这样既减少重复，也保留足够透明的上游边界，便于定位问题。
+
+## 产物持久、可复用
+
+生成结果不绑定于单次 UI 会话或进程内临时对象。每次 run 会记录 artifact 路径与 metadata，同一份输出可以依次用于 Studio 检查、兼容 metric 打分、benchmark layout 转换、跨 run 对照，以及后续审计——**无需重新加载 checkpoint**。
+
+当生成成本高于评测迭代成本时，这一边界尤其重要：可以先固定一批输出，在 metric 或报告规则变化后重新评分，而不必重复推理。
+
+## 记录比命令更完整
+
+可执行命令只是复现的起点。checkpoint、依赖、dataset、prompt 或 evaluator 任一变化，同一命令都可能产生不可比结果。WorldFoundry 持久化 request ledger、result ledger、模型与 benchmark 身份、输出路径、metric 摘要、blocker 与 scorecard。
+
+一份结果因此同时说明**实际执行了什么**，以及**该结果被允许主张什么**。失败 sample 保持可见；缺失官方覆盖记为 blocker；normalizer 导入不会因产出 JSON 分数而被视为 official benchmark run。
+
+## 多入口，同一后端
+
+TUI、CLI、Studio、Python 与 MCP 面向不同使用方式，但共用 catalog 与 runtime 契约，而不是各自实现一套 backend：
+
+| 入口 | 适合做什么 |
+| --- | --- |
+| TUI | 浏览 ID、调参数、生成命令 |
+| CLI | 脚本化与批量任务 |
+| Studio | 模型感知表单与视觉检查 |
+| Python / MCP | 自定义流程或 agent 编排 |
+
+TUI 输出的命令可写入 job 脚本；CLI 生成的 artifact 可在 Studio 打开或进入评测。**界面可以切换，run 身份与持久输出保持一致。**
+
+## 适合谁用
+
+WorldFoundry 适合需要长期维护或比较多个世界模型家族、将生成与评测解耦、在 review 与 metric 之间复用 artifact，或为人与 agent 提供稳定机器可读发现的团队。若某个模型或 benchmark 集成需要在组织内共享，而不是留在私人脚本里，也适合落在这里。
+
+模型、benchmark、机器、参与者与 review 环节越多，统一契约与完整证据链带来的收益越大。
+
+## 继续阅读
+
+若你的工作涉及多个模型家族、可重复推理、对输出的系统化打分，或需要向他人说明 run 内容与系统就绪情况，可以从下面两页继续：
+
+- [快速开始](/zh/docs/quickstart) — 跑通第一条完整路径
+- [包含什么](/zh/docs/overview/capabilities) — 查看子系统与支持边界

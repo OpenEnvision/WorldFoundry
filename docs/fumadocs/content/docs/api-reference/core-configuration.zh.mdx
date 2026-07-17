@@ -1,0 +1,41 @@
+---
+title: Core 配置
+description: 延迟构造图、结构化推理配置、递归实例化与 freeze 行为。
+---
+
+Core 配置把“描述对象图”和“构造昂贵模型对象”分开。`LazyCall(target)(...)` 会把 target 与命名参数记录成可编辑的 OmegaConf 节点；只有当 runtime 准备好以后，`instantiate` 才遍历对象图并真正创建对象。
+
+这个 package 需要 `attrs` 和 `omegaconf`。它们由视频或模型 runtime 环境提供，不属于最小 CLI 安装。
+
+## 延迟构造示例
+
+```python
+from torch import nn
+
+from worldfoundry.core.configuration import LazyCall, instantiate
+
+Linear = LazyCall(nn.Linear)
+layer_config = Linear(in_features=8, out_features=4, bias=False)
+
+# 此时还没有真实 module，因此组合配置仍然可以修改对象图。
+layer_config.out_features = 6
+layer = instantiate(layer_config)
+
+assert isinstance(layer, nn.Linear)
+assert layer.in_features == 8
+assert layer.out_features == 6
+```
+
+`LazyCall` 只接受关键字参数。它先记录 target 签名中的默认值，再用显式值覆盖。嵌套 list 和 mapping 默认递归实例化；设置 `_recursive_=False` 可以关闭递归；普通 mapping 和基础值会原样通过。
+
+## 发布模型的结构化配置
+
+`Config` 及其嵌套 attrs 类只保存发布推理共同需要的小部分配置：延迟模型图、checkpoint 来源、runtime/CuDNN 设置、模型并行设置和 job 身份。模型专属字段继续留在模型自己的 lazy graph 中。
+
+`make_freezable` 会为采用 `slots=False` 的 attrs 类增加递归 `freeze()`。它用于防止配置完成组合后被意外改写，并不会让配置引用的 PyTorch module 也变成不可变对象。
+
+## 完整参考
+
+以下为该类别的生成签名。可用本页符号索引跳转；源码链接指向各惰性导出背后的具体实现。
+
+<PythonApiGroupReference group="core-configuration" locale="zh" />

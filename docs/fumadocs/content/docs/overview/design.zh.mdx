@@ -1,0 +1,105 @@
+---
+title: 设计
+description: WorldFoundry 的分层、契约、数据流与设计取舍。
+---
+
+WorldFoundry 遵循一条最重要的设计规则：**把模型执行与 benchmark 评测分开，再用显式 artifact 和证据连接两侧**。这样可以让差异很大的系统共享一条研究工作流，而不会把模型加载代码塞进 metric，也不会把 benchmark 假设写进模型 pipeline。
+
+## 架构总览
+
+<WorldFoundryArchitecture locale="zh" />
+
+四层拥有不同职责，也以不同速度变化。
+
+**使用界面层**是人和 agent 操作系统的方式。TUI 用于引导式发现，CLI 用于自动化，Studio 用于可视化创建和 review job，Python 与 MCP 用于程序化编排。它们可以收集不同输入，但不应该私藏模型实现或打分逻辑。
+
+**控制平面**回答系统中有什么、什么能运行、需要什么、应该怎样调度。模型与 benchmark catalog、alias、资产声明、runtime profile、readiness 字段和 run plan 都位于这一层。它负责描述与路由，不执行 GPU kernel，也不计算 benchmark 分数。
+
+**执行层**一侧是模型 pipeline 和 operator，另一侧是 benchmark runner 与 metric。模型代码负责 checkpoint 加载和生成，benchmark 代码负责 protocol 专属打分与结果归一化。两侧都不应该越过 artifact 边界接管另一侧的职责。
+
+**契约与证据层**是进程结束后仍然保留的内容。Request、result、artifact 引用、manifest、report 与 scorecard 都可以序列化。它们让一次 run 在 Python 进程退出后仍然可理解，也允许生成与打分使用不同环境、运行在不同机器，或在不同时间完成。
+
+## 端到端数据流
+
+<WorldFoundryWorkflow locale="zh" />
+
+一次 run 从声明式身份开始。模型 manifest 与 benchmark manifest 记录来源、预期能力、依赖、runtime binding 和已知 blocker。随后，用户输入、任务 metadata 或 dataset sample 被归一化成 `GenerationRequest`。
+
+`WorldModelRunner` 解析目标模型，再调度到正确的 pipeline/operator 或外部 runtime。Runner 返回 `GenerationResult`，其中包含状态、耗时、错误、metadata 和持久输出。这些输出可以是视频、图像、frame、几何、点云、动作、trajectory、trace 或结构化数据。
+
+评测消费的是 result，而不是 checkpoint。可复用 metric 或 benchmark 专属 runner 读取生成 artifact，写出逐样本 metric row，再按选定 protocol 聚合。Reporting 最后把 run 身份、provenance、覆盖率、blocker 与分数汇总到 `run_manifest.json`、`report.md` 和 `scorecard.json` 等文件中。
+
+文件边界是刻意设计的。昂贵的生成 job 可以只运行一次，先经过视觉检查，再在不重新加载模型的情况下交给新 metric。Benchmark 也可以运行在独立环境中，而不需要把自己的依赖塞进所有模型 runtime。
+
+### 例子：Matrix-Game 2 输出跨过边界
+
+仓库中的 Matrix-Game 2 universal 示例使用初始图像 `worldfoundry/data/test_cases/matrix-game-2/universal/0000.png` 和动作条件配置。Operator 会把这些输入转换成模型原生调用，pipeline 负责 checkpoint 与推理，输出端再写出视频和 metadata。概念上的流向如下：
+
+```text
+初始图像 + action 序列 + seed/fps
+  -> Matrix-Game 2 operator
+  -> Matrix-Game 2 pipeline / checkpoint
+  -> generated_video + metadata
+  -> GenerationResult 中的 ArtifactRef
+  -> 视觉 review，或读取 generated_video 的兼容 metric
+```
+
+评测端只需知道 artifact 的 kind、URI 与 sample identity，不需要知道 Matrix-Game 2 怎样加载权重。反过来，pipeline 也不需要 import 某个 benchmark 的 evaluator。若视频生成成功但 benchmark 所需 prompt set 不完整，`GenerationResult` 仍然可以有效，而 scorecard 的 leaderboard eligibility 必须保持为 false。
+
+## 连接系统的核心契约
+
+### Manifest 描述意图与要求
+
+模型和 benchmark manifest 回答条目是什么、来自哪里、有哪些 alias 和能力、需要哪些资产、由哪个 runtime 处理。它们是可 review 的声明，不是声明路径能在所有机器上运行的证明。
+
+### Request 与 result 归一化执行边界
+
+`GenerationRequest` 携带 sample 身份、输入媒体、文本或任务条件与参数。`GenerationResult` 记录该 sample 实际发生了什么，并指向输出。本地 checkpoint、托管 API 和 simulator-facing policy 因此可以保留原生实现，同时向评测与报告提供稳定结果形态。
+
+### Artifact 让结果持久化
+
+Artifact manifest 与 request/result ledger 记录哪些文件或 URI 属于本次 run。Artifact 可以脱离生成进程存在，之后仍然能够被 review、转换为官方 layout、重新打分、比较或审计。
+
+### Scorecard 与结果声明范围
+
+Metric summary 回答怎样打分，scorecard 则进一步加入覆盖率、provenance、blocker、validation 状态和 eligibility。这样，framework 成功、导入官方形态文件和完整复现官方 benchmark 不会被当成同一种成就。
+
+## Pipeline 与 operator 拆分
+
+**Pipeline** 负责模型构建、checkpoint 加载、设备放置与原生 inference call。**Operator** 把归一化 WorldFoundry 输入适配到 pipeline，再把原生输出转换为持久 artifact。
+
+这个拆分避免 Studio、CLI、脚本和评测 job 重复实现输入整形、输出命名和结果归一化。它也保留模型的原生行为：camera-conditioned 世界模型、diffusion 视频模型和 robot policy 不应该为了满足 abstraction 而假装拥有完全相同的参数。
+
+## Catalog 与 runtime 拆分
+
+即使完整 runtime 尚未接入，catalog 条目仍然可以保存稳定 ID、上游来源、许可证、checkpoint 引用、任务家族和已知要求。但 metadata 不能被误读为执行证据。
+
+因此，WorldFoundry 分别跟踪 catalog 状态、runner binding、本地资产 readiness、bounded validation、official runtime evidence 与 leaderboard eligibility。CLI 会从这些字段推导下一步，而不是把它们压成一个含糊的 “supported” 值。
+
+## 资产放在 git 外
+
+模型权重、dataset、metric checkpoint、凭据、生成媒体和 simulator 资产通常体积很大，或受到许可证、隐私和机器配置约束。仓库只保留代码、manifest、小型 fixture 和文档。Bootstrap 脚本会定义明确的本地根目录，使不同 run 复用外部资产，而不需要把资产复制进每一个上游项目。
+
+这个设计也让缺失状态可见。Run 应该报告具体缺少的 checkpoint、dataset、metric 权重、凭据或 simulator，而不是静默切换到另一种实现。
+
+## 各层在仓库中的位置
+
+模型身份与要求位于 `worldfoundry/data/models/catalog/`。模型执行分布在 `worldfoundry/pipelines/`、`worldfoundry/operators/` 与 `worldfoundry/synthesis/`。Benchmark metadata、资产、任务与 runtime profile 位于 `worldfoundry/data/benchmarks/`，公开评测契约、runner、metric、report 与 scorecard 则位于 `worldfoundry/evaluation/`。
+
+浏览器 workspace 与 visualizer 位于 `worldfoundry/studio/`。发现、规划、执行、验证与报告命令位于 `worldfoundry/cli/`。受支持的运维辅助路径集中在 `scripts/setup/`、`scripts/inference/` 和 `scripts/workspace/`。
+
+如果需要源码级 call chain 与扩展边界，请继续阅读[维护者架构文档](/zh/docs/maintainers/architecture)。
+
+## 修改系统时遵循的原则
+
+**证据先于声明。** Manifest 记录意图，runtime 与 scorecard 证据支撑 readiness。
+
+**Artifact 是一等对象。** 进程退出后，结果仍然可检查、可复用。
+
+**显式 blocker 优于静默 fallback。** 缺资产、凭据、覆盖率或官方 parity 时必须保持可见。
+
+**一个核心支持多种界面。** TUI、CLI、Studio、Python、脚本和 MCP 复用相同 catalog 与执行路径。
+
+**保留模型差异。** WorldFoundry 归一化子系统边界和证据，而不是所有原生参数或表征。
+
+**Official validation 不等于官方复现。** 导入官方形态结果证明的是归一化链路，不是完整 benchmark parity。

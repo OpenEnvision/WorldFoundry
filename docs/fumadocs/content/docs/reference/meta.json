@@ -3,6 +3,7 @@
   "defaultOpen": true,
   "pages": [
     "environments",
-    "cli"
+    "cli",
+    "validation"
   ]
 }
