@@ -1,0 +1,115 @@
+benchmark_ids: [larybench]
+id: larybench
+name: LARYBench
+environment_id: worldfoundry-larybench-cu128
+needs_new_env: true
+readiness_note: The in-tree result normalizer is CPU-capable; extraction and probe training require the dedicated LARYBench environment plus caller-provided datasets and model checkpoints.
+
+notes:
+- No external LARYBench checkout is required at runtime.
+- Existing extraction, classification, and regression results can be normalized without loading a dataset or checkpoint.
+- Full benchmark runs require the selected LARYBench data shards, metadata CSVs, representation-model checkpoints, and sufficient GPU capacity.
+- Leaderboard parity remains false until a complete official split and checkpoint configuration is retained as run evidence.
+
+python_path: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-larybench-cu128/bin/python
+pythonpath_roots: [.]
+preflight_command: >-
+  PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-larybench-cu128/bin/python -m
+  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight
+  --profile larybench
+  --manifest worldfoundry/data/benchmarks/runtime_profiles/official/larybench.yaml
+  --output-dir tmp/worldfoundry_preflight/larybench
+  --json
+
+required_assets:
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+  - worldfoundry/evaluation/tasks/execution/runners/larybench
+  config_root: worldfoundry/data/benchmarks/assets/larybench/configs
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/larybench.yaml
+  environment_manifest: worldfoundry/data/models/runtime/environments/benchmark/larybench.yaml
+
+required_env: []
+optional_env:
+- WORLDFOUNDRY_LARYBENCH_RESULTS_PATH
+- DATA_DIR
+- LARY_METADATA_DIR
+- LARY_LA_DIR
+- LARY_LOG_DIR
+- MODEL_DIR
+- CUDA_VISIBLE_DEVICES
+- DINO_V2_PATH
+- DINO_V3_PATH
+- SIGLIP2_PATH
+- UNIVLA_CKPT_PATH
+- VILLA_X_CKPT_PATH
+- WAN2_2_CKPT_PATH
+- FLUX2_CKPT_PATH
+
+required_imports:
+- torch
+- torchvision
+- transformers
+- accelerate
+- diffusers
+- pandas
+- numpy
+- cv2
+- PIL
+- yaml
+- sklearn
+- tqdm
+- omegaconf
+
+required_packages:
+- torch
+- torchvision
+- transformers
+- accelerate
+- diffusers
+- pandas
+- numpy
+- opencv-python
+- Pillow
+- PyYAML
+- scikit-learn
+- tqdm
+- omegaconf
+
+required_paths:
+- id: official_runner_script
+  path: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+- id: in_tree_runtime
+  path: worldfoundry/evaluation/tasks/execution/runners/larybench
+- id: config_root
+  path: worldfoundry/data/benchmarks/assets/larybench/configs
+- id: task_yaml
+  path: worldfoundry/data/benchmarks/tasks/external/larybench.yaml
+- id: environment_manifest
+  path: worldfoundry/data/models/runtime/environments/benchmark/larybench.yaml
+
+requires_cuda_visibility: false
+status: in_tree_runtime_ready_external_assets_pending
+base_model_dependencies:
+- spatial_perception_core_stack
+- selected_larybench_representation_model
+
+bounded_fixture_validation:
+  status: verified
+  components: [runtime_command, extraction_normalizer, classification_normalizer, regression_normalizer]
+  full_model_inference: false
+  official_benchmark_verified: false
+  integration_evidence: true
+  leaderboard_valid: false
+
+validation_command:
+- ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+- -m
+- worldfoundry.evaluation.tasks.execution.runners.larybench.run_larybench_official_runner
+- --official-results-path
+- ${WORLDFOUNDRY_LARYBENCH_RESULTS_PATH}
+- --stage
+- <extract_or_classify_or_regress>
+- --output-dir
+- <out>
+- --json

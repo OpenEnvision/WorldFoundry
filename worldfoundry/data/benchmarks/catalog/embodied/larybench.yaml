@@ -102,6 +102,7 @@ runner:
     metadata_root_env: LARY_METADATA_DIR
     latent_action_root_env: LARY_LA_DIR
     model_root_env: MODEL_DIR
+    runtime_profile: worldfoundry/data/benchmarks/runtime_profiles/official/larybench.yaml
   expected_artifacts:
   - scorecard.json
   - benchmark_contract.json
@@ -133,6 +134,7 @@ blockers:
 data_refs:
   hf_dataset_id: meituan-longcat/LARYBench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/larybench.yaml
+  runtime_profile: worldfoundry/data/benchmarks/runtime_profiles/official/larybench.yaml
   in_tree_runtime_paths:
   - worldfoundry/evaluation/tasks/execution/runners/larybench/cli.py
   - worldfoundry/evaluation/tasks/execution/runners/larybench/extract.py

@@ -1,7 +1,18 @@
 # Third-Party License Notes
 
-This file summarizes license terms for vendored code under `thirdparty/`.
+This file summarizes license terms for third-party and adapted code in WorldFoundry.
 It is not a substitute for the full upstream license text retained in each component.
+
+## `LARYBench` (adapted in-tree runtime)
+
+- local_paths: `worldfoundry/evaluation/tasks/execution/runners/larybench`, `worldfoundry/base_models/perception_core/action_recognition/latent_action`, `worldfoundry/data/benchmarks/assets/larybench`
+- upstream_url: `https://github.com/meituan-longcat/LARYBench`
+- upstream_revision: `e7feaf1b72921ee2c34e489adb0f45faf356ecee`
+- license: MIT
+- license_file: `thirdparty/licenses/LARYBench-LICENSE`
+- commercial_restrictions: none stated in the retained MIT license.
+- purpose: Latent-action extraction plus semantic classification and physical-action regression evaluation.
+- modifications: Ported to WorldFoundry paths, shared model components, runtime contracts, artifact scorecards, and bounded execution helpers.
 
 ## `diff-gaussian-rasterization` (modified fork)
 

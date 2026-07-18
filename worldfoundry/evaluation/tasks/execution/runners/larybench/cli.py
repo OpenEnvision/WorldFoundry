@@ -36,6 +36,7 @@ def create_parser():
     extract.add_argument("--gpus", default="0")
     extract.add_argument("--mode", choices=("video", "image"), default="video")
     extract.add_argument("--stride", type=int, default=5)
+    extract.add_argument("--perspective", default="1st")
     extract.add_argument("--partition", type=int, default=0)
     extract.add_argument("--num-partitions", type=int, default=1)
 
@@ -81,9 +82,7 @@ def _parse_gpu_ids(value):
         elif item.isdigit() or item.startswith(("GPU-", "MIG-")):
             normalized.append(item)
         else:
-            raise ValueError(
-                f"unsupported device selector {item!r}; use CUDA indices, GPU/MIG UUIDs, or cpu"
-            )
+            raise ValueError(f"unsupported device selector {item!r}; use CUDA indices, GPU/MIG UUIDs, or cpu")
     return normalized
 
 
@@ -144,6 +143,8 @@ def _spawn_extract_partitions(args, gpus):
             args.mode,
             "--stride",
             str(args.stride),
+            "--perspective",
+            args.perspective,
             "--partition",
             str(partition),
             "--num-partitions",
@@ -180,6 +181,7 @@ def run_extract(args):
         gpus=gpus,
         mode=args.mode,
         stride=args.stride,
+        perspective=args.perspective,
         partition=args.partition,
         num_partitions=args.num_partitions,
     )

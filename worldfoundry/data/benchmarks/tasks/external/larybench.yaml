@@ -41,6 +41,7 @@ metadata:
     metadata_root_env: LARY_METADATA_DIR
     latent_action_root_env: LARY_LA_DIR
     model_root_env: MODEL_DIR
+    runtime_profile: worldfoundry/data/benchmarks/runtime_profiles/official/larybench.yaml
   runner_availability:
     available: true
     runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
@@ -53,6 +54,7 @@ metadata:
   data_refs:
     hf_dataset_id: meituan-longcat/LARYBench
     task_yaml: worldfoundry/data/benchmarks/tasks/external/larybench.yaml
+    runtime_profile: worldfoundry/data/benchmarks/runtime_profiles/official/larybench.yaml
 tasks:
   larybench_extract:
     benchmark_name: larybench

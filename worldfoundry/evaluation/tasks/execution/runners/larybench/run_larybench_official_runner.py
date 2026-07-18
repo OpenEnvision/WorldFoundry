@@ -48,6 +48,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     parser.add_argument("--mode", choices=("video", "image"), default="video")
     parser.add_argument("--stride", type=int, default=5)
+    parser.add_argument("--perspective", default="1st")
     parser.add_argument("--dim", type=int)
     parser.add_argument("--classes", type=int)
     parser.add_argument("--model-type", choices=("mlp", "dit"), default="mlp")
@@ -141,6 +142,8 @@ def _build_runtime_command(args: argparse.Namespace, layout: Mapping[str, Path])
                 args.mode,
                 "--stride",
                 str(args.stride),
+                "--perspective",
+                args.perspective,
             ]
         )
         if args.input:

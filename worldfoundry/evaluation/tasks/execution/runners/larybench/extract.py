@@ -92,6 +92,7 @@ class ExtractionConfig:
     partition: int = 0
     mode: str = "video"
     stride: int = 5
+    perspective: str = "1st"
 
 
 class LatentActionExtractor:
@@ -157,6 +158,7 @@ def extract_latent_actions(
     gpus=None,
     mode="video",
     stride=5,
+    perspective="1st",
     num_partitions=1,
     partition=0,
 ):
@@ -205,6 +207,7 @@ def extract_latent_actions(
             partition=partition,
             mode=mode,
             stride=stride,
+            perspective=perspective,
         )
     )
     processed = extractor.extract(current_data, str(save_dir))
