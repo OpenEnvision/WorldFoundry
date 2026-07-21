@@ -171,12 +171,8 @@ class LingBotMapResult:
                 else:
                     ext_h = None
                 if ext_h is not None:
-                    try:
-                        camera_to_world = np.linalg.inv(ext_h)
-                    except np.linalg.LinAlgError:
-                        camera_to_world = None
-                    if camera_to_world is not None:
-                        pts = pts @ camera_to_world[:3, :3].T + camera_to_world[:3, 3]
+                    camera_to_world = ext_h
+                    pts = pts @ camera_to_world[:3, :3].T + camera_to_world[:3, 3]
             if color_arr is not None and color_arr.ndim == 4:
                 color_frame = color_arr[min(frame_idx, color_arr.shape[0] - 1)]
                 frame_rgb = color_frame.reshape(-1, color_frame.shape[-1])[valid, :3]
