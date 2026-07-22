@@ -1,4 +1,4 @@
-# WorldFoundry
+![WorldFoundry teaser](docs/fumadocs/public/teaser.png)
 
 [![Python](https://img.shields.io/badge/python-3.10%20--%203.13-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
@@ -79,8 +79,6 @@ Join the **WorldFoundry Community** [Discord](https://discord.gg/ybUQMDA4x) or W
 - **[2026-07-11]** 🎉 **WorldFoundry is officially open-sourced.** We welcome ⭐ stars, bug reports, feature requests, and pull requests from the community!
 - **[Coming Soon]** Documentation improvements and additional benchmark integrations.
 
-
-![WorldFoundry teaser](docs/fumadocs/public/teaser.png)
 
 ## Links
 
