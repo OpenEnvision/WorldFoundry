@@ -27,6 +27,10 @@ def apply_prenorm_transformer_residuals(
 
     attn_kwargs = dict(attn_residual_kwargs or {})
     sd_pos = stochastic_depth_pos
+    # Keep the two residual branches independently configurable.  ``drop_path2``
+    # is optional for callers of this helper that predate the second path, so
+    # retain the historical behavior by falling back to ``drop_path1``.
+    ffn_drop_path = drop_path1 if drop_path2 is None else drop_path2
 
     if training and sample_drop_ratio > 0.1:
         x = drop_add_residual_stochastic_depth(
@@ -41,12 +45,11 @@ def apply_prenorm_transformer_residuals(
             sample_drop_ratio=sample_drop_ratio,
         )
     elif training and sample_drop_ratio > 0.0:
-        drop_path = drop_path1
         if sd_pos is not None or attn_kwargs:
-            x = x + drop_path(attn_residual(x, pos=sd_pos, **attn_kwargs))
+            x = x + drop_path1(attn_residual(x, pos=sd_pos, **attn_kwargs))
         else:
-            x = x + drop_path(attn_residual(x))
-        x = x + drop_path(ffn_residual(x))  # FIXME: drop_path2
+            x = x + drop_path1(attn_residual(x))
+        x = x + ffn_drop_path(ffn_residual(x))
     else:
         if sd_pos is not None or attn_kwargs:
             x = x + attn_residual(x, pos=sd_pos, **attn_kwargs)
