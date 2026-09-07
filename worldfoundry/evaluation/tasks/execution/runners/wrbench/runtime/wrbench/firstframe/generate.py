@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -148,6 +149,107 @@ class DashScopeT2IProvider:
         return {"source": "url", "url": urls[0], "provider": self.provider_name, "model": self.model}
 
 
+class AtlasCloudT2IProvider:
+    """Generate first frames through the Atlas Cloud asynchronous image API."""
+
+    provider_name = "atlascloud"
+
+    def __init__(
+        self,
+        *,
+        model: str | None = None,
+        api_key: str | None = None,
+        endpoint: str | None = None,
+        size: str | None = None,
+        n: int | str | None = None,
+        timeout: float = 180.0,
+        poll_interval: float = 2.0,
+    ) -> None:
+        _require_httpx()
+        import httpx
+
+        self.model = _require_config_value(model, label="Atlas Cloud first-frame model")
+        self.api_key = _require_config_value(api_key, label="Atlas Cloud API key")
+        self.endpoint = _require_config_value(
+            endpoint,
+            label="Atlas Cloud API endpoint",
+        ).rstrip("/")
+        self.size = _require_config_value(size, label="Atlas Cloud first-frame size")
+        self.n = _require_config_int(n, label="Atlas Cloud first-frame n")
+        if self.n != 1:
+            raise RuntimeError("Atlas Cloud first-frame n must be 1")
+        self.timeout = timeout
+        self.poll_interval = poll_interval
+        self._client = httpx.Client(timeout=timeout)
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _submit_url(self) -> str:
+        if self.endpoint.endswith("/model/generateImage"):
+            return self.endpoint
+        return f"{self.endpoint}/model/generateImage"
+
+    def _prediction_url(self, prediction_id: str) -> str:
+        api_root = self._submit_url().removesuffix("/model/generateImage")
+        return f"{api_root}/model/prediction/{prediction_id}"
+
+    @staticmethod
+    def _prediction_data(payload: dict[str, Any]) -> dict[str, Any]:
+        data = payload.get("data")
+        return data if isinstance(data, dict) else payload
+
+    def generate(self, *, prompt: str, family_id: str, out_path: Path) -> dict[str, Any]:
+        del family_id
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "size": self.size,
+            "output_format": "png",
+        }
+        response = self._client.post(self._submit_url(), headers=self._headers(), json=payload)
+        response.raise_for_status()
+        submitted = self._prediction_data(response.json())
+        prediction_id = submitted.get("id")
+        if not isinstance(prediction_id, str) or not prediction_id:
+            raise RuntimeError("Atlas Cloud submission returned no prediction id")
+
+        deadline = time.monotonic() + self.timeout
+        while time.monotonic() < deadline:
+            result = self._client.get(
+                self._prediction_url(prediction_id),
+                headers=self._headers(),
+            )
+            result.raise_for_status()
+            prediction = self._prediction_data(result.json())
+            status = str(prediction.get("status") or "").lower()
+            if status in {"completed", "succeeded"}:
+                outputs = prediction.get("outputs") or []
+                first = outputs[0] if outputs else None
+                output_url = first if isinstance(first, str) else first.get("url") if isinstance(first, dict) else None
+                if not output_url:
+                    raise RuntimeError("Atlas Cloud prediction returned no output URL")
+                image = self._client.get(output_url)
+                image.raise_for_status()
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_bytes(image.content)
+                return {
+                    "source": "url",
+                    "url": output_url,
+                    "provider": self.provider_name,
+                    "model": self.model,
+                    "prediction_id": prediction_id,
+                }
+            if status in {"failed", "canceled"}:
+                raise RuntimeError(f"Atlas Cloud prediction {status}: {prediction.get('error') or 'unknown error'}")
+            time.sleep(self.poll_interval)
+
+        raise TimeoutError(f"Atlas Cloud prediction {prediction_id} timed out")
+
+
 class MockT2IProvider:
     """Write a minimal PNG placeholder for tests (1x1 transparent)."""
     provider_name = "mock"
@@ -173,7 +275,9 @@ def get_t2i_provider(name: str | None = None, **kwargs: Any) -> T2IProvider:
         return MockT2IProvider(model=model)
     if provider in {"dashscope", "wan"}:
         return DashScopeT2IProvider(**kwargs)
-    raise ValueError(f"Unknown T2I provider {provider!r}; expected dashscope or mock")
+    if provider in {"atlascloud", "atlas_cloud"}:
+        return AtlasCloudT2IProvider(**kwargs)
+    raise ValueError(f"Unknown T2I provider {provider!r}; expected atlascloud, dashscope, or mock")
 
 
 def generate_first_frame(
