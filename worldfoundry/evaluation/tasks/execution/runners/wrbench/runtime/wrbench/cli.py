@@ -1018,7 +1018,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ff.add_argument("--families-jsonl", dest="families_jsonl", metavar="PATH")
     p_ff.add_argument("--family-id", dest="family_id", metavar="ID")
     p_ff.add_argument("--prompt", metavar="TEXT", help="T2I prompt (with --family-id).")
-    p_ff.add_argument("--provider", required=True, help="T2I provider: dashscope, mock.")
+    p_ff.add_argument("--provider", required=True, help="T2I provider: atlascloud, dashscope, mock.")
     p_ff.add_argument("--model", required=True, help="T2I model name.")
     p_ff.add_argument("--api-key", dest="api_key", help="T2I API key.")
     p_ff.add_argument("--endpoint", required=True, help="T2I API endpoint.")

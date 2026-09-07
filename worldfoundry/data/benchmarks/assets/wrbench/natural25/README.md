@@ -22,6 +22,22 @@ also regenerate first-frame PNGs per family via `wrbench firstframe` (optional
 extra) or substitute images from your own T2I pipeline. Human annotation
 verdicts are released separately from this repository.
 
+Atlas Cloud is available as an optional first-frame provider. For example, a
+live model whose current schema accepts `size` and PNG output can be run with:
+
+```bash
+wrbench firstframe \
+  --family-id demo --prompt "A simple tabletop scene" --out outputs/first-frames \
+  --provider atlascloud --model bytedance/seedream-v5.0-lite \
+  --api-key "$ATLASCLOUD_API_KEY" \
+  --endpoint https://api.atlascloud.ai/api/v1 \
+  --size '2048*2048' --n 1 --overwrite-existing
+```
+
+The provider submits each image task once, polls the bounded prediction
+endpoint, and downloads the completed output. Existing bundled frames and
+provider defaults are unchanged.
+
 `variants.jsonl` keeps `ti2v_prompt` as the first-frame-anchored prompt of
 record. Text-only runs should explicitly materialize a prompt profile such as
 `t2v_layout_anchor`, where the initial layout and event tails are maintained in
