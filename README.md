@@ -69,6 +69,7 @@ Join the **WorldFoundry Community** [Discord](https://discord.gg/ybUQMDA4x) or W
 
 ## 📰 News
 
+- **[2026-09-10]** ❤️ The official WorldFoundry update is ready for release. Next week, we will roll out comprehensive updates to WorldFoundry and another project, along with the accompanying technical reports and entirely new open-source documentation. Thank you for your patience throughout this process. Stay tuned!
 - **[2026-07-17]** 🔧 **WorldFoundry v0.2.0: Major Infrastructure Overhaul**
   - **Core Inference Upgrades** – Refactored to inference‑only path with integrated Wan, HunyuanVideo, LTX2, Cosmos, perception & 3D foundation modules. Unified attention backend selection (FlashAttention 2/3, SageAttention, xFormers, SDPA fallback). Triton kernel registration, compilation & inference caching. NVFP4 quantization support. GPU selection driven by actual compute capability (A100, H100). Multi‑GPU Context/Sequence Parallel with advanced memory management.
   - **World Model Integration** – Incorporated LingBot World 2, Lingbot Video, Helios, Bernini, AlayaWorld, Rolling Forcing, LiveWorld, MinWM, sana streaming, and more.
