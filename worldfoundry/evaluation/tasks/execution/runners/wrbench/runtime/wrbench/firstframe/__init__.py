@@ -1,6 +1,7 @@
 """First-frame image generation."""
 
 from wrbench.firstframe.generate import (
+    AtlasCloudT2IProvider,
     DashScopeT2IProvider,
     FirstFrameManifest,
     MockT2IProvider,
@@ -11,6 +12,7 @@ from wrbench.firstframe.generate import (
 )
 
 __all__ = [
+    "AtlasCloudT2IProvider",
     "DashScopeT2IProvider",
     "FirstFrameManifest",
     "MockT2IProvider",
