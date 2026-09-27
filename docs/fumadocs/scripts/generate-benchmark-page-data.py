@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Build docs/fumadocs/lib/benchmark-page-data.json from catalog + task YAML.
+"""Build benchmark-page-data.json from manifests and curated documentation copy.
 
 Dimensions, data composition, and metrics are extracted from recorded fields.
 Leaderboard rows are emitted only when the catalog already stores published
 scores — sample_results fixtures are ignored. Missing facts stay missing.
+Editorial details that are not present in manifests live in
+benchmark-page-overrides.json, never in the generated output itself.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ CATALOG_ROOT = ROOT / "worldfoundry/data/benchmarks/catalog"
 TASK_ROOT = ROOT / "worldfoundry/data/benchmarks/tasks/external"
 MDX_ROOT = DOCS_ROOT / "content/docs/evaluation/benchmark-hub"
 OUT = DOCS_ROOT / "lib" / "benchmark-page-data.json"
+OVERRIDES = DOCS_ROOT / "lib" / "benchmark-page-overrides.json"
 
 GENERIC_SPLITS = {
     "standard",
@@ -117,6 +120,24 @@ def as_list(value: Any) -> list[Any]:
 def humanize(value: str) -> str:
     text = str(value).replace("_", " ").replace("-", " ").strip()
     return re.sub(r"\s+", " ", text).title() if text else ""
+
+
+def license_label(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if not isinstance(value, dict):
+        return ""
+    status = str(value.get("status") or "").strip()
+    if status == "upstream_readme_declaration":
+        notes = str(value.get("notes") or "")
+        match = re.search(r"\b(?:Apache-2\.0|MIT|BSD-3-Clause)\b", notes, re.I)
+        return f"{match.group(0)} (upstream README declaration)" if match else "Upstream README declaration"
+    return {
+        "apache-2.0": "Apache-2.0",
+        "mit": "MIT",
+        "unlicensed_upstream": "No published upstream license",
+        "restricted_noncommercial": "Restricted; see upstream terms",
+    }.get(status, humanize(status))
 
 
 def label_zh(value: str) -> str:
@@ -368,11 +389,11 @@ def collect_data(
                 {
                     "kind": "huggingface",
                     "id": str(item["repo_id"]),
-                    "license": str(item.get("license") or official.get("license") or ""),
+                    "license": license_label(item.get("license") or official.get("license")),
                 }
             )
     for url in github_urls(official.get("github")):
-        sources.append({"kind": "github", "id": url, "license": str(official.get("license") or "")})
+        sources.append({"kind": "github", "id": url, "license": license_label(official.get("license"))})
 
     dataset = catalog.get("dataset") if isinstance(catalog.get("dataset"), dict) else {}
     notes = [str(item) for item in as_list(overlay.get("notes")) if item]
@@ -407,7 +428,7 @@ def collect_data(
         "sources": sources,
         "splits": interesting_splits(task.get("splits") or overlay.get("splits")),
         "modalities": [str(item) for item in catalog.get("modalities") or []],
-        "license": str(official.get("license") or ""),
+        "license": license_label(official.get("license")),
         "notes": notes,
         "notesZh": notes_zh,
         "notApplicable": bool(dataset.get("not_applicable")),
@@ -718,6 +739,30 @@ DATA_OVERLAYS: dict[str, dict[str, Any]] = {
 LEADERBOARDS: dict[str, dict[str, Any]] = {}
 
 
+def merge_override(generated: Any, override: Any, path: str) -> Any:
+    """Replace only explicitly curated leaves, preserving new manifest fields."""
+    if not isinstance(generated, dict) or not isinstance(override, dict):
+        return override
+    unknown = set(override) - set(generated)
+    if unknown:
+        raise ValueError(f"unknown benchmark override fields at {path}: {sorted(unknown)}")
+    return {
+        key: merge_override(value, override[key], f"{path}.{key}") if key in override else value
+        for key, value in generated.items()
+    }
+
+
+def load_page_overrides(page_ids: set[str]) -> dict[str, dict[str, Any]]:
+    payload = json.loads(OVERRIDES.read_text(encoding="utf-8"))
+    if payload.get("schemaVersion") != 1 or not isinstance(payload.get("pages"), dict):
+        raise ValueError(f"invalid benchmark page overrides: {OVERRIDES}")
+    overrides = payload["pages"]
+    unknown = set(overrides) - page_ids
+    if unknown:
+        raise ValueError(f"overrides reference missing benchmarks: {sorted(unknown)}")
+    return overrides
+
+
 def build_payload() -> dict[str, Any]:
     catalogs = collect_catalogs()
     tasks = collect_tasks()
@@ -727,9 +772,12 @@ def build_payload() -> dict[str, Any]:
         zh_copy = harvest_metric_copy(MDX_ROOT / f"{bench_id}.zh.mdx")
         pages[bench_id] = build_entry(bench_id, catalog, tasks.get(bench_id, {}), en_copy, zh_copy)
 
+    for bench_id, override in load_page_overrides(set(pages)).items():
+        pages[bench_id] = merge_override(pages[bench_id], override, bench_id)
+
     ingested = sorted(bid for bid, page in pages.items() if page["leaderboard"]["ingested"])
     return {
-        "generatedFrom": "worldfoundry/data/benchmarks/catalog + tasks/external + recorded About facts",
+        "generatedFrom": "worldfoundry/data/benchmarks/catalog + tasks/external + recorded About facts + curated docs overrides",
         "benchmarkCount": len(pages),
         "leaderboardIngestedIds": ingested,
         "leaderboardPlaceholderCount": len(pages) - len(ingested),

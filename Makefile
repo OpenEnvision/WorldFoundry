@@ -55,6 +55,8 @@ install-dev:
 docs-check:
 	npm --prefix docs/fumadocs run api:check
 	npm --prefix docs/fumadocs run models:check
+	npm --prefix docs/fumadocs run models:homes:check
+	npm --prefix docs/fumadocs run benchmarks:check
 	npm --prefix docs/fumadocs run coverage:check
 
 docs-dev-fast:

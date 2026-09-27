@@ -1,6 +1,7 @@
 ---
 title: XGEN-JING
 description: 复用 MiniMax-H3 基础模型的相机控制与音视频联合生成。
+pageSource: authored
 ---
 
 `xgen-jing` 接入公开发布的 **JING-Flash-v1 四步双向模型**。Transformer 继承 WorldFoundry 的 MiniMax-H3；注意力、投影、RoPE、AdaLN、MLP 和输出头继续共用。扩展仅增加相机 FiLM、逐段独立文本细化，以及全局媒体／段内文本可见性。Qwen3-VL、潜变量几何、Euler 更新和媒体写出复用现有代码，音视频 VAE 直接使用 Diffusers 的 H3 实现。

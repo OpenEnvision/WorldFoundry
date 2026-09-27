@@ -32,7 +32,6 @@
     "models:prose:check": "bash scripts/run-python.sh scripts/generate_model_home_prose.py --check",
     "models:arch-diagrams": "bash scripts/run-python.sh scripts/generate-model-arch-diagrams.py",
     "models:homes:check": "bash scripts/run-python.sh scripts/check-model-homes.py",
-    "models:homes:fix": "bash scripts/run-python.sh scripts/check-model-homes.py --fix",
     "models:media": "bash scripts/run-python.sh scripts/harvest-model-media.py",
     "models:paper-figures": "bash scripts/run-python.sh scripts/harvest-model-media.py --paper-figures",
     "prebuild": "npm run mdx:generate && npm run api:generate",

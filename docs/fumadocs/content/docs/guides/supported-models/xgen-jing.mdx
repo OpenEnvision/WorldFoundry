@@ -1,6 +1,7 @@
 ---
 title: XGEN-JING
 description: Camera-controlled, joint audio/video generation with the shared MiniMax-H3 base.
+pageSource: authored
 ---
 
 `xgen-jing` runs the released **JING-Flash-v1 four-step bidirectional** model. Its transformer inherits WorldFoundry's MiniMax-H3 implementation: attention, projections, RoPE, AdaLN, MLPs and output heads remain shared. The extension adds camera FiLM, independent text refinement per slice and global-media/slice-local-text attention. Qwen3-VL conditioning, latent geometry, Euler updates and media export reuse existing components; the H3 video/audio codecs come from Diffusers.

@@ -1,12 +1,7 @@
 {
-  "generatedFrom": "worldfoundry/data/benchmarks/catalog + tasks/external + recorded About facts + curated docs overrides",
-  "benchmarkCount": 75,
-  "leaderboardIngestedIds": [],
-  "leaderboardPlaceholderCount": 75,
+  "schemaVersion": 1,
   "pages": {
     "ai2thor": {
-      "id": "ai2thor",
-      "name": "AI2-THOR",
       "projectPage": "https://ai2thor.allenai.org/",
       "paperUrl": "https://arxiv.org/abs/1712.05474",
       "dimensions": [
@@ -57,22 +52,13 @@
             "license": "Apache-2.0"
           }
         ],
-        "splits": [
-          "ai2thor_default"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action"
-        ],
         "license": "Apache-2.0",
         "notes": [
           "WorldFoundry boots Unity for FloorPlan wiring or imports a rollout export. It does not bundle ALFRED/TEACh assets or invent a public AI2-THOR model board."
         ],
         "notesZh": [
           "WorldFoundry 可为接线启动 Unity，或导入 rollout 导出。不附带 ALFRED/TEACh 资产，也不编造公开模型榜。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -113,18 +99,11 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://ai2thor.allenai.org/",
-        "entries": []
+        "officialUrl": "https://ai2thor.allenai.org/"
       }
     },
     "behavior1k": {
-      "id": "behavior1k",
-      "name": "BEHAVIOR-1K",
       "projectPage": "https://behavior.stanford.edu/",
-      "paperUrl": "https://arxiv.org/abs/2403.09227",
       "dimensions": [
         {
           "id": "activities",
@@ -150,28 +129,12 @@
         "sizeLabelZh": "1000 项活动",
         "count": 1000,
         "unit": "activities",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/StanfordVL/OmniGibson",
-            "license": "upstream_terms"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "upstream_terms",
         "notes": [
           "WorldFoundry imports official OmniGibson result exports; it does not run OmniGibson in tree."
         ],
         "notesZh": [
           "WorldFoundry 导入官方 OmniGibson 结果导出；仓内不跑 OmniGibson。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -212,18 +175,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://behavior.stanford.edu/",
-        "entries": []
+        "officialUrl": "https://behavior.stanford.edu/"
       }
     },
     "bridgedata-v2": {
-      "id": "bridgedata-v2",
-      "name": "BridgeData V2",
-      "projectPage": "https://rail-berkeley.github.io/bridgedata/",
-      "paperUrl": "https://arxiv.org/abs/2308.12952",
       "dimensions": [
         {
           "id": "language-conditioned",
@@ -275,21 +230,13 @@
         "splits": [
           "eval"
         ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state",
-          "proprioception"
-        ],
         "license": "MIT",
         "notes": [
           "Code repo is MIT. Dataset materialization follows the project-page HTTP release. Hugging Face copies in the wild are third-party conversions."
         ],
         "notesZh": [
           "代码仓库为 MIT。数据就位遵循项目页 HTTP 发布。网上的 Hugging Face 副本是第三方转换。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -337,20 +284,9 @@
           "primary": false,
           "leaderboardKey": "rollout_success"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://rail-berkeley.github.io/bridgedata/",
-        "entries": []
-      }
+      ]
     },
     "calvin": {
-      "id": "calvin",
-      "name": "CALVIN",
-      "projectPage": "http://calvin.cs.uni-freiburg.de/",
-      "paperUrl": "https://ieeexplore.ieee.org/document/9788026",
       "dimensions": [
         {
           "id": "abc",
@@ -374,26 +310,6 @@
         "summaryZh": "弗莱堡大学的长时程语言条件桌面（PyBullet）：最多五条语言指令串联，四个环境配置 A/B/C/D。",
         "sizeLabel": "4 environments (A/B/C/D), chains of 1–5 instructions",
         "sizeLabelZh": "4 个环境（A/B/C/D），1–5 条指令链",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/mees/calvin",
-            "license": "mit"
-          }
-        ],
-        "splits": [
-          "abc",
-          "d"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "mit",
         "notes": [
           "WorldFoundry normalizes official sequence-evaluation exports. Dataset roots and policy checkpoints follow the mees/calvin docs."
         ],
@@ -439,20 +355,10 @@
           "primary": false,
           "leaderboardKey": "completion"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "http://calvin.cs.uni-freiburg.de/",
-        "entries": []
-      }
+      ]
     },
     "kinetix": {
-      "id": "kinetix",
-      "name": "Kinetix",
       "projectPage": "https://github.com/FLAIROx/Kinetix",
-      "paperUrl": "https://arxiv.org/abs/2410.23208",
       "dimensions": [
         {
           "id": "open_ended",
@@ -468,31 +374,12 @@
         "summaryZh": "牛津 FLAIR 开放式 JAX 2D 物理 RL 环境空间（ICLR 2025 口头）。模拟器执行在上游。",
         "sizeLabel": "Open-ended level space",
         "sizeLabelZh": "开放式关卡空间",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/FLAIROx/Kinetix",
-            "license": "upstream_terms"
-          }
-        ],
-        "splits": [
-          "realtime"
-        ],
-        "modalities": [
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "upstream_terms",
         "notes": [
           "WorldFoundry imports official rollout exports. It does not run the JAX simulator or load policies."
         ],
         "notesZh": [
           "WorldFoundry 导入官方 rollout 导出。不跑 JAX 模拟器，也不加载策略。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -533,18 +420,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/FLAIROx/Kinetix",
-        "entries": []
+        "officialUrl": "https://github.com/FLAIROx/Kinetix"
       }
     },
     "larybench": {
-      "id": "larybench",
-      "name": "LARYBench",
-      "projectPage": "https://meituan-longcat.github.io/LARYBench/",
-      "paperUrl": "https://arxiv.org/abs/2604.11689",
       "dimensions": [
         {
           "id": "extract",
@@ -610,38 +489,18 @@
         "sizeLabelZh": "4 个机器人数据集",
         "count": 4,
         "unit": "datasets",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "meituan-longcat/LARYBench",
-            "license": "mit"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/meituan-longcat/LARYBench",
-            "license": "mit"
-          }
-        ],
         "splits": [
           "calvin",
           "vlabench",
           "agibot-beta",
           "robocoin"
         ],
-        "modalities": [
-          "image",
-          "video",
-          "action",
-          "state"
-        ],
-        "license": "mit",
         "notes": [
           "WorldFoundry vendors extract, classify, and regress drivers in tree. Official media and representation checkpoints stay outside the package."
         ],
         "notesZh": [
           "WorldFoundry 仓内内置抽取、分类、回归驱动。官方媒体与表征权重仍在包外。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -698,18 +557,9 @@
           "primary": false,
           "leaderboardKey": "val_unseen_mse"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://meituan-longcat.github.io/LARYBench/",
-        "entries": []
-      }
+      ]
     },
     "libero-mem": {
-      "id": "libero-mem",
-      "name": "LIBERO-Mem",
       "projectPage": "https://libero-mem.github.io/",
       "paperUrl": "https://arxiv.org/abs/2511.11478",
       "dimensions": [
@@ -766,20 +616,13 @@
           "or",
           "oo"
         ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
         "license": "upstream_terms",
         "notes": [
           "Official protocol also reports subgoal completion with Sequence (→) and Or (∨). WorldFoundry imports whatever the official export contains; it does not recompute subgoals."
         ],
         "notesZh": [
           "官方协议还用顺序（→）与或（∨）报告子目标完成率。WorldFoundry 只导入官方导出里已有的字段，不重算子目标。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -820,16 +663,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://libero-mem.github.io/",
-        "entries": []
+        "officialUrl": "https://libero-mem.github.io/"
       }
     },
     "libero-plus": {
-      "id": "libero-plus",
-      "name": "LIBERO-Plus",
       "projectPage": "https://sylvestf.github.io/LIBERO-plus/",
       "paperUrl": "https://arxiv.org/abs/2510.13626",
       "dimensions": [
@@ -903,7 +740,6 @@
         "summaryZh": "在原始 LIBERO Spatial / Object / Goal / Long 任务上生成的 10,030 个仅评测扰动实例。7 个因子、21 个子维、五个难度级。官方资产：sylvestf/LIBERO-plus（可替换的 libero fork）。",
         "sizeLabel": "10,030 instances · 7 factors · 21 sub-dimensions",
         "sizeLabelZh": "10,030 个实例 · 7 个因子 · 21 个子维",
-        "count": 10030,
         "unit": "instances",
         "sources": [
           {
@@ -923,20 +759,12 @@
           "l4",
           "l5"
         ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "mit",
         "notes": [
           "Paper analysis of ten models reports drops from ~95% to below 30% under modest camera / initial-state shifts. That is an upstream finding, not a WorldFoundry board."
         ],
         "notesZh": [
           "论文对十个模型的分析报告：在不大的相机 / 初始状态扰动下，成功率从约 95% 降到 30% 以下。那是上游结论，不是 WorldFoundry 榜单。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -977,16 +805,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://sylvestf.github.io/LIBERO-plus/",
-        "entries": []
+        "officialUrl": "https://sylvestf.github.io/LIBERO-plus/"
       }
     },
     "libero-pro": {
-      "id": "libero-pro",
-      "name": "LIBERO-Pro",
       "projectPage": "https://zxy-mllab.github.io/LIBERO-PRO-Webpage/",
       "paperUrl": "https://arxiv.org/abs/2510.03827",
       "dimensions": [
@@ -1036,8 +858,6 @@
         "summaryZh": "叠在原始 LIBERO 套件上的即插即用层。五类扰动（物体、构型、指令、任务、环境）；任务重设计不与另外四类混用。官方数据：zhouxueyang/LIBERO-Pro。协议：每任务 50 个 episode，与原版 LIBERO 一致。",
         "sizeLabel": "5 perturbation types on original LIBERO suites",
         "sizeLabelZh": "叠在原始 LIBERO 套件上的 5 类扰动",
-        "count": null,
-        "unit": "",
         "sources": [
           {
             "kind": "huggingface",
@@ -1057,20 +877,12 @@
           "task",
           "environment"
         ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "mit",
         "notes": [
           "The paper reports 90%+ stock-LIBERO scores collapsing to 0% under generalized PRO settings. That is an upstream finding, not a WorldFoundry board."
         ],
         "notesZh": [
           "论文报告原版 LIBERO 上 90%+ 的分数在泛化 PRO 设置下塌到 0%。那是上游结论，不是 WorldFoundry 榜单。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -1111,97 +923,21 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://zxy-mllab.github.io/LIBERO-PRO-Webpage/",
-        "entries": []
+        "officialUrl": "https://zxy-mllab.github.io/LIBERO-PRO-Webpage/"
       }
     },
     "libero": {
-      "id": "libero",
-      "name": "LIBERO",
-      "projectPage": "https://libero-project.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2306.03310",
-      "dimensions": [
-        {
-          "id": "libero_spatial",
-          "name": "LIBERO-Spatial",
-          "nameZh": "LIBERO-Spatial",
-          "kind": "suite",
-          "description": "Spatial-relation transfer across tabletop layouts.",
-          "descriptionZh": "桌面布局上的空间关系迁移。"
-        },
-        {
-          "id": "libero_object",
-          "name": "LIBERO-Object",
-          "nameZh": "LIBERO-Object",
-          "kind": "suite",
-          "description": "Object-identity transfer across manipulation tasks.",
-          "descriptionZh": "操作任务中的物体身份迁移。"
-        },
-        {
-          "id": "libero_goal",
-          "name": "LIBERO-Goal",
-          "nameZh": "LIBERO-Goal",
-          "kind": "suite",
-          "description": "Goal-specification transfer.",
-          "descriptionZh": "目标描述迁移。"
-        },
-        {
-          "id": "libero_100",
-          "name": "LIBERO-100",
-          "nameZh": "LIBERO-100",
-          "kind": "suite",
-          "description": "LIBERO-10 plus LIBERO-90 long-horizon mix.",
-          "descriptionZh": "LIBERO-10 与 LIBERO-90 组成的长程混合套件。"
-        }
-      ],
       "data": {
         "summary": "Four lifelong suites on a robosuite/MuJoCo Franka tabletop: Spatial, Object, Goal, and LIBERO-100 (LIBERO-10 + LIBERO-90). Official demos on yifengzhu-hf/LIBERO-datasets; LeRobot conversion on lerobot/libero.",
         "summaryZh": "四个终身学习套件，基于 robosuite/MuJoCo 的 Franka 桌面：Spatial、Object、Goal，以及 LIBERO-100（LIBERO-10 + LIBERO-90）。官方演示在 yifengzhu-hf/LIBERO-datasets；LeRobot 转换版在 lerobot/libero。",
         "sizeLabel": "4 suites (Spatial / Object / Goal / LIBERO-100)",
         "sizeLabelZh": "4 个套件（Spatial / Object / Goal / LIBERO-100）",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "yifengzhu-hf/LIBERO-datasets",
-            "license": "other"
-          },
-          {
-            "kind": "huggingface",
-            "id": "lerobot/libero",
-            "license": "apache-2.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/Lifelong-Robot-Learning/LIBERO",
-            "license": "mit"
-          }
-        ],
-        "splits": [
-          "libero_spatial",
-          "libero_object",
-          "libero_goal",
-          "libero_10",
-          "libero_90"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "mit",
         "notes": [
           "WorldFoundry can import official eval_result trees and also wire closed-loop execution; suite choice and seeds must match the upstream protocol to compare."
         ],
         "notesZh": [
           "WorldFoundry 可以导入官方 eval_result 树，也可以接线闭环执行；套件选择与随机种子必须匹配上游协议才可比较。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -1240,20 +976,9 @@
           "primary": false,
           "leaderboardKey": "action_accuracy"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://libero-project.github.io/",
-        "entries": []
-      }
+      ]
     },
     "maniskill": {
-      "id": "maniskill",
-      "name": "ManiSkill",
-      "projectPage": "https://maniskill.ai/",
-      "paperUrl": "https://arxiv.org/abs/2302.04659",
       "dimensions": [
         {
           "id": "rigid_manipulation",
@@ -1293,23 +1018,6 @@
         "summaryZh": "UCSD Hao Su 实验室的 GPU 并行 SAPIEN 评测：数十个操作任务族、多种本体与演示数据。WorldFoundry 不跑模拟器，只归一化官方 rollout 导出。",
         "sizeLabel": "Dozens of task families (upstream ManiSkill / ManiSkill3)",
         "sizeLabelZh": "数十个任务族（上游 ManiSkill / ManiSkill3）",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/haosulab/ManiSkill",
-            "license": "apache-2.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "apache-2.0",
         "notes": [
           "Simulator execution, policy loading, and rollout collection stay upstream. This page is an official-results importer."
         ],
@@ -1355,18 +1063,9 @@
           "primary": false,
           "leaderboardKey": "normalized_return"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://maniskill.ai/",
-        "entries": []
-      }
+      ]
     },
     "maniskill2": {
-      "id": "maniskill2",
-      "name": "ManiSkill2",
       "projectPage": "https://maniskill2.github.io/",
       "paperUrl": "https://arxiv.org/abs/2302.04659",
       "dimensions": [
@@ -1416,7 +1115,6 @@
         "summaryZh": "ICLR 2023 的 SAPIEN 套件：20 个任务族、2,000+ 物体模型、400 万+ 演示帧。Gym API，多种控制器。与后来的 GPU 并行 maniskill Hub 页分开。",
         "sizeLabel": "20 task families · 2,000+ objects · 4M+ demo frames",
         "sizeLabelZh": "20 个任务族 · 2,000+ 物体 · 400 万+ 演示帧",
-        "count": 20,
         "unit": "task families",
         "sources": [
           {
@@ -1429,19 +1127,12 @@
           "seen",
           "unseen"
         ],
-        "modalities": [
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "apache-2.0",
         "notes": [
           "WorldFoundry imports official rollout summaries. SAPIEN execution and the 2022 cloud eval stay upstream."
         ],
         "notesZh": [
           "WorldFoundry 导入官方 rollout 摘要。SAPIEN 执行与 2022 云评测留在上游。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -1482,18 +1173,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://maniskill2.github.io/",
-        "entries": []
+        "officialUrl": "https://maniskill2.github.io/"
       }
     },
     "metaworld": {
-      "id": "metaworld",
-      "name": "Meta-World",
-      "projectPage": "https://meta-world.github.io/",
-      "paperUrl": "https://arxiv.org/abs/1910.10897",
       "dimensions": [
         {
           "id": "mt1",
@@ -1551,13 +1234,6 @@
         "sizeLabelZh": "50 个任务 · 6 个官方套件",
         "count": 50,
         "unit": "tasks",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/Farama-Foundation/Metaworld",
-            "license": "mit"
-          }
-        ],
         "splits": [
           "mt1",
           "mt10",
@@ -1566,12 +1242,6 @@
           "ml10",
           "ml45"
         ],
-        "modalities": [
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "mit",
         "notes": [
           "WorldFoundry normalizes caller-provided JSON/CSV. Declare the MT/ML suite with the export or rows are not comparable."
         ],
@@ -1617,18 +1287,9 @@
           "primary": false,
           "leaderboardKey": "normalized_return"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://meta-world.github.io/",
-        "entries": []
-      }
+      ]
     },
     "mikasa": {
-      "id": "mikasa",
-      "name": "MiKASA-Robo",
       "projectPage": "https://mikasarobo.github.io/",
       "paperUrl": "https://arxiv.org/abs/2502.10550",
       "dimensions": [
@@ -1680,30 +1341,15 @@
         "sizeLabelZh": "32 个 RL 任务；90 个 VLA 任务",
         "count": 32,
         "unit": "tasks",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/CognitiveAISystems/MIKASA-Robo",
-            "license": "upstream_terms"
-          }
-        ],
         "splits": [
           "eval"
         ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "upstream_terms",
         "notes": [
           "Paper: arXiv:2502.10550 (OpenReview 9cLPurIZMj). WorldFoundry imports official result files only."
         ],
         "notesZh": [
           "论文：arXiv:2502.10550（OpenReview 9cLPurIZMj）。WorldFoundry 只导入官方结果文件。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -1744,18 +1390,11 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://mikasarobo.github.io/",
-        "entries": []
+        "officialUrl": "https://mikasarobo.github.io/"
       }
     },
     "molmospaces": {
-      "id": "molmospaces",
-      "name": "MolmoSpaces-Bench",
       "projectPage": "https://allenai.github.io/MolmoBot/",
-      "paperUrl": "https://arxiv.org/abs/2603.16861",
       "dimensions": [
         {
           "id": "pick",
@@ -1789,30 +1428,12 @@
         "sizeLabelZh": "1000 episode 仿真阶梯",
         "count": 1000,
         "unit": "episodes",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/allenai/MolmoBot",
-            "license": "upstream_terms"
-          }
-        ],
-        "splits": [
-          "pick_and_place"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "upstream_terms",
         "notes": [
           "An official leaderboard exists. This hub has not ingested its rows. WorldFoundry only normalizes a caller-provided export."
         ],
         "notesZh": [
           "官方 leaderboard 存在。本 Hub 尚未收录其行。WorldFoundry 只归一化调用方提供的导出。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -1853,18 +1474,11 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://molmospaces.allen.ai/leaderboard",
-        "entries": []
+        "officialUrl": "https://molmospaces.allen.ai/leaderboard"
       }
     },
     "rlbench": {
-      "id": "rlbench",
-      "name": "RLBench",
       "projectPage": "https://sites.google.com/view/rlbench",
-      "paperUrl": "https://arxiv.org/abs/1909.12271",
       "dimensions": [
         {
           "id": "tasks",
@@ -1906,23 +1520,6 @@
         "sizeLabelZh": "100 个任务 · 无限规划器演示",
         "count": 100,
         "unit": "tasks",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/stepjam/RLBench",
-            "license": "other:noassertion_github_api"
-          }
-        ],
-        "splits": [
-          "few_shot"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "other:noassertion_github_api",
         "notes": [
           "WorldFoundry normalizes policy rollout exports. CoppeliaSim, PyRep, and task assets stay upstream."
         ],
@@ -1979,18 +1576,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://sites.google.com/view/rlbench",
-        "entries": []
+        "officialUrl": "https://sites.google.com/view/rlbench"
       }
     },
     "robocasa": {
-      "id": "robocasa",
-      "name": "RoboCasa",
-      "projectPage": "https://robocasa.ai/",
-      "paperUrl": "https://arxiv.org/abs/2406.02523",
       "dimensions": [
         {
           "id": "atomic",
@@ -2022,29 +1611,6 @@
         "summaryZh": "UT Austin 与 NVIDIA 的厨房仿真：120 个场景、2500+ 资产、100 个原子任务加组合长时程任务，并带面向通才策略的大规模演示。",
         "sizeLabel": "120 scenes · 100+ tasks · 2,500+ assets",
         "sizeLabelZh": "120 个场景 · 100+ 任务 · 2500+ 资产",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/robocasa/robocasa",
-            "license": "other:noassertion_github_api"
-          }
-        ],
-        "splits": [
-          "kitchen",
-          "long_horizon"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "other:noassertion_github_api",
-        "notes": [
-          "RoboCasa uses simulator assets and generated policy rollouts rather than a single public HF benchmark table."
-        ],
         "notesZh": [
           "RoboCasa 使用模拟器资产与策略 rollout，而不是一张公开的 Hugging Face 评测表。"
         ],
@@ -2087,18 +1653,9 @@
           "primary": false,
           "leaderboardKey": "reward"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://robocasa.ai/",
-        "entries": []
-      }
+      ]
     },
     "robocerebra": {
-      "id": "robocerebra",
-      "name": "RoboCerebra",
       "projectPage": "https://robocerebra.github.io/",
       "paperUrl": "https://arxiv.org/abs/2506.06677",
       "dimensions": [
@@ -2158,30 +1715,15 @@
         "sizeLabelZh": "1000 条轨迹 · 100 个变体",
         "count": 1000,
         "unit": "trajectories",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/buaa-colalab/RoboCerebra",
-            "license": "upstream_terms"
-          }
-        ],
         "splits": [
           "eval"
         ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "upstream_terms",
         "notes": [
           "WorldFoundry imports official rollout exports. It does not run the bundled LIBERO simulator or the hierarchical VLM+VLA stack."
         ],
         "notesZh": [
           "WorldFoundry 导入官方 rollout 导出。仓内不跑捆绑的 LIBERO 模拟器，也不跑分层 VLM+VLA 栈。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -2222,18 +1764,11 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://robocerebra.github.io/",
-        "entries": []
+        "officialUrl": "https://robocerebra.github.io/"
       }
     },
     "robomme": {
-      "id": "robomme",
-      "name": "RoboMME",
       "projectPage": "https://robomme.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2603.04639",
       "dimensions": [
         {
           "id": "counting",
@@ -2275,33 +1810,12 @@
         "sizeLabelZh": "16 个任务 · 1600 条演示 · 77 万步",
         "count": 16,
         "unit": "tasks",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/RoboMME/robomme_policy_learning",
-            "license": "upstream_terms"
-          }
-        ],
-        "splits": [
-          "counting",
-          "imitation",
-          "permanence",
-          "reference"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "upstream_terms",
         "notes": [
           "WorldFoundry normalizes per-suite success from an official export. It does not run the RoboMME simulator or the π0.5 variants."
         ],
         "notesZh": [
           "WorldFoundry 从官方导出归一化逐套件成功率。仓内不跑 RoboMME 模拟器或 π0.5 变体。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -2351,18 +1865,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://robomme.github.io/",
-        "entries": []
+        "officialUrl": "https://robomme.github.io/"
       }
     },
     "robotwin": {
-      "id": "robotwin",
-      "name": "RoboTwin 2.0",
-      "projectPage": "https://robotwin-platform.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2506.18088",
       "dimensions": [
         {
           "id": "demo_clean",
@@ -2404,45 +1910,13 @@
         "sizeLabelZh": "50 个任务 · 731 个物体 · 5 种本体 · 10 万+ 轨迹",
         "count": 50,
         "unit": "tasks",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "TianxingChen/RoboTwin2.0",
-            "license": "mit"
-          },
-          {
-            "kind": "huggingface",
-            "id": "lerobot/robotwin_unified",
-            "license": "manual_review:missing_hf_license"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/RoboTwin-Platform/RoboTwin",
-            "license": ""
-          }
-        ],
-        "splits": [
-          "demo_clean",
-          "demo_randomized"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state",
-          "proprioception",
-          "rgb",
-          "depth",
-          "pointcloud"
-        ],
         "license": "mit",
         "notes": [
           "Official leaderboard lives at robotwin-platform.github.io/leaderboard. WorldFoundry has not ingested those rows."
         ],
         "notesZh": [
           "官方榜单在 robotwin-platform.github.io/leaderboard。WorldFoundry 尚未收录这些行。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -2519,18 +1993,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://robotwin-platform.github.io/leaderboard",
-        "entries": []
+        "officialUrl": "https://robotwin-platform.github.io/leaderboard"
       }
     },
     "simpler-env": {
-      "id": "simpler-env",
-      "name": "SimplerEnv",
-      "projectPage": "https://simpler-env.github.io/",
-      "paperUrl": "https://openreview.net/forum?id=LZh48DTg71",
       "dimensions": [
         {
           "id": "google_robot",
@@ -2554,29 +2020,6 @@
         "summaryZh": "SIMPLER（面向真机设置的仿真操作策略评测）：用已验证的 real-to-sim 相关性，在仿真里给 RT-1、RT-1-X、Octo 等策略排序。",
         "sizeLabel": "2 embodiment families (Google Robot, WidowX/Bridge)",
         "sizeLabelZh": "2 个本体族（Google Robot、WidowX/Bridge）",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/simpler-env/SimplerEnv",
-            "license": "mit"
-          }
-        ],
-        "splits": [
-          "google_robot",
-          "widowx_bridge"
-        ],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "mit",
-        "notes": [
-          "SimplerEnv evaluates policy rollouts in simulator; generated result files and rollout logs are normalized by WorldFoundry."
-        ],
         "notesZh": [
           "SimplerEnv 在模拟器里评测策略 rollout；WorldFoundry 归一化生成的结果文件与 rollout 日志。"
         ],
@@ -2619,20 +2062,10 @@
           "primary": false,
           "leaderboardKey": "reward"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://simpler-env.github.io/",
-        "entries": []
-      }
+      ]
     },
     "vlabench": {
-      "id": "vlabench",
-      "name": "VLABench",
       "projectPage": "https://github.com/OpenMOSS/VLABench",
-      "paperUrl": "https://arxiv.org/abs/2502.09858",
       "dimensions": [
         {
           "id": "categories",
@@ -2648,30 +2081,13 @@
         "summaryZh": "复旦 OpenMOSS 语言条件操作评测：100 类任务、MuJoCo 中 2000+ 物体。面向 VLA 策略与 VLM 规划器。",
         "sizeLabel": "100 categories / 2,000+ objects",
         "sizeLabelZh": "100 类 / 2000+ 物体",
-        "count": 100,
         "unit": "categories",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/OpenMOSS/VLABench",
-            "license": "upstream_terms"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "language",
-          "vision",
-          "action",
-          "state"
-        ],
-        "license": "upstream_terms",
         "notes": [
           "WorldFoundry imports official rollouts. It does not boot MuJoCo or load policies."
         ],
         "notesZh": [
           "WorldFoundry 导入官方 rollout。不启动 MuJoCo，也不加载策略。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -2712,81 +2128,21 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/OpenMOSS/VLABench",
-        "entries": []
+        "officialUrl": "https://github.com/OpenMOSS/VLABench"
       }
     },
     "4dworldbench": {
-      "id": "4dworldbench",
-      "name": "4DWorldBench",
-      "projectPage": "https://yeppp27.github.io/4DWorldBench.github.io/",
-      "paperUrl": "https://arxiv.org/pdf/2511.19836",
-      "dimensions": [
-        {
-          "id": "perceptual_quality",
-          "name": "Perceptual quality",
-          "nameZh": "感知质量",
-          "kind": "axis",
-          "description": "CLIP-IQA, CLIP-aesthetic, FastVQA.",
-          "descriptionZh": "CLIP-IQA、CLIP-aesthetic、FastVQA。"
-        },
-        {
-          "id": "condition_4d_alignment",
-          "name": "Condition-4D alignment",
-          "nameZh": "Condition-4D 对齐",
-          "kind": "axis",
-          "description": "Attribute, relationship, motion, event, scene, and camera-error control.",
-          "descriptionZh": "属性、关系、运动、事件、场景与相机误差控制。"
-        },
-        {
-          "id": "physical_realism",
-          "name": "Physical realism",
-          "nameZh": "物理真实感",
-          "kind": "axis",
-          "description": "LLM-assisted physics reasoning.",
-          "descriptionZh": "LLM 辅助的物理推理。"
-        },
-        {
-          "id": "four_d_consistency",
-          "name": "4D consistency",
-          "nameZh": "4D 一致性",
-          "kind": "axis",
-          "description": "Viewpoint, motion smoothness, motion QA, and style consistency.",
-          "descriptionZh": "视角、运动平滑、运动问答与风格一致性。"
-        }
-      ],
       "data": {
         "summary": "Caller-supplied Condition-to-4D JSON plus generated videos. Official dataset download is not published. Four axes: perceptual quality, Condition-4D alignment, physical realism, 4D consistency.",
         "summaryZh": "调用方提供的 Condition-to-4D JSON 与生成视频。官方数据集下载尚未发布。四个轴：感知质量、Condition-4D 对齐、物理真实感、4D 一致性。",
         "sizeLabel": "Official dataset unpublished",
         "sizeLabelZh": "官方数据集未发布",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/yeppp27/4dworldbench_code.git",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "image",
-          "video",
-          "generated-video"
-        ],
-        "license": "",
         "notes": [
           "WorldFoundry hosts the official runtime and scores one dimension at a time. It does not invent a 4DWorldBench board."
         ],
         "notesZh": [
           "WorldFoundry 托管官方 runtime，一次评一个维度。不编造 4DWorldBench 榜单。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -2960,20 +2316,10 @@
           "primary": true,
           "leaderboardKey": "four_d_worldbench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://yeppp27.github.io/4DWorldBench.github.io/",
-        "entries": []
-      }
+      ]
     },
     "aigcbench": {
-      "id": "aigcbench",
-      "name": "AIGCBench",
       "projectPage": "https://www.benchcouncil.org/AIGCBench",
-      "paperUrl": "https://arxiv.org/abs/2401.01651",
       "dimensions": [
         {
           "id": "first_frame",
@@ -3029,8 +2375,6 @@
         "summaryZh": "BenchCouncil 图生视频套件：条件图像、文本 prompt 与参考视频。内置 prompt_suite.json 可在不下载完整 Hugging Face 数据的情况下物化请求。",
         "sizeLabel": "Official I2V prompt suite",
         "sizeLabelZh": "官方 I2V prompt 套件",
-        "count": null,
-        "unit": "",
         "sources": [
           {
             "kind": "huggingface",
@@ -3043,13 +2387,6 @@
             "license": "apache-2.0"
           }
         ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "text",
-          "video"
-        ],
-        "license": "apache-2.0",
         "notes": [
           "WorldFoundry imports official metric CSV / TSV exports. CLIP, DOVER, and optical-flow scorers stay caller-supplied."
         ],
@@ -3167,20 +2504,9 @@
           "primary": true,
           "leaderboardKey": "aigcbench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://huggingface.co/papers/2401.01651",
-        "entries": []
-      }
+      ]
     },
     "apple-pi": {
-      "id": "apple-pi",
-      "name": "Apple-PI",
-      "projectPage": "https://21yrm.github.io/Apple-PI-homepage/",
-      "paperUrl": "https://arxiv.org/abs/2607.16401",
       "dimensions": [
         {
           "id": "perception_text",
@@ -3242,20 +2568,13 @@
             "license": "Apache-2.0"
           }
         ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video",
-          "text"
-        ],
         "license": "Apache-2.0",
         "notes": [
           "Source repo is Apache-2.0. GT availability follows the upstream release; WorldFoundry does not vendor Orchard media or Gemini credentials."
         ],
         "notesZh": [
           "源码仓库为 Apache-2.0。GT 是否公开遵循上游发布；WorldFoundry 不分发 Orchard 媒体或 Gemini 凭证。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -3312,20 +2631,9 @@
           "primary": false,
           "leaderboardKey": "apple_pi_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://21yrm.github.io/Apple-PI-homepage/",
-        "entries": []
-      }
+      ]
     },
     "camerabench": {
-      "id": "camerabench",
-      "name": "CameraBench",
-      "projectPage": "https://linzhiqiu.github.io/papers/camerabench/",
-      "paperUrl": "https://arxiv.org/abs/2504.15376",
       "dimensions": [
         {
           "id": "binary",
@@ -3365,39 +2673,13 @@
         "summaryZh": "CMU CameraBench 测试集（syCen/CameraBench）：专家标注的镜头运动视频，含二分类、VQA、检索与描述四个指标族。",
         "sizeLabel": "Official CameraBench testset",
         "sizeLabelZh": "官方 CameraBench 测试集",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "syCen/CameraBench",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/sy77777en/CameraBench",
-            "license": ""
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/linzhiqiu/t2v_metrics",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "video",
-          "camera",
-          "text"
-        ],
         "license": "cc-by-4.0",
         "notes": [
           "WorldFoundry aggregates prepared score files or imports official JSON. VLM / SfM score generation stays upstream."
         ],
         "notesZh": [
           "WorldFoundry 聚合已准备的分数文件或导入官方 JSON。VLM / SfM 打分仍在上游。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -3454,78 +2736,12 @@
           "primary": true,
           "leaderboardKey": "camerabench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://linzhiqiu.github.io/papers/camerabench/",
-        "entries": []
-      }
+      ]
     },
     "chronomagic-bench": {
-      "id": "chronomagic-bench",
-      "name": "ChronoMagic-Bench",
-      "projectPage": "https://pku-yuangroup.github.io/ChronoMagic-Bench/",
-      "paperUrl": "https://arxiv.org/abs/2406.18522",
-      "dimensions": [
-        {
-          "id": "temporal_coherence",
-          "name": "Temporal coherence",
-          "nameZh": "时间连贯",
-          "kind": "axis",
-          "description": "CHScore tracking-point coherence via CoTracker.",
-          "descriptionZh": "CHScore：通过 CoTracker 的跟踪点连贯性。"
-        },
-        {
-          "id": "metamorphic_amplitude",
-          "name": "Metamorphic amplitude",
-          "nameZh": "形态变化幅度",
-          "kind": "axis",
-          "description": "MTScore / GPT-4o-MTScore for large physical or biological state change.",
-          "descriptionZh": "MTScore / GPT-4o-MTScore：大幅物理或生物状态变化。"
-        }
-      ],
       "data": {
-        "summary": "1,649 closed-set prompts; ChronoMagic-Bench dataset discovery records 1,799 rows",
-        "summaryZh": "1,649 条闭集 prompt；ChronoMagic-Bench 数据集发现记录 1,799 行",
-        "sizeLabel": "1,649 prompts",
-        "sizeLabelZh": "1,649 条 prompt",
-        "count": 1649,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "BestWishYsh/ChronoMagic-Bench",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "huggingface",
-            "id": "BestWishYsh/ChronoMagic",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "huggingface",
-            "id": "BestWishYsh/ChronoMagic-Pro",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "huggingface",
-            "id": "BestWishYsh/ChronoMagic-ProH",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/PKU-YuanGroup/ChronoMagic-Bench",
-            "license": ""
-          }
-        ],
         "splits": [
           "close"
-        ],
-        "modalities": [
-          "text",
-          "video"
         ],
         "license": "cc-by-4.0",
         "notes": [
@@ -3533,8 +2749,7 @@
         ],
         "notesZh": [
           "CHScore 是仓内已验证的有界官方分量。榜单对齐仍需要 MTScore、GPT-4o-MTScore、UMT-FVD、UMTScore、完整 prompt 覆盖与官方提交协议。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -3555,20 +2770,10 @@
           "primary": false,
           "leaderboardKey": "temporal_transformation"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://pku-yuangroup.github.io/ChronoMagic-Bench/",
-        "entries": []
-      }
+      ]
     },
     "devil-dynamics": {
-      "id": "devil-dynamics",
-      "name": "DEVIL Dynamics",
       "projectPage": "https://github.com/MingXiangL/DEVIL",
-      "paperUrl": "https://arxiv.org/abs/2407.01094",
       "dimensions": [
         {
           "id": "dynamics_range",
@@ -3600,21 +2805,6 @@
         "summaryZh": "NeurIPS 2024 动力学导向 T2V 协议。Prompt 按动力学等级分层；三个协议指标与人类评分 >90% 相关。",
         "sizeLabel": "Official prompt suite (upstream)",
         "sizeLabelZh": "官方 prompt 套件（上游）",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/MingXiangL/DEVIL",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "WorldFoundry imports official JSON or staged artifact scores. Full recomputation needs RAFT/CLIP/ViCLIP/DINOv2/AMT plus the dynamics regression checkpoint. Gemini naturalness is not local."
         ],
@@ -3662,18 +2852,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/MingXiangL/DEVIL",
-        "entries": []
+        "officialUrl": "https://github.com/MingXiangL/DEVIL"
       }
     },
     "evalcrafter": {
-      "id": "evalcrafter",
-      "name": "EvalCrafter",
-      "projectPage": "http://evalcrafter.github.io",
-      "paperUrl": "https://arxiv.org/abs/2310.11440",
       "dimensions": [
         {
           "id": "visual_quality",
@@ -3711,35 +2893,13 @@
       "data": {
         "summary": "700 official T2V prompts (0000.mp4 … 0699.mp4). Seventeen objective metrics roll up into four aspect scores plus Total.",
         "summaryZh": "700 条官方 T2V prompt（0000.mp4 … 0699.mp4）。17 项客观指标汇总为四个分面分加 Total。",
-        "sizeLabel": "700 prompts",
-        "sizeLabelZh": "700 条 prompt",
-        "count": 700,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "RaphaelLiu/EvalCrafter_T2V_Dataset",
-            "license": "apache-2.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/evalcrafter/EvalCrafter",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
         "license": "apache-2.0",
         "notes": [
           "In-tree official-run recomputes the CLIP-based subset (clip_score, clip_temp_score, face_consistency_score). The other 14 metrics import from official dumps."
         ],
         "notesZh": [
           "仓内 official-run 只重算 CLIP 子集（clip_score、clip_temp_score、face_consistency_score）。其余 14 项从官方导出导入。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -3940,20 +3100,9 @@
           "primary": false,
           "leaderboardKey": "celebrity_id_score"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "http://evalcrafter.github.io",
-        "entries": []
-      }
+      ]
     },
     "ewmbench": {
-      "id": "ewmbench",
-      "name": "EWMBench",
-      "projectPage": "https://huggingface.co/datasets/agibot-world/EWMBench",
-      "paperUrl": "https://arxiv.org/abs/2505.09694",
       "dimensions": [
         {
           "id": "scene_consistency",
@@ -3993,35 +3142,13 @@
         "summaryZh": "AgiBot EWMBench：来自 AgiBot-World 生态的动作条件机器人操作视频，按场景、运动、语义与多样性打分。",
         "sizeLabel": "Official EWMBench suite",
         "sizeLabelZh": "官方 EWMBench 套件",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "agibot-world/EWMBench",
-            "license": "cc-by-nc-sa-4.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/AgibotTech/EWMBench",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "action",
-          "video",
-          "frames"
-        ],
         "license": "cc-by-nc-sa-4.0",
         "notes": [
           "WorldFoundry normalizes official result files. Full official scoring still needs upstream detector / VLM assets."
         ],
         "notesZh": [
           "WorldFoundry 归一化官方结果文件。完整官方打分仍需要上游检测器 / VLM 资源。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -4069,83 +3196,16 @@
           "primary": true,
           "leaderboardKey": "ewmbench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://huggingface.co/datasets/agibot-world/EWMBench",
-        "entries": []
-      }
+      ]
     },
     "fetv": {
-      "id": "fetv",
-      "name": "FETV",
-      "projectPage": "https://github.com/llyx97/FETV",
-      "paperUrl": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/c481049f7410f38e788f67c171c64ad5-Abstract-Datasets_and_Benchmarks.html",
-      "dimensions": [
-        {
-          "id": "major_content",
-          "name": "Major content",
-          "nameZh": "主要内容",
-          "kind": "axis",
-          "description": "What the clip depicts — the primary subject or event.",
-          "descriptionZh": "片段描绘的主要内容或事件。"
-        },
-        {
-          "id": "attribute_control",
-          "name": "Attribute control",
-          "nameZh": "属性控制",
-          "kind": "axis",
-          "description": "Whether requested attributes (color, count, style) are realized.",
-          "descriptionZh": "请求的属性（颜色、数量、风格等）是否被实现。"
-        },
-        {
-          "id": "prompt_complexity",
-          "name": "Prompt complexity",
-          "nameZh": "Prompt 复杂度",
-          "kind": "axis",
-          "description": "Simple vs compositional prompt difficulty.",
-          "descriptionZh": "简单 prompt 与组合式 prompt 的难度分层。"
-        }
-      ],
       "data": {
-        "summary": "619 prompts categorized on three orthogonal axes",
-        "summaryZh": "619 条 prompt，沿三个正交轴分类",
-        "sizeLabel": "619 prompts",
-        "sizeLabelZh": "619 条 prompt",
-        "count": 619,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "lyx97/FETV",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/llyx97/FETV-EVAL",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/llyx97/FETV",
-            "license": "cc-by-4.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "cc-by-4.0",
         "notes": [
           "CLIPScore is the bounded official component verified in tree. Human ratings and BLIP / FID / FVD need imported scores or extra assets."
         ],
         "notesZh": [
           "CLIPScore 是仓内已验证的有界官方分量。人工评分与 BLIP / FID / FVD 需要导入分数或额外资源。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -4229,20 +3289,9 @@
           "primary": true,
           "leaderboardKey": "fetv_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/llyx97/FETV",
-        "entries": []
-      }
+      ]
     },
     "genai-bench": {
-      "id": "genai-bench",
-      "name": "GenAI-Bench",
-      "projectPage": "https://github.com/TIGER-AI-Lab/GenAI-Bench",
-      "paperUrl": "https://arxiv.org/abs/2406.04485",
       "dimensions": [
         {
           "id": "image_generation",
@@ -4287,12 +3336,6 @@
             "id": "https://github.com/TIGER-AI-Lab/GenAI-Bench",
             "license": "cc-by-4.0"
           }
-        ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video",
-          "text"
         ],
         "license": "cc-by-4.0",
         "notes": [
@@ -4349,222 +3392,10 @@
           "primary": true,
           "leaderboardKey": "genai_bench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/TIGER-AI-Lab/GenAI-Bench",
-        "entries": []
-      }
-    },
-    "harnesseval-w": {
-      "id": "harnesseval-w",
-      "name": "HarnessEval-W",
-      "projectPage": "https://mirros-lab.github.io/HarnessEval-W",
-      "paperUrl": "https://arxiv.org/abs/2608.16859",
-      "dimensions": [
-        {
-          "id": "exploratory_transition",
-          "name": "Exploratory Transition",
-          "nameZh": "Exploratory Transition",
-          "kind": "track",
-          "description": "",
-          "descriptionZh": ""
-        },
-        {
-          "id": "intentional_transition",
-          "name": "Intentional Transition",
-          "nameZh": "Intentional Transition",
-          "kind": "track",
-          "description": "",
-          "descriptionZh": ""
-        },
-        {
-          "id": "physical_transition",
-          "name": "Physical Transition",
-          "nameZh": "Physical Transition",
-          "kind": "track",
-          "description": "",
-          "descriptionZh": ""
-        },
-        {
-          "id": "drift_resistance",
-          "name": "Drift Resistance",
-          "nameZh": "Drift Resistance",
-          "kind": "track",
-          "description": "",
-          "descriptionZh": ""
-        },
-        {
-          "id": "return_revisit_consistency",
-          "name": "Return Revisit Consistency",
-          "nameZh": "Return Revisit Consistency",
-          "kind": "track",
-          "description": "",
-          "descriptionZh": ""
-        },
-        {
-          "id": "offscreen_evolution",
-          "name": "Offscreen Evolution",
-          "nameZh": "Offscreen Evolution",
-          "kind": "track",
-          "description": "",
-          "descriptionZh": ""
-        }
-      ],
-      "data": {
-        "summary": "",
-        "summaryZh": "",
-        "sizeLabel": "",
-        "sizeLabelZh": "",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "MirroS-Lab/HarnessEval-W",
-            "license": "Apache-2.0 (upstream README declaration)"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/MirroS-Lab/HarnessEval-W",
-            "license": "Apache-2.0 (upstream README declaration)"
-          }
-        ],
-        "splits": [
-          "exploratory_transition",
-          "intentional_transition",
-          "physical_transition",
-          "drift_resistance",
-          "return_revisit_consistency",
-          "offscreen_evolution"
-        ],
-        "modalities": [
-          "image",
-          "video",
-          "text",
-          "action"
-        ],
-        "license": "Apache-2.0 (upstream README declaration)",
-        "notes": [],
-        "notesZh": [],
-        "notApplicable": false
-      },
-      "metrics": [
-        {
-          "id": "overall_macro",
-          "name": "Overall Macro",
-          "description": "Equal mean of all six family scores; each case combines core and observation scores at 50/50.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": true,
-          "leaderboardKey": "overall_macro"
-        },
-        {
-          "id": "overall_core_macro",
-          "name": "Overall Core Macro",
-          "description": "Official HarnessEval common-case overall core macro score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "overall_core_macro"
-        },
-        {
-          "id": "overall_observation_macro",
-          "name": "Overall Observation Macro",
-          "description": "Official HarnessEval common-case overall observation macro score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "overall_observation_macro"
-        },
-        {
-          "id": "observation_quality_macro",
-          "name": "Observation Quality Macro",
-          "description": "Official HarnessEval common-case observation quality macro score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "observation_quality_macro"
-        },
-        {
-          "id": "observation_physical_plausibility_macro",
-          "name": "Observation Physical Plausibility Macro",
-          "description": "Official HarnessEval common-case observation physical plausibility macro score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "observation_physical_plausibility_macro"
-        },
-        {
-          "id": "exploratory_transition",
-          "name": "Exploratory Transition",
-          "description": "Official HarnessEval common-case exploratory transition score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "exploratory_transition"
-        },
-        {
-          "id": "intentional_transition",
-          "name": "Intentional Transition",
-          "description": "Official HarnessEval common-case intentional transition score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "intentional_transition"
-        },
-        {
-          "id": "physical_transition",
-          "name": "Physical Transition",
-          "description": "Official HarnessEval common-case physical transition score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "physical_transition"
-        },
-        {
-          "id": "drift_resistance",
-          "name": "Drift Resistance",
-          "description": "Official HarnessEval common-case drift resistance score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "drift_resistance"
-        },
-        {
-          "id": "return_revisit_consistency",
-          "name": "Return Revisit Consistency",
-          "description": "Official HarnessEval common-case return revisit consistency score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "return_revisit_consistency"
-        },
-        {
-          "id": "offscreen_evolution",
-          "name": "Offscreen Evolution",
-          "description": "Official HarnessEval common-case offscreen evolution score.",
-          "descriptionZh": "",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "offscreen_evolution"
-        }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://mirros-lab.github.io/HarnessEval-W",
-        "entries": []
-      }
+      ]
     },
     "ipv-bench": {
-      "id": "ipv-bench",
-      "name": "IPV-Bench",
       "projectPage": "https://github.com/showlab/Impossible-Videos",
-      "paperUrl": "https://arxiv.org/abs/2503.14378",
       "dimensions": [
         {
           "id": "generation",
@@ -4588,21 +3419,6 @@
         "summaryZh": "NUS Show Lab Impossible Videos：生成并识别物理、生物、地理与社会上不可能的事件。两条赛道（IPV-Txt / IPV-Vid）。",
         "sizeLabel": "Official taxonomy (upstream repo)",
         "sizeLabelZh": "官方分类（上游仓库）",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/showlab/Impossible-Videos",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "WorldFoundry normalizes official CSV/JSON. It does not run the official judges or understanding models."
         ],
@@ -4677,17 +3493,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/showlab/Impossible-Videos",
-        "entries": []
+        "officialUrl": "https://github.com/showlab/Impossible-Videos"
       }
     },
     "iworld-bench": {
-      "id": "iworld-bench",
-      "name": "iWorld-Bench",
-      "projectPage": "https://iworld-bench.com/",
       "paperUrl": "",
       "dimensions": [
         {
@@ -4722,27 +3531,17 @@
         "sizeLabelZh": "4900 测试样本",
         "count": 4900,
         "unit": "samples",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/EmbodiedCity/iWorld-Bench",
-            "license": "Apache-2.0"
-          }
-        ],
-        "splits": [],
         "modalities": [
           "video",
           "action",
           "camera"
         ],
-        "license": "Apache-2.0",
         "notes": [
           "Bounded verified scope is one real 16-frame official memory_ability run. Full suite needs VBench assets and a CUDA ViPE build."
         ],
         "notesZh": [
           "已验证有界范围是一次真实 16 帧官方 memory_ability 运行。全套需要 VBench 资产与 CUDA ViPE 构建。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -4835,20 +3634,9 @@
           "primary": true,
           "leaderboardKey": "iworldbench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://iworld-bench.com/",
-        "entries": []
-      }
+      ]
     },
     "likephys": {
-      "id": "likephys",
-      "name": "LikePhys",
-      "projectPage": "https://yuanjianhao508.github.io/LikePhys/",
-      "paperUrl": "https://arxiv.org/abs/2510.11512",
       "dimensions": [
         {
           "id": "likelihood-probe",
@@ -4898,31 +3686,13 @@
         "sizeLabelZh": "12 个场景；920 个片段",
         "count": 920,
         "unit": "clips",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "JianhaoDYDY/LikePhys-Benchmark",
-            "license": "apache-2.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/YuanJianhao508/LikePhys",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
         "license": "apache-2.0",
         "notes": [
           "Mis-rank is an error rate (lower is better). Paper filter_config exclusions apply unless --no-report-filter is set."
         ],
         "notesZh": [
           "误排率是错误率（越低越好）。除非设置 --no-report-filter，否则应用论文 filter_config 排除规则。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -4988,20 +3758,10 @@
           "primary": false,
           "leaderboardKey": "temporal_disorder_misrank_rate"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://yuanjianhao508.github.io/LikePhys/",
-        "entries": []
-      }
+      ]
     },
     "memobench": {
-      "id": "memobench",
-      "name": "MemoBench",
       "projectPage": "https://github.com/MemoBench-Team/MemoBench",
-      "paperUrl": "",
       "dimensions": [
         {
           "id": "synthetic",
@@ -5051,31 +3811,13 @@
         "sizeLabelZh": "360 条片段",
         "count": 360,
         "unit": "clips",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/MemoBench-Team/MemoBench",
-            "license": ""
-          }
-        ],
-        "splits": [
-          "synthetic",
-          "real"
-        ],
-        "modalities": [
-          "text",
-          "image",
-          "frames",
-          "video"
-        ],
         "license": "MIT",
         "notes": [
           "WorldFoundry vendors Step 1. ORS and VQA stay external. Step 1 only is not the full suite."
         ],
         "notesZh": [
           "WorldFoundry 内置 Step 1。ORS 与 VQA 仍在外部。只跑 Step 1 不是完整套件。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -5215,18 +3957,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/MemoBench-Team/MemoBench",
-        "entries": []
+        "officialUrl": "https://github.com/MemoBench-Team/MemoBench"
       }
     },
     "mind": {
-      "id": "mind",
-      "name": "MIND",
-      "projectPage": "https://csu-jpg.github.io/MIND.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2602.08025",
       "dimensions": [
         {
           "id": "lcm",
@@ -5291,18 +4025,13 @@
         "splits": [
           "standard"
         ],
-        "modalities": [
-          "video",
-          "action"
-        ],
         "license": "MIT",
         "notes": [
           "WorldFoundry vendors the metric runtime and scores generated videos. It does not generate those videos. mind_average is a WorldFoundry aggregate — MIND publishes no official composite."
         ],
         "notesZh": [
           "WorldFoundry 内置指标 runtime，对已生成视频打分。它不生成这些视频。mind_average 是 WorldFoundry 聚合值——MIND 官方不发布综合分。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -5503,20 +4232,9 @@
           "primary": true,
           "leaderboardKey": "mind_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://csu-jpg.github.io/MIND.github.io/",
-        "entries": []
-      }
+      ]
     },
     "mirabench": {
-      "id": "mirabench",
-      "name": "MiraBench",
-      "projectPage": "https://mira-space.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2407.06358",
       "dimensions": [
         {
           "id": "temporal",
@@ -5566,18 +4284,6 @@
         "sizeLabelZh": "150 条 prompt",
         "count": 150,
         "unit": "prompts",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/mira-space/MiraData",
-            "license": "gpl-3.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
         "license": "GPL-3.0",
         "notes": [
           "WorldFoundry vendors calculate_score.py. Mock backend is wiring only. Complete upstream scorer execution is pending."
@@ -5750,20 +4456,10 @@
           "primary": true,
           "leaderboardKey": "mirabench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://mira-space.github.io/",
-        "entries": []
-      }
+      ]
     },
     "pawbench": {
-      "id": "pawbench",
-      "name": "PAWBench",
       "projectPage": "https://pawbench.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2608.27345",
       "dimensions": [
         {
           "id": "calibration",
@@ -5789,32 +4485,13 @@
         "sizeLabelZh": "50 场景 × 50 次 rollout",
         "count": 50,
         "unit": "scenes",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "Andrew613/PAWBench",
-            "license": "Apache-2.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/Andrew0613/PAWBench",
-            "license": "Apache-2.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video",
-          "text"
-        ],
         "license": "Apache-2.0",
         "notes": [
           "WorldFoundry vendors PAWEval (Gemini 3.5 Flash via OpenRouter by default). Incomplete coverage is a blocker, not a silent average."
         ],
         "notesZh": [
           "WorldFoundry 内置 PAWEval（默认 OpenRouter 上的 Gemini 3.5 Flash）。不完整覆盖是 blocker，不会静默平均。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -5837,18 +4514,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://pawbench.github.io/",
-        "entries": []
+        "officialUrl": "https://pawbench.github.io/"
       }
     },
     "phyeduvideo": {
-      "id": "phyeduvideo",
-      "name": "PhyEduVideo",
-      "projectPage": "https://meghamariamkm.github.io/phyeduvideo26/",
-      "paperUrl": "https://arxiv.org/abs/2601.00943",
       "dimensions": [
         {
           "id": "physics-education",
@@ -5914,26 +4583,12 @@
         "sizeLabelZh": "60 个概念；205 条教学点 prompt",
         "count": 205,
         "unit": "prompts",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/meghamariamkm/PhyEduVideo",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "Result files are caller-supplied. Coverage checks pair prompts to videos; they do not validate how upstream scores were produced."
         ],
         "notesZh": [
           "结果文件由调用方提供。覆盖率校验只配对 prompt 与视频，不验证上游分数如何产生。"
-        ],
-        "notApplicable": true
+        ]
       },
       "metrics": [
         {
@@ -5981,20 +4636,9 @@
           "primary": true,
           "leaderboardKey": "phyeduvideo_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://meghamariamkm.github.io/phyeduvideo26/",
-        "entries": []
-      }
+      ]
     },
     "phyfps-bench-gen": {
-      "id": "phyfps-bench-gen",
-      "name": "PhyFPS-Bench-Gen",
-      "projectPage": "",
-      "paperUrl": "",
       "dimensions": [
         {
           "id": "chronometric-audit",
@@ -6024,10 +4668,6 @@
       "data": {
         "summary": "100 prompts; one generated video per prompt named 0001.mp4 … 0100.mp4. WorldFoundry runs Visual Chronometer predict.py in tree (or imports results.csv). VC-Common checkpoint: xiangbog/Visual_Chronometer.",
         "summaryZh": "100 条 prompt；每条生成一个视频，命名 0001.mp4 … 0100.mp4。WorldFoundry 在仓内运行 Visual Chronometer predict.py（或导入 results.csv）。VC-Common 权重：xiangbog/Visual_Chronometer。",
-        "sizeLabel": "100 prompts",
-        "sizeLabelZh": "100 条 prompt",
-        "count": 100,
-        "unit": "prompts",
         "sources": [
           {
             "kind": "github",
@@ -6040,19 +4680,12 @@
             "license": ""
           }
         ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "All metrics are lower-is-better. Alignment metrics are undefined without Meta FPS."
         ],
         "notesZh": [
           "全部指标越低越好。没有 Meta FPS 时对齐指标无定义。"
-        ],
-        "notApplicable": true
+        ]
       },
       "metrics": [
         {
@@ -6102,18 +4735,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/taco-group/Visual_Chronometer",
-        "entries": []
+        "officialUrl": "https://github.com/taco-group/Visual_Chronometer"
       }
     },
     "phygenbench": {
-      "id": "phygenbench",
-      "name": "PhyGenBench",
-      "projectPage": "https://phygenbench123.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2410.05363",
       "dimensions": [
         {
           "id": "t2v-generation",
@@ -6145,28 +4770,12 @@
         "summaryZh": "160 条捆绑 T2V prompt，声称覆盖四大领域的 27 条物理定律。WorldFoundry 提供 prompts.json 与 PhyGenEval overall.py；各阶段 judge（VQAScore、GPT-4o/LLaVA、InternVideo2）不在仓内运行。",
         "sizeLabel": "160 prompts; 27 laws",
         "sizeLabelZh": "160 条 prompt；27 条定律",
-        "count": 160,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/OpenGVLab/PhyGenBench",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "Result import or prepared-stage overall.py aggregation only. Aggregation alone is not official PhyGenEval evidence."
         ],
         "notesZh": [
           "仅支持结果导入或已备 stage 的 overall.py 聚合。仅有聚合不是官方 PhyGenEval 证据。"
-        ],
-        "notApplicable": true
+        ]
       },
       "metrics": [
         {
@@ -6205,20 +4814,9 @@
           "primary": true,
           "leaderboardKey": "phygenbench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://phygenbench123.github.io/",
-        "entries": []
-      }
+      ]
     },
     "phyground": {
-      "id": "phyground",
-      "name": "PhyGround",
-      "projectPage": "https://phyground.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2605.10806",
       "dimensions": [
         {
           "id": "criteria-grounding",
@@ -6258,34 +4856,12 @@
         "summaryZh": "250 条文本+图像转视频 prompt，覆盖 13 条定律分类（固体、流体、光学）。WorldFoundry 导入 PhyJudge/人工 scores.json；不运行 PhyJudge-9B。",
         "sizeLabel": "250 prompts; 13 laws",
         "sizeLabelZh": "250 条 prompt；13 条定律",
-        "count": 250,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "NU-World-Model-Embodied-AI/phyground",
-            "license": ""
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/NU-World-Model-Embodied-AI/PhyGround",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "text",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "Judge outputs live under annotations/ or --official-results-path. Use --result-model-id when a file holds several model ids."
         ],
         "notesZh": [
           "Judge 输出在 annotations/ 或 --official-results-path。文件含多个模型 id 时用 --result-model-id。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -6351,20 +4927,9 @@
           "primary": true,
           "leaderboardKey": "phyground_overall"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://phyground.github.io/",
-        "entries": []
-      }
+      ]
     },
     "physical-ai-bench": {
-      "id": "physical-ai-bench",
-      "name": "Physical AI Bench (PAI-Bench)",
-      "projectPage": "",
-      "paperUrl": "https://arxiv.org/abs/2512.01989",
       "dimensions": [
         {
           "id": "generation",
@@ -6388,42 +4953,17 @@
         "summaryZh": "WorldFoundry 仓内 evaluator 只覆盖两条赛道：generation（shi-labs/physical-ai-bench-generation）与 conditional-generation（shi-labs/physical-ai-bench-conditional-generation，约 273 GB）。论文可能还有其他赛道，不在本 contract。未收录官方 leaderboard。",
         "sizeLabel": "2 in-tree tracks (G, C)",
         "sizeLabelZh": "仓内 2 条赛道（G、C）",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "shi-labs/physical-ai-bench-generation",
-            "license": ""
-          },
-          {
-            "kind": "huggingface",
-            "id": "shi-labs/physical-ai-bench-conditional-generation",
-            "license": ""
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/SHI-Labs/physical-ai-bench",
-            "license": ""
-          }
-        ],
-        "splits": [
-          "generation",
-          "conditional-generation"
-        ],
         "modalities": [
           "text",
           "image",
           "video"
         ],
-        "license": "",
         "notes": [
           "The contract does not mark a single primary metric. Generation and conditional-generation expose different families. Local scorecards are not SHI-Labs leaderboard submissions."
         ],
         "notesZh": [
           "contract 未指定单一主指标。生成与条件生成暴露不同指标族。本地 scorecard 不是 SHI-Labs leaderboard 提交。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -6590,18 +5130,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/SHI-Labs/physical-ai-bench",
-        "entries": []
+        "officialUrl": "https://github.com/SHI-Labs/physical-ai-bench"
       }
     },
     "physics-iq-verified": {
-      "id": "physics-iq-verified",
-      "name": "Physics-IQ Verified",
-      "projectPage": "https://physics-iq-verified.anates.ai/",
-      "paperUrl": "https://arxiv.org/abs/2606.18943",
       "dimensions": [
         {
           "id": "verified-protocol",
@@ -6679,19 +5211,12 @@
             "license": ""
           }
         ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "Do not mix Original Google Cloud Storage media into --protocol verified. physics_iq_verified_mse is the official score_mse_view (higher is better after variance normalization), not Original's physics_iq_mse_penalty."
         ],
         "notesZh": [
           "不要把 Original 的 Google Cloud Storage 媒体混进 --protocol verified。physics_iq_verified_mse 是官方 score_mse_view（方差归一化后越高越好），不是 Original 的 physics_iq_mse_penalty。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -6739,20 +5264,9 @@
           "primary": false,
           "leaderboardKey": "physics_iq_verified_mse"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://physics-iq-verified.anates.ai/",
-        "entries": []
-      }
+      ]
     },
     "physics-iq": {
-      "id": "physics-iq",
-      "name": "Physics-IQ Original",
-      "projectPage": "https://physics-iq.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2501.09038",
       "dimensions": [
         {
           "id": "solid-mechanics",
@@ -6810,22 +5324,6 @@
         "sizeLabelZh": "66 个场景；198 视频单次 contract",
         "count": 198,
         "unit": "videos",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/google-deepmind/physics-IQ-benchmark",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video"
-        ],
-        "license": "",
-        "notes": [
-          "Original reference videos and masks are officially distributed through Google Cloud Storage and prepared externally; the separate Physics-IQ Verified Hugging Face dataset is not interchangeable."
-        ],
         "notesZh": [
           "原始参考视频与 mask 经 Google Cloud Storage 分发，在仓外准备；Physics-IQ Verified 的 Hugging Face 数据集不可互换。"
         ],
@@ -6886,20 +5384,9 @@
           "primary": false,
           "leaderboardKey": "physics_iq_mse_penalty"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://physics-iq.github.io/",
-        "entries": []
-      }
+      ]
     },
     "physvidbench": {
-      "id": "physvidbench",
-      "name": "PhysVidBench",
-      "projectPage": "https://cyberiada.github.io/PhysVidBench/",
-      "paperUrl": "https://arxiv.org/abs/2507.15824",
       "dimensions": [
         {
           "id": "caption-qa",
@@ -6947,33 +5434,12 @@
         "summaryZh": "目录记录 383 条 prompt 与 4123 道问题（cc-by-4.0）。WorldFoundry 捆绑 prompts_questions.csv 与字幕轨道；导入 output.csv，或对所供字幕跑有界 Gemini QA。从你的视频生成 AuroraCap 字幕不在仓内。",
         "sizeLabel": "383 prompts; 4123 questions",
         "sizeLabelZh": "383 条 prompt；4123 道问题",
-        "count": 383,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "Anonymousny/PhysVidBench",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/ensanli/PhysVidBenchCode",
-            "license": "cc-by-4.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "cc-by-4.0",
         "notes": [
           "Gemini QA over supplied captions is not official pipeline evidence. Only upstream full-pipeline output.csv import carries official weight."
         ],
         "notesZh": [
           "对所供字幕的 Gemini QA 不是官方全流水线证据。只有导入上游全流水线 output.csv 才具官方效力。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -7030,20 +5496,10 @@
           "primary": true,
           "leaderboardKey": "physvidbench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://cyberiada.github.io/PhysVidBench/",
-        "entries": []
-      }
+      ]
     },
     "rbench": {
-      "id": "rbench",
-      "name": "RBench",
       "projectPage": "https://github.com/DAGroup-PKU/ReVidgen",
-      "paperUrl": "https://arxiv.org/abs/2601.15282",
       "dimensions": [
         {
           "id": "tasks",
@@ -7067,49 +5523,14 @@
         "summaryZh": "北大 / 字节 Seed 机器人 I2V 评测（ICML 2026）。650 条图文。VLM + GroundingDINO/SAM2/CoTracker/Q-Align 算子。CC-BY-4.0。论文报告与人类 0.96 Spearman。",
         "sizeLabel": "650 cases",
         "sizeLabelZh": "650 条样本",
-        "count": 650,
         "unit": "cases",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "DAGroup-PKU/RBench",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "huggingface",
-            "id": "DAGroup-PKU/RoVid-X",
-            "license": "cc-by-4.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/DAGroup-PKU/ReVidgen",
-            "license": ""
-          }
-        ],
-        "splits": [
-          "dual_arm",
-          "humanoid",
-          "single_arm",
-          "quad",
-          "common_manipulation",
-          "long-horizon_planning",
-          "multi-entity_collaboration",
-          "spatial_relationship",
-          "visual_reasoning"
-        ],
-        "modalities": [
-          "image",
-          "text",
-          "video"
-        ],
         "license": "CC-BY-4.0",
         "notes": [
           "WorldFoundry aggregates official eval/4_embodiments and eval/5_tasks trees. rbench_overall is a WorldFoundry composite, not a published RBench number. GPT and Qwen are never mixed."
         ],
         "notesZh": [
           "WorldFoundry 聚合官方 eval/4_embodiments 与 eval/5_tasks 树。rbench_overall 是 WorldFoundry 合成值，不是已发表数字。GPT 与 Qwen 从不混用。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -7258,18 +5679,11 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/DAGroup-PKU/ReVidgen",
-        "entries": []
+        "officialUrl": "https://github.com/DAGroup-PKU/ReVidgen"
       }
     },
     "sana-wm-bench": {
-      "id": "sana-wm-bench",
-      "name": "SANA-WM 80-Scene Benchmark",
       "projectPage": "https://github.com/NVlabs/Sana",
-      "paperUrl": "",
       "dimensions": [
         {
           "id": "simple_60s",
@@ -7293,38 +5707,13 @@
         "summaryZh": "NVIDIA SANA-WM 80 场景世界模型评测。两个划分各 80 场景，961 帧 16 FPS 轨迹。分面：VBench 质量、回访一致性、相机位姿、delta_iq。Apache-2.0。",
         "sizeLabel": "80 scenes × 2 splits",
         "sizeLabelZh": "80 场景 × 2 划分",
-        "count": 80,
-        "unit": "scenes",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "Efficient-Large-Model/SANA-WM-Bench",
-            "license": ""
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/NVlabs/Sana",
-            "license": ""
-          }
-        ],
-        "splits": [
-          "simple_60s",
-          "hard_60s"
-        ],
-        "modalities": [
-          "text",
-          "image",
-          "video",
-          "camera-trajectory"
-        ],
         "license": "Apache-2.0",
         "notes": [
           "WorldFoundry owns the evaluator and reuses resident VBench/Pi3. Full 80×2 numerical parity has not been run. Pose inference is a separate GPU stage."
         ],
         "notesZh": [
           "WorldFoundry 自研评测器并复用已有 VBench/Pi3。尚未跑 80×2 数值对齐。位姿推断是单独 GPU 阶段。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -7410,18 +5799,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/NVlabs/Sana",
-        "entries": []
+        "officialUrl": "https://github.com/NVlabs/Sana"
       }
     },
     "stevo-bench": {
-      "id": "stevo-bench",
-      "name": "STEVO-Bench",
-      "projectPage": "https://glab-caltech.github.io/STEVOBench/",
-      "paperUrl": "https://arxiv.org/abs/2603.13215",
       "dimensions": [
         {
           "id": "control",
@@ -7451,36 +5832,13 @@
       "data": {
         "summary": "Caltech GLab state-evolution-out-of-sight bench. 225 tasks across 6 world-change categories. Official judges are remote VLMs (Gemini default, ensemble size 3). MIT.",
         "summaryZh": "Caltech GLab 画外状态演化评测。6 类世界变化、225 个任务。官方裁判是远程 VLM（默认 Gemini，ensemble 3）。MIT。",
-        "sizeLabel": "225 tasks",
-        "sizeLabelZh": "225 个任务",
-        "count": 225,
-        "unit": "tasks",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "JhanLiufu/StEvo-Bench",
-            "license": "MIT"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/jhanliufu-personal/STEVO-Bench",
-            "license": "MIT"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video",
-          "text"
-        ],
         "license": "MIT",
         "notes": [
           "WorldFoundry vendors the official evaluator (pin 680fb6ee2733…). leaderboard_valid stays false until the full 225-task official ensemble is judged. No offline judge."
         ],
         "notesZh": [
           "WorldFoundry 内置官方评测器（钉选 680fb6ee2733…）。在用官方 ensemble 评完 225 个任务前 leaderboard_valid 为 false。没有离线裁判。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -7537,20 +5895,9 @@
           "primary": false,
           "leaderboardKey": "control_success"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://glab-caltech.github.io/STEVOBench/",
-        "entries": []
-      }
+      ]
     },
     "t2v-compbench": {
-      "id": "t2v-compbench",
-      "name": "T2V-CompBench",
-      "projectPage": "https://t2v-compbench-2025.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2407.14505",
       "dimensions": [
         {
           "id": "consistent_attribute_binding",
@@ -7612,35 +5959,16 @@
       "data": {
         "summary": "1,400 compositional T2V prompts: 200 per category across seven composition axes. Hugging Face also hosts 25,200 official reference videos.",
         "summaryZh": "1,400 条组合式 T2V prompt：7 个组合轴各 200 条。Hugging Face 另有 25,200 条官方参考视频。",
-        "sizeLabel": "1,400 prompts",
-        "sizeLabelZh": "1,400 条 prompt",
-        "count": 1400,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "Kaiyue/T2V-CompBench-Videos",
-            "license": "openrail"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/KaiyueSun98/T2V-CompBench",
-            "license": "unknown_pending_review"
-          }
-        ],
-        "splits": [],
         "modalities": [
           "text",
           "video"
         ],
-        "license": "unknown_pending_review",
         "notes": [
           "WorldFoundry vendors the official runtime. Full-suite average is emitted only when all seven category scores exist."
         ],
         "notesZh": [
           "WorldFoundry 内置官方 runtime。只有七个类别分齐备时才写出全套平均分。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -7715,20 +6043,9 @@
           "primary": true,
           "leaderboardKey": "t2v_compbench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://t2v-compbench-2025.github.io/",
-        "entries": []
-      }
+      ]
     },
     "t2v-safety-bench": {
-      "id": "t2v-safety-bench",
-      "name": "T2VSafetyBench",
-      "projectPage": "https://github.com/yibo-miao/T2VSafetyBench",
-      "paperUrl": "https://arxiv.org/abs/2407.05965",
       "dimensions": [
         {
           "id": "sexual_content",
@@ -7786,18 +6103,6 @@
         "sizeLabelZh": "14 个 prompt 类",
         "count": 14,
         "unit": "prompt classes",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/yibo-miao/T2VSafetyBench",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
         "license": "upstream_terms",
         "notes": [
           "No Hugging Face dataset is required. Judge mode needs a GPT key; import mode only normalizes official result files."
@@ -7925,20 +6230,10 @@
           "primary": true,
           "leaderboardKey": "nsfw_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/yibo-miao/T2VSafetyBench",
-        "entries": []
-      }
+      ]
     },
     "t2vworldbench": {
-      "id": "t2vworldbench",
-      "name": "T2VWorldBench",
       "projectPage": "https://github.com/magiclinux/world_knowledge",
-      "paperUrl": "https://arxiv.org/abs/2507.18107",
       "dimensions": [
         {
           "id": "physics",
@@ -7992,23 +6287,7 @@
       "data": {
         "summary": "WACV 2026 world-knowledge T2V bench: 6 categories, 60 subcategories, 1,200 prompts. Prompt CSV is vendored; full metadata/sample videos are Drive-hosted.",
         "summaryZh": "WACV 2026 世界知识 T2V 评测：6 大类、60 子类、1200 条 prompt。Prompt CSV 已内置；完整元数据/样例视频在 Drive。",
-        "sizeLabel": "1,200 prompts",
         "sizeLabelZh": "1200 条 prompt",
-        "count": 1200,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/magiclinux/world_knowledge",
-            "license": "unknown_pending_review"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "unknown_pending_review",
         "notes": [
           "WorldFoundry normalizes official result fields. Full raw-video/VLM evaluation (LLaVA + Drive assets) is pending."
         ],
@@ -8083,18 +6362,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/magiclinux/world_knowledge",
-        "entries": []
+        "officialUrl": "https://github.com/magiclinux/world_knowledge"
       }
     },
     "vbench-2.0": {
-      "id": "vbench-2.0",
-      "name": "VBench-2.0",
-      "projectPage": "https://vchitect.github.io/VBench-2.0-project/",
-      "paperUrl": "https://arxiv.org/abs/2503.21755",
       "dimensions": [
         {
           "id": "creativity",
@@ -8144,41 +6415,16 @@
         "sizeLabelZh": "18 项能力 / 五柱",
         "count": 18,
         "unit": "abilities",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "Vchitect/VBench-2.0_sampled_videos",
-            "license": "unknown_pending_review"
-          },
-          {
-            "kind": "huggingface",
-            "id": "Vchitect/VBench-2.0_human_annotation",
-            "license": "unknown_pending_review"
-          },
-          {
-            "kind": "huggingface",
-            "id": "Vchitect/VBench-2.0_human_anomaly",
-            "license": "unknown_pending_review"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/Vchitect/VBench",
-            "license": "unknown_pending_review"
-          }
-        ],
-        "splits": [],
         "modalities": [
           "text",
           "generated-video"
         ],
-        "license": "unknown_pending_review",
         "notes": [
           "WorldFoundry vendors the VBench-2.0 runtime and writes coverage manifests. A bounded diversity component is verified; the full suite is not."
         ],
         "notesZh": [
           "WorldFoundry 内置 VBench-2.0 runtime 并写出覆盖清单。有界 diversity 组件已验证；全套未验证。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -8235,20 +6481,9 @@
           "primary": true,
           "leaderboardKey": "total score"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://vchitect.github.io/VBench-2.0-project/",
-        "entries": []
-      }
+      ]
     },
     "vbench-plus-plus": {
-      "id": "vbench-plus-plus",
-      "name": "VBench++",
-      "projectPage": "https://vchitect.github.io/VBench-project/",
-      "paperUrl": "https://arxiv.org/abs/2411.13503",
       "dimensions": [
         {
           "id": "i2v",
@@ -8282,15 +6517,6 @@
         "sizeLabelZh": "三条赛道",
         "count": 3,
         "unit": "tracks",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/Vchitect/VBench",
-            "license": "apache-2.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [],
         "license": "Apache-2.0",
         "notes": [
           "WorldFoundry vendors the VBench++ runtime. A bounded long-video component is verified; the complete suite is not."
@@ -8337,46 +6563,9 @@
           "primary": true,
           "leaderboardKey": "vbench_plus_plus_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://vchitect.github.io/VBench-project/",
-        "entries": []
-      }
+      ]
     },
     "vbench": {
-      "id": "vbench",
-      "name": "VBench",
-      "projectPage": "https://vchitect.github.io/VBench-project/",
-      "paperUrl": "https://arxiv.org/abs/2311.17982",
-      "dimensions": [
-        {
-          "id": "temporal_quality",
-          "name": "Temporal quality",
-          "nameZh": "时间质量",
-          "kind": "axis",
-          "description": "Subject/background consistency, flicker, motion smoothness, dynamic degree.",
-          "descriptionZh": "主体/背景一致性、闪烁、运动平滑与动态程度。"
-        },
-        {
-          "id": "frame_quality",
-          "name": "Frame quality",
-          "nameZh": "帧质量",
-          "kind": "axis",
-          "description": "Aesthetic quality and imaging quality.",
-          "descriptionZh": "美学质量与成像质量。"
-        },
-        {
-          "id": "semantics",
-          "name": "Semantics / text alignment",
-          "nameZh": "语义 / 文本对齐",
-          "kind": "axis",
-          "description": "Object class, multiple objects, human action, color, spatial relationship, scene, appearance/temporal style, overall consistency.",
-          "descriptionZh": "物体类别、多物体、人体动作、颜色、空间关系、场景、外观/时间风格与整体一致性。"
-        }
-      ],
       "data": {
         "summary": "Official VBench_full_info.json: 946 prompt rows across 16 dimensions. vbench_standard expects five samples per prompt named {prompt}-{index}.mp4.",
         "summaryZh": "官方 VBench_full_info.json：16 个维度共 946 条 prompt 行。vbench_standard 要求每条 prompt 5 个样本，命名为 {prompt}-{index}.mp4。",
@@ -8384,19 +6573,6 @@
         "sizeLabelZh": "946 条 prompt 行 · 16 维",
         "count": 946,
         "unit": "prompt rows",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/Vchitect/VBench",
-            "license": "apache-2.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "apache-2.0",
         "notes": [
           "WorldFoundry vendors the official runtime. Bounded GPU validation covers aesthetic_quality only. No public Hugging Face dataset is required."
         ],
@@ -8586,20 +6762,9 @@
           "primary": false,
           "leaderboardKey": "overall_consistency"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://vchitect.github.io/VBench-project/",
-        "entries": []
-      }
+      ]
     },
     "video-bench": {
-      "id": "video-bench",
-      "name": "Video-Bench",
-      "projectPage": "https://github.com/Video-Bench/Video-Bench",
-      "paperUrl": "https://arxiv.org/abs/2504.04907",
       "dimensions": [
         {
           "id": "quality",
@@ -8623,35 +6788,13 @@
         "summaryZh": "CVPR 2025 对齐人类偏好的 MLLM 视频评测。GPT-4o 少样本 / chain-of-query 裁判。人类标注已发布；官方视频需申请。Apache-2.0。",
         "sizeLabel": "Official annotation + gated videos",
         "sizeLabelZh": "官方标注 + 需申请视频",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "Video-Bench/Video-Bench_human_annotation",
-            "license": "apache-2.0"
-          },
-          {
-            "kind": "huggingface",
-            "id": "Video-Bench/Video-Bench_videos",
-            "license": "apache-2.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/Video-Bench/Video-Bench",
-            "license": "apache-2.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [],
         "license": "Apache-2.0",
         "notes": [
           "WorldFoundry vendors the runtime and wraps evaluate.py. Credential-gated path is present; no credentialed release run is claimed."
         ],
         "notesZh": [
           "WorldFoundry 内置 runtime 并封装 evaluate.py。凭证门控路径存在；不声称已做带凭证的发布运行。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -8744,20 +6887,9 @@
           "primary": true,
           "leaderboardKey": "overall_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/Video-Bench/Video-Bench",
-        "entries": []
-      }
+      ]
     },
     "videophy": {
-      "id": "videophy",
-      "name": "VideoPhy",
-      "projectPage": "https://videophy.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2406.03520",
       "dimensions": [
         {
           "id": "sa",
@@ -8791,19 +6923,6 @@
         "sizeLabelZh": "688 条 prompt",
         "count": 688,
         "unit": "prompts",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/Hritikbansal/videophy",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "VideoCon-Physics checkpoint is caller-supplied, not vendored."
         ],
@@ -8849,20 +6968,9 @@
           "primary": true,
           "leaderboardKey": "videophy_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://videophy.github.io/",
-        "entries": []
-      }
+      ]
     },
     "videophy2": {
-      "id": "videophy2",
-      "name": "VideoPhy2",
-      "projectPage": "https://videophy2.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2503.06800",
       "dimensions": [
         {
           "id": "actions",
@@ -8888,36 +6996,13 @@
         "sizeLabelZh": "200 个动作",
         "count": 200,
         "unit": "actions",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "videophysics/videophy2_test",
-            "license": "mit"
-          },
-          {
-            "kind": "huggingface",
-            "id": "videophysics/videophy2_train",
-            "license": "mit"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/Hritikbansal/videophy",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
         "license": "MIT",
         "notes": [
           "AutoEval base + optional LoRA checkpoints are caller-supplied."
         ],
         "notesZh": [
           "AutoEval 基座与可选 LoRA 权重要调用方提供。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -8956,20 +7041,10 @@
           "primary": false,
           "leaderboardKey": "rule_followed_rate"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://videophy2.github.io/",
-        "entries": []
-      }
+      ]
     },
     "videoscience-bench": {
-      "id": "videoscience-bench",
-      "name": "VideoScience-Bench",
       "projectPage": "https://huggingface.co/spaces/lmgame/videoscience-bench",
-      "paperUrl": "https://arxiv.org/abs/2512.02942",
       "dimensions": [
         {
           "id": "prompt_consistency",
@@ -9017,21 +7092,6 @@
         "summaryZh": "UCSD Hao AI Lab 科学理解 T2V 评测。五维 1–4 量表；官方加权总分归一化为 videoscience_average。目录状态：experimental。",
         "sizeLabel": "Experiment-grounded prompt suite",
         "sizeLabelZh": "实验接地的 prompt 套件",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/hao-ai-lab/VideoScience",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
-        "license": "",
         "notes": [
           "WorldFoundry wires the VLM judge and normalizes official files. No complete credentialed upstream run is claimed."
         ],
@@ -9097,18 +7157,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://huggingface.co/spaces/lmgame/videoscience-bench",
-        "entries": []
+        "officialUrl": "https://huggingface.co/spaces/lmgame/videoscience-bench"
       }
     },
     "videoscore": {
-      "id": "videoscore",
-      "name": "VideoScore",
-      "projectPage": "https://tiger-ai-lab.github.io/VideoScore/",
-      "paperUrl": "https://arxiv.org/abs/2406.15252",
       "dimensions": [
         {
           "id": "reward",
@@ -9134,33 +7186,13 @@
         "sizeLabelZh": "3.76 万条 VideoFeedback 视频",
         "count": 37600,
         "unit": "videos",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "TIGER-Lab/VideoFeedback",
-            "license": "apache-2.0"
-          },
-          {
-            "kind": "huggingface",
-            "id": "TIGER-Lab/VideoScore-Bench",
-            "license": "apache-2.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/TIGER-AI-Lab/VideoScore",
-            "license": "mit"
-          }
-        ],
-        "splits": [],
-        "modalities": [],
         "license": "MIT",
         "notes": [
           "A bounded official scorer GPU run is verified. SPCC/pairwise full-suite parity is not."
         ],
         "notesZh": [
           "有界官方打分器 GPU 运行已验证。SPCC/成对全套对齐未验证。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -9217,20 +7249,9 @@
           "primary": true,
           "leaderboardKey": "videoscore_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://tiger-ai-lab.github.io/VideoScore/",
-        "entries": []
-      }
+      ]
     },
     "videoverse": {
-      "id": "videoverse",
-      "name": "VideoVerse",
-      "projectPage": "https://www.naptmn.cn/Homepage_of_VideoVerse/",
-      "paperUrl": "https://arxiv.org/abs/2510.08398",
       "dimensions": [
         {
           "id": "events",
@@ -9244,35 +7265,13 @@
       "data": {
         "summary": "OPPO 300-prompt world-model T2V bench. Event-LCS plus per-question verification. Prompt manifests bundled. Apache-2.0.",
         "summaryZh": "OPPO 300 prompt 世界模型 T2V 评测。事件 LCS 加逐题核验。Prompt 清单已捆绑。Apache-2.0。",
-        "sizeLabel": "300 prompts",
-        "sizeLabelZh": "300 条 prompt",
-        "count": 300,
-        "unit": "prompts",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "NNaptmn/VideoVerse",
-            "license": "apache-2.0"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/Zeqing-Wang/VideoVerse",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video"
-        ],
         "license": "Apache-2.0",
         "notes": [
           "WorldFoundry runs Gemini/URL/local VLM judges. Official path is integrated; a full credentialed suite is not release-verified."
         ],
         "notesZh": [
           "WorldFoundry 可跑 Gemini/URL/本地 VLM 裁判。官方路径已接入；带凭证的完整套件未做发布级验证。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -9338,20 +7337,10 @@
           "primary": true,
           "leaderboardKey": "videoverse_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://www.naptmn.cn/Homepage_of_VideoVerse/",
-        "entries": []
-      }
+      ]
     },
     "visual-chronometer": {
-      "id": "visual-chronometer",
-      "name": "Visual Chronometer",
       "projectPage": "https://github.com/taco-group/Visual_Chronometer",
-      "paperUrl": "",
       "dimensions": [
         {
           "id": "phyfps",
@@ -9367,20 +7356,6 @@
         "summaryZh": "TACO 的任意视频 PhyFPS 预测器（不是固定 prompt 套件）。发布的 VC-Common 权重覆盖 10–60 FPS。与 PhyFPS-Bench-Gen 共用 runtime。",
         "sizeLabel": "Arbitrary video directory",
         "sizeLabelZh": "任意视频目录",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/taco-group/Visual_Chronometer",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "video"
-        ],
-        "license": "",
         "notes": [
           "Runtime/normalizer surfaces exist; no release-verified full official run is claimed. Mock backends are wiring-only."
         ],
@@ -9428,18 +7403,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/taco-group/Visual_Chronometer",
-        "entries": []
+        "officialUrl": "https://github.com/taco-group/Visual_Chronometer"
       }
     },
     "vmbench": {
-      "id": "vmbench",
-      "name": "VMBench",
-      "projectPage": "https://amap-ml.github.io/VMBench-Website/",
-      "paperUrl": "https://openaccess.thecvf.com/content/ICCV2025/html/Ling_VMBench_A_Benchmark_for_Perception-Aligned_Video_Motion_Generation_ICCV_2025_paper.html",
       "dimensions": [
         {
           "id": "pas",
@@ -9489,15 +7456,6 @@
         "sizeLabelZh": "1050 条 prompt",
         "count": 1050,
         "unit": "prompts",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/AMAP-ML/VMBench",
-            "license": "apache-2.0"
-          }
-        ],
-        "splits": [],
-        "modalities": [],
         "license": "Apache-2.0",
         "notes": [
           "In-tree prompt bundle is the tracked source. Result/runtime wiring is present; full CUDA recomputation (MMDetection/MMPose/DeepSpeed) is unverified."
@@ -9562,20 +7520,9 @@
           "primary": true,
           "leaderboardKey": "Avg"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://amap-ml.github.io/VMBench-Website/",
-        "entries": []
-      }
+      ]
     },
     "wbench": {
-      "id": "wbench",
-      "name": "WBench",
-      "projectPage": "https://meituan-longcat.github.io/WBench/",
-      "paperUrl": "https://arxiv.org/abs/2605.25874",
       "dimensions": [
         {
           "id": "quality",
@@ -9625,37 +7572,12 @@
         "sizeLabelZh": "289 例多轮协议",
         "count": 289,
         "unit": "cases",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "meituan-longcat/WBench",
-            "license": ""
-          },
-          {
-            "kind": "huggingface",
-            "id": "meituan-longcat/WBench-examples",
-            "license": ""
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/meituan-longcat/WBench",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video",
-          "action"
-        ],
-        "license": "",
         "notes": [
           "A real single-video temporal_flickering component is verified. The 289-case multi-turn protocol is not."
         ],
         "notesZh": [
           "真实单视频 temporal_flickering 组件已验证。289 例多轮协议未验证。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -9910,20 +7832,9 @@
           "primary": true,
           "leaderboardKey": "wbench_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://meituan-longcat.github.io/WBench/",
-        "entries": []
-      }
+      ]
     },
     "world-in-world": {
-      "id": "world-in-world",
-      "name": "World-in-World",
-      "projectPage": "https://world-in-world.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2510.18135",
       "dimensions": [
         {
           "id": "ar",
@@ -9965,20 +7876,6 @@
         "sizeLabelZh": "4 个闭环环境",
         "count": 4,
         "unit": "environments",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/World-In-World/world-in-world",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "video",
-          "action",
-          "observation"
-        ],
-        "license": "",
         "notes": [
           "WorldFoundry imports task summaries only. Closed-loop runtime parity is pending."
         ],
@@ -10060,20 +7957,9 @@
           "primary": true,
           "leaderboardKey": "world_in_world_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://world-in-world.github.io/",
-        "entries": []
-      }
+      ]
     },
     "worldarena": {
-      "id": "worldarena",
-      "name": "WorldArena",
-      "projectPage": "https://world-arena.ai/",
-      "paperUrl": "https://arxiv.org/abs/2602.08971",
       "dimensions": [
         {
           "id": "perceptual",
@@ -10097,22 +7983,6 @@
         "summaryZh": "清华 FIB Lab 具身世界模型评测。与 OpenEnvision WorldAtlas Arena（worldatlas-arena）不同。主键 ewm_score。",
         "sizeLabel": "Perceptual + functional tracks",
         "sizeLabelZh": "感知 + 功能赛道",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/tsinghua-fib-lab/WorldArena",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "video",
-          "action"
-        ],
-        "license": "",
         "notes": [
           "One real prepared-data PSNR component is verified. Full Track 1 and embodied tracks are not."
         ],
@@ -10221,20 +8091,10 @@
           "primary": true,
           "leaderboardKey": "ewm_score"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://world-arena.ai/",
-        "entries": []
-      }
+      ]
     },
     "worldatlas-arena": {
-      "id": "worldatlas-arena",
-      "name": "WorldArena (WorldAtlas Arena)",
       "projectPage": "https://github.com/OpenEnvision/WorldArena",
-      "paperUrl": "",
       "dimensions": [
         {
           "id": "long_sequence",
@@ -10292,21 +8152,6 @@
         "sizeLabelZh": "六轴向量（无合并标量）",
         "count": 6,
         "unit": "axes",
-        "sources": [
-          {
-            "kind": "github",
-            "id": "https://github.com/OpenEnvision/WorldArena",
-            "license": "MIT"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video",
-          "text",
-          "camera-pose",
-          "action"
-        ],
         "license": "",
         "notes": [
           "Existing summaries normalize on CPU. Full-suite metric execution is not verified. Do not invent a combined official average."
@@ -10373,18 +8218,10 @@
         }
       ],
       "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://github.com/OpenEnvision/WorldArena",
-        "entries": []
+        "officialUrl": "https://github.com/OpenEnvision/WorldArena"
       }
     },
     "worldbench": {
-      "id": "worldbench",
-      "name": "WorldBench",
-      "projectPage": "https://world-bench.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2601.21282",
       "dimensions": [
         {
           "id": "video",
@@ -10410,23 +8247,13 @@
         "sizeLabelZh": "宣称 425 场景 / HF 上 375",
         "count": 425,
         "unit": "scenes",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "worldbenchmark/IntuitivePhysics",
-            "license": ""
-          }
-        ],
-        "splits": [],
-        "modalities": [],
         "license": "not_provided",
         "notes": [
           "In-tree runner exists, but runtime environments record no confirmed redistributable official raw-video evaluator. official-run from videos is not a release claim."
         ],
         "notesZh": [
           "仓内 runner 存在，但运行时环境记录没有确认可再分发的官方原始视频评测器。从视频做 official-run 不是发布声明。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -10483,20 +8310,9 @@
           "primary": false,
           "leaderboardKey": "binary_accuracy"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://world-bench.github.io/",
-        "entries": []
-      }
+      ]
     },
     "worldmodelbench": {
-      "id": "worldmodelbench",
-      "name": "WorldModelBench",
-      "projectPage": "https://worldmodelbench-team.github.io/",
-      "paperUrl": "https://arxiv.org/abs/2502.20694",
       "dimensions": [
         {
           "id": "instruction",
@@ -10530,32 +8346,12 @@
         "sizeLabelZh": "350 条实例",
         "count": 350,
         "unit": "instances",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "Efficient-Large-Model/worldmodelbench",
-            "license": "unknown_pending_review"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/WorldModelBench-Team/WorldModelBench",
-            "license": "unknown_pending_review"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "text",
-          "image",
-          "video"
-        ],
-        "license": "unknown_pending_review",
         "notes": [
           "Result import and manifest coverage checks are verified. Full judge-checkpoint execution is not."
         ],
         "notesZh": [
           "结果导入与清单覆盖检查已验证。完整裁判权重执行未验证。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -10594,20 +8390,9 @@
           "primary": true,
           "leaderboardKey": "world_model_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://worldmodelbench-team.github.io/",
-        "entries": []
-      }
+      ]
     },
     "worldolympiad": {
-      "id": "worldolympiad",
-      "name": "WorldOlympiad",
-      "projectPage": "https://alibaba-damo-academy.github.io/WorldOlympiad",
-      "paperUrl": "https://arxiv.org/abs/2606.11129",
       "dimensions": [
         {
           "id": "physical",
@@ -10641,37 +8426,13 @@
         "sizeLabelZh": "1000 视频划分（此处未计分）",
         "count": 1000,
         "unit": "videos",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "ziplab/WorldOlympiad",
-            "license": "No published upstream license"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/alibaba-damo-academy/WorldOlympiad",
-            "license": "No published upstream license"
-          }
-        ],
-        "splits": [
-          "general",
-          "gaming",
-          "embodied"
-        ],
-        "modalities": [
-          "text",
-          "image",
-          "video",
-          "action"
-        ],
         "license": "unlicensed_upstream",
         "notes": [
           "In-tree batch plan (--run-official --dry-run) and judge-output normalization are verified. No scored triathlon run is claimed."
         ],
         "notesZh": [
           "仓内批量计划（--run-official --dry-run）与裁判输出归一化已验证。不声称已做计分三项赛。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -10827,20 +8588,9 @@
           "primary": false,
           "leaderboardKey": "clip_semantic_adherence"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://alibaba-damo-academy.github.io/WorldOlympiad",
-        "entries": []
-      }
+      ]
     },
     "worldreasonbench": {
-      "id": "worldreasonbench",
-      "name": "WorldReasonBench",
-      "projectPage": "https://unix-ai-lab.github.io/WorldReasonBench/",
-      "paperUrl": "https://arxiv.org/abs/2605.10434",
       "dimensions": [
         {
           "id": "prv",
@@ -10874,32 +8624,13 @@
         "sizeLabelZh": "436 例",
         "count": 436,
         "unit": "cases",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "WorldReasonBench",
-            "license": "Restricted; see upstream terms"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/UniX-AI-Lab/WorldReasonBench",
-            "license": "Restricted; see upstream terms"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video",
-          "text"
-        ],
         "license": "restricted_noncommercial",
         "notes": [
           "Result normalization/QA component code exists. No complete official judge run is claimed."
         ],
         "notesZh": [
           "结果归一化/QA 组件代码存在。不声称已完成完整官方裁判运行。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -11055,20 +8786,9 @@
           "primary": false,
           "leaderboardKey": "pairwise_accuracy_without_ties"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://unix-ai-lab.github.io/WorldReasonBench/",
-        "entries": []
-      }
+      ]
     },
     "worldscore": {
-      "id": "worldscore",
-      "name": "WorldScore",
-      "projectPage": "https://haoyi-duan.github.io/WorldScore/",
-      "paperUrl": "https://arxiv.org/abs/2504.00983",
       "dimensions": [
         {
           "id": "controllability",
@@ -11100,35 +8820,13 @@
         "summaryZh": "斯坦福统一世界生成评测。起始场景 + 相机指定布局指令。数据 Howieeeee/WorldScore（MIT），修订 42c4e267e1cc0529af1b0284ce018e04d43906e3。",
         "sizeLabel": "Howieeeee/WorldScore",
         "sizeLabelZh": "Howieeeee/WorldScore",
-        "count": null,
-        "unit": "",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "Howieeeee/WorldScore",
-            "license": "mit"
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/haoyi-duan/WorldScore",
-            "license": "mit"
-          }
-        ],
-        "splits": [],
-        "modalities": [
-          "image",
-          "video",
-          "3d",
-          "4d"
-        ],
         "license": "MIT",
         "notes": [
           "A bounded dynamic component is verified. Full metric-tree execution (DROID/lietorch, GroundingDINO, SAM, flow, Mamba) is not."
         ],
         "notesZh": [
           "有界动态组件已验证。完整指标树执行（DROID/lietorch、GroundingDINO、SAM、光流、Mamba）未验证。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -11167,20 +8865,9 @@
           "primary": true,
           "leaderboardKey": "worldscore_average"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://haoyi-duan.github.io/WorldScore/",
-        "entries": []
-      }
+      ]
     },
     "wrbench": {
-      "id": "wrbench",
-      "name": "WRBench",
-      "projectPage": "https://jinplu.github.io/WRBench/",
-      "paperUrl": "https://arxiv.org/abs/2606.20545",
       "dimensions": [
         {
           "id": "d1",
@@ -11228,47 +8915,13 @@
         "summaryZh": "中科大 / X-Humanoid 持久状态评测。Natural-25：500 条相机控制请求。D1–D6 分层链。数据 WRBench/wrbench-natural25。",
         "sizeLabel": "Natural-25 / 500 requests",
         "sizeLabelZh": "Natural-25 / 500 条请求",
-        "count": 500,
         "unit": "requests",
-        "sources": [
-          {
-            "kind": "huggingface",
-            "id": "WRBench/wrbench-natural25",
-            "license": ""
-          },
-          {
-            "kind": "huggingface",
-            "id": "WRBench/wrbench-results",
-            "license": ""
-          },
-          {
-            "kind": "huggingface",
-            "id": "WRBench/wrbench-videos",
-            "license": ""
-          },
-          {
-            "kind": "github",
-            "id": "https://github.com/JinPLu/WRBench",
-            "license": ""
-          }
-        ],
-        "splits": [
-          "natural25"
-        ],
-        "modalities": [
-          "text",
-          "image",
-          "video",
-          "camera-trajectory"
-        ],
-        "license": "",
         "notes": [
           "Natural-25 request materialization and result normalization are available. Full D1–D6 execution (VGGT-Omega, DINOv2, Qwen3.5, Qwen3-VL) is unverified."
         ],
         "notesZh": [
           "Natural-25 请求物化与结果归一化可用。完整 D1–D6 执行（VGGT-Omega、DINOv2、Qwen3.5、Qwen3-VL）未验证。"
-        ],
-        "notApplicable": false
+        ]
       },
       "metrics": [
         {
@@ -11352,14 +9005,7 @@
           "primary": true,
           "leaderboardKey": "Avg"
         }
-      ],
-      "leaderboard": {
-        "ingested": false,
-        "source": "",
-        "sourceZh": "",
-        "officialUrl": "https://jinplu.github.io/WRBench/",
-        "entries": []
-      }
+      ]
     }
   }
 }
