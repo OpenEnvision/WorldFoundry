@@ -127,6 +127,10 @@ def batch_nearest_dot(src_dirs, query_dirs, batch=8192):
 
 def fill_mask_from_contour(mask):
     mask_np = mask.squeeze(0).cpu().numpy().astype(np.uint8)
+    # A uniform mask has no contour. Preserve its occupancy instead of
+    # turning a fully conditioned panorama into an all-inpaint request.
+    if mask_np.all() or not mask_np.any():
+        return torch.from_numpy(mask_np.copy())
     contours = measure.find_contours(mask_np, fully_connected="high")
     filled = np.zeros_like(mask_np, dtype=np.uint8)
     for contour in contours:

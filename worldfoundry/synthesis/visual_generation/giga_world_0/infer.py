@@ -131,13 +131,23 @@ def _local_text_encoder(model_dir: Path, *, device, dtype, max_length: int):
 
 
 def _condition_image(path: Path, *, height: int, width: int):
-    from PIL import Image, ImageOps
+    from PIL import Image
 
-    return ImageOps.fit(
-        Image.open(path).convert("RGB"),
-        (width, height),
-        method=Image.Resampling.LANCZOS,
-    )
+    image = Image.open(path).convert("RGB")
+    image_width, image_height = image.size
+    # Match the official scripts/inference.py resize followed by center crop.
+    # ImageOps.fit uses Lanczos by default and changes the released GR1 inputs.
+    if height / image_height < width / image_width:
+        resized_width = width
+        resized_height = round(width / image_width * image_height)
+    else:
+        resized_height = height
+        resized_width = round(height / image_height * image_width)
+    left = (resized_width - width) // 2
+    top = (resized_height - height) // 2
+    return image.resize(
+        (resized_width, resized_height), resample=Image.Resampling.BILINEAR
+    ).crop((left, top, left + width, top + height))
 
 
 def run(args: argparse.Namespace) -> Path:

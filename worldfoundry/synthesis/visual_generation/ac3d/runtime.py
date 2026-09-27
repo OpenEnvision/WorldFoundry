@@ -14,7 +14,7 @@ import imageio.v3 as iio
 import numpy as np
 
 from worldfoundry.core.io import file_sha256
-from worldfoundry.core.io.paths import checkpoint_root_path
+from worldfoundry.core.io.paths import checkpoint_root_candidates
 from worldfoundry.core.io.video import materialize_video_input
 
 DEFAULT_AC3D_REPO_ID = "snap-research/ac3d"
@@ -38,7 +38,7 @@ def _local_repo_candidates() -> tuple[Path, ...]:
 
 
 def _ckpt_root_candidates() -> tuple[Path, ...]:
-    return (checkpoint_root_path("ac3d", specific_env="WORLDFOUNDRY_AC3D_CKPT_ROOT"),)
+    return checkpoint_root_candidates("ac3d", specific_env="WORLDFOUNDRY_AC3D_CKPT_ROOT")
 
 
 def _base_model_candidates(variant: str) -> tuple[Path, ...]:
@@ -46,7 +46,8 @@ def _base_model_candidates(variant: str) -> tuple[Path, ...]:
     values = [
         os.environ.get("WORLDFOUNDRY_AC3D_BASE_MODEL_PATH"),
         os.environ.get("WORLDFOUNDRY_COGVIDEOX_ROOT") and str(Path(os.environ["WORLDFOUNDRY_COGVIDEOX_ROOT"]) / name),
-        str(checkpoint_root_path(name)),
+        *(str(path) for path in checkpoint_root_candidates(name)),
+        *(str(path) for path in checkpoint_root_candidates(f"THUDM--{name}")),
     ]
     return tuple(Path(value).expanduser() for value in values if value)
 
@@ -388,18 +389,20 @@ class AC3DRuntime:
 
     def runtime_plan(self, **overrides: Any) -> dict[str, Any]:
         options = {**self.defaults, **overrides}
+        runtime_root_exists = Path(self.runtime_root).is_dir()
+        controlnet_model_exists = Path(self.controlnet_model_path).is_file()
         return {
-            "status": "prepared",
+            "status": "prepared" if runtime_root_exists and controlnet_model_exists else "blocked",
             "backend": "official_ac3d_in_tree_runtime",
             "backend_quality": "official_in_tree_runtime",
             "model_id": self.model_id,
             "variant": self.variant,
             "runtime_root": self.runtime_root,
-            "runtime_root_exists": Path(self.runtime_root).is_dir(),
+            "runtime_root_exists": runtime_root_exists,
             "base_model_path": self.base_model_path,
             "base_model_exists": Path(self.base_model_path).exists(),
             "controlnet_model_path": self.controlnet_model_path,
-            "controlnet_model_exists": Path(self.controlnet_model_path).is_file(),
+            "controlnet_model_exists": controlnet_model_exists,
             "video_root_dir": str(options.get("video_root_dir") or ""),
             "annotation_json": str(options.get("annotation_json") or self.defaults["annotation_json"]),
             "python_executable": self.python_executable,

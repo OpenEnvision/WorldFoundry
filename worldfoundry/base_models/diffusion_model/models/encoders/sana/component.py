@@ -34,7 +34,7 @@ SANA_PROMPT_PREFIX = "\n".join(
         '- User Prompt: A cat sleeping -> Enhanced: A small, fluffy white cat curled up in a round shape, sleeping peacefully on a warm sunny windowsill, surrounded by pots of blooming red flowers.',
         '- User Prompt: A busy city street -> Enhanced: A bustling city street scene at dusk, featuring glowing street lamps, a diverse crowd of people in colorful clothing, and a double-decker bus passing by towering glass skyscrapers.',
         'Please generate only the enhanced description for the prompt below and avoid including any additional commentary or evaluations:',
-        'User Prompt:',
+        'User Prompt: ',
     )
 )
 

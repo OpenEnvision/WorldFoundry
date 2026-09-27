@@ -19,6 +19,8 @@ SANA-WM 是基于英伟达高效 Sana 架构的世界模型：两阶段设计（
 
 用 `sana-wm-streaming` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
 
+相机动作遵循当前官方 SANA-WM 控制约定：`w/s` 前进/后退，`a/d` 向左/右转头，`j/l` 向左/右平移，`i/k` 向上/下俯仰。持续按键的默认速度为每帧 0.025 个单位和 0.6°，松键后逐渐减速。首图之后的每个过渡帧提供一个动作，也可直接传入 `camera_to_world` 位姿。
+
 SANA-WM 复用规范的 Sana 网络、编码器、自编码器、调度器与配方角色——不再保留模态自有的 Sana 运行时（论文 arXiv 2605.15178，apache-2.0）。交互 pipeline 保持两阶段模型常驻，以原生 8k+1 时间窗口推进；质量档案保持双向阶段与 LTX-2 精修器开启。该模型由英伟达（NVIDIA）发布。
 
 catalog 记录的任务包括 世界模型、相机可控视频、controllable-world-generation。别名包括 `sana world model`、`sana-wm-2.6b`、`sana-wm-streaming`、`Efficient-Large-Model/SANA-WM_streaming`。

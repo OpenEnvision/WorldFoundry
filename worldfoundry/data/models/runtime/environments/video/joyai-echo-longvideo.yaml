@@ -13,6 +13,7 @@ pip_packages:
 - torch==2.8.0
 - torchvision==0.23.0
 - torchaudio==2.8.0
+- torchcodec==0.7.0
 - triton==3.4.0
 - transformers==4.57.6
 - peft==0.17.1
@@ -30,6 +31,7 @@ validation_imports:
 - torch
 - torchvision
 - torchaudio
+- torchcodec
 - transformers
 - accelerate
 - safetensors
@@ -37,5 +39,6 @@ validation_imports:
 - av
 notes:
 - Pins mirror the upstream Echo-LongVideo Python 3.11 / CUDA 12.8 reference environment.
+- TorchAudio 2.8 media writing uses TorchCodec; its 0.7 release matches PyTorch 2.8 and requires shared FFmpeg libraries from the conda ffmpeg package.
 - FP4 additionally requires the optional requirements-fp4.txt NVIDIA ModelOpt dependency.
 - Production voice-memory extraction additionally requires the upstream requirements-msst.txt and scripts/setup_msst.py assets.

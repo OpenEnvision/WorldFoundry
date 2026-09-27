@@ -116,6 +116,9 @@ def unpatchify(x, patch_size):
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import Resample38
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import ResidualBlock
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import (
+    CausalConv3d as _SharedCausalConv3d,
+)
 
 
 class AttentionBlock(nn.Module):
@@ -636,7 +639,9 @@ class Decoder3d_38(nn.Module):
 def count_conv3d(model):
     count = 0
     for m in model.modules():
-        if isinstance(m, CausalConv3d):
+        # Shared Wan residual/resample blocks use a separate CausalConv3d
+        # class, but each still consumes a causal cache slot.
+        if isinstance(m, (CausalConv3d, _SharedCausalConv3d)):
             count += 1
     return count
 

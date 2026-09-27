@@ -12,8 +12,7 @@ input_schema:
 integration_status: runtime_ported
 notes:
 - HappyOyster API route is registered; API credentials/endpoint are runtime-gated.
-- Missing checkpoints/assets are reported by the runtime plan and are not catalog
-  blockers.
+- This hosted API route does not use local model weights.
 - WorldFoundry tracks HappyOyster metadata only; no runnable API client or generation
   pipeline is registered.
 runtime_status: route_ready_assets_pending

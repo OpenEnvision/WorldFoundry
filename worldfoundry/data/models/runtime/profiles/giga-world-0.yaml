@@ -27,9 +27,7 @@ input_schema:
   prompt: true
   image: true
   video: false
-  actions:
-  - robot_action
-  - world_action
+  actions: []
 artifact_kind: generated_video
 artifact_filename: giga-world-0.mp4
 execution:
@@ -45,3 +43,5 @@ notes:
 - The legacy official T5-11B PyTorch checkpoint must be converted locally with weights-only loading to the encoder-only safetensors directory above.
 - Single-image low-step generation validates checkpoint execution only; use official GR1 observations and full sampling settings for evaluation-quality parity.
 - The text encoder accepts up to 512 tokens by default, matching the official GigaWorld-0 encoder; smaller max_text_length values are an explicit runtime choice.
+- This GR1 video inference route conditions on the initial image and text prompt;
+  it does not consume a structured robot-action sequence.

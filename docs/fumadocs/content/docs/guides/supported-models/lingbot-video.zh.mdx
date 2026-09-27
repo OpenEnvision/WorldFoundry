@@ -33,11 +33,13 @@ LingBot 文/图生视频家族，不是世界卡。
 
 记录的任务 profile：`text-to-image`、`text-to-video`、`text-image-to-video`、`video-refinement`、`t2v`、`ti2v` 等。绑定的 pipeline 类是 `LingBotVideoGenerationPipeline`。
 
-系列状态：**Runner 一致性待确认**。
+系列状态：**MoE 短片 T2V 已与官方运行器对照，其他模式待验证**。
 
 `t2v` 记录默认值：height=480, width=832, num_frames=121, num_inference_steps=40, guidance_scale=3.0, seed=42；`ti2v` 记录默认值：height=480, width=832, num_frames=121, num_inference_steps=40, guidance_scale=3.0, seed=42。
 
-完整的 checkpoint 加载产物与视觉一致性仍在等待。 已发布的稠密 1.3B checkpoint 已有一次记录在案的 121 帧、832x480 质量导向 Workspace 产物。 注意 profile 中的一个细节：即使默认产物类型是 T2V 视频路径， T2I 也会产出图像。 稠密与 MoE 权重均为外部资产（apache-2.0），不入 git。
+结构化 `prompt_json` 若包含 `duration`，运行器会按 `duration × fps` 推导帧数并向上取到 `4n+1`。要使用该时长，请省略 `num_frames`，或将其设为相同的推导值；显式冲突会在加载权重前报错。Studio 预设含 `num_frames=121`，若提供不同时长的提示 JSON，需要删掉或改成对应帧数。
+
+已发布的稠密 1.3B checkpoint 有一次记录在案的 121 帧、832x480 Workspace 产物。对 MoE 30B-A3B，固定版本的官方脚本与 WorldFoundry 运行器使用官方 T2V 示例 1，仅将时长从 5 秒缩短为 1 秒，以相同种子、40 步各生成了清晰连贯的 25 帧、832x480 视频。两路解码帧的逐帧 RGB MAE 均值为 10.48/255，说明该配置的视觉和任务结果一致，但并非逐像素相同。先前 20 步小玩具车结果仍是提示词特定的画质疑虑；标准 5 秒配置、细化器和其他模式仍待验证。注意 profile 中的一个细节：即使默认产物类型是 T2V 视频路径，T2I 也会产出图像。稠密与 MoE 权重均为外部资产（apache-2.0），不入 git。
 
 ## 在 WorldFoundry 中运行
 

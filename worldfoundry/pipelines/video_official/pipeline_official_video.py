@@ -225,6 +225,61 @@ class SAMA14BPipeline(OfficialVideoPipeline):
     MODEL_ID = "sama-14b"
     GENERATION_TYPE = "v2v"
 
+    def __call__(
+        self,
+        prompt: str,
+        images: Any = None,
+        video: Any = None,
+        num_frames: int | None = None,
+        fps: int | None = None,
+        output_path: str | Path | None = None,
+        return_dict: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        unsupported_conditions = (
+            "image",
+            "image_path",
+            "mask",
+            "mask_path",
+            "mask_image",
+            "mask_video",
+            "reference",
+            "reference_image",
+            "reference_image_path",
+            "ref_image_path",
+        )
+        unsupported = [name for name in unsupported_conditions if kwargs.get(name) is not None]
+        operator_kwargs = kwargs.get("operator_kwargs")
+        if isinstance(operator_kwargs, Mapping):
+            unsupported.extend(
+                f"operator_kwargs.{name}"
+                for name in unsupported_conditions
+                if operator_kwargs.get(name) is not None
+            )
+        if images is not None:
+            unsupported.append("images")
+        if unsupported:
+            raise ValueError(
+                "SAMA-14B's released inference route accepts a source video and text prompt, "
+                f"not {', '.join(unsupported)}."
+            )
+        return super().__call__(
+            prompt=prompt,
+            video=video,
+            num_frames=num_frames,
+            fps=fps,
+            output_path=output_path,
+            return_dict=return_dict,
+            **kwargs,
+        )
+
+    def run_pipeline_invocation(self, invocation: PipelineInvocation) -> Mapping[str, Any]:
+        if invocation.ref_image_path not in (None, ""):
+            raise ValueError(
+                "SAMA-14B's released inference route does not accept a separate reference image."
+            )
+        return super().run_pipeline_invocation(invocation)
+
 
 class SpatialLadderPipeline(OfficialVideoPipeline):
     """Pipeline implementation for SpatialLadder visual generation."""

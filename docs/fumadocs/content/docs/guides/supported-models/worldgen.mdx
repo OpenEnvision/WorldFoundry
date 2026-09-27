@@ -25,4 +25,6 @@ Score generated 3D worlds on [WorldScore](/docs/evaluation/benchmark-hub/worldsc
 
 `WorldGenPipeline` is an in-tree subprocess adapter in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `LeoXie/WorldGen` **and** accept the gated **FLUX.1-dev** (text-to-pano) and **FLUX.1-Fill-dev** (image-to-pano) terms. Missing foundations are reported at inference time. **Runner / official scene-quality parity is pending.**
 
+A local 512×256, 50-step text-to-scene run produced a finite Gaussian-splat scene with the requested furniture. A cropped perspective-photo image-to-scene run produced a valid PLY but did not preserve its input room. The current upstream image path maps a single input across spherical panorama rays without a specified camera field of view. A separate full 2:1 panorama exposed a contour-fill bug that erased every conditioned pixel when the image covered the whole sphere; the in-tree fix preserves the full mask. Repeating the 50-step run with that panorama produced a valid PLY whose recovered RGB differed from the input by 1.44/255 on average. Because the full panorama leaves nothing to inpaint, this verifies condition preservation and scene conversion, not novel expansion from a perspective photograph.
+
 <ModelRelatedRecipes modelId="worldgen" locale="en" />

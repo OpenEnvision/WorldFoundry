@@ -314,7 +314,7 @@ class ABotM0Runtime:
         self._resolved_dtype = str(dtype)
         return model
 
-    def _prepare_state(self, observation: Mapping[str, Any], action_dim: int) -> Any:
+    def _prepare_state(self, observation: Mapping[str, Any], state_dim: int) -> Any:
         import numpy as np
 
         if not self.config.include_state:
@@ -325,8 +325,8 @@ class ABotM0Runtime:
         values = np.asarray(state, dtype=np.float32).reshape(-1)
         if self.config.action_layout == "dual_arm_14":
             values = _dual_arm_to_training(values)
-        if values.shape != (action_dim,):
-            raise ValueError(f"ABot-M0 requires {action_dim} state values, got {values.shape}")
+        if values.shape != (state_dim,):
+            raise ValueError(f"ABot-M0 requires {state_dim} state values, got {values.shape}")
         return values[None, None, :]
 
     def _unnormalize(self, normalized: Any) -> Any:
@@ -406,7 +406,7 @@ class ABotM0Runtime:
                 f"ABot-M0 requires {len(self.config.camera_keys)} ordered RGB views "
                 f"{list(self.config.camera_keys)}, got {len(views)}"
             )
-        state = self._prepare_state(observation, model.action_config.action_dim)
+        state = self._prepare_state(observation, model.action_config.state_dim)
         state_tensor = torch.from_numpy(state) if state is not None else None
         with worldfoundry_inference_context():
             normalized = model.predict_action(

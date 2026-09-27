@@ -102,6 +102,9 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model impo
 
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import ResidualBlock
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import (
+    CausalConv3d as _SharedCausalConv3d,
+)
 
 
 class AttentionBlock(nn.Module):
@@ -601,7 +604,9 @@ class Decoder3d_38(nn.Module):
 def count_conv3d(model):
     count = 0
     for m in model.modules():
-        if isinstance(m, CausalConv3d):
+        # VideoVAE38 mixes this module's convs with shared Wan residual and
+        # resample blocks.  Both classes consume a slot in the causal cache.
+        if isinstance(m, (CausalConv3d, _SharedCausalConv3d)):
             count += 1
     return count
 

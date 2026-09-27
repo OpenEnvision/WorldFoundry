@@ -1,7 +1,7 @@
 backend: callable_entrypoint
 checkpoint_path: ${WORLDFOUNDRY_HFD_ROOT}/yuanty--fastwam
 checkpoint_ref: yuanty/fastwam
-revision: 139eebb6d90cdd9bdbbe465f72c6edc9ad5a518a
+revision: 8eaceeb24c3cc92ff2a9c9a9d266a4941b836705
 policy_target: worldfoundry.synthesis.action_generation.fastwam.runtime:predict_action
 torch_dtype: auto
 trust_remote_code: false
@@ -24,6 +24,16 @@ variants:
     image_height: 224
     image_width: 448
     normalization: min/max
+  libero_optional_idm:
+    checkpoint_file: libero_optional_idm_2cam224.pt
+    statistics_file: libero_optional_idm_2cam224_dataset_stats.json
+    action_dim: 7
+    proprio_dim: 8
+    image_height: 224
+    image_width: 448
+    normalization: min/max
+    action_infer_shift: 1.0
+    sigma_shift: 1.0
 video_config:
   has_image_input: false
   patch_size: [1, 2, 2]

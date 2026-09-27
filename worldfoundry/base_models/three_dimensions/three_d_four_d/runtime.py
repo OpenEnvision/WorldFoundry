@@ -558,6 +558,9 @@ class ThreeDFourDRuntimeSynthesis(BaseSynthesis):
             return command
         if self.spec.command_kind == "worldgen_inference":
             command = [python, entrypoint, "--prompt", prompt or "a 3D scene", "--output_dir", output_dir]
+            resolution = options.get("resolution", self.options.get("resolution"))
+            if resolution is not None:
+                command.extend(["--resolution", str(int(resolution))])
             pano_image = options.get("pano_image", self.options.get("pano_image"))
             if pano_image:
                 command.extend(["--pano_image", str(pano_image)])

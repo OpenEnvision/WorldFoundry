@@ -8,14 +8,24 @@ runtime:
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/SAMA-14B
   - $WORLDFOUNDRY_HFD_ROOT/syxbb--SAMA-14B
+  - ${WORLDFOUNDRY_REPO_ROOT}/../ckpts/syxbb--SAMA-14B
   defaults:
     wan_model_root: $WORLDFOUNDRY_CKPT_DIR/Wan2.1-T2V-14B
+    wan_model_root_candidates:
+    - $WORLDFOUNDRY_CKPT_DIR/Wan2.1-T2V-14B
+    - $WORLDFOUNDRY_HFD_ROOT/Wan-AI--Wan2.1-T2V-14B
+    - ${WORLDFOUNDRY_REPO_ROOT}/../ckpts/Wan-AI--Wan2.1-T2V-14B
     max_frames: 49
     height: 480
     width: 832
     fps: 16
     seed: 1
     quality: 5
+  required_paths:
+  - path: sama_14b_ema.safetensors
+    base: checkpoint
+  required_default_paths:
+  - wan_model_root
   command:
   - "{python}"
   - "{repo_root}/infer_sh/inference.py"
@@ -45,5 +55,5 @@ runtime:
   - "--tiled"
   - "--overwrite"
 notes:
-- Official SAMA editing route; mask/reference inputs are passed by operator kwargs when available.
+- Official SAMA instruction-guided video editing takes a source video and text prompt; its inference entrypoint has no spatial mask or reference-image input.
 - Runtime code is resolved from WorldFoundry's in-tree infer-only port.

@@ -30,12 +30,14 @@ class SanaNoiseInitializer:
         temporal_compression: int = 1,
         noise_scale: float = 1.0,
         allow_spatial_padding: bool = False,
+        float32_noise: bool = False,
     ) -> None:
         self.channels = int(channels)
         self.spatial_compression = int(spatial_compression)
         self.temporal_compression = int(temporal_compression)
         self.noise_scale = float(noise_scale)
         self.allow_spatial_padding = bool(allow_spatial_padding)
+        self.float32_noise = bool(float32_noise)
         if min(self.channels, self.spatial_compression, self.temporal_compression) <= 0:
             raise ValueError("Sana latent geometry must be positive")
 
@@ -73,7 +75,7 @@ class SanaNoiseInitializer:
             self.latent_shape(request),
             generator=generator,
             device=device,
-            dtype=dtype,
+            dtype=torch.float32 if self.float32_noise else dtype,
         ) * self.noise_scale
 
     def initialize(
@@ -202,7 +204,7 @@ class SanaWorldInitializer(SanaNoiseInitializer):
     @staticmethod
     def _camera_conditions(request: DiffusionRequest) -> dict[str, torch.Tensor]:
         from worldfoundry.core.geometry.conditioning import pack_spatiotemporal_camera_conditioning
-        from worldfoundry.core.geometry.trajectory import rollout_wasd_camera_actions
+        from worldfoundry.core.geometry.trajectory import rollout_sana_wm_camera_actions
 
         direct_camera = request.inputs.get("camera_conditions")
         direct_plucker = request.inputs.get("chunk_plucker")
@@ -228,9 +230,9 @@ class SanaWorldInitializer(SanaNoiseInitializer):
                 actions = request.inputs.get("camera_action")
             if actions is None:
                 actions = ()
-            if isinstance(actions, str) and "-" not in actions:
+            if isinstance(actions, str) and not any(delimiter in actions for delimiter in ("-", ",", "，")):
                 actions = [actions]
-            poses = rollout_wasd_camera_actions(actions, num_frames=request.num_frames)
+            poses = rollout_sana_wm_camera_actions(actions, num_frames=request.num_frames)
         poses = torch.as_tensor(poses, dtype=torch.float32)
         if poses.ndim == 4 and poses.shape[0] == 1:
             poses = poses[0]
@@ -314,6 +316,7 @@ def build_sana_image_initializer(context: ComponentBuildContext) -> SanaNoiseIni
         channels=int(context.component_options.get("channels", 32)),
         spatial_compression=int(context.component_options.get("spatial_compression", 32)),
         noise_scale=float(context.component_options.get("noise_scale", 1.0)),
+        float32_noise=True,
     )
 
 

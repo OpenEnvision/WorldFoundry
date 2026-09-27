@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -56,6 +57,35 @@ def _first_path(value: Any) -> str | None:
 def _append_value(command: list[str], flag: str, value: Any) -> None:
     if value is not None and value != "":
         command.extend((flag, str(value)))
+
+
+def _validate_frame_count_request(
+    request: Mapping[str, Any], prompt_json: Path | None, mode: str
+) -> None:
+    """Catch frame requests that the official CLI would silently override."""
+    if mode == "t2i" or request.get("num_frames") is None:
+        return
+    duration = request.get("duration")
+    if duration is None and prompt_json is not None:
+        sample = json.loads(prompt_json.read_text(encoding="utf-8"))
+        if isinstance(sample, list):
+            sample = sample[0] if sample else {}
+        if isinstance(sample, dict):
+            duration = sample.get("duration")
+    if duration is None:
+        return
+    fps = int(request.get("fps") or 24)
+    # Match runner's num_frames_from_duration: frames are rounded to 4n+1.
+    frame_count = int(float(duration) * fps)
+    effective_frames = ((frame_count - 1) // 4 + 1) * 4 + 1
+    requested_frames = int(request["num_frames"])
+    if requested_frames != effective_frames:
+        raise ValueError(
+            "LingBot-Video num_frames conflicts with duration: "
+            f"requested {requested_frames}, but duration={duration} at fps={fps} "
+            f"produces {effective_frames} frames. Set num_frames={effective_frames} "
+            "or omit num_frames to use the prompt duration."
+        )
 
 
 @dataclass(frozen=True)
@@ -193,6 +223,7 @@ class LingBotVideoRuntime:
             raise ValueError(
                 "LingBot-Video requires prompt_json or a structured prompt string."
             )
+        _validate_frame_count_request(request, prompt_json, mode)
         if mode == "ti2v" and not _first_path(
             request.get("image") or request.get("images")
         ):

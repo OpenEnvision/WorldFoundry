@@ -47,7 +47,8 @@ runner_parity:
   status: pending
   notes:
   - The direct Diffusers, optional SGLang, FSDP, context-parallel, CFG-parallel, and refiner code paths are preserved.
-  - Full checkpoint-backed artifact and visual parity validation remains pending.
+  - A checkpoint-backed MoE T2V short clip has been compared with the pinned official runner;
+    pixel-exact parity, the five-second recipe, refiner, and other modes remain pending.
 runtime_profile: runtime-profile:lingbot-video
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: lingbot-video

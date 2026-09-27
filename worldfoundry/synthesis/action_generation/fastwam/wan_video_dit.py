@@ -537,21 +537,23 @@ class WanVideoDiT(torch.nn.Module):
         )
 
         batch_size = x.shape[0]
+        patch_t = int(self.patch_size[0])
         patch_h = int(self.patch_size[1])
         patch_w = int(self.patch_size[2])
-        if x.shape[3] % patch_h != 0 or x.shape[4] % patch_w != 0:
+        if x.shape[2] % patch_t != 0 or x.shape[3] % patch_h != 0 or x.shape[4] % patch_w != 0:
             raise ValueError(
-                "Latent spatial shape must be divisible by DiT patch size, "
-                f"got HxW=({x.shape[3]}, {x.shape[4]}), patch=({patch_h}, {patch_w})"
+                "Latent shape must be divisible by DiT patch size, "
+                f"got TxHxW={tuple(x.shape[2:])}, patch={tuple(self.patch_size)}"
             )
-        tokens_per_frame = (x.shape[3] // patch_h) * (x.shape[4] // patch_w)
+        x = self.patchify(x, control_camera_latents_input=control_camera_latents_input)
+        num_frames, grid_h, grid_w = x.shape[2:]
 
         if self.seperated_timestep and fuse_vae_embedding_in_latents:
             if not hasattr(self, "patch_size") or len(self.patch_size) < 3:
                 raise ValueError(f"Invalid dit.patch_size: {getattr(self, 'patch_size', None)}")
 
             token_timesteps = torch.ones(
-                (batch_size, x.shape[2], tokens_per_frame),
+                (batch_size, num_frames, grid_h * grid_w),
                 dtype=timestep.dtype,
                 device=timestep.device,
             ) * timestep.view(batch_size, 1, 1)
@@ -562,7 +564,35 @@ class WanVideoDiT(torch.nn.Module):
             t_mod = self.time_projection(t).unflatten(2, (6, self.hidden_dim))
         else:
             raise NotImplementedError("Only support seperated_timestep with fuse_vae_embedding_in_latents for now.")
-        x = self.patchify(x, control_camera_latents_input=control_camera_latents_input)
+        max_position = len(self.freqs[0])
+        if num_frames > max_position or grid_h > max_position or grid_w > max_position:
+            raise ValueError(f"Latent grid exceeds the RoPE cache of {max_position} positions")
+        frame_freqs, height_freqs, width_freqs = self.freqs
+        f_rope = frame_freqs[:num_frames].view(num_frames, 1, 1, -1)
+        h_rope = height_freqs[:grid_h].view(1, grid_h, 1, -1)
+        w_rope = width_freqs[:grid_w].view(1, 1, grid_w, -1)
+        freqs = torch.cat(
+            (
+                f_rope.expand(-1, grid_h, grid_w, -1),
+                h_rope.expand(num_frames, -1, grid_w, -1),
+                w_rope.expand(num_frames, grid_h, -1, -1),
+            ),
+            dim=-1,
+        ).reshape(num_frames * grid_h * grid_w, 1, -1).to(x.device)
+        tokens = rearrange(x, "b c f h w -> b (f h w) c")
+        return {
+            "tokens": tokens,
+            "context": self.text_embedding(context),
+            "context_mask": context_mask,
+            "t": t,
+            "t_mod": t_mod,
+            "freqs": freqs,
+            "meta": {
+                "grid_size": (num_frames, grid_h, grid_w),
+                "tokens_per_frame": grid_h * grid_w,
+            },
+        }
+
     def post_dit(self, x_tokens: torch.Tensor, pre_state: Dict[str, Any]) -> torch.Tensor:
         f, h, w = pre_state["meta"]["grid_size"]
         x = self.head(x_tokens, pre_state["t"])

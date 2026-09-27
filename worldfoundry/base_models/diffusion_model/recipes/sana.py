@@ -248,7 +248,11 @@ def _image_recipe(variant: SanaVariant) -> NativeDiffusionRecipe:
     initializer_factory = build_sana_controlnet_initializer if controlnet else build_sana_image_initializer
     scheduler_factory = build_sana_scm_scheduler if sprint else build_sana_flow_match_scheduler
     scheduler_options = {"sigma_data": 0.5} if sprint else {
-        "shift": 4.0 if _parameter_scale(variant.model_id) == "600M" else 3.0
+        "shift": (
+            6.0 if variant.model_id == "sana-1600m-4k-bf16"
+            else 4.0 if _parameter_scale(variant.model_id) == "600M"
+            else 3.0
+        )
     }
     codec_options = {"decoder_input_scale": 0.5} if sprint else {}
     return NativeDiffusionRecipe(

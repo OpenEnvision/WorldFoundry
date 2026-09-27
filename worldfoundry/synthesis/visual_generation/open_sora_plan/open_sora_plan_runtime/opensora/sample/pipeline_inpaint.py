@@ -3,7 +3,6 @@ import inspect
 import os
 from typing import Callable, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
-from altair import condition
 import numpy as np
 import torch
 from einops import rearrange

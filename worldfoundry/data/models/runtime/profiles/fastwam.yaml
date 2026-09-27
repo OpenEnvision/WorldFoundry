@@ -8,15 +8,17 @@ groups:
 - policy_rollout
 source_repos:
 - url: https://github.com/yuantianyuan01/FastWAM
-  revision: 45d8e1458921d83f8ad6cf9ce993d371208dabd0
+  revision: 7faa71108368fbb3b6885649f112af607427a2d4
 checkpoints:
 - repo_id: yuanty/fastwam
-  revision: 139eebb6d90cdd9bdbbe465f72c6edc9ad5a518a
+  revision: 8eaceeb24c3cc92ff2a9c9a9d266a4941b836705
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/yuanty--fastwam
   role: released_fastwam_policy_checkpoints_and_statistics
   required_paths:
   - libero_uncond_2cam224.pt
   - libero_uncond_2cam224_dataset_stats.json
+  - libero_optional_idm_2cam224.pt
+  - libero_optional_idm_2cam224_dataset_stats.json
   - robotwin_uncond_3cam_384.pt
   - robotwin_uncond_3cam_384_dataset_stats.json
 - repo_id: DiffSynth-Studio/Wan-Series-Converted-Safetensors
@@ -51,6 +53,13 @@ variants:
     camera_layout: two horizontal 224x224 views
     action_shape: [32, 7]
     status: checkpoint_gpu_validated
+  libero_optional_idm:
+    checkpoint_file: libero_optional_idm_2cam224.pt
+    statistics_file: libero_optional_idm_2cam224_dataset_stats.json
+    camera_layout: two horizontal 224x224 views
+    action_shape: [8, 7]
+    action_infer_modes: [idm, first_frame]
+    status: checkpoint_gpu_validated_synthetic
 input_schema:
   model_id: fastwam
   image: true
@@ -79,5 +88,6 @@ notes:
 - The released MoT policy is approximately 12 GB before the Wan VAE and UMT5 encoder are loaded.
 - UMT5 defaults to CPU and instruction embeddings are cached; callers can supply precomputed 4096-dimensional tokens.
 - Video expert key/value tensors are prefetched once and reused across all action denoising steps.
-- Both released LIBERO and RoboTwin checkpoints and their matching statistics are staged locally and manifest-size verified.
-- Both released variants passed real Workspace inference on A100 with ten denoising steps: RoboTwin emitted finite 32x14 actions and LIBERO emitted finite 32x7 actions.
+- The LIBERO base, RoboTwin base, and LIBERO Optional IDM checkpoints and their matching statistics are staged locally.
+- Both base variants passed real Workspace inference on A100 with ten denoising steps: RoboTwin emitted finite 32x14 actions and LIBERO emitted finite 32x7 actions.
+- The separate LIBERO Optional IDM checkpoint passed synthetic two-camera inference in both first_frame and idm modes with finite 8x7 action chunks at two denoising steps; this is not LIBERO task-success evidence.

@@ -8436,7 +8436,9 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 1234,
             "nproc_per_node": 1,
             "ae": "WFVAEModel_D8_4x8x8",
-            "text_encoder_name_1": str(checkpoint_root_path("mt5-xxl")),
+            "text_encoder_name_1": _checkpoint_model_ref(
+                "mt5-xxl", fallback=str(checkpoint_root_path("mt5-xxl"))
+            ),
         },
         "call_params": _official_video_call_params(),
         "load_params": _official_video_load_params(),
@@ -11144,6 +11146,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "return_mesh",
             "save_scene",
             "low_vram",
+            "resolution",
         ),
         "load_params": _three_d_four_d_runtime_load_params(),
         "tags": ("world-generation", "3d", "mesh"),

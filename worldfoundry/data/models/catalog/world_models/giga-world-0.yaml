@@ -7,7 +7,7 @@ aliases:
 tasks:
 - robotics-world-model
 - video-generation
-- action-conditioned-generation
+- image-to-video
 provider: official_repo
 source:
   status: open_source
@@ -49,12 +49,12 @@ docs:
   publisher: GigaAI
   publisher_kind: company
   publisher_zh: 极佳科技（GigaAI）
-  overview: 'GigaWorld-0 is GigaAI''s open robotics world-model series: video-generation models trained for action-conditioned robot data generation, with pretrain and GR1-specialized 2B checkpoints recorded. In this catalog the official WorldArena-listed source is vendored in-tree; execution waits on staged checkpoints and task assets.'
-  overview_zh: GigaWorld-0 是极佳科技开源的机器人世界模型系列：面向动作条件机器人数据生成训练的视频生成模型，记录了 pretrain 与 GR1 专用两个 2B checkpoint。本 catalog 中其官方（WorldArena 收录的）源码已内置树内；执行待 checkpoint 与任务资产就位。
+  overview: 'GigaWorld-0 is GigaAI''s open robotics world-model series, with pretrain and GR1-specialized 2B video checkpoints. The integrated GR1 inference route generates video from an initial image and text prompt; it has no structured robot-action input.'
+  overview_zh: GigaWorld-0 是极佳科技开源的机器人世界模型系列，包含预训练和 GR1 专用两个 2B 视频 checkpoint。当前接入的 GR1 推理入口根据首帧图像和文本提示生成视频，没有结构化机器人动作输入。
   architecture: Two 2B video checkpoints are recorded — GigaWorld-0-Video-Pretrain-2b and GigaWorld-0-Video-GR1-2b under open-gigaai. Architecture internals beyond the recorded tasks are not stored in this repository.
   architecture_zh: 记录两个 2B 视频 checkpoint——open-gigaai 下的 GigaWorld-0-Video-Pretrain-2b 与 GigaWorld-0-Video-GR1-2b。除已记录任务外的架构内部细节仓库未存。
-  usage_notes: The pipeline resolves the vendored inference entrypoint and returns blocked runtime diagnostics until checkpoints and task assets are staged.
-  usage_notes_zh: pipeline 解析内置推理入口，在 checkpoint 与任务资产就位前返回 blocked 运行时诊断。
+  usage_notes: Provide an initial image and text prompt with the local GR1, T5 and Wan VAE weights. Set the official frame count and resolution explicitly for evaluation. Structured robot actions are not consumed.
+  usage_notes_zh: 提供首帧图像、文本提示以及本地 GR1、T5、Wan VAE 权重；评测时显式设置官方帧数与分辨率。它不消费结构化机器人动作。
   limitations:
   - Execution is checkpoint and task-asset gated.
   limitations_zh:

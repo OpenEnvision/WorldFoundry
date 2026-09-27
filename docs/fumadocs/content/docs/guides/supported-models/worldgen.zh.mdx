@@ -25,4 +25,6 @@ catalog 的论文链接和标题旁封面是 Meta Reality Labs 的 [WorldGen: Fr
 
 `WorldGenPipeline` 是 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）里的树内子进程适配器。就位 `LeoXie/WorldGen`，并接受 gated 的 **FLUX.1-dev**（文生全景）与 **FLUX.1-Fill-dev**（图生全景）条款。缺基座会在推理时报告。**Runner / 官方场景质量一致性仍为 pending。**
 
+本地 512×256、50 步的文生场景运行生成了数值正常的高斯场景，反投影中可见提示要求的家具。一张裁剪后的透视房间照片用于图生场景时，虽然生成了有效 PLY，却没有保留原房间。当前上游图像路径在未指定相机视场角的情况下，把单张输入映射到球面全景光线。另用完整的 2:1 全景测试时，发现轮廓填充会在输入覆盖全景时清空所有条件像素；树内修复现已保留完整掩码。用该全景重跑 50 步得到有效 PLY，其恢复的 RGB 与输入平均相差 1.44/255。完整全景没有待扩展的区域，因此这只验证条件保留与场景转换，不能证明从透视照片生成新内容的能力。
+
 <ModelRelatedRecipes modelId="worldgen" locale="zh" />

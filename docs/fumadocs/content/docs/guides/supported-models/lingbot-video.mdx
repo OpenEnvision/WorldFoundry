@@ -31,11 +31,13 @@ Required `prompt`, `image`, and `prompt_json`; artifacts `generated_image`, `gen
 
 Recorded task profiles: `text-to-image`, `text-to-video`, `text-image-to-video`, `video-refinement`, `t2v`, and `ti2v` among others. WorldFoundry binds `LingBotVideoGenerationPipeline`.
 
-Family status: **Runner parity pending**.
+Family status: **MoE short-clip T2V compared with the official runner; other modes pending**.
 
 Recorded `t2v` defaults: height=480, width=832, num_frames=121, num_inference_steps=40, guidance_scale=3.0, seed=42 Recorded `ti2v` defaults: height=480, width=832, num_frames=121, num_inference_steps=40, guidance_scale=3.0, seed=42.
 
-Full checkpoint-backed artifact and visual parity are pending. The released Dense 1.3B checkpoint already has a recorded 121-frame, 832x480 quality-oriented Workspace artifact. Note one quirk from the profile: T2I produces an image even though the default artifact type is the T2V video route. Dense and MoE weights are external (apache-2.0) and never tracked in git.
+For structured `prompt_json` with a `duration`, the runner derives the video length from `duration × fps` and rounds it to a `4n+1` frame count. Omit `num_frames` to use that duration, or set it to the same derived count; conflicting explicit values fail before checkpoint loading. The Studio preset includes `num_frames=121`, so remove or adjust that field when supplying a prompt JSON with a different duration.
+
+The released Dense 1.3B checkpoint has a recorded 121-frame, 832x480 quality-oriented Workspace artifact. For MoE 30B-A3B, the pinned official script and the WorldFoundry runner both produced coherent 25-frame, 832x480 videos from official T2V example 1 with only its duration shortened from five to one second, using 40 steps and the same seed. Their decoded frame-aligned RGB MAE averaged 10.48/255, so this supports visual and task-level agreement for that configuration, not pixel-exact parity. The earlier 20-step small-toy-car result remains a prompt-specific quality concern; the five-second recipe, refiner, and other modes still need validation. T2I produces an image even though the default artifact type is the T2V video route. Dense and MoE weights are external (apache-2.0) and never tracked in git.
 
 ## Running in WorldFoundry
 

@@ -1,17 +1,50 @@
 import os
 import torch
 import tempfile
+from contextlib import contextmanager
+from importlib import import_module
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from huggingface_hub import hf_hub_download
 from .models.flux_pano_gen_pipeline import FluxPipeline
 from .models.flux_pano_fill_pipeline import FluxFillPipeline
-from nunchaku import NunchakuFluxTransformer2dModel
-from nunchaku.utils import get_precision
-from nunchaku.lora.flux.compose import compose_lora
-from .utils.lora_utils import compose_lora_with_fixes, load_and_fix_lora
+from .utils.lora_utils import load_and_fix_lora
 
 
 CKPT_ROOT = Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", "~/.cache/worldfoundry/checkpoints")).expanduser()
+
+
+@contextmanager
+def _compatible_peft_lora_dispatch():
+    """Skip PEFT's torchao dispatcher when an older, unused torchao is installed."""
+    try:
+        from packaging.version import Version
+
+        torchao_version = Version(version("torchao"))
+    except (PackageNotFoundError, ValueError):
+        yield
+        return
+
+    if torchao_version >= Version("0.16.0"):
+        yield
+        return
+
+    # PEFT >= 0.20 raises for torchao < 0.16 even on ordinary nn.Linear
+    # layers. FLUX.1-dev uses those layers, so its LoRA needs no torchao path.
+    peft_torchao = import_module("peft.tuners.lora.torchao")
+    original = peft_torchao.is_torchao_available
+    peft_torchao.is_torchao_available = lambda: False
+    try:
+        yield
+    finally:
+        peft_torchao.is_torchao_available = original
+
+
+def _load_standard_lora(pipe, lora_path: str) -> None:
+    with _compatible_peft_lora_dispatch():
+        # Diffusers requires an explicit weight name for local files in offline
+        # mode, even though its loader later recognizes the full file path.
+        pipe.load_lora_weights(lora_path, weight_name=Path(lora_path).name)
 
 
 def _first_existing(*candidates):
@@ -34,7 +67,11 @@ def _worldgen_lora(filename: str) -> str:
 
 
 def _flux_repo(remote_repo: str, local_name: str) -> str:
-    return _first_existing(CKPT_ROOT / local_name, CKPT_ROOT / "hfd" / f"black-forest-labs--{local_name}") or remote_repo
+    return _first_existing(
+        CKPT_ROOT / local_name,
+        CKPT_ROOT / f"black-forest-labs--{local_name}",
+        CKPT_ROOT / "hfd" / f"black-forest-labs--{local_name}",
+    ) or remote_repo
 
 
 def build_pano_gen_model(lora_path=None, device="cuda", low_vram=True):
@@ -43,6 +80,9 @@ def build_pano_gen_model(lora_path=None, device="cuda", low_vram=True):
         lora_path = _worldgen_lora("worldgen_text2scene.safetensors")
     
     if low_vram:
+        from nunchaku import NunchakuFluxTransformer2dModel
+        from nunchaku.utils import get_precision
+
         # Get precision and initialize Nunchaku transformer
         precision = get_precision()
         print(f"Using Nunchaku with {precision} precision")
@@ -66,11 +106,10 @@ def build_pano_gen_model(lora_path=None, device="cuda", low_vram=True):
         pipe = FluxPipeline.from_pretrained(
             _flux_repo("black-forest-labs/FLUX.1-dev", "FLUX.1-dev"),
             torch_dtype=torch.bfloat16,
-            device=device
         )
         # Load LoRA weights using standard diffusers method
         print(f"Loading LoRA weights from: {lora_path}")
-        pipe.load_lora_weights(lora_path)
+        _load_standard_lora(pipe, lora_path)
     
     pipe.enable_model_cpu_offload() # Save VRAM
     pipe.enable_vae_tiling()
@@ -82,6 +121,9 @@ def build_pano_fill_model(lora_path=None, device="cuda", low_vram=True):
         lora_path = _worldgen_lora("worldgen_img2scene.safetensors")
     
     if low_vram:
+        from nunchaku import NunchakuFluxTransformer2dModel
+        from nunchaku.utils import get_precision
+
         # Get precision and initialize Nunchaku transformer
         precision = get_precision()
         print(f"Using Nunchaku with {precision} precision")
@@ -105,11 +147,10 @@ def build_pano_fill_model(lora_path=None, device="cuda", low_vram=True):
         pipe = FluxFillPipeline.from_pretrained(
             _flux_repo("black-forest-labs/FLUX.1-Fill-dev", "FLUX.1-Fill-dev"),
             torch_dtype=torch.bfloat16,
-            device=device
         )
         # Load LoRA weights using standard diffusers method
         print(f"Loading LoRA weights from: {lora_path}")
-        pipe.load_lora_weights(lora_path)
+        _load_standard_lora(pipe, lora_path)
     
     pipe.enable_model_cpu_offload() # Save VRAM
     pipe.enable_vae_tiling()

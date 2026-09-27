@@ -504,7 +504,11 @@ def predict_action(
         image_height=option_int(options.get("image_height"), 480),
         jpeg_roundtrip=option_bool(options.get("jpeg_roundtrip"), True),
     )
-    cache_key = (checkpoint_path, device, runtime_options_cache_key(options))
+    # Per-call task text is carried in runtime_options by the public pipeline.
+    # Cache by the parsed model configuration so changing the instruction does
+    # not reload the 1B policy and SigLIP on every action step. T5 release is
+    # governed separately by release_text_encoder.
+    cache_key = (config.checkpoint_location, config.device, runtime_options_cache_key(config.__dict__))
     runtime = _RUNTIME_CACHE.setdefault(cache_key, RDT1BRuntime(config))
     return runtime.predict_action(
         instruction=instruction,

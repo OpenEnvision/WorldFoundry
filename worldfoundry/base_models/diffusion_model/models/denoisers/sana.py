@@ -47,7 +47,10 @@ def _base_image_config(
         "attn_type": "linear",
         "ffn_type": "glumbconv",
         "mlp_acts": ("silu", "silu", None),
-        "use_pe": False,
+        # Official Sana 2K/4K configs enable sinusoidal position embeddings.
+        # The 512/1024px image configs keep them disabled.
+        "use_pe": input_size >= 64,
+        "pe_interpolation": 2.0 if input_size >= 128 else 1.0,
         "linear_head_dim": 32,
         "cross_norm": cross_norm,
     }

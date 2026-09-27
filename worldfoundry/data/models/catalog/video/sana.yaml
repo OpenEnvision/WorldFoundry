@@ -23,13 +23,15 @@ official_sources:
   huggingface:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px
     status: confirmed
+  - repo_id: Efficient-Large-Model/Sana_1600M_1024px_BF16
+    status: confirmed
   - repo_id: Efficient-Large-Model/SANA-Streaming
     status: confirmed
   - repo_id: Efficient-Large-Model/SANA-Streaming_bidirectional
     status: confirmed
   license: apache-2.0
   access_notes: Official GitHub repository is public under Apache-2.0; Hugging Face
-    checkpoints remain external assets and were not downloaded.
+    checkpoints remain external assets and are not bundled in the source tree.
 integration:
   status: runtime_ported
   notes:
@@ -55,7 +57,7 @@ runner_parity:
 variants:
 - id: sana-600m-512px
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_600M_512px
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -63,7 +65,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-600m-1024px
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_600M_1024px
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -71,7 +73,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-512px
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_512px
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -79,7 +81,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-512px-multiling
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_512px_MultiLing
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -87,7 +89,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-1024px
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -95,7 +97,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-1024px-multiling
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px_MultiLing
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -103,7 +105,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-1024px-bf16
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px_BF16
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -111,7 +113,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-2k-bf16
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_2Kpx_BF16
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -119,7 +121,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-4k-bf16
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_4Kpx_BF16
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -127,7 +129,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana1p5-1600m-1024px
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA1.5_1.6B_1024px
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -135,7 +137,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana1p5-4800m-1024px
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA1.5_4.8B_1024px
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -143,7 +145,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-sprint-600m-1024px
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_Sprint_0.6B_1024px
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -151,7 +153,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-sprint-1600m-1024px
   task: text-to-image
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_Sprint_1.6B_1024px
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -159,7 +161,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-controlnet-600m-1024px
   task: image-conditioned-generation
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_600M_1024px_ControlNet_HED
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -167,7 +169,7 @@ variants:
   runtime_profile: runtime-profile:sana
 - id: sana-controlnet-1600m-1024px-bf16
   task: image-conditioned-generation
-  integration_status: planned
+  integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px_BF16_ControlNet_HED
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner

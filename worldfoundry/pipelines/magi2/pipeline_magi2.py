@@ -341,15 +341,17 @@ class NativeMagi2Pipeline(PipelineABC):
             self.preview_transformer.pre_adapter.to(device)
             self.preview_transformer.post_adapter.to(device)
 
-        # 2. Seed latents (video + audio pure noise) — audio has no encoder.
-        gen = torch.Generator(device="cpu").manual_seed(int(seed))
+        # 2. Match the official CUDA RNG draws for video then audio while
+        # keeping this pipeline's seed local to the call.
+        gen = torch.Generator(device=device).manual_seed(int(seed))
         video_latent = torch.randn(
             1, _VIDEO_LATENT_CHANNELS, plan["video_latent_t"], plan["latent_h"], plan["latent_w"],
-            generator=gen, dtype=torch.float32,
-        ).to(device)
+            generator=gen, dtype=torch.float32, device=device,
+        )
         audio_latent = torch.randn(
-            1, plan["audio_latent_t"], _AUDIO_LATENT_CHANNELS, generator=gen, dtype=torch.float32,
-        ).to(device)
+            1, plan["audio_latent_t"], _AUDIO_LATENT_CHANNELS,
+            generator=gen, dtype=torch.float32, device=device,
+        )
 
         # 3. Preview denoise via the sampler driving the DiT through the data proxy.
         video_scheduler = FlowUniPCMultistepScheduler()

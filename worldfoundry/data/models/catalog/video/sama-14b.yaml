@@ -4,8 +4,6 @@ runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipel
 pipeline_binding: sama-14b
 tasks:
 - video-editing
-- reference-guided-video
-- mask-conditioned-video
 provider: official_repo
 source:
   status: open_source
@@ -30,7 +28,7 @@ integration:
 runner_parity:
   status: pending
   notes:
-  - Output parity remains pending until a checkpoint-backed run is performed.
+  - A 17-frame checkpoint-backed run showed close visual agreement with official inference; broad output parity remains pending.
 runtime_profile: runtime-profile:sama-14b
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets;
@@ -39,17 +37,19 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'SAMA 14B is an open 14B video editing model recorded for reference-guided and mask-conditioned video editing: you supply a source video plus a mask or reference and it rewrites the masked content. The WorldFoundry route is complete and reports missing checkpoints at runtime; weights are apache-2.0 at syxbb/SAMA-14B.'
-  overview_zh: SAMA 14B 是开源的 14B 视频编辑模型，记录任务为参考引导与掩码条件的视频编辑：提供源视频加掩码或参考图，它重写被掩码的内容。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告；权重为 apache-2.0，位于 syxbb/SAMA-14B。
+  overview: 'SAMA 14B is an open instruction-guided video editing model: it takes a source video and a text instruction. The released inference route does not accept a spatial mask or separate reference image. WorldFoundry reports missing checkpoints at runtime; weights are apache-2.0 at syxbb/SAMA-14B.'
+  overview_zh: SAMA 14B 是开源的指令引导视频编辑模型，输入是源视频和文本指令。发布的推理入口不接受空间蒙版或单独的参考图。WorldFoundry 在运行时报告缺失权重；权重位于 syxbb/SAMA-14B，采用 apache-2.0 许可证。
   architecture: The catalog records a 14B-parameter editing model with a prompt/image/video input contract; the publishing institution and architecture internals are not recorded in this repository — consult the upstream GitHub (Cynthiazxy123/SAMA) for details.
   architecture_zh: catalog 记录这是一个 14B 参数的编辑模型，输入契约为 prompt/image/video；发表机构与架构内部细节仓库未记录——详情请查阅上游 GitHub（Cynthiazxy123/SAMA）。
-  usage_notes: Runner parity is pending until a checkpoint-backed run is performed. Prepare source video, mask, and reference assets before launching; the route reports missing assets explicitly.
-  usage_notes_zh: 在完成一次 checkpoint 加载运行前，runner parity 保持 pending。启动前请准备源视频、掩码与参考资产；路径会明确报告缺失资产。
+  usage_notes: Supply a source video and edit instruction. A checkpoint-backed 17-frame run was compared with the official implementation; broader editing quality remains unverified.
+  usage_notes_zh: 提供源视频和编辑指令。已将一次使用真实权重的 17 帧运行与官方实现对照；更广泛的编辑质量仍未验证。
   limitations:
-  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - A 17-frame checkpoint-backed run was checked against official inference; other inputs and longer videos require separate validation.
+  - The released SAMA inference entrypoint has no spatial mask or separate reference-image input.
   - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
   - The publishing institution is not recorded in this repository.
   limitations_zh:
-  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - 已将一次使用真实权重的 17 帧运行与官方推理对照；其他输入和更长视频仍需单独验证。
+  - 发布的 SAMA 推理入口没有空间蒙版或单独的参考图输入。
   - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
   - 发表机构在本仓库中未记录。

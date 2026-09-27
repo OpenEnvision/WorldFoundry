@@ -1,7 +1,6 @@
 import os
 import torch
 import safetensors.torch
-from nunchaku.lora.flux.compose import compose_lora
 import re
 from typing import Dict, Tuple, List
 
@@ -90,8 +89,10 @@ def load_and_fix_lora(lora_path: str) -> Tuple[Dict[str, torch.Tensor], float]:
 
 def compose_lora_with_fixes(lora_paths: List[Tuple[str, float]]) -> Dict[str, torch.Tensor]:
     """Compose multiple LoRAs after fixing any missing keys."""
+    from nunchaku.lora.flux.compose import compose_lora
+
     # Load and fix each LoRA
     fixed_loras = [load_and_fix_lora(path) for path, weight in lora_paths]
     
     # Compose the fixed LoRAs
-    return compose_lora(fixed_loras) 
+    return compose_lora(fixed_loras)

@@ -143,6 +143,11 @@ def worldfoundry_path_tokens(env: Mapping[str, str] | None = None) -> dict[str, 
     )
     ckpt_dir = Path(environ.get("WORLDFOUNDRY_CKPT_DIR") or default_ckpt_dir).expanduser()
     hfd_root = Path(environ.get("WORLDFOUNDRY_HFD_ROOT") or ckpt_dir / "hfd").expanduser()
+    ckpt_sibling = (
+        ckpt_dir.with_name("ckpts" if ckpt_dir.name == "ckpt" else "ckpt")
+        if ckpt_dir.name in {"ckpt", "ckpts"}
+        else ckpt_dir
+    )
     default_conda_root = (
         home / "conda"
         if explicit_home
@@ -171,6 +176,7 @@ def worldfoundry_path_tokens(env: Mapping[str, str] | None = None) -> dict[str, 
         "WORLDFOUNDRY_MODEL_DIR": str(model_dir),
         "WORLDFOUNDRY_MODEL_SOURCE_DIR": str(model_source),
         "WORLDFOUNDRY_CKPT_DIR": str(ckpt_dir),
+        "WORLDFOUNDRY_CKPT_SIBLING_DIR": str(ckpt_sibling),
         "WORLDFOUNDRY_HFD_ROOT": str(hfd_root),
         "WORLDFOUNDRY_CONDA_ROOT": str(conda_root),
         "WORLDFOUNDRY_CONDA_ENVS_ROOT": str(conda_envs_root),

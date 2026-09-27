@@ -87,7 +87,13 @@ def _frames(value: Any) -> list[Any]:
         value = Image.open(value).convert("RGB")
     if hasattr(value, "convert"):
         value = np.asarray(value.convert("RGB"))
-    tensor = value.detach().cpu() if isinstance(value, torch.Tensor) else torch.as_tensor(np.asarray(value))
+    if isinstance(value, torch.Tensor):
+        tensor = value.detach().cpu()
+    else:
+        array = np.asarray(value)
+        # PIL-backed arrays can be read-only; PyTorch warns that a tensor
+        # sharing their storage has undefined behavior if modified.
+        tensor = torch.as_tensor(array.copy() if not array.flags.writeable else array)
     if tensor.ndim == 3:
         return [tensor]
     if tensor.ndim == 4:

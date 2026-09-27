@@ -21,6 +21,8 @@ The paper is [SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear 
 
 Use `sana-wm-streaming` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
 
+Camera actions follow the current official SANA-WM controls: `w/s` move forward/back, `a/d` yaw left/right, `j/l` strafe left/right, and `i/k` pitch up/down. Held actions use the official default speeds of 0.025 units and 0.6° per frame, with a gradual stop after release. Pass one action for each transition after the initial image, or provide explicit `camera_to_world` poses.
+
 SANA-WM reuses the canonical Sana network, encoder, autoencoder, scheduler, and recipe roles — no modality-owned Sana runtime remains (paper arXiv 2605.15178, apache-2.0). The interactive pipeline keeps its two-stage model resident and advances with native 8k+1 temporal windows; the quality profile keeps the bidirectional stage and LTX-2 refiner enabled.
 
 Catalog tasks include world-model, camera-controlled-video, and controllable-world-generation. Catalog aliases include `sana world model`, `sana-wm-2.6b`, `sana-wm-streaming`, and `Efficient-Large-Model/SANA-WM_streaming`.

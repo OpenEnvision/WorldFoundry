@@ -268,7 +268,10 @@ def predict_action(
         ),
         user_prompt_template=str(_required_option(options, "user_prompt_template")),
     )
-    cache_key = (checkpoint_path, device, runtime_options_cache_key(options))
+    # Call metadata such as task_instruction changes per request. Cache the
+    # parsed model configuration instead, so a new prompt does not reload the
+    # Qwen backbone and Spirit policy weights on every action prediction.
+    cache_key = (config.checkpoint_location, config.device, runtime_options_cache_key(config.__dict__))
     runtime = _RUNTIME_CACHE.setdefault(cache_key, SpiritV15Runtime(config))
     return runtime.predict_action(
         instruction=instruction,

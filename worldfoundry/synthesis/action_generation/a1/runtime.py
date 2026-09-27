@@ -305,6 +305,12 @@ class A1Runtime:
 
         from .modeling import AffordVLA
 
+        if self.model_config.action_head == "flow_matching":
+            # Transformers lazily imports Qwen2 (and torchao) on first access.
+            # Import it before the meta-device context: torchao constructs CPU
+            # lookup tables during import and cannot materialize meta tensors.
+            from transformers import Qwen2ForCausalLM  # noqa: F401
+
         with torch.device("meta"):
             self.model = AffordVLA(self.model_config, device="meta")
         _load_checkpoint(self.model, self.checkpoint_root, strict=config.strict_checkpoint)

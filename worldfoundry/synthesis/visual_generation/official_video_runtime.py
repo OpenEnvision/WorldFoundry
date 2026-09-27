@@ -273,6 +273,17 @@ class OfficialVideoRuntime:
         if isinstance(defaults, Mapping):
             runtime["defaults"] = default_variables
         self.runtime = _expand_value(runtime)
+        expanded_defaults = self.runtime.get("defaults")
+        if isinstance(expanded_defaults, dict):
+            for key in tuple(expanded_defaults):
+                if not key.endswith("_candidates") or not isinstance(expanded_defaults[key], list):
+                    continue
+                variable = key.removesuffix("_candidates")
+                candidates = expanded_defaults.pop(key)
+                if overrides.get(variable) is None:
+                    resolved = _first_existing(candidates)
+                    if resolved is not None:
+                        expanded_defaults[variable] = str(resolved)
         self._diffusers_pipeline: Any | None = None
         self._diffusers_pipeline_key: tuple[str, ...] | None = None
 
@@ -292,7 +303,7 @@ class OfficialVideoRuntime:
             **overrides,
         )
 
-    def _requirement_report(self) -> RuntimeRequirementReport:
+    def _requirement_report(self, *, extra: Mapping[str, Any] | None = None) -> RuntimeRequirementReport:
         missing: list[str] = []
         repo_sources = self.runtime.get("repo_root") or self.runtime.get("repo_root_candidates")
         checkpoint_sources = self.runtime.get("checkpoint_path") or self.runtime.get("checkpoint_candidates")
@@ -325,6 +336,18 @@ class OfficialVideoRuntime:
             checkpoint_path=checkpoint_path,
         ):
             missing.append(f"required runtime path not found: {path}")
+        defaults = self.runtime.get("defaults")
+        if isinstance(defaults, Mapping):
+            effective_defaults = {**defaults, **_with_cli_aliases(defaults, extra or {})}
+            for key in self.runtime.get("required_default_paths") or ():
+                value = effective_defaults.get(key)
+                candidate = (
+                    _resolve_flat_wan_checkpoint_alias(value)
+                    if key in {"wan_model_root", "wan_root"} and value
+                    else _existing_path(value)
+                )
+                if candidate is None or not Path(candidate).exists():
+                    missing.append(f"required default path not found: {key}={value}")
         if kind == "api_endpoint":
             env_name = str(self.runtime.get("api_key_env") or "")
             if env_name and not os.environ.get(env_name):
@@ -407,7 +430,7 @@ class OfficialVideoRuntime:
         video_path: str | Path | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        report = self._requirement_report()
+        report = self._requirement_report(extra=extra)
         defaults = self.runtime.get("defaults")
         default_variables = dict(defaults) if isinstance(defaults, Mapping) else {}
         variables = {
@@ -440,11 +463,18 @@ class OfficialVideoRuntime:
             "notes": list(self.config.get("notes") or ()),
         }
 
-    def _blocked_result(self, *, output_path: Path, prompt: str, missing: tuple[str, ...]) -> dict[str, Any]:
+    def _blocked_result(
+        self,
+        *,
+        output_path: Path,
+        prompt: str,
+        missing: tuple[str, ...],
+        extra: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         plan_path = output_path.with_suffix(output_path.suffix + ".runtime_plan.json")
         plan_path.write_text(
-            json.dumps(self.runtime_plan(output_path=output_path, prompt=prompt), indent=2, sort_keys=True),
+            json.dumps(self.runtime_plan(output_path=output_path, prompt=prompt, extra=extra), indent=2, sort_keys=True),
             encoding="utf-8",
         )
         return {
@@ -469,7 +499,7 @@ class OfficialVideoRuntime:
         **kwargs: Any,
     ) -> dict[str, Any]:
         output = Path(output_path).expanduser().resolve()
-        report = self._requirement_report()
+        report = self._requirement_report(extra=kwargs)
         if plan_only:
             output.parent.mkdir(parents=True, exist_ok=True)
             plan_path = output.with_suffix(output.suffix + ".runtime_plan.json")
@@ -497,7 +527,7 @@ class OfficialVideoRuntime:
                 "artifact_path": str(output),
             }
         if not report.ready:
-            return self._blocked_result(output_path=output, prompt=prompt, missing=report.missing)
+            return self._blocked_result(output_path=output, prompt=prompt, missing=report.missing, extra=kwargs)
 
         kind = str(self.runtime.get("kind"))
         if kind == "official_cli":

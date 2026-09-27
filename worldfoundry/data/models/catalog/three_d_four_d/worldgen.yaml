@@ -49,10 +49,12 @@ docs:
   limitations:
   - Depends on gated FLUX foundation models — access must be granted upstream.
   - Full official scene-quality parity is pending.
+  - A cropped perspective-photo image-to-scene run did not preserve its input; the upstream spherical-ray path does not specify an input camera field of view. A full 2:1 panorama is preserved after the in-tree full-mask fix, but leaves no area to expand.
   - The publishing institution is not recorded in this repository.
   limitations_zh:
   - 依赖 gated 的 FLUX 基础模型——需先在上游获得访问权限。
   - 完整的官方场景质量一致性待验证。
+  - 裁剪的透视照片用于图生场景时未能保留输入；上游球面光线路径未指定输入视场角。树内修复完整掩码后可保留 2:1 全景，但全景没有待扩展区域。
   - 发表机构在本仓库中未记录。
   recommended_benchmarks:
   - id: worldscore

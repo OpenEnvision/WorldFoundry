@@ -9,9 +9,9 @@ integration:
   status: all_released_checkpoints_gpu_validated
   notes:
   - WorldFoundry contains the released MoT action-inference graph, Wan VAE, UMT5 encoder, scheduler, preprocessing, and normalization code.
-  - Both official LIBERO and RoboTwin checkpoint variants are declared in the runtime data configuration.
+  - LIBERO base, LIBERO Optional IDM, and RoboTwin base checkpoints are declared in the runtime data configuration.
   - Runtime execution never imports an adjacent FastWAM source checkout and never enables remote checkpoint code.
-  - Both variants passed real A100 Workspace inference with finite 32-step action chunks using their official camera/state contracts.
+  - Both base variants passed real A100 inference with finite 32-step action chunks; Optional IDM passed synthetic 8-step inference in both idm and first_frame modes.
 license: mit
 name: FastWAM
 output_artifacts:
@@ -20,7 +20,7 @@ official_sources:
   paper: https://arxiv.org/abs/2603.16666
   project_page: https://yuantianyuan01.github.io/FastWAM/
   github:
-    head_sha: 45d8e1458921d83f8ad6cf9ce993d371208dabd0
+    head_sha: 7faa71108368fbb3b6885649f112af607427a2d4
     url: https://github.com/yuantianyuan01/FastWAM
   huggingface:
   - repo_id: yuanty/fastwam
@@ -48,16 +48,16 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'FastWAM is a GPU-validated world-action model built on the Wan video stack: a mixture-of-transformers (MoT) action-inference graph rides on Wan2.1-T2V-1.3B components. Both official LIBERO and RoboTwin checkpoint variants passed real A100 workspace inference with finite 32-step action chunks using their official camera/state contracts — the catalog status is all_released_checkpoints_gpu_validated (MIT license).'
-  overview_zh: FastWAM 是基于 Wan 视频栈的 GPU 已验证世界-动作模型：mixture-of-transformers（MoT）动作推理图构建在 Wan2.1-T2V-1.3B 组件之上。官方 LIBERO 与 RoboTwin 两个 checkpoint 变体均按官方相机/状态契约在真实 A100 上通过推理，输出有限的 32 步动作块——catalog 状态为 all_released_checkpoints_gpu_validated（MIT 许可）。
+  overview: 'FastWAM is a GPU-validated world-action model built on the Wan video stack. The LIBERO and RoboTwin base checkpoints produced finite 32-step action chunks; the separate LIBERO Optional IDM checkpoint produced finite 8-step chunks in both idm and first_frame modes with synthetic observations. These are inference checks, not robot task-success claims (MIT license).'
+  overview_zh: FastWAM 是基于 Wan 视频栈的 GPU 已验证世界动作模型。LIBERO 与 RoboTwin 基础权重输出有限的 32 步动作块；独立的 LIBERO Optional IDM 权重在合成观测下以 idm 和 first_frame 两种模式输出有限的 8 步动作块。这些仅是推理验证，不代表机器人任务成功（MIT 许可）。
   architecture: The released MoT action-inference graph, Wan VAE, UMT5 encoder, scheduler, preprocessing, and normalization all live in-tree. Runtime execution never imports an adjacent FastWAM source checkout and never enables remote checkpoint code.
   architecture_zh: 发布的 MoT 动作推理图、Wan VAE、UMT5 编码器、调度器、预处理与归一化全部内置树内。运行时执行绝不导入相邻的 FastWAM 源码 checkout，也不启用远程 checkpoint 代码。
-  usage_notes: Both LIBERO and RoboTwin variants are declared in the runtime data configuration — pick per benchmark. Stage yuanty/fastwam plus the Wan-series converted safetensors and Wan2.1-T2V-1.3B base locally.
-  usage_notes_zh: LIBERO 与 RoboTwin 变体均已在运行时数据配置中声明——按基准选择。需在本地就位 yuanty/fastwam、Wan 系列转换 safetensors 与 Wan2.1-T2V-1.3B 基座。
+  usage_notes: Select libero, libero_optional_idm, or robotwin in the runtime data configuration. Optional IDM supports idm (generated-future conditioning) and first_frame modes. Stage yuanty/fastwam plus the Wan-series converted safetensors and Wan2.1-T2V-1.3B tokenizer locally.
+  usage_notes_zh: 在运行时配置中选择 libero、libero_optional_idm 或 robotwin。Optional IDM 支持 idm（生成未来视频后预测动作）与 first_frame 模式。需在本地就位 yuanty/fastwam、Wan 系列转换 safetensors 与 Wan2.1-T2V-1.3B tokenizer。
   limitations:
-  - Action chunks are fixed 32-step under the official contracts.
+  - Synthetic checkpoint probes do not establish closed-loop LIBERO or RoboTwin task success.
   limitations_zh:
-  - 按官方契约，动作块固定为 32 步。
+  - 合成输入的权重推理验证不代表 LIBERO 或 RoboTwin 闭环任务成功。
   recommended_benchmarks:
   - id: libero
     reason: GPU-validated LIBERO checkpoint variant.
