@@ -1,48 +1,35 @@
 ---
 title: "RT-1"
-description: "RT-1 from Google Research: vla and vla policy rollout; Runner parity pending."
-modelId: "rt-1"
+description: "RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry vendors the RT-1 SavedModel runtime a…"
 pageSource: generated
 ---
 
-RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry vendors the RT-1 SavedModel runtime a…
+**Publisher:** Google Research · Company
 
-<ModelPaperFigures modelId="rt-1" locale="en" />
+RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry vendors the RT-1 SavedModel runtime and upstream source in-tree; py_compile, import, and plan generation passed, but the configured checkpoint directory is not yet staged locally.
 
-The recorded paper is [arXiv 2212.06817](https://arxiv.org/abs/2212.06817).
+**Catalog status:** Runtime ported
 
-Project page: [robotics-transformer.github.io](https://robotics-transformer.github.io/). Code: [google-research/robotics_transformer](https://github.com/google-research/robotics_transformer).
+## Upstream sources
+
+- [Project](https://robotics-transformer.github.io/)
+- [Paper](https://arxiv.org/abs/2212.06817)
+- [GitHub](https://github.com/google-research/robotics_transformer)
+- [Upstream README](https://github.com/google-research/robotics_transformer#readme)
 
 <ModelCommandBuilder modelId="rt-1" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `rt-1` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
-
-An EfficientNet-B3 image tokenizer with FiLM language conditioning, TokenLearner compression, and a decoder-only transformer emitting discretized action tokens — served as a TensorFlow SavedModel. It is published by Google Research.
-
-Catalog tasks include vla, vla policy rollout, robot policy, and robotics transformer. Catalog aliases include `rt1` and `robotics-transformer`.
+An EfficientNet-B3 image tokenizer with FiLM language conditioning, TokenLearner compression, and a decoder-only transformer emitting discretized action tokens — served as a TensorFlow SavedModel.
 
 ## Runtime contract
 
-Required `image`, `instruction`, and `prompt`; optional `actions` (robot_action, proprio, action_space) and `video`; artifacts `rt1_action_trace.json`.
-
-Recorded task profiles: `vla`, `vla.policy_rollout`, `robot_policy`, and `robotics_transformer`. WorldFoundry binds `RT1Pipeline`.
-
-Family status: **Runner parity pending**.
-
 The official checkpoint and TensorFlow rollout command must be validated before integrated status; stage the SavedModel checkpoint directory to run beyond plan generation. This is a TensorFlow entry, unlike most PyTorch policies in the catalog.
 
-Official checkpoint and TensorFlow rollout command must be validated before integrated status.
+## Readiness and limitations
 
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run rt-1 --pipeline.task-profile vla` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, Cpu).
-
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh rt-1`.
-
-Status: **Runner parity pending**.
+- TensorFlow SavedModel stack; checkpoint directory is not yet staged.
+- No license is recorded in this repository.
 
 <ModelRelatedRecipes modelId="rt-1" locale="en" />

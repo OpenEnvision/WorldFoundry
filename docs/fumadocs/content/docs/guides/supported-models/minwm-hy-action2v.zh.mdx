@@ -1,50 +1,39 @@
 ---
 title: "minWM"
-description: "minWM（Shengshu Technology）：交互式世界模型、动作条件视频；Runner 一致性待确认。"
-modelId: "minwm-hy-action2v"
+description: "minWM HY Action2V 基于 HunyuanVideo-1.5，复用 WorldFoundry 共享模型组件，从提示词、图像和轨迹生成相机可控视频。"
 pageSource: generated
 ---
 
-minWM HY Action2V 是生数科技在 HunyuanVideo-1.5 基座上的极简世界模型配方：给定提示词、图像与运动轨迹，经蒸馏的 DMD 入口生成动作条件、相机可控的视频。本 catalog 中专用 HY15 Action2V 路径与原生动作 token 路径已接通；runner parity 待 checkpoint 就位。
+**发表机构:** 生数科技（Shengshu AI） · 企业
 
-<ModelPaperFigures modelId="minwm-hy-action2v" locale="zh" />
+minWM HY Action2V 基于 HunyuanVideo-1.5，复用 WorldFoundry 共享模型组件，从提示词、图像和轨迹生成相机可控视频。
 
-记录论文为[arXiv 2605.30263](https://arxiv.org/abs/2605.30263)。
+**目录状态:** 已集成
 
-代码：[shengshu-ai/minWM](https://github.com/shengshu-ai/minWM)。
+## 上游来源
+
+- [论文](https://arxiv.org/abs/2605.30263)
+- [GitHub](https://github.com/shengshu-ai/minWM)
+- [上游 README](https://github.com/shengshu-ai/minWM#readme)
 
 <ModelCommandBuilder modelId="minwm-hy-action2v" locale="zh" />
 
-## 用来做什么
+## 架构
 
-用 `minwm-hy-action2v` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
-
-官方源码以固定 revision 内置（apache-2.0）。仅需上游 384.97 GB minWM 仓库中的 HY15/Action2V/dmd 子集——该条目有意避免拉取完整研究归档。该模型由生数科技（Shengshu AI）发布。
-
-catalog 记录的任务包括 交互式世界模型、动作条件视频、相机可控视频。别名包括 `minwm`、`minwm-hy-action2v`。
-
-记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（相机/运动轨迹贴合度）。
+仅推理的相机 Transformer 保留上游 PRoPE 和自回归缓存，复用基础层、VAE 与编码器，无需缺失的 WorldPlay 运行时。
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`trajectory`；产物 `minwm-hy-action2v.mp4`。
+就位 HY15/Action2V/dmd 及 HunyuanVideo-1.5 的编码器、VAE。公开入口使用相机条件四步自回归推理和 VAE 空间分块解码。
 
-记录的任务 profile：`interactive-world-model`、`action-conditioned-video`、`camera-controlled-video`。绑定的 pipeline 类是 `MinWMHYAction2VPipeline`。
+## 评测 Benchmark
 
-系列状态：**Runner 一致性待确认**。
+- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 相机/运动轨迹贴合度。
 
-输入为提示词、图像与轨迹（原生运动 token）。 期望得到产物前请先就位 HY15 Action2V DMD 子集；基于 Wan 的同门单独记录为 minwm-wan-action2v。
+## 就绪状态与限制
 
-runner parity 待 DMD checkpoint 子集就位。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run minwm-hy-action2v --pipeline.task-profile interactive-world-model`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `MIN-Lab/minWM`、`tencent/HunyuanVideo-1.5`。就位权重用 `bash scripts/inference/prepare_model_infer.sh minwm-hy-action2v`。
-
-状态：**Runner 一致性待确认**。
+- 已验证单张 H100 的相机条件推理；公开运行时不支持无相机条件模式。
+- HY15 衍生文件保留腾讯混元许可条款，见附带许可与来源说明。
+- 仅需就位必要权重子集。
 
 <ModelRelatedRecipes modelId="minwm-hy-action2v" locale="zh" />

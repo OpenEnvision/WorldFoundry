@@ -1,48 +1,36 @@
 ---
 title: "pixelSplat"
-description: "pixelSplat（Massachusetts Institute of Technology (MIT)）：3D 重建、高斯泼溅；计划中。"
-modelId: "pixelsplat"
+description: "pixelSplat 在单次前向中从两张标定视图重建 3D 高斯场景（CVPR 2024）。树内运行时支持原始卷积版本的 RE10K 和 ACID 权重，已使用真实标定输入完成 GPU 验证。"
 pageSource: generated
 ---
 
-pixelSplat 仅凭两张图像即可在单次前向中重建 3D 高斯泼溅场景——前馈式 3DGS，而非逐场景优化（CVPR 2024）。本 catalog 中其运行时源码已内置树内，但在本地提供高斯光栅化扩展并就位 re10k.ckpt checkpoint 之前，推理保持受限。
+**发表机构:** 麻省理工学院（MIT） · 高校
 
-<ModelPaperFigures modelId="pixelsplat" locale="zh" />
+pixelSplat 在单次前向中从两张标定视图重建 3D 高斯场景（CVPR 2024）。树内运行时支持原始卷积版本的 RE10K 和 ACID 权重，已使用真实标定输入完成 GPU 验证。
 
-记录论文为[arXiv 2312.12337](https://arxiv.org/abs/2312.12337)。
+**目录状态:** 已集成
 
-项目页：[dcharatan.github.io/pixelsplat](https://dcharatan.github.io/pixelsplat)。代码：[dcharatan/pixelsplat](https://github.com/dcharatan/pixelsplat)。
+## 上游来源
+
+- [项目主页](https://dcharatan.github.io/pixelsplat)
+- [论文](https://arxiv.org/abs/2312.12337)
+- [GitHub](https://github.com/dcharatan/pixelsplat)
+- [上游 README](https://github.com/dcharatan/pixelsplat#readme)
 
 <ModelCommandBuilder modelId="pixelsplat" locale="zh" />
 
-## 用来做什么
+## 架构
 
-用 `pixelsplat` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
-
-按论文，极线 Transformer 消解两视图间的尺度歧义，网络预测高斯参数的概率分布。 WorldFoundry 将源码内置于 base_models/three_dimensions/point_clouds/pixelsplat，并对官方测试入口做惰性封装（MIT 许可；checkpoint 镜像 dylanebert/pixelSplat）。该模型由麻省理工学院（MIT）发布。
-
-catalog 记录的任务包括 3D 重建、高斯泼溅、新视角合成。别名包括 `pixel-splat`、`pixel_splat`。
+按论文，极线 Transformer 消解两视图间的尺度歧义，网络预测高斯参数的概率分布。 WorldFoundry 将源码内置于 base_models/three_dimensions/point_clouds/pixelsplat，并对官方测试入口做惰性封装（MIT 许可；checkpoint 镜像 dylanebert/pixelSplat）。
 
 ## 运行时契约
 
-必填 `image`；可选 `actions`、`prompt`；产物 `pixelsplat.ply`。
+model_path 指向 re10k.ckpt 或 acid.ckpt，同时指定匹配的 experiment 与标定数据 dataset_roots/index_path。需安装已声明的运行依赖和本地高斯光栅化扩展。仅传图像列表时使用合成基线。PLY 导出归一化几何、DC 颜色和标准透明度 logit。
 
-记录的任务 profile：`3d-reconstruction`、`gaussian-splatting`、`novel-view-synthesis`。绑定的 pipeline 类是 `PixelSplatPipeline`。
+## 就绪状态与限制
 
-系列状态：**计划中**。
-
-PixelSplatSynthesis 封装官方测试入口，但缺少本地高斯光栅化扩展与就位的 re10k.ckpt 时会快速失败。 提交任务前请先编译/就位两者。
-
-在本地编译高斯光栅化扩展并就位 re10k.ckpt 之前无法推理。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run pixelsplat --pipeline.task-profile 3d-reconstruction` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.10，CUDA 11.3）。
-
-记录的权重仓库包括 `dylanebert/pixelSplat`。就位权重用 `bash scripts/inference/prepare_model_infer.sh pixelsplat`。
-
-记录 license 为 mit；状态：**计划中**。
+- 支持原始卷积版本权重，不能直接替换为更新的 camera-ready 网络权重。
+- 验证覆盖每个数据集的两个场景，并非完整基准；未标定输入不能证明几何准确性。
+- PLY 仅保留 DC 颜色，视角相关外观仍需使用原生渲染器。
 
 <ModelRelatedRecipes modelId="pixelsplat" locale="zh" />

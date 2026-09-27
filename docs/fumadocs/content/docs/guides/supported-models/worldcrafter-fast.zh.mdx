@@ -1,6 +1,6 @@
 ---
 title: "WorldCrafter Fast"
-description: "Reuses shared Helios transformer, scheduler, latent preparation and VGGT layers."
+description: "WorldCrafter Fast 是来自 Tencentarc 的世界模型。Catalog 将它记录为文生视频、图生视频、相机可控视频生成、世界模型任务。"
 pageSource: generated
 ---
 
@@ -8,7 +8,7 @@ text · image → video
 
 WorldCrafter Fast 是来自 Tencentarc 的世界模型。Catalog 将它记录为文生视频、图生视频、相机可控视频生成、世界模型任务。
 
-WorldFoundry 将它绑定到 worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline pipeline（runner：worldfoundry.pipeline）。
+WorldFoundry 记录了到 worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline pipeline 的绑定（runner：worldfoundry.pipeline）。
 
 它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。
 
@@ -16,6 +16,21 @@ WorldFoundry 将它绑定到 worldfoundry.pipelines.worldcrafter.pipeline_worldc
 
 该路径已记录 WorldFoundry runner parity 产物。
 
+**目录状态:** Runner 已验证
+
+## 上游来源
+
+- [项目主页](https://drexubery.github.io/WorldCrafter/)
+- [论文](https://arxiv.org/abs/2609.24984)
+- [GitHub](https://github.com/TencentARC/WorldCrafter)
+- [上游 README](https://github.com/TencentARC/WorldCrafter#readme)
+
 <ModelCommandBuilder modelId="worldcrafter-fast" locale="zh" />
+
+## 就绪状态与限制
+
+- 原生 Demo 证据未记录。
+- 已在本地 H100 上使用发布权重验证 640×384 的双片段图生视频和文生视频推理，包含严格权重加载、裁剪前输出有限性检查、完整解码与画面检查。
+- 共享 Transformer 的上游数值检查已通过；Base 从中断点恢复的裁剪前输出与连续运行完全一致。长时程画面质量尚未确立。
 
 <ModelRelatedRecipes modelId="worldcrafter-fast" locale="zh" />

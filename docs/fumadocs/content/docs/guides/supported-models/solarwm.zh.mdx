@@ -1,12 +1,21 @@
 ---
 title: "SolarWM"
-description: "SolarWM provides dataset-indexed camera-controlled inference across Wan 5B/14B, LTX-2.5 and MiniMax-H3 releases."
+description: "SolarWM 支持从数据索引读取相机轨迹，在 Wan 5B/14B、LTX-2.5 和 MiniMax-H3 路线上执行推理。"
 pageSource: generated
 ---
 
 **发表机构:** Junchao-cs · 研究机构
 
 SolarWM 支持从数据索引读取相机轨迹，在 Wan 5B/14B、LTX-2.5 和 MiniMax-H3 路线上执行推理。
+
+**目录状态:** 已集成
+
+## 上游来源
+
+- [项目主页](https://junchao-cs.github.io/SolarWM-Web/)
+- [论文](https://arxiv.org/abs/2609.02886)
+- [源码](https://github.com/Junchao-cs/SolarWM)
+- [上游 README](https://github.com/Junchao-cs/SolarWM#readme)
 
 <ModelCommandBuilder modelId="solarwm" locale="zh" />
 
@@ -21,5 +30,9 @@ WorldFoundry 统一选择官方 solarwm infer 路线，在对应独立环境中�
 ## 评测 Benchmark
 
 - [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) — 长时程相机控制下的世界一致性。
+
+## 就绪状态与限制
+
+- 当前工作区仅完成 CPU 可执行的检查，GPU 推理和 checkpoint 产物仍待验证。
 
 <ModelRelatedRecipes modelId="solarwm" locale="zh" />

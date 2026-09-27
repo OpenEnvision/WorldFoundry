@@ -1,6 +1,6 @@
 ---
 title: "WorldCrafter Base"
-description: "Reuses shared Helios transformer, scheduler, latent preparation and VGGT layers."
+description: "WorldCrafter Base is a world model from Tencentarc. The catalog records it for text-to-video, image-to-video, camera-controlled-video, and world-model."
 pageSource: generated
 ---
 
@@ -8,7 +8,7 @@ text · image → video
 
 WorldCrafter Base is a world model from Tencentarc. The catalog records it for text-to-video, image-to-video, camera-controlled-video, and world-model.
 
-WorldFoundry binds it to the worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline pipeline via worldfoundry.pipeline.
+WorldFoundry records a binding to the worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline pipeline via worldfoundry.pipeline.
 
 It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).
 
@@ -16,6 +16,21 @@ Weights are pulled from the Hugging Face repository TencentARC/WorldCrafter-Base
 
 A WorldFoundry runner-parity artifact is recorded for this route.
 
+**Catalog status:** Runner verified
+
+## Upstream sources
+
+- [Project](https://drexubery.github.io/WorldCrafter/)
+- [Paper](https://arxiv.org/abs/2609.24984)
+- [GitHub](https://github.com/TencentARC/WorldCrafter)
+- [Upstream README](https://github.com/TencentARC/WorldCrafter#readme)
+
 <ModelCommandBuilder modelId="worldcrafter-base" locale="en" />
+
+## Readiness and limitations
+
+- Native demo evidence: Not recorded.
+- Local H100 validation passed released-weight I2V/T2V at 640x384 for two chunks, strict loading, pre-clamp finite outputs, full decode and visual review.
+- Shared-transformer upstream numerical checks passed; Base resume matched continuous pre-clamp outputs exactly. Long-horizon quality is not established.
 
 <ModelRelatedRecipes modelId="worldcrafter-base" locale="en" />

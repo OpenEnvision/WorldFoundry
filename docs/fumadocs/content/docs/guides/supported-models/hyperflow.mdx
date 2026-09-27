@@ -9,10 +9,23 @@ text · image → video
 
 Eight-step MiniMax-H3 adapter with joint video/audio, first/last-frame conditioning and ordered multimodal references.
 
+**Catalog status:** Integrated
+
+## Upstream sources
+
+- [Source](https://github.com/Video-Rebirth/hyperflow)
+- [Upstream README](https://github.com/Video-Rebirth/hyperflow#readme)
+
 <ModelCommandBuilder modelId="hyperflow" locale="en" />
 
 ## Runtime contract
 
 Supply a complete local diffusers MiniMax-H3 snapshot, weights_path and the dedicated Python executable. The upstream loader supplies the fixed grid; num_inference_steps must be 8 and output fps must be 24.
+
+## Readiness and limitations
+
+- GPU inference requires substantial VRAM and host RAM; the upstream single-GPU measurements use an H200.
+- The official frame count is aligned upward to 17n+5, with supported aligned counts from 124 to 345 at 24 fps.
+- Ref2VA requires transformer_ref weights; audio-only references are unsupported.
 
 <ModelRelatedRecipes modelId="hyperflow" locale="en" />

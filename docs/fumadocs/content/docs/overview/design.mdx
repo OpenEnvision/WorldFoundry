@@ -42,11 +42,11 @@ The **contract and evidence layer** is what survives the process. Requests, resu
 
 ## Catalogs: knowing what exists
 
-The **Model Zoo** assigns stable IDs and aliases to world-model systems. A model manifest can record tasks, upstream sources, checkpoint references, variants, runtime bindings, install profiles, hardware expectations, validation notes, and known blockers. The catalog currently spans 270 models, but that number describes catalog coverage rather than uniform runtime maturity.
+The **Model Zoo** assigns stable IDs and aliases to world-model systems. A model manifest can record tasks, upstream sources, checkpoint references, variants, runtime bindings, install profiles, hardware expectations, validation notes, and known blockers. See the [model catalog](/docs/guides/supported-models) for current coverage; an entry does not imply a runnable runtime.
 
 Those entries are organized around five operational families. The video catalog covers text-, image-, and video-conditioned generation, editing, animation, and audio-video systems. The world-model catalog focuses on interactive worlds, navigation, action or camera conditioning, and simulators. The 3D/4D catalog includes reconstruction, depth, point clouds, scene representations, and dynamic geometry. The VLA/VA/WAM catalog covers embodied policies and world-action systems. A separate hosted-API catalog covers provider-backed systems whose weights are never loaded locally.
 
-The **Benchmark Zoo** plays the same role for evaluation protocols. Together with reusable metrics, the current release covers nearly 100 benchmark and metric implementations: generated-video quality, physical and dynamic consistency, camera and 3D/4D behavior, world-model capability, safety, memory, and embodied control. A benchmark manifest can declare datasets, generated-output layouts, metric assets, official commands, normalizers, runtime profiles, eligibility conditions, and blockers.
+The **Benchmark Zoo** plays the same role for evaluation protocols. Its [benchmark hub](/docs/evaluation/benchmark-hub) covers generated-video quality, physical and dynamic consistency, camera and 3D/4D behavior, world-model capability, safety, memory, and embodied control. A benchmark manifest can declare datasets, generated-output layouts, metric assets, official commands, normalizers, runtime profiles, eligibility conditions, and blockers.
 
 Query the catalogs before downloading anything:
 
@@ -107,7 +107,7 @@ Exact files depend on the run mode and integration. The contract is that unavail
 
 WorldFoundry does not redistribute model checkpoints, gated weights, full benchmark datasets, simulator assets, API keys, private endpoints, or normal user outputs. It also does not vendor every upstream training stack, or guarantee that every model × benchmark pair is meaningful.
 
-Those boundaries keep the repository reviewable and respect upstream licenses. The checked-in code describes how external assets connect to a run and reports when they are missing; it never silently downloads or substitutes protected resources. License names and official texts for in-tree `base_models` copies are listed under [Vendored licenses](/docs/reference/vendored-licenses).
+Those boundaries keep the repository reviewable and respect upstream licenses. The checked-in code describes how external assets connect to a run and reports when they are missing; it never silently downloads or substitutes protected resources. Licensing and provenance for in-tree upstream code are recorded in the repository files linked from [Third-party notices](/docs/reference/vendored-licenses).
 
 ## Where the layers live
 

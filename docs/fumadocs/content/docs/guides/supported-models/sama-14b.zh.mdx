@@ -1,48 +1,38 @@
 ---
 title: "SAMA"
-description: "SAMA：视频编辑；Runner 一致性待确认。"
-modelId: "sama-14b"
+description: "SAMA 14B 是开源的指令引导视频编辑模型，输入是源视频和文本指令。发布的推理入口不接受空间蒙版或单独的参考图。WorldFoundry 在运行时报告缺失权重；权重位于 syxbb/SAMA-14B，采用 apache-2.0 许可证。"
 pageSource: generated
 ---
 
-SAMA 14B 是开源的 14B 视频编辑模型，记录任务为参考引导与掩码条件的视频编辑：提供源视频加掩码或参考图，它重写被掩码的内容。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告；权重为 apache-2.0，位于 syxbb/SAMA-14B。
+**发表机构:** 开源研究发布（仓库未记录正式机构） · 研究机构
 
-<ModelPaperFigures modelId="sama-14b" locale="zh" />
+SAMA 14B 是开源的指令引导视频编辑模型，输入是源视频和文本指令。发布的推理入口不接受空间蒙版或单独的参考图。WorldFoundry 在运行时报告缺失权重；权重位于 syxbb/SAMA-14B，采用 apache-2.0 许可证。
 
-记录论文为[arXiv 2603.19228](https://arxiv.org/abs/2603.19228)。
+**目录状态:** 已集成
 
-项目页：[cynthiazxy123.github.io/SAMA](https://cynthiazxy123.github.io/SAMA/)。代码：[Cynthiazxy123/SAMA](https://github.com/Cynthiazxy123/SAMA)。
+## 上游来源
+
+- [项目主页](https://cynthiazxy123.github.io/SAMA/)
+- [论文](https://arxiv.org/abs/2603.19228)
+- [GitHub](https://github.com/Cynthiazxy123/SAMA)
+- [Hugging Face](https://huggingface.co/syxbb/SAMA-14B)
+- [上游 README](https://github.com/Cynthiazxy123/SAMA#readme)
 
 <ModelCommandBuilder modelId="sama-14b" locale="zh" />
 
-## 用来做什么
-
-用 `sama-14b` 做 catalog 视频到视频推理。输入已经是视频时从这里起步。
+## 架构
 
 catalog 记录这是一个 14B 参数的编辑模型，输入契约为 prompt/image/video；发表机构与架构内部细节仓库未记录——详情请查阅上游 GitHub（Cynthiazxy123/SAMA）。
 
-catalog 记录的任务包括 视频编辑、reference-guided-video、mask-conditioned-video。
-
 ## 运行时契约
 
-必填 `prompt`；可选 `image`、`video`；产物 `sama-14b.mp4`。
+提供源视频和编辑指令。已将一次使用真实权重的 17 帧运行与官方实现对照；更广泛的编辑质量仍未验证。
 
-记录的任务 profile：`video-editing`、`reference-guided-video`、`mask-conditioned-video`。绑定的 pipeline 类是 `SAMA14BPipeline`。
+## 就绪状态与限制
 
-系列状态：**Runner 一致性待确认**。
-
-在完成一次 checkpoint 加载运行前，runner parity 保持 pending。 启动前请准备源视频、掩码与参考资产；路径会明确报告缺失资产。
-
-Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run sama-14b --pipeline.task-profile video-editing` 改视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `syxbb/SAMA-14B`。就位权重用 `bash scripts/inference/prepare_model_infer.sh sama-14b`。
-
-记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+- 已将一次使用真实权重的 17 帧运行与官方推理对照；其他输入和更长视频仍需单独验证。
+- 发布的 SAMA 推理入口没有空间蒙版或单独的参考图输入。
+- Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+- 发表机构在本仓库中未记录。
 
 <ModelRelatedRecipes modelId="sama-14b" locale="zh" />

@@ -1,50 +1,32 @@
 ---
 title: "OmniVinci"
-description: "OmniVinci from NVIDIA: multimodal-reasoning and audio-reasoning; Runner parity pending."
-modelId: "omnivinci"
+description: "OmniVinci is NVIDIA's omni-modal understanding LLM: one model that reasons over images, video, and audio together."
 pageSource: generated
 ---
 
+**Publisher:** NVIDIA · Company
+
 OmniVinci is NVIDIA's omni-modal understanding LLM: one model that reasons over images, video, and audio together. In this catalog it is an understanding/reasoning entry, not a generator — tasks are multimodal reasoning, audio reasoning, and image/video question answering, and the artifact is a model_response.
 
-<ModelPaperFigures modelId="omnivinci" locale="en" />
+**Catalog status:** Integrated
 
-Code: [nvidia/omnivinci](https://huggingface.co/nvidia/omnivinci).
+## Upstream sources
+
+- [GitHub](https://huggingface.co/nvidia/omnivinci)
 
 <ModelCommandBuilder modelId="omnivinci" locale="en" />
 
-## What it is for
-
-Pick `omnivinci` for the recorded multimodal reasoning route: documented inputs in, a reasoning artifact out. Use it when the card is a reasoner, not a generator.
+## Architecture
 
 NVIDIA describes OmniVinci as an omni-modal LLM with joint vision-audio alignment (public release at nvidia/omnivinci). This repository records the prompt/image/video input contract; parameter counts and internals are not recorded here.
 
-Catalog tasks include multimodal-reasoning, audio-reasoning, image-question-answering, and video-question-answering. Catalog aliases include `nvidia/omnivinci`.
-
 ## Runtime contract
 
-Required `prompt`; optional `image` and `video`; artifacts `omnivinci.json`.
+Runner parity is pending. Use it to interrogate videos produced by generation entries — e.g. asking questions about physical plausibility or event order — rather than to generate content.
 
-Recorded task profiles: `multimodal-reasoning`, `audio-reasoning`, `image-question-answering`, and `video-question-answering`. WorldFoundry binds `OmniVinciPipeline`.
+## Readiness and limitations
 
-Family status: **Runner parity pending**.
-
-Use it to interrogate videos produced by generation entries — e.g. asking questions about physical plausibility or event order — rather than to generate content.
-
-The public `OmniVinciPipeline` accepts a video file through `video_path` (or `video`). It samples eight frames by default; set `max_video_frames` from 1 to 128 to change that limit. Video audio is off by default; set `load_audio_in_video=True` when the clip has an audio track and the question needs it. One checkpoint-backed, silent 13-frame clip was tested with eight sampled frames, and the image QA route also passed a regression check. Longer clips, audio-in-video, and evaluator runner parity remain unverified.
-
-WorldFoundry route is complete; missing checkpoint/assets are reported at runtime.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run omnivinci --pipeline.task-profile multimodal-reasoning` to run the reasoning route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-For direct video QA, call `OmniVinciPipeline.from_pretrained(model_path="/path/to/nvidia--omnivinci")`, then `pipeline(prompt="What is happening?", video_path="/path/to/clip.mp4", max_video_frames=8, load_audio_in_video=False, output_path="answer.json", return_dict=True)`. The result points to a JSON answer and reports the number of frames processed.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `nvidia/omnivinci`. Stage assets with `bash scripts/inference/prepare_model_infer.sh omnivinci`.
-
-Status: **Runner parity pending**.
+- Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.
+- Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
 
 <ModelRelatedRecipes modelId="omnivinci" locale="en" />

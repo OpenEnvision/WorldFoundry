@@ -1,48 +1,36 @@
 ---
 title: "WildDet3D"
-description: "WildDet3D（Allen Institute for AI (AI2)）：3d-detection、wild-3d-perception；Runner 一致性待确认。"
-modelId: "wilddet3d"
+description: "艾伦人工智能研究所（AI2）的 WildDet3D 面向野外 3D 检测：从不受约束的真实图像中恢复 3D 物体框，作为世界理解能力。官方 GitHub 仓库与 allenai/WildDet3D Hugging Face 模型均已确认；WorldFoundry 树内注册了官方推理路由，检测器资产为运行时门控。"
 pageSource: generated
 ---
 
+**发表机构:** 艾伦人工智能研究所（AI2） · 研究机构
+
 艾伦人工智能研究所（AI2）的 WildDet3D 面向野外 3D 检测：从不受约束的真实图像中恢复 3D 物体框，作为世界理解能力。官方 GitHub 仓库与 allenai/WildDet3D Hugging Face 模型均已确认；WorldFoundry 树内注册了官方推理路由，检测器资产为运行时门控。
 
-<ModelPaperFigures modelId="wilddet3d" locale="zh" />
+**目录状态:** 运行时已移植
 
-记录论文为[arXiv 2604.08626](https://arxiv.org/abs/2604.08626)。
+## 上游来源
 
-项目页：[allenai.github.io/WildDet3D](https://allenai.github.io/WildDet3D/)。代码：[allenai/WildDet3D](https://github.com/allenai/WildDet3D)。
+- [项目主页](https://allenai.github.io/WildDet3D/)
+- [论文](https://arxiv.org/abs/2604.08626)
+- [GitHub](https://github.com/allenai/WildDet3D)
+- [Hugging Face](https://huggingface.co/allenai/WildDet3D)
+- [上游 README](https://github.com/allenai/WildDet3D#readme)
 
 <ModelCommandBuilder modelId="wilddet3d" locale="zh" />
 
-## 用来做什么
-
-需要动作条件世界步进时选 `wilddet3d`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+## 架构
 
 这是感知类条目而非生成器：输出为 3D 检测产物（generated_3d_asset）而非视频。官方仓库指针（锁定 head 1b8aa52b）之外的架构内部细节仓库未记录。
 
-catalog 记录的任务包括 3d-detection、wild-3d-perception、world-understanding。
-
 ## 运行时契约
 
-必填 `image`、`prompt`、`video`；可选 `actions`；产物 `generated_3d_asset`、`wilddet3d_runtime_plan.json`。
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。注意上游记录的 SAM 派生许可（other:sam-license）。
 
-记录的任务 profile：`3d-detection`、`wild-3d-perception`、`world-understanding`。绑定的 pipeline 类是 `WildDet3DPipeline`。
+## 就绪状态与限制
 
-系列状态：**Runner 一致性待确认**。
-
-配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。 注意上游记录的 SAM 派生许可（other:sam-license）。
-
-WorldFoundry tracks upstream source and checkpoint 计划中; no runnable pipeline is registered.
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run wilddet3d --pipeline.task-profile 3d-detection` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `allenai/WildDet3D`。就位权重用 `bash scripts/inference/prepare_model_infer.sh wilddet3d`。
-
-记录 license 为 other:sam-license；状态：**Runner 一致性待确认**。
+- 仅感知：不产出视频或世界生成结果。
+- 许可记录为 other:sam-license；商用前请审查。
 
 <ModelRelatedRecipes modelId="wilddet3d" locale="zh" />

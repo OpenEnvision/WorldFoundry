@@ -1,48 +1,36 @@
 ---
 title: "LeWorldModel"
-description: "LeWorldModel（Mila – Quebec AI Institute / Université de Montréal）：潜空间世界模型、JEPA 世界模型；Runner 一致性待确认。"
-modelId: "leworldmodel"
+description: "LeWorldModel（le-wm）研究潜空间世界模型：在 PushT 等控制任务上训练与评估 JEPA 式及像素空间世界模型。本 catalog 中已注册官方 eval 路径的仅推理封装；执行需要 stable-worldmodel 包、任务数据集，以及当策略非随机时的策略 checkpoint。"
 pageSource: generated
 ---
 
+**发表机构:** Mila 魁北克人工智能研究所 / 蒙特利尔大学 · 高校
+
 LeWorldModel（le-wm）研究潜空间世界模型：在 PushT 等控制任务上训练与评估 JEPA 式及像素空间世界模型。本 catalog 中已注册官方 eval 路径的仅推理封装；执行需要 stable-worldmodel 包、任务数据集，以及当策略非随机时的策略 checkpoint。
 
-<ModelPaperFigures modelId="leworldmodel" locale="zh" />
+**目录状态:** 运行时已移植
 
-记录论文为[arXiv 2603.19312](https://arxiv.org/abs/2603.19312)。
+## 上游来源
 
-项目页：[le-wm.github.io](https://le-wm.github.io/)。代码：[lucas-maes/le-wm](https://github.com/lucas-maes/le-wm)。
+- [项目主页](https://le-wm.github.io/)
+- [论文](https://arxiv.org/abs/2603.19312)
+- [GitHub](https://github.com/lucas-maes/le-wm)
+- [Hugging Face](https://huggingface.co/eren23/lewm-models)
+- [上游 README](https://github.com/lucas-maes/le-wm#readme)
 
 <ModelCommandBuilder modelId="leworldmodel" locale="zh" />
 
-## 用来做什么
+## 架构
 
-需要动作条件世界步进时选 `leworldmodel`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
-
-记录的结构覆盖潜空间（JEPA）与像素两类世界模型 variant（checkpoint 位于 eren23/lewm-models）。运行时 eval 配置位于 data/models/runtime/configs/le_wm/config/eval；推理不需要训练配置。该模型由Mila 魁北克人工智能研究所 / 蒙特利尔大学发布。
-
-catalog 记录的任务包括 潜空间世界模型、JEPA 世界模型、pixel-world-model、pusht-eval。
+记录的结构覆盖潜空间（JEPA）与像素两类世界模型 variant（checkpoint 位于 eren23/lewm-models）。运行时 eval 配置位于 data/models/runtime/configs/le_wm/config/eval；推理不需要训练配置。
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`video`；可选 `actions` (world_action, robot_action)；产物 `generated_world`、`leworldmodel_result.json`。
+路径匹配官方 eval.py 配置流程，并在执行前报告缺失的 stable-worldmodel 包、任务数据集或非随机策略 checkpoint。官方 PushT 评估一致性仍待验证。
 
-记录的任务 profile：`latent-world-model`、`jepa-world-model`、`pixel-world-model`、`pusht-eval`。绑定的 pipeline 类是 `LeWorldModelPipeline`。
+## 就绪状态与限制
 
-系列状态：**Runner 一致性待确认**。
-
-路径匹配官方 eval.py 配置流程，并在执行前报告缺失的 stable-worldmodel 包、任务数据集或非随机策略 checkpoint。 官方 PushT 评估一致性仍待验证。
-
-面向评估的世界模型：用于评价动力学，不渲染演示视频。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run leworldmodel --pipeline.task-profile pusht-eval` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `eren23/lewm-models`。就位权重用 `bash scripts/inference/prepare_model_infer.sh leworldmodel`。
-
-状态：**Runner 一致性待确认**。
+- 面向评估的世界模型：用于评价动力学，不渲染演示视频。
+- 官方 PushT 评估一致性待验证。
 
 <ModelRelatedRecipes modelId="leworldmodel" locale="zh" />

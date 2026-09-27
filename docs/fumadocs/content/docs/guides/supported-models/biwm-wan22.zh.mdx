@@ -1,6 +1,6 @@
 ---
 title: "BiWM Wan2.2"
-description: "Reuses canonical Wan transformer, UMT5, causal VAE and core video IO."
+description: "BiWM Wan2.2 是来自 Lynnreal Ai 的世界模型。Catalog 将它记录为文生视频、图生视频、相机可控视频生成、世界模型任务。"
 pageSource: generated
 ---
 
@@ -8,7 +8,7 @@ text · image → video
 
 BiWM Wan2.2 是来自 Lynnreal Ai 的世界模型。Catalog 将它记录为文生视频、图生视频、相机可控视频生成、世界模型任务。
 
-该条目目前尚未绑定可运行的 WorldFoundry pipeline；本页只记录上游来源与就绪状态。
+WorldFoundry 记录了到 worldfoundry.pipelines.biwm.pipeline_biwm:BiWMPipeline pipeline 的绑定（runner：worldfoundry.pipeline）；仅有绑定记录并不代表已成功运行。
 
 它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。
 
@@ -16,6 +16,18 @@ BiWM Wan2.2 是来自 Lynnreal Ai 的世界模型。Catalog 将它记录为文�
 
 当前 runner parity 为“Pending”，原生 demo parity 为“Not Recorded”；端到端 GPU 证据应视为尚未记录。
 
+**目录状态:** 运行时已移植
+
+## 上游来源
+
+- [GitHub](https://github.com/LynnReal-AI/BiWM)
+- [上游 README](https://github.com/LynnReal-AI/BiWM#readme)
+
 <ModelCommandBuilder modelId="biwm-wan22" locale="zh" />
+
+## 就绪状态与限制
+
+- 已记录 pipeline 绑定，但尚无成功运行的证据；Runner parity 仍待验证，原生 Demo 证据未记录。
+- 由于训练后的 BiWM 生成器权重尚未公开发布，完整权重推理目前受阻；仅有 Wan 基座权重不能代替它。
 
 <ModelRelatedRecipes modelId="biwm-wan22" locale="zh" />

@@ -1,6 +1,6 @@
 ---
 title: "AlayaWorld v1.1"
-description: "Separate AR and four-step DMD inference for AlayaWorld v1.1 with ViGeo spatial memory."
+description: "AlayaWorld v1.1 独立提供带 ViGeo 空间记忆的 AR 和四步 DMD 推理。"
 pageSource: generated
 ---
 
@@ -8,6 +8,13 @@ pageSource: generated
 image → video
 
 AlayaWorld v1.1 独立提供带 ViGeo 空间记忆的 AR 和四步 DMD 推理。
+
+**目录状态:** 已集成
+
+## 上游来源
+
+- [源码](https://github.com/AlayaLab/AlayaWorld)
+- [上游 README](https://github.com/AlayaLab/AlayaWorld#readme)
 
 <ModelCommandBuilder modelId="alayaworld-v1.1" locale="zh" />
 
@@ -18,5 +25,9 @@ AlayaWorld v1.1 独立提供带 ViGeo 空间记忆的 AR 和四步 DMD 推理。
 ## 运行时契约
 
 选择 variant=ar（30 步）或 dmd（4 步）。需 stage2b Transformer/历史权重、LTX-2.3 基座、Gemma 和 ViGeo1.1；DMD 另需 stage3 LoRA。此路线独立于原版 DA3 合并 checkpoint。
+
+## 就绪状态与限制
+
+- 当前工作区仅完成 CPU 可执行的检查，GPU 推理和 checkpoint 产物仍待验证。
 
 <ModelRelatedRecipes modelId="alayaworld-v1.1" locale="zh" />

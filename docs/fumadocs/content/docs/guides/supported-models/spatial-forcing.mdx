@@ -1,48 +1,40 @@
 ---
 title: "Spatial-Forcing"
-description: "Spatial-Forcing: vla and vla action prediction; Verified; 4 variants."
-modelId: "spatial-forcing"
+description: "Spatial-Forcing aligns VLA internal representations with 3D geometry (via VGGT-style supervision) to boost manipulation precision on OpenVLA backbones. All four released OpenVLA-LIBERO checkpoints (spatial, object, goal, long; Apache-2.0)…"
 pageSource: generated
 ---
 
-Spatial-Forcing aligns VLA internal representations with 3D geometry (via VGGT-style supervision) to boost manipulation precision on OpenVLA backbones. All four released OpenVLA-LIBERO checkpoints (spatial, object, goal, long; Apache-2.0) passed strict restoration and real A100 inference with finite 8x7 actions — the catalog status is Verified.
+**Publisher:** Open-source research release (institution not recorded) · Research lab
 
-<ModelPaperFigures modelId="spatial-forcing" locale="en" />
+Spatial-Forcing aligns VLA internal representations with 3D geometry (via VGGT-style supervision) to boost manipulation precision on OpenVLA backbones. All four released OpenVLA-LIBERO checkpoints (spatial, object, goal, long; Apache-2.0) passed strict restoration and real A100 inference with finite 8x7 actions — the catalog status is all_released_checkpoints_gpu_validated.
 
-Code: [OpenHelix-Team/Spatial-Forcing](https://github.com/OpenHelix-Team/Spatial-Forcing).
+**Catalog status:** Profile only
+
+## Upstream sources
+
+- [GitHub](https://github.com/OpenHelix-Team/Spatial-Forcing)
+- [Hugging Face](https://huggingface.co/haofuly/spatial-forcing-7b-finetuned-libero-spatial)
+- [Hugging Face](https://huggingface.co/haofuly/spatial-forcing-7b-finetuned-libero-object)
+- [Hugging Face](https://huggingface.co/haofuly/spatial-forcing-7b-finetuned-libero-goal)
+- [Hugging Face](https://huggingface.co/haofuly/spatial-forcing-7b-finetuned-libero-10)
+- [Upstream README](https://github.com/OpenHelix-Team/Spatial-Forcing#readme)
 
 <ModelCommandBuilder modelId="spatial-forcing" locale="en" />
 
-## What it is for
-
-Pick `spatial-forcing-libero-spatial` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+## Architecture
 
 Fine-tuned OpenVLA 7B checkpoints where spatial alignment was enforced during training; at inference the models run as standard OpenVLA-style policies. The inference-only runtime disables checkpoint-hosted remote code; VGGT, alignment projectors, and LoRA adapter copies are excluded.
 
-Catalog tasks include vla, vla action prediction, and vla policy rollout. Catalog aliases include `spatial_forcing` and `spatial-forcing-openvla`. Also recorded: `spatial-forcing-libero-object`, `spatial-forcing-libero-goal`, `spatial-forcing-libero-10`.
-
-Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (All four LIBERO checkpoints are GPU-validated).
-
 ## Runtime contract
-
-Required `prompt`, `image`, and `state`; optional `model_id` (spatial-forcing), `camera_keys` (full_image, wrist_image), `state_dimension` (8), `policy_family`, and `action_representation`; artifacts `action_trace` and `spatial-forcing_action_trace.json`.
-
-Recorded task profiles: `vla`, `vla.action_prediction`, and `vla.policy_rollout`. WorldFoundry binds `SpatialForcingPipeline`.
-
-Start on `spatial-forcing-libero-spatial`. The family registers 4 catalog variants (cards above): `spatial-forcing-libero-spatial` (`vla.policy_rollout`) — Verified; `spatial-forcing-libero-object` (`vla.policy_rollout`) — Verified; `spatial-forcing-libero-goal` (`vla.policy_rollout`) — Verified; `spatial-forcing-libero-10` (`vla.policy_rollout`) — Verified. Family status: **Verified**.
 
 Pick the LIBERO split checkpoint you need (spatial/object/goal/long) from the official collection; only locally staged snapshots are accepted.
 
-Action/VLA integration for the four released Spatial-Forcing OpenVLA-LIBERO checkpoints.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [LIBERO](/docs/evaluation/benchmark-hub/libero) — All four LIBERO checkpoints are GPU-validated.
 
-The catalog launch is `worldfoundry-eval run spatial-forcing-libero-spatial --pipeline.task-profile vla.policy_rollout`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the dedicated environment `worldfoundry-vla-spatial-forcing-cu121` (Python 3.10, CUDA 12.1, torch==2.2.0).
-
-Recorded weight repositories include `haofuly/spatial-forcing-7b-finetuned-libero-spatial`, `haofuly/spatial-forcing-7b-finetuned-libero-object`, and `haofuly/spatial-forcing-7b-finetuned-libero-goal` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh spatial-forcing-libero-spatial`.
-
-Recorded licenses include apache-2.0; status: **Verified**.
+- Released checkpoints are LIBERO fine-tunes; other embodiments need retraining.
 
 <ModelRelatedRecipes modelId="spatial-forcing" locale="en" />

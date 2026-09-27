@@ -9,6 +9,13 @@ text · image → video
 
 Zing-0.5 generates video with frame-aligned keyboard control and prompt switching.
 
+**Catalog status:** Integrated
+
+## Upstream sources
+
+- [Source](https://github.com/seedleap/zing-world-model)
+- [Upstream README](https://github.com/seedleap/zing-world-model#readme)
+
 <ModelCommandBuilder modelId="zing" locale="en" />
 
 ## Architecture
@@ -18,5 +25,10 @@ Native Wan2.2 TI2V-5B layers, UMT5, VAE38 and attention are reused. Only the key
 ## Runtime contract
 
 Use ZingPipeline.from_pretrained(checkpoint_dir). num_frames includes the optional reference and must be 1+4*N; height/width are multiples of 32. Keyboard controls contain N-1 rows of eight values for a total N-frame result.
+
+## Readiness and limitations
+
+- Tiny CPU transformer state-dict and FP32/BF16 rollout parity checked against upstream, including eviction and prompt switches.
+- Checkpoint-backed GPU generation and native auxiliary-model parity are pending.
 
 <ModelRelatedRecipes modelId="zing" locale="en" />

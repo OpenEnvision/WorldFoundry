@@ -1,48 +1,42 @@
 ---
 title: "Uni3C"
-description: "Uni3C（Alibaba DAMO Academy）：图生视频、相机可控视频；已验证; 独立环境 `uni3c`。"
-modelId: "uni3c"
+description: "阿里巴巴达摩院的 Uni3C 将相机控制与人体动作控制统一到图生视频中：PCDController 阶段负责相机操控，统一阶段结合相机与人体动作（RealisDance-DiT）。WorldFoundry 已将两条官方第二阶段推理路径内置树内，公开 Apache-2.0 checkpoint（ewrfcas/Uni3C、theFoxofSky/RealisDance-DiT）构建在 Wan2.1-I2V-14B-720P 基座之上。"
 pageSource: generated
 ---
 
+**发表机构:** 阿里巴巴达摩院 · 企业
+image → video
+
 阿里巴巴达摩院的 Uni3C 将相机控制与人体动作控制统一到图生视频中：PCDController 阶段负责相机操控，统一阶段结合相机与人体动作（RealisDance-DiT）。WorldFoundry 已将两条官方第二阶段推理路径内置树内，公开 Apache-2.0 checkpoint（ewrfcas/Uni3C、theFoxofSky/RealisDance-DiT）构建在 Wan2.1-I2V-14B-720P 基座之上。
 
-<ModelPaperFigures modelId="uni3c" locale="zh" />
+**目录状态:** 运行时已移植
 
-记录论文为[arXiv 2504.14899](https://arxiv.org/abs/2504.14899)。
+## 上游来源
 
-项目页：[ewrfcas.github.io/Uni3C](https://ewrfcas.github.io/Uni3C/)。代码：[alibaba-damo-academy/Uni3C](https://github.com/alibaba-damo-academy/Uni3C)。
+- [项目主页](https://ewrfcas.github.io/Uni3C/)
+- [论文](https://arxiv.org/abs/2504.14899)
+- [GitHub](https://github.com/alibaba-damo-academy/Uni3C)
+- [Hugging Face](https://huggingface.co/ewrfcas/Uni3C)
+- [Hugging Face](https://huggingface.co/theFoxofSky/RealisDance-DiT)
+- [上游 README](https://github.com/alibaba-damo-academy/Uni3C#readme)
 
 <ModelCommandBuilder modelId="uni3c" locale="zh" />
 
-## 用来做什么
-
-用 `uni3c` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+## 架构
 
 仓库记录三个 checkpoint 角色：ewrfcas/Uni3C 为 pcd_controller、 Wan-AI/Wan2.1-I2V-14B-720P-Diffusers 为 camera_base、theFoxofSky/RealisDance-DiT 为相机+人体统一模型。预渲染控制包保持为显式运行时输入；预处理不会被隐式替换。
 
-catalog 记录的任务包括 图生视频、相机可控视频、human-motion-controlled-video、image-camera-control-video。别名包括 `PCDController`、`alibaba-damo-academy/Uni3C`。模态上，它接受图像，输出视频。
-
-记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（显式控制下的相机轨迹跟随）。
-
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (camera_control_bundle, human_motion_bundle)；产物 `generated_video`、`uni3c.mp4`。
+按需选择仅相机或相机+人体统一路由，并提供匹配的预渲染控制包。默认 PCDController 相机路线已使用正式 checkpoint 在 H100 上完成 GPU 验证；相机+人体统一路线仍需单独完成 checkpoint 支撑的验证。
 
-记录的任务 profile：`image-to-video`、`camera-controlled-video`、`human-motion-controlled-video`、`image-camera-control-video`。绑定的 pipeline 类是 `Uni3CPipeline`。
+## 评测 Benchmark
 
-系列状态：**已验证**。
+- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 显式控制下的相机轨迹跟随。
 
-`image-camera-control-video` 记录默认值：num_frames=9, fps=16, seed=0。
+## 就绪状态与限制
 
-按需选择仅相机或相机+人体统一路由，并提供匹配的预渲染控制包。 默认 PCDController 相机路线已使用正式 checkpoint 在 H100 上完成 GPU 验证；相机+人体统一路线仍需单独完成 checkpoint 支撑的验证。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run uni3c --pipeline.task-profile image-camera-control-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-记录的权重仓库包括 `ewrfcas/Uni3C`、`Wan-AI/Wan2.1-I2V-14B-720P-Diffusers`、`theFoxofSky/RealisDance-DiT`。就位权重用 `bash scripts/inference/prepare_model_infer.sh uni3c`。
-
-状态：**已验证**。
+- 已记录的 GPU 验证覆盖默认 PCDController 相机路线，不覆盖相机+人体统一路线。
+- 控制包需预先渲染；pipeline 不代为生成。
 
 <ModelRelatedRecipes modelId="uni3c" locale="zh" />

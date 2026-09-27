@@ -1,50 +1,40 @@
 ---
 title: "Pandora"
-description: "Pandora from Maitrix.org (UC San Diego / MBZUAI): diffusion-world-model and world-generation; Planned."
-modelId: "pandora"
+description: "Pandora is an early general world model with natural-language actions and video states: it simulates world states as video and lets you steer the simulation with free-text actions at any step."
 pageSource: generated
 ---
 
+**Publisher:** Maitrix.org (UC San Diego / MBZUAI) · Research lab
+text → video
+
 Pandora is an early general world model with natural-language actions and video states: it simulates world states as video and lets you steer the simulation with free-text actions at any step. In this catalog the model, ChatUniVi, and DynamiCrafter runtime modules are vendored in-tree; full generation stays blocked because the official weights are hidden by data-license constraints.
 
-<ModelPaperFigures modelId="pandora" locale="en" />
+**Catalog status:** Planned
 
-The recorded paper is [arXiv 2406.09401](https://arxiv.org/abs/2406.09401).
+## Upstream sources
 
-Project page: [world-model.maitrix.org](https://world-model.maitrix.org/). Code: [maitrix-org/Pandora](https://github.com/maitrix-org/Pandora).
+- [Project](https://world-model.maitrix.org/)
+- [Paper](https://arxiv.org/abs/2406.09401)
+- [GitHub](https://github.com/maitrix-org/Pandora)
+- [Upstream README](https://github.com/maitrix-org/Pandora#readme)
 
 <ModelCommandBuilder modelId="pandora" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `pandora` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
-
-Per the upstream release, an autoregressive LLM backbone (ChatUniVi-family) connects to a video diffusion decoder (DynamiCrafter-family) so language actions steer video-state rollouts. The vendored runtime lives under synthesis/visual_generation/pandora/pandora_runtime. It is published by Maitrix.org (UC San Diego / MBZUAI).
-
-Catalog tasks include diffusion-world-model, world-generation, and text-to-video. Catalog aliases include `pandora-world`. Documented modalities: text in, video out.
-
-Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Language-action world-rollout quality).
+Per the upstream release, an autoregressive LLM backbone (ChatUniVi-family) connects to a video diffusion decoder (DynamiCrafter-family) so language actions steer video-state rollouts. The vendored runtime lives under synthesis/visual_generation/pandora/pandora_runtime.
 
 ## Runtime contract
 
-Required `prompt`; optional `image`; artifacts `pandora.mp4`.
-
-Recorded task profiles: `diffusion-world-model`, `world-generation`, and `text-to-video`. WorldFoundry binds `PandoraPipeline`.
-
-Family status: **Planned**.
-
 PandoraSynthesis provides a runtime-plan wrapper; real generation requires caller-provided official-compatible checkpoints, since official weights are hidden or unavailable.
 
-Runtime source is vendored in-tree; full generation remains blocked by hidden official weights.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Language-action world-rollout quality.
 
-The catalog launch is `worldfoundry-eval run pandora --pipeline.task-profile diffusion-world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, Prepare Only).
-
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh pandora`.
-
-Status: **Planned**.
+- Official weights are hidden by data-license constraints — caller-provided checkpoints required.
+- Research prototype: quality trails newer world models.
 
 <ModelRelatedRecipes modelId="pandora" locale="en" />

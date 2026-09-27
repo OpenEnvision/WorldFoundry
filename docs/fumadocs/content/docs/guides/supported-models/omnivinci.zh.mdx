@@ -1,50 +1,32 @@
 ---
 title: "OmniVinci"
-description: "OmniVinci（NVIDIA）：多模态推理、音频推理；Runner 一致性待确认。"
-modelId: "omnivinci"
+description: "OmniVinci 是英伟达的全模态理解大模型：单一模型同时对图像、视频与音频进行推理。在本 catalog 中它是理解/推理类条目，而非生成器——任务为多模态推理、音频推理与图像/视频问答，产物是 model_response。"
 pageSource: generated
 ---
 
+**发表机构:** 英伟达（NVIDIA） · 企业
+
 OmniVinci 是英伟达的全模态理解大模型：单一模型同时对图像、视频与音频进行推理。在本 catalog 中它是理解/推理类条目，而非生成器——任务为多模态推理、音频推理与图像/视频问答，产物是 model_response。
 
-<ModelPaperFigures modelId="omnivinci" locale="zh" />
+**目录状态:** 已集成
 
-代码：[nvidia/omnivinci](https://huggingface.co/nvidia/omnivinci)。
+## 上游来源
+
+- [GitHub](https://huggingface.co/nvidia/omnivinci)
 
 <ModelCommandBuilder modelId="omnivinci" locale="zh" />
 
-## 用来做什么
+## 架构
 
-走记录的多模态推理路由时选 `omnivinci`：记录输入进、推理产物出。本卡是推理器而不是生成器时用它。
-
-英伟达将 OmniVinci 描述为具备视觉-音频联合对齐的全模态 LLM（公开发布于 nvidia/omnivinci）。本仓库记录 prompt/image/video 输入契约；参数规模与内部细节仓库未记录。该模型由英伟达（NVIDIA）发布。
-
-catalog 记录的任务包括 多模态推理、音频推理、图像问答、视频问答。别名包括 `nvidia/omnivinci`。
+英伟达将 OmniVinci 描述为具备视觉-音频联合对齐的全模态 LLM（公开发布于 nvidia/omnivinci）。本仓库记录 prompt/image/video 输入契约；参数规模与内部细节仓库未记录。
 
 ## 运行时契约
 
-必填 `prompt`；可选 `image`、`video`；产物 `omnivinci.json`。
+Runner parity 为 pending。适合用来审视生成条目产出的视频——例如就物理合理性或事件顺序提问——而不是用来生成内容。
 
-记录的任务 profile：`multimodal-reasoning`、`audio-reasoning`、`image-question-answering`、`video-question-answering`。绑定的 pipeline 类是 `OmniVinciPipeline`。
+## 就绪状态与限制
 
-系列状态：**Runner 一致性待确认**。
-
-适合用来审视生成条目产出的视频——例如就物理合理性或事件顺序提问——而不是用来生成内容。
-
-公开的 `OmniVinciPipeline` 通过 `video_path`（或 `video`）接收视频文件。默认抽取 8 帧；`max_video_frames` 可设为 1 至 128。视频音频默认关闭；有音轨且问题需要听觉信息时可设 `load_audio_in_video=True`。目前已用一段静音的 13 帧视频完成 8 帧抽样的真实权重问答，并复测图像问答。长视频、视频音频以及 evaluator Runner 一致性仍未验证。
-
-Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run omnivinci --pipeline.task-profile multimodal-reasoning` 跑推理路由。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-直接做视频问答时，先调用 `OmniVinciPipeline.from_pretrained(model_path="/path/to/nvidia--omnivinci")`，再调用 `pipeline(prompt="视频中发生了什么？", video_path="/path/to/clip.mp4", max_video_frames=8, load_audio_in_video=False, output_path="answer.json", return_dict=True)`。返回结果指向 JSON 答案，并记录实际处理的帧数。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `nvidia/omnivinci`。就位权重用 `bash scripts/inference/prepare_model_infer.sh omnivinci`。
-
-状态：**Runner 一致性待确认**。
+- Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+- Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
 
 <ModelRelatedRecipes modelId="omnivinci" locale="zh" />

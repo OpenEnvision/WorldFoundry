@@ -1,0 +1,40 @@
+---
+title: "UniWorld-View"
+description: "UniWorld-View generates camera-controlled novel views from a single image or a casually captured monocular video."
+pageSource: generated
+---
+
+**Publisher:** PKU Yuan Group · University
+image · video → video
+
+UniWorld-View generates camera-controlled novel views from a single image or a casually captured monocular video.
+
+**Catalog status:** Integrated
+
+## Upstream sources
+
+- [Project](https://zhouhyocean.github.io/uniworld-view/)
+- [Paper](https://arxiv.org/abs/2608.04701)
+- [GitHub](https://github.com/PKU-YuanGroup/UniWorld-View)
+- [Hugging Face](https://huggingface.co/Drexubery/UniView)
+- [Source](https://github.com/NIRVANALAN/STream3R)
+- [Upstream README](https://github.com/PKU-YuanGroup/UniWorld-View#readme)
+- [Upstream README](https://github.com/NIRVANALAN/STream3R#readme)
+
+<ModelCommandBuilder modelId="uniworld-view" locale="en" />
+
+## Architecture
+
+Official UniView transformer on Wan2.1-VACE-14B with geometry estimation and rendered camera controls.
+
+## Runtime contract
+
+Use a pinned official checkout with STream3R under extern, a separate upstream environment and the official local weights. The upstream CLI uses BLIP2 captions rather than a user text prompt.
+
+## Readiness and limitations
+
+- The upstream authors recommend at least 60 GB of GPU memory.
+- Validation covers specific official samples and settings; quantitative camera-angle accuracy and other scenes remain unmeasured.
+- With aspect-ratio preservation enabled, actual output dimensions can differ from the requested height and width.
+
+<ModelRelatedRecipes modelId="uniworld-view" locale="en" />

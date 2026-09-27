@@ -1,50 +1,43 @@
 ---
 title: "HY-WorldPlay"
-description: "HY-WorldPlay from Tencent (Hunyuan): world and video; Verified."
-modelId: "hy-worldplay"
+description: "HY-WorldPlay is Tencent's real-time interactive world video model: starting from an image, it follows pose/action input to roll the world forward — the interactive arm of the Hunyuan world stack."
 pageSource: generated
 ---
 
+**Publisher:** Tencent (Hunyuan) · Company
+video
+
 HY-WorldPlay is Tencent's real-time interactive world video model: starting from an image, it follows pose/action input to roll the world forward — the interactive arm of the Hunyuan world stack. In this catalog the runner is verified for the official image-pose-video route with the official 8-GPU execution profile.
 
-<ModelPaperFigures modelId="hy-worldplay" locale="en" />
+**Catalog status:** Runner verified
 
-The recorded paper is [arXiv 2602.09022](https://arxiv.org/abs/2602.09022).
+## Upstream sources
 
-Project page: [3d-models.hunyuan.tencent.com/world](https://3d-models.hunyuan.tencent.com/world/). Code: [Tencent-Hunyuan/HY-WorldPlay](https://github.com/Tencent-Hunyuan/HY-WorldPlay).
+- [Project](https://3d-models.hunyuan.tencent.com/world/)
+- [Paper](https://arxiv.org/abs/2602.09022)
+- [GitHub](https://github.com/Tencent-Hunyuan/HY-WorldPlay)
+- [Hugging Face](https://huggingface.co/tencent/HY-WorldPlay)
+- [Upstream README](https://github.com/Tencent-Hunyuan/HY-WorldPlay#readme)
 
 <ModelCommandBuilder modelId="hy-worldplay" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `hy-worldplay` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
-
-The recorded checkpoint set tells the assembly: tencent/HY-WorldPlay action weights over tencent/HunyuanVideo-1.5 video-model support assets, with Qwen2.5-VL-7B-Instruct, byt5-small, and FLUX.1-Redux-dev as support components. The in-tree pipeline follows the official demo contract. It is published by Tencent (Hunyuan).
-
-Catalog tasks include world, video, world model, and official-image-pose-video. Catalog aliases include `hunyuan-worldplay` and `hunyuanworldplay`. Documented outputs include video.
-
-Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Interactive world-rollout quality), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Pose/camera-following accuracy).
+The recorded checkpoint set tells the assembly: tencent/HY-WorldPlay action weights over tencent/HunyuanVideo-1.5 video-model support assets, with Qwen2.5-VL-7B-Instruct, byt5-small, and FLUX.1-Redux-dev as support components. The in-tree pipeline follows the official demo contract.
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions`; artifacts `hy-worldplay.mp4`.
-
-Recorded task profiles: `world`, `video`, `world_model`, and `official-image-pose-video`. WorldFoundry binds `HunyuanWorldPlayPipeline`.
-
-Family status: **Verified**.
-
-Recorded `official-image-pose-video` defaults: num_frames=125, fps=24, height=480, width=832, num_inference_steps=4, seed=1.
-
 The official route uses 8 torchrun ranks — plan for a multi-GPU host and stage all five recorded checkpoint sets. Full benchmark scoring and longer interaction suites remain separate work.
 
-## Running in WorldFoundry
+## Evaluation benchmarks
 
-Launch `worldfoundry-eval run hy-worldplay --pipeline.task-profile official-image-pose-video` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Interactive world-rollout quality.
+- [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — Pose/camera-following accuracy.
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+## Readiness and limitations
 
-Recorded weight repositories include `tencent/HY-WorldPlay`, `tencent/HunyuanVideo-1.5`, and `Qwen/Qwen2.5-VL-7B-Instruct` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh hy-worldplay`.
-
-Status: **Verified**.
+- Official execution profile needs 8 GPUs.
+- Five checkpoint sets must be staged before running.
+- Benchmark scoring and long interaction suites are not yet recorded.
 
 <ModelRelatedRecipes modelId="hy-worldplay" locale="en" />

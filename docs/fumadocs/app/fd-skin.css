@@ -663,6 +663,67 @@
   }
 }
 
+/* Keep the homepage controls in two deliberate rows on narrow screens. */
+@media (max-width: 640px) {
+  .wf-home-stage .wf-home-site-header-inner {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 34px auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  .wf-home-stage .pi-doc-header-brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .wf-home-stage .wf-home-site-header-tools {
+    display: contents;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-nav {
+    grid-column: 1 / 3;
+    grid-row: 2;
+    justify-content: flex-start;
+    order: initial;
+    width: auto;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-site-search-trigger {
+    grid-column: 2;
+    grid-row: 1;
+    flex: none;
+    font-size: 0 !important;
+    justify-content: center;
+    min-width: 34px !important;
+    padding-inline: 0 !important;
+    width: 34px !important;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-site-search-trigger kbd,
+  .wf-home-stage .wf-home-site-header .pi-site-search-trigger .ms-auto {
+    display: none !important;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-github-link {
+    display: none;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-theme-switch {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-language-switch {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
+
 /* ---------- Theme toggle (single light/dark button) ---------- */
 .pi-github-link {
   align-items: center;
@@ -1843,12 +1904,13 @@
 
 @media (max-width: 900px) {
   .wf-home-hero-carousel-viewport {
-    height: clamp(16rem, 82vw, 24rem);
+    aspect-ratio: 16 / 10;
+    height: auto;
   }
 
   .wf-home-hero-card-media {
-    aspect-ratio: 4 / 5;
-    min-height: clamp(16rem, 78vw, 22rem);
+    aspect-ratio: 16 / 10;
+    min-height: 0;
   }
 
   .wf-home-hero-card.is-prev,
@@ -1858,12 +1920,27 @@
 
   .wf-home-hero-card,
   .wf-home-hero-card.is-active {
-    transform: translate(-50%, -50%) scale(1);
+    top: 0;
+    transform: translate(-50%, 0) scale(1);
     width: 100%;
   }
 
   .wf-home-hero-card-overlay {
     padding: 1.25rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .wf-home-hero-carousel-viewport,
+  .wf-home-hero-card-media {
+    aspect-ratio: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .wf-home-hero-carousel-viewport,
+  .wf-home-hero-card-media {
+    aspect-ratio: 4 / 5;
   }
 }
 

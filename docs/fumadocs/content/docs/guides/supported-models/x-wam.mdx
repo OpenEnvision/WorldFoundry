@@ -1,50 +1,44 @@
 ---
 title: "X-WAM"
-description: "X-WAM: wam and world action model; Verified; 3 variants."
-modelId: "x-wam"
+description: "X-WAM is a GPU-validated world-action model: one Wan 2.2 joint flow process predicts future RGB/depth, proprioception, and robot actions together. RoboCasa-SFT passed checkpoint-backed action and future-RGB inference; RoboTwin-SFT addition…"
 pageSource: generated
 ---
 
-X-WAM is a GPU-validated world-action model: one Wan 2.2 joint flow process predicts future RGB/depth, proprioception, and robot actions together. The 38.9 GB RoboCasa-SFT checkpoint restored strictly and passed both the official 10-step action/proprioception path and a full 50-step future-RGB decode on an A100 (Apache-2.0).
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+image → depth
 
-<ModelPaperFigures modelId="x-wam" locale="en" />
+X-WAM is a GPU-validated world-action model: one Wan 2.2 joint flow process predicts future RGB/depth, proprioception, and robot actions together. RoboCasa-SFT passed checkpoint-backed action and future-RGB inference; RoboTwin-SFT additionally matched the pinned official runner on one paired in-domain episode (Apache-2.0).
 
-The recorded paper is [arXiv 2604.26694](https://arxiv.org/abs/2604.26694).
+**Catalog status:** Runtime ported
 
-Project page: [sharinka0715.github.io/X-WAM](https://sharinka0715.github.io/X-WAM/). Code: [sharinka0715/X-WAM](https://github.com/sharinka0715/X-WAM).
+## Upstream sources
+
+- [Project](https://sharinka0715.github.io/X-WAM/)
+- [Paper](https://arxiv.org/abs/2604.26694)
+- [GitHub](https://github.com/sharinka0715/X-WAM)
+- [Hugging Face](https://huggingface.co/sharinka0715/X-WAM-checkpoints)
+- [Hugging Face](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B)
+- [Upstream README](https://github.com/sharinka0715/X-WAM#readme)
 
 <ModelCommandBuilder modelId="x-wam" locale="en" />
 
-## What it is for
-
-`x-wam-robocasa-sft` is the recorded instruction-to-action line. Start here when you need a WorldFoundry VLA rollout rather than a video generator.
+## Architecture
 
 Built on Wan2.2-TI2V-5B: a joint flow model over visual futures and action streams. The official deployed policy uses asynchronous early stopping after 10 action steps and returns a 32-step action chunk; optional full world decoding continues to 50 steps. Both Hub repos are revision-pinned.
 
-Catalog tasks include wam, world action model, wam world action modeling, and robot policy. Catalog aliases include `x_wam`, `xwam`, and `X-WAM`. Documented modalities: image in, depth out. Also recorded: `x-wam-robotwin-sft`, `x-wam-pretrained`.
-
-Recorded evaluation entry points include [RoboCasa](/docs/evaluation/benchmark-hub/robocasa) (The GPU-validated checkpoint is RoboCasa-SFT), [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Joint world-action prediction quality), [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) (Referenced in this model's manifest evidence notes).
-
 ## Runtime contract
-
-Required `prompt`, `image`, and `state`; optional `model_id` (x-wam), `camera_count` (3), `policy_family`, `observation_layout`, and `variants` (\{"robocasa_sft": \{"action_shape": [32, 7], "camera_keys": ["robot0_agentview_left", "robot0_agentview_right", "robot0_eye_in_hand"], "state_dimension": 8\}, "robotwin_sft": \{"action_shape": [32, 14], "camera_keys": ["head_camera", "left_camera", "right_camera"], "state_dimension": 16\}\}); artifacts `action_trace`, `predicted_video`, and `x-wam_action_trace.json`.
-
-Recorded task profiles: `wam`, `world_action_model`, `wam.world_action_modeling`, `robot_policy`, `video_prediction`, and `depth_prediction` among others. WorldFoundry binds `XWAMPipeline`.
-
-Start on `x-wam-robocasa-sft`. The family registers 3 catalog variants (cards above): `x-wam-robocasa-sft` (`wam.world_action_modeling`) — Verified; `x-wam-robotwin-sft` (`wam.world_action_modeling`) — Verified; `x-wam-pretrained` (`wam.post_training_base`) — Verified. Family status: **Verified**.
 
 Stage the X-WAM checkpoint states plus the Wan2.2-TI2V-5B base. The runtime is self-contained in-tree and never imports an external X-WAM checkout; training, simulators, ZeroMQ services, Lightning, and DeepSpeed orchestration are excluded.
 
-X-WAM is routed as a world-action model because one Wan 2.2 joint flow process predicts future RGB/depth, proprioception, and robot actions.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [RoboCasa](/docs/evaluation/benchmark-hub/robocasa) — The RoboCasa-SFT checkpoint passed GPU inference; no closed-loop benchmark was run.
+- [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) — The RoboTwin-SFT checkpoint matched the pinned official runner on one paired episode; no closed-loop benchmark was run.
+- [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) — Joint world-action prediction quality.
 
-Launch `worldfoundry-eval run x-wam-robocasa-sft --pipeline.task-profile wam.world_action_modeling` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the dedicated environment `worldfoundry-x-wam-cu129` (Python 3.10, CUDA 12.9, torch==2.8.0).
-
-Recorded weight repositories include `sharinka0715/X-WAM-checkpoints` and `Wan-AI/Wan2.2-TI2V-5B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh x-wam-robocasa-sft`.
-
-Recorded licenses include apache-2.0; status: **Verified**.
+- Optional depth decoding remains unvalidated.
+- The 38.9 GB checkpoint requires substantial local storage.
 
 <ModelRelatedRecipes modelId="x-wam" locale="en" />

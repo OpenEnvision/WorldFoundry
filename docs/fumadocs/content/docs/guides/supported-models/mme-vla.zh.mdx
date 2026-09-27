@@ -1,50 +1,42 @@
 ---
 title: "MME-VLA"
-description: "MME-VLA：视觉-语言-动作（VLA）、VLA 动作预测；仅静态加载。"
-modelId: "mme-vla"
+description: "MME-VLA 是 RoboMME 项目的策略学习线，核心是面向重记忆操作的感知帧采样。README 确认四个 Apache-2.0 checkpoint 仓库——最佳感知帧采样模块、mme_vla_suite 集合、pi05 基线与 VLM 子目标预测器。 WorldFoundry 从内置子集在进程内调用 create_trained_policy(...).infer。"
 pageSource: generated
 ---
 
+**发表机构:** 开源研究发布（仓库未记录正式机构） · 研究机构
+
 MME-VLA 是 RoboMME 项目的策略学习线，核心是面向重记忆操作的感知帧采样。README 确认四个 Apache-2.0 checkpoint 仓库——最佳感知帧采样模块、mme_vla_suite 集合、pi05 基线与 VLM 子目标预测器。 WorldFoundry 从内置子集在进程内调用 create_trained_policy(...).infer。
 
-<ModelPaperFigures modelId="mme-vla" locale="zh" />
+**目录状态:** 仅有运行环境配置
 
-记录论文为[arXiv 2603.04639](https://arxiv.org/abs/2603.04639)。
+## 上游来源
 
-项目页：[robomme.github.io/challenge.html](https://robomme.github.io/challenge.html)。代码：[RoboMME/robomme_policy_learning](https://github.com/RoboMME/robomme_policy_learning)。
+- [项目主页](https://robomme.github.io/challenge.html)
+- [论文](https://arxiv.org/abs/2603.04639)
+- [GitHub](https://github.com/RoboMME/robomme_policy_learning)
+- [Hugging Face](https://huggingface.co/Yinpei/perceptual-framesamp-modul)
+- [Hugging Face](https://huggingface.co/Yinpei/mme_vla_suite)
+- [Hugging Face](https://huggingface.co/Yinpei/pi05_baseline)
+- [Hugging Face](https://huggingface.co/Yinpei/vlm_subgoal_predictor)
+- [上游 README](https://github.com/RoboMME/robomme_policy_learning#readme)
 
 <ModelCommandBuilder modelId="mme-vla" locale="zh" />
 
-## 用来做什么
-
-需要 catalog 上的 VLA 策略时选 `perceptual-framesamp-modul`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+## 架构
 
 仓库记录的设计将感知帧采样模块与策略学习及可选的 VLM 子目标预测器结合。解析器、运行时导入与 compileall 检查无需外部 checkout 即通过；更多内部细节仓库未记录。
 
-catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行、具身评测。别名包括 `mme_vla`、`robomme-policy-learning`、`perceptual-framesamp-modul`。
-
-记录的评测入口包括[RoboMME](/zh/docs/evaluation/benchmark-hub/robomme)（RoboMME 项目的原生基准）。
-
 ## 运行时契约
-
-必填 `image`、`prompt`、`state`；可选 `model_id` (mme-vla)、`image_keys` (observation/image, observation/wrist_image)、`state_key` (observation/state)、`memory_keys` (static_image_emb, static_pos_emb, static_state_emb, static_mask, recur_image_emb, recur_pos_emb, recur_state_emb, recur_mask, simple_subgoal, grounded_subgoal)、`policy_family`；产物 `action_trace`、`mme-vla_action_trace.json`。
-
-记录的任务 profile：`vla`、`vla.action_prediction`、`vla.policy_rollout`、`embodied_benchmark`。绑定的 pipeline 类是 `MMEVLAPipeline`。
-
-系列状态：**仅静态加载**。
 
 在声称 demo parity 前仍需 checkpoint 驱动的动作块验证；请先就位帧采样模块 checkpoint。
 
-尚未声称 demo parity；checkpoint 驱动验证待完成。
+## 评测 Benchmark
 
-## 在 WorldFoundry 中运行
+- [RoboMME](/zh/docs/evaluation/benchmark-hub/robomme) — RoboMME 项目的原生基准。
 
-catalog 启动命令是 `worldfoundry-eval run perceptual-framesamp-modul --pipeline.task-profile vla.policy_rollout`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+## 就绪状态与限制
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch==2.7.1）。
-
-记录的权重仓库包括 `Yinpei/perceptual-framesamp-modul`、`Yinpei/mme_vla_suite`、`Yinpei/pi05_baseline` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh perceptual-framesamp-modul`。
-
-记录 license 为 apache-2.0；状态：**仅静态加载**。
+- 尚未声称 demo parity；checkpoint 驱动验证待完成。
 
 <ModelRelatedRecipes modelId="mme-vla" locale="zh" />

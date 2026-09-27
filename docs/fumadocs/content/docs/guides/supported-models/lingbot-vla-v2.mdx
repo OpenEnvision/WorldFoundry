@@ -1,48 +1,34 @@
 ---
 title: "LingBot-VLA 2.0"
-description: "LingBot-VLA 2.0 from Robbyant (Ant Group): vla and vla action prediction; Static load only; dedicated `worldfoundry-lingbot-vla-v2-cu128`."
-modelId: "lingbot-vla-v2"
+description: "LingBot-VLA 2.0 is Robbyant's 6B second-generation VLA built on a Qwen3-VL mixture-of-experts policy, released as robbyant/lingbot-vla-v2-6b under Apache-2.0. WorldFoundry runs official policy inference in-process and in-tree — batching, f…"
 pageSource: generated
 ---
 
+**Publisher:** Robbyant (Ant Group) · Company
+
 LingBot-VLA 2.0 is Robbyant's 6B second-generation VLA built on a Qwen3-VL mixture-of-experts policy, released as robbyant/lingbot-vla-v2-6b under Apache-2.0. WorldFoundry runs official policy inference in-process and in-tree — batching, feature transforms, robot mappings, and normalization included — with static checkpoint validation complete.
 
-<ModelPaperFigures modelId="lingbot-vla-v2" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [arXiv 2607.06403](https://arxiv.org/abs/2607.06403).
+## Upstream sources
 
-Code: [Robbyant/lingbot-vla-v2](https://github.com/Robbyant/lingbot-vla-v2).
+- [Paper](https://arxiv.org/abs/2607.06403)
+- [GitHub](https://github.com/Robbyant/lingbot-vla-v2)
+- [Hugging Face](https://huggingface.co/robbyant/lingbot-vla-v2-6b)
+- [Upstream README](https://github.com/Robbyant/lingbot-vla-v2#readme)
 
 <ModelCommandBuilder modelId="lingbot-vla-v2" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `lingbot-vla-v2-6b` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
-
-A Qwen3-VL/MoE policy with a 55-dimensional internal representation, denoising action decoding, image_grid_thw handling, and optional torch.compile paths. Training-only perception teachers are excluded; inference consumes their distilled representations from the trained weights. It is published by Robbyant (Ant Group).
-
-Catalog tasks include vla, vla action prediction, vla policy rollout, and robot policy. Catalog aliases include `lingbot-vla2`, `lingbot-vla-v2-6b`, and `lingbotvla2`.
+A Qwen3-VL/MoE policy with a 55-dimensional internal representation, denoising action decoding, image_grid_thw handling, and optional torch.compile paths. Training-only perception teachers are excluded; inference consumes their distilled representations from the trained weights.
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `state`; optional `model_id` (lingbot-vla-v2), `state_dim` (14), `batch`, `camera_keys` (observation.images.cam_high, observation.images.cam_left_wrist, observation.images.cam_right_wrist), and `policy_family`; artifacts `action_trace` and `lingbot_vla_v2_action_trace.json`.
-
-Recorded task profiles: `vla`, `vla.action_prediction`, `vla.policy_rollout`, and `robot_policy`. WorldFoundry binds `LingBotVLAV2Pipeline`.
-
-Family status: **Static load only**.
-
 The public 6B checkpoint uses the bundled official-derived inference config; robot-specific downstream checkpoints may override it with their own lingbotvla_cli.yaml.
 
-Qwen3-VL/MoE policy inference, official batching, feature transforms, robot mappings, and normalization assets are integrated directly in-tree.
+## Readiness and limitations
 
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run lingbot-vla-v2-6b --pipeline.task-profile vla.action_prediction` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the dedicated environment `worldfoundry-lingbot-vla-v2-cu128` (Python 3.11, CUDA 12.8, torch==2.8.0).
-
-Recorded weight repositories include `robbyant/lingbot-vla-v2-6b` and `Qwen/Qwen3-VL-4B-Instruct`. Stage assets with `bash scripts/inference/prepare_model_infer.sh lingbot-vla-v2-6b`.
-
-Recorded licenses include apache-2.0; status: **Static load only**.
+- GPU rollout validation is not recorded in this repository (static checkpoint validation only).
 
 <ModelRelatedRecipes modelId="lingbot-vla-v2" locale="en" />

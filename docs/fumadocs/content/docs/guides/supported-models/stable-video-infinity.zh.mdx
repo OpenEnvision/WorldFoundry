@@ -1,50 +1,51 @@
 ---
 title: "Stable Video Infinity 2.0"
-description: "Stable Video Infinity 2.0（EPFL (VITA lab)）：图生视频、长视频生成；已验证。"
-modelId: "stable-video-infinity"
+description: "Stable Video Infinity 2.0（SVI）通过五帧续接与逐段换种子来串联视频段，由提示词流驱动，可生成任意长度的视频。它是 catalog 中证据最充分的条目之一：runner 状态为 full_default_gpu_parity_verified，记录的 A100 运行生成两段相接的 81 帧 832x544 视频并输出 157 帧 H.264 产物；与固定官方运行时的同设置对比达到 31.03 dB PSNR。"
 pageSource: generated
 ---
 
-Stable Video Infinity 2.0（SVI）通过五帧续接与逐段换种子来串联视频段，由提示词流驱动，可生成任意长度的视频。它是 catalog 中证据最充分的条目之一：runner 状态为 已验证，记录的 A100 运行生成两段相接的 81 帧 832x544 视频并输出 157 帧 H.264 产物；与固定官方运行时的同设置对比达到 31.03 dB PSNR。
+**发表机构:** 洛桑联邦理工学院（EPFL VITA 实验室） · 高校
+image → video
+[Stable Video Infinity: Infinite-Length Video Generation with Error Recycling](https://arxiv.org/abs/2510.09212) (2025)
 
-<ModelPaperFigures modelId="stable-video-infinity" locale="zh" />
+Stable Video Infinity 2.0（SVI）通过五帧续接与逐段换种子来串联视频段，由提示词流驱动，可生成任意长度的视频。它是 catalog 中证据最充分的条目之一：runner 状态为 full_default_gpu_parity_verified，记录的 A100 运行生成两段相接的 81 帧 832x544 视频并输出 157 帧 H.264 产物；与固定官方运行时的同设置对比达到 31.03 dB PSNR。
 
-记录论文为[Stable Video Infinity: Infinite-Length Video Generation with Error Recycling](https://arxiv.org/abs/2510.09212)（2025）。
+**目录状态:** 已集成
 
-项目页：[stable-video-infinity.github.io/homepage](https://stable-video-infinity.github.io/homepage/)。代码：[vita-epfl/Stable-Video-Infinity](https://github.com/vita-epfl/Stable-Video-Infinity)。代码：[epfl-vita/svi-model](https://huggingface.co/epfl-vita/svi-model)。
+## 上游来源
+
+- [项目主页](https://stable-video-infinity.github.io/homepage/)
+- [论文](https://arxiv.org/abs/2510.09212)
+- [GitHub](https://github.com/vita-epfl/Stable-Video-Infinity)
+- [Hugging Face](https://huggingface.co/vita-video-gen/svi-model)
+- [Hugging Face](https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P)
+- [源码](https://huggingface.co/epfl-vita/svi-model)
+- [上游 README](https://github.com/vita-epfl/Stable-Video-Infinity#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/stable-video-infinity/paper.png" alt="Stable Video Infinity: Infinite-Length Video Generation with Error Recycling" />
+  <figcaption>Stable Video Infinity: Infinite-Length Video Generation with Error Recycling</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="stable-video-infinity" locale="zh" />
 
-## 用来做什么
+## 架构
 
-`stable-video-infinity` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
-
-SVI 2.0 是叠加在 Wan2.1-I2V-14B-480P 上的 LoRA：适配器复用 WorldFoundry 规范化 Wan 组件与分段 runner，保留五帧续接、参考帧填充与提示词流重复机制。发布的训练管线 LoRA 键会归一化为纯 Wan DiT 模块名，任何发现的 LoRA 对未合并成功都会导致加载失败。该模型由洛桑联邦理工学院（EPFL VITA 实验室）发布。
-
-catalog 记录的任务包括 图生视频、长视频生成、prompt-stream-video-generation、prompt-stream-i2v。别名包括 `SVI`、`SVI-2.0`、`stable_video_infinity`、`stable-video-infinity-2.0`。模态上，它接受图像，输出视频。
-
-记录的评测入口包括[ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)（长时程评测，契合 SVI 的无限长视频目标）、[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（单段质量标尺）。
+SVI 2.0 是叠加在 Wan2.1-I2V-14B-480P 上的 LoRA：适配器复用 WorldFoundry 规范化 Wan 组件与分段 runner，保留五帧续接、参考帧填充与提示词流重复机制。发布的训练管线 LoRA 键会归一化为纯 Wan DiT 模块名，任何发现的 LoRA 对未合并成功都会导致加载失败。
 
 ## 运行时契约
 
-必填 `prompt`、`prompt_stream`、`image`；可选 `video`、`actions` (seed, num_clips, num_motion_frames)；产物 `generated_video`、`stable-video-infinity.mp4`。
+默认值遵循官方配方：五运动帧续接、完整参考帧填充、每段独立种子、每条提示词重复两次后推进。除非启用 use_first_prompt_only，官方 999 段上限被限定为每条提示词两段。需同时就位 SVI LoRA （vita-video-gen/svi-model，MIT）与 Wan2.1 基座。
 
-记录的任务 profile：`image-to-video`、`long-video-generation`、`prompt-stream-video-generation`、`prompt-stream-i2v`。绑定的 pipeline 类是 `StableVideoInfinityPipeline`。
+## 评测 Benchmark
 
-系列状态：**已验证**。
+- [ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench) — 长时程评测，契合 SVI 的无限长视频目标。
+- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — 单段质量标尺。
 
-`prompt-stream-i2v` 记录默认值：num_frames=81, num_inference_steps=50, seed=0, fps=24。
+## 就绪状态与限制
 
-默认值遵循官方配方：五运动帧续接、完整参考帧填充、每段独立种子、每条提示词重复两次后推进。 除非启用 use_first_prompt_only，官方 999 段上限被限定为每条提示词两段。 需同时就位 SVI LoRA （vita-video-gen/svi-model，MIT）与 Wan2.1 基座。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run stable-video-infinity --pipeline.task-profile prompt-stream-i2v` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.5）。
-
-记录的权重仓库包括 `vita-video-gen/svi-model`、`Wan-AI/Wan2.1-I2V-14B-480P`、`epfl-vita/svi-model`。就位权重用 `bash scripts/inference/prepare_model_infer.sh stable-video-infinity`。
-
-记录 license 为 mit、apache-2.0；状态：**已验证**。
+- 需要同时就位 SVI LoRA 与 Wan2.1-I2V-14B 基座 checkpoint。
+- 长视频漂移被缓解而非消除——多段串联后质量仍可能下降。
+- 训练启动器与数据集不在源码树内；这是仅推理移植。
 
 <ModelRelatedRecipes modelId="stable-video-infinity" locale="zh" />

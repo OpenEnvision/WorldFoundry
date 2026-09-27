@@ -1,48 +1,34 @@
 ---
 title: "Open-MAGVIT2"
-description: "Open-MAGVIT2 from Tencent (ARC Lab): video-tokenization and class-conditional-image-generation; Verified."
-modelId: "open-magvit2"
+description: "Open-MAGVIT2 is Tencent ARC's open reproduction of the MAGVIT-v2 lookup-free visual tokenizer, plus autoregressive generation on top of it."
 pageSource: generated
 ---
 
+**Publisher:** Tencent (ARC Lab) · Company
+
 Open-MAGVIT2 is Tencent ARC's open reproduction of the MAGVIT-v2 lookup-free visual tokenizer, plus autoregressive generation on top of it. In this catalog the runnable route is class-conditional ImageNet image generation — full 256-token generation passed checkpoint-backed GPU and semantic visual QA (verified at 256x256, ImageNet class 207). The artifact is a generated PNG image, not video.
 
-<ModelPaperFigures modelId="open-magvit2" locale="en" />
+**Catalog status:** Integrated
 
-The recorded paper is [arXiv 2409.04410](https://arxiv.org/abs/2409.04410).
+## Upstream sources
 
-Code: [TencentARC/Open-MAGVIT2](https://github.com/TencentARC/Open-MAGVIT2).
+- [Paper](https://arxiv.org/abs/2409.04410)
+- [GitHub](https://github.com/TencentARC/Open-MAGVIT2)
+- [Upstream README](https://github.com/TencentARC/Open-MAGVIT2#readme)
 
 <ModelCommandBuilder modelId="open-magvit2" locale="en" />
 
-## What it is for
+## Architecture
 
-`open-magvit2` is the recorded image-generation line. Start here for prompt-to-image inference.
-
-Two parts recorded in-tree: the lookup-free quantization (LFQ) tokenizer with a very large codebook, and an autoregressive transformer that predicts visual tokens for a requested ImageNet class. The class_id input selects the category; generation runs the vendored CUDA wrapper. It is published by Tencent (ARC Lab).
-
-Catalog tasks include video-tokenization, class-conditional-image-generation, and autoregressive-generation. Catalog aliases include `open_magvit2` and `openmagvit2`.
+Two parts recorded in-tree: the lookup-free quantization (LFQ) tokenizer with a very large codebook, and an autoregressive transformer that predicts visual tokens for a requested ImageNet class. The class_id input selects the category; generation runs the vendored CUDA wrapper.
 
 ## Runtime contract
 
-Required `class_id`; optional `image` and `prompt`; artifacts `open_magvit2.png`.
+Runner status is checkpoint_backed_verified — this route actually ran on GPU with the TencentARC/Open-MAGVIT2 weights (apache-2.0). Keep expectations scoped: it is class-conditional image generation, not prompt-to-video; video tokenization is what the tokenizer supports upstream.
 
-Recorded task profiles: `video-tokenization`, `class-conditional-image-generation`, and `autoregressive-generation`. WorldFoundry binds `OpenMAGVIT2Pipeline`.
+## Readiness and limitations
 
-Family status: **Verified**.
-
-Runner status is Verified — this route actually ran on GPU with the TencentARC/Open-MAGVIT2 weights (apache-2.0). Keep expectations scoped: it is class-conditional image generation, not prompt-to-video; video tokenization is what the tokenizer supports upstream.
-
-Runtime source is vendored in-tree and the CUDA generation wrapper is wired.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run open-magvit2 --pipeline.task-profile video-tokenization`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, CUDA 11.3).
-
-Recorded weight repositories include `TencentARC/Open-MAGVIT2`. Stage assets with `bash scripts/inference/prepare_model_infer.sh open-magvit2`.
-
-Recorded licenses include apache-2.0; status: **Verified**.
+- The runnable route generates class-conditional images only — no free-form prompts, no video output.
+- ImageNet-class conditioning limits subject diversity to the 1000 classes.
 
 <ModelRelatedRecipes modelId="open-magvit2" locale="en" />

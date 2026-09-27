@@ -9,6 +9,13 @@ image → video
 
 Separate AR and four-step DMD inference for AlayaWorld v1.1 with ViGeo spatial memory.
 
+**Catalog status:** Integrated
+
+## Upstream sources
+
+- [Source](https://github.com/AlayaLab/AlayaWorld)
+- [Upstream README](https://github.com/AlayaLab/AlayaWorld#readme)
+
 <ModelCommandBuilder modelId="alayaworld-v1.1" locale="en" />
 
 ## Architecture
@@ -18,5 +25,11 @@ The inference-only rollout methods and three small configuration adapters are ex
 ## Runtime contract
 
 Select variant=ar (30 steps) or dmd (4 steps). Stage2b transformer/history weights, the LTX-2.3 base, Gemma and ViGeo1.1 are required; DMD additionally needs stage3 LoRA. This is separate from the original merged DA3 checkpoint route.
+
+## Readiness and limitations
+
+- Uses extracted inference-only rollout methods and inference configuration sections; no trainer or optimizer is instantiated.
+- CPU configuration and adapter contracts checked; checkpoint loading, VRAM usage and GPU artifact parity remain pending.
+- Single-GPU inference bridge; full-window native VAE encoding may use more peak memory than the upstream streaming encoder.
 
 <ModelRelatedRecipes modelId="alayaworld-v1.1" locale="en" />

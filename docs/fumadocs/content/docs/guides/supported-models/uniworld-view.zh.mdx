@@ -1,0 +1,40 @@
+---
+title: "UniWorld-View"
+description: "UniWorld-View 从单张图像或随手拍摄的单目视频生成相机可控的新视角视频。"
+pageSource: generated
+---
+
+**发表机构:** 北京大学元培研究组 · 高校
+image · video → video
+
+UniWorld-View 从单张图像或随手拍摄的单目视频生成相机可控的新视角视频。
+
+**目录状态:** 已集成
+
+## 上游来源
+
+- [项目主页](https://zhouhyocean.github.io/uniworld-view/)
+- [论文](https://arxiv.org/abs/2608.04701)
+- [GitHub](https://github.com/PKU-YuanGroup/UniWorld-View)
+- [Hugging Face](https://huggingface.co/Drexubery/UniView)
+- [源码](https://github.com/NIRVANALAN/STream3R)
+- [上游 README](https://github.com/PKU-YuanGroup/UniWorld-View#readme)
+- [上游 README](https://github.com/NIRVANALAN/STream3R#readme)
+
+<ModelCommandBuilder modelId="uniworld-view" locale="zh" />
+
+## 架构
+
+基于 Wan2.1-VACE-14B 的 UniView Transformer，结合几何估计和渲染后的相机控制。
+
+## 运行时契约
+
+使用固定版本的官方源码及 extern 下的 STream3R、独立的官方环境和本地权重。上游 CLI 使用 BLIP2 自动描述，不读取用户文本提示。
+
+## 就绪状态与限制
+
+- 上游建议显存至少 60 GB。
+- 已对官方样例的指定配置完成真实权重推理，其他场景及相机角度精度尚未量化验证。
+- 默认保持输入宽高比时，实际输出尺寸可能不同于请求的高和宽。
+
+<ModelRelatedRecipes modelId="uniworld-view" locale="zh" />

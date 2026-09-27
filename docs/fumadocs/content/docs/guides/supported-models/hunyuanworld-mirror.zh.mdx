@@ -1,48 +1,36 @@
 ---
 title: "HunyuanWorld-Mirror"
-description: "HunyuanWorld-Mirror（Tencent (Hunyuan)）：three_dimension；已验证。"
-modelId: "hunyuanworld-mirror"
+description: "HunyuanWorld-Mirror 是腾讯的通用 3D 重建模型：输入图像，一次前向返回点云、高斯泼溅、深度、法线与相机参数。本 catalog 中它已验证——使用本地 tencent/HunyuanWorld-Mirror 资产的 GPU 推理产出点云 PLY、高斯泼溅 PLY、深度图、法线图与 scene.rrd。"
 pageSource: generated
 ---
 
+**发表机构:** 腾讯（混元） · 企业
+
 HunyuanWorld-Mirror 是腾讯的通用 3D 重建模型：输入图像，一次前向返回点云、高斯泼溅、深度、法线与相机参数。本 catalog 中它已验证——使用本地 tencent/HunyuanWorld-Mirror 资产的 GPU 推理产出点云 PLY、高斯泼溅 PLY、深度图、法线图与 scene.rrd。
 
-<ModelPaperFigures modelId="hunyuanworld-mirror" locale="zh" />
+**目录状态:** Runner 已验证
 
-记录论文为[arXiv 2510.10726](https://arxiv.org/abs/2510.10726)。
+## 上游来源
 
-项目页：[3d-models.hunyuan.tencent.com/world](https://3d-models.hunyuan.tencent.com/world/)。代码：[Tencent-Hunyuan/HunyuanWorld-Mirror](https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror)。
+- [项目主页](https://3d-models.hunyuan.tencent.com/world/)
+- [论文](https://arxiv.org/abs/2510.10726)
+- [GitHub](https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror)
+- [Hugging Face](https://huggingface.co/tencent/HunyuanWorld-Mirror)
+- [上游 README](https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror#readme)
 
 <ModelCommandBuilder modelId="hunyuanworld-mirror" locale="zh" />
 
-## 用来做什么
+## 架构
 
-需要动作条件世界步进时选 `hunyuanworld-mirror`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
-
-WorldFoundry 通过树内 HunyuanMirrorPipeline 与内置的仅推理 WorldMirror 模型代码执行推理；官方仓库仅作一致性核对的溯源，不是运行时依赖。第三方包（onnxruntime、pycolmap、open3d、gsplat）是环境依赖，不是 catalog 阻塞。该模型由腾讯（混元）发布。
-
-catalog 记录的任务包括 three_dimension。别名包括 `hunyuan-mirror`、`hy-world-mirror`。
+WorldFoundry 通过树内 HunyuanMirrorPipeline 与内置的仅推理 WorldMirror 模型代码执行推理；官方仓库仅作一致性核对的溯源，不是运行时依赖。第三方包（onnxruntime、pycolmap、open3d、gsplat）是环境依赖，不是 catalog 阻塞。
 
 ## 运行时契约
 
-必填 `image`；可选 `prompt`、`video`；产物 `hunyuan_mirror_outputs.zip`。
+HunyuanMirrorPipeline 接受标准 pipeline runner 传入的 image、input、images 或 image_path 负载，并把重建产物写入样例输出目录。真实推理需要配置好的 Python 环境、本地 checkpoint 与 GPU 兼容的 torch/gsplat。
 
-记录的任务 profile：`three_dimension`。绑定的 pipeline 类是 `HunyuanMirrorPipeline`。
+## 就绪状态与限制
 
-系列状态：**已验证**。
-
-HunyuanMirrorPipeline 接受标准 pipeline runner 传入的 image、input、images 或 image_path 负载，并把重建产物写入样例输出目录。 真实推理需要配置好的 Python 环境、本地 checkpoint 与 GPU 兼容的 torch/gsplat。
-
-运行环境需要 GPU 兼容的 torch/gsplat 包。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run hunyuanworld-mirror --pipeline.task-profile three_dimension` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.10，CUDA 12.8）。
-
-记录的权重仓库包括 `tencent/HunyuanWorld-Mirror`。就位权重用 `bash scripts/inference/prepare_model_infer.sh hunyuanworld-mirror`。
-
-状态：**已验证**。
+- 运行环境需要 GPU 兼容的 torch/gsplat 包。
+- 面向重建：它不生成新内容，只重建所见。
 
 <ModelRelatedRecipes modelId="hunyuanworld-mirror" locale="zh" />

@@ -1,48 +1,39 @@
 ---
 title: "MultiWorld"
-description: "MultiWorld: video generation and multi-agent-world-model; Planned."
-modelId: "multiworld"
+description: "MultiWorld (\"It Takes Two\") is a multi-agent interactive video generator: two players' actions drive one shared generated game world. The in-tree ItTakesTwo wrapper has completed a checkpoint-backed 81-frame GPU inference run; game-domain…"
 pageSource: generated
 ---
 
-MultiWorld ("It Takes Two") is a multi-agent interactive video generator: two players' actions drive one shared generated game world. In this catalog the in-tree ItTakesTwo wrapper is registered as the model-zoo entry; full generation remains dependency/checkpoint gated.
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+video
 
-<ModelPaperFigures modelId="multiworld" locale="en" />
+MultiWorld ("It Takes Two") is a multi-agent interactive video generator: two players' actions drive one shared generated game world. The in-tree ItTakesTwo wrapper has completed a checkpoint-backed 81-frame GPU inference run; game-domain action fidelity remains unverified.
 
-Code: [CIntellifusion/MultiWorld](https://github.com/CIntellifusion/MultiWorld). Code: [multimodal-art-projection/MultiWorld](https://github.com/multimodal-art-projection/MultiWorld).
+**Catalog status:** Integrated
+
+## Upstream sources
+
+- [GitHub](https://github.com/CIntellifusion/MultiWorld)
+- [Upstream README](https://github.com/CIntellifusion/MultiWorld#readme)
 
 <ModelCommandBuilder modelId="multiworld" locale="en" />
 
-## What it is for
-
-Pick `multiworld` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+## Architecture
 
 Architecture internals beyond the recorded tasks are not stored in this repository. The upstream license is custom and flagged for manual review.
 
-Catalog tasks include video generation, multi-agent-world-model, interactive-video-generation, and game-video. Catalog aliases include `multiword` and `multiworld-ittakestwo`. Documented outputs include video.
-
-Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Multi-agent world-rollout quality).
-
 ## Runtime contract
 
-Required `prompt`, `image`, and `video`; optional `actions` (trajectory); artifacts `multiworld.mp4`.
+Supply an initial image and two-player discrete and continuous action tensors (or an action CSV). A local toydata checkpoint run produced 81 frames at 480x480 and 35 steps. Review the custom upstream license before redistribution.
 
-Recorded task profiles: `video_generation`, `multi-agent-world-model`, `interactive-video-generation`, and `game-video`. WorldFoundry binds `MultiWorldItTakesTwoPipeline`.
+## Evaluation benchmarks
 
-Family status: **Planned**.
+- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Multi-agent world-rollout quality.
 
-Full generation is dependency/checkpoint gated — treat this entry as planned until assets and environment parity are staged. Review the custom upstream license first.
+## Readiness and limitations
 
-The in-tree MultiWorld ItTakesTwo wrapper is registered as the model-zoo entry; full generation remains dependency/checkpoint gated.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run multiworld --pipeline.task-profile video_generation`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh multiworld`.
-
-Status: **Planned**.
+- Custom upstream license flagged for manual review.
+- The synthetic-action, out-of-domain image check does not establish game-domain action control or realistic world dynamics.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="multiworld" locale="en" />

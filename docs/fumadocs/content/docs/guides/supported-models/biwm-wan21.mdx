@@ -1,6 +1,6 @@
 ---
 title: "BiWM Wan2.1"
-description: "Reuses canonical Wan transformer, UMT5, causal VAE and core video IO."
+description: "BiWM Wan2.1 is a world model from Lynnreal Ai. The catalog records it for text-to-video, image-to-video, camera-controlled-video, and world-model."
 pageSource: generated
 ---
 
@@ -8,7 +8,7 @@ text · image → video
 
 BiWM Wan2.1 is a world model from Lynnreal Ai. The catalog records it for text-to-video, image-to-video, camera-controlled-video, and world-model.
 
-No runnable WorldFoundry pipeline is bound to this entry yet; this page records upstream provenance and readiness state only.
+WorldFoundry records a binding to the worldfoundry.pipelines.biwm.pipeline_biwm:BiWMPipeline pipeline via worldfoundry.pipeline; this binding alone does not establish a successful run.
 
 It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).
 
@@ -16,6 +16,19 @@ Weights are pulled from the Hugging Face repository Wan-AI/Wan2.1-T2V-1.3B.
 
 Runner parity is currently “Pending” and native-demo parity is “Not Recorded”; treat end-to-end GPU evidence as not yet recorded.
 
+**Catalog status:** Runtime ported
+
+## Upstream sources
+
+- [GitHub](https://github.com/LynnReal-AI/BiWM)
+- [Upstream README](https://github.com/LynnReal-AI/BiWM#readme)
+
 <ModelCommandBuilder modelId="biwm-wan21" locale="en" />
+
+## Readiness and limitations
+
+- Runner evidence is “Pending” — not a verified end-to-end GPU run. Do not treat this page as proof the route is fully validated.
+- Native demo evidence: Not recorded.
+- Full trained-checkpoint inference is blocked by the absence of a public generator release.
 
 <ModelRelatedRecipes modelId="biwm-wan21" locale="en" />

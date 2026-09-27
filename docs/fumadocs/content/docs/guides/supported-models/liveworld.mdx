@@ -1,50 +1,41 @@
 ---
 title: "LiveWorld"
-description: "LiveWorld: camera-controlled-video and video-to-video; Runner parity pending."
-modelId: "liveworld"
+description: "LiveWorld is a camera-controlled video-to-video world model with a monitor-centric workflow: it consumes a video plus a geometry NPZ and re-renders the scene under new camera behavior."
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+video → video
+
 LiveWorld is a camera-controlled video-to-video world model with a monitor-centric workflow: it consumes a video plus a geometry NPZ and re-renders the scene under new camera behavior. In this catalog the official source is vendored at a pinned revision and the dedicated geometry-NPZ route is wired; prediction waits on four missing checkpoint snapshots.
 
-<ModelPaperFigures modelId="liveworld" locale="en" />
+**Catalog status:** Integrated
 
-The recorded paper is [arXiv 2404.05072](https://arxiv.org/abs/2404.05072).
+## Upstream sources
 
-Project page: [zichengduan.github.io/LiveWorld](https://zichengduan.github.io/LiveWorld). Code: [ZichengDuan/LiveWorld](https://github.com/ZichengDuan/LiveWorld).
+- [Project](https://zichengduan.github.io/LiveWorld)
+- [Paper](https://arxiv.org/abs/2404.05072)
+- [GitHub](https://github.com/ZichengDuan/LiveWorld)
+- [Upstream README](https://github.com/ZichengDuan/LiveWorld#readme)
 
 <ModelCommandBuilder modelId="liveworld" locale="en" />
 
-## What it is for
-
-Pick `liveworld` when you need camera-controlled video: a camera trajectory in, a steered clip out. Use it instead of unconstrained T2V when viewpoint must follow a path.
+## Architecture
 
 The recorded stack pins Wan2.1-T2V-14B and SAM3, both structurally validated locally (apache-2.0). Architecture internals beyond the recorded structure are not stored in this repository.
 
-Catalog tasks include camera-controlled-video, video-to-video, and world-model. Documented modalities: video in, video out.
-
-Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-behavior adherence of re-rendered video).
-
 ## Runtime contract
-
-Required `prompt`, `video`, and `geometry_npz`; artifacts `liveworld.mp4`.
-
-Recorded task profiles: `camera-controlled-video`, `video-to-video`, and `world-model`. WorldFoundry binds `LiveWorldPipeline`.
-
-Family status: **Runner parity pending**.
 
 Runtime resolution is local-only; prediction remains gated until the four missing checkpoint snapshots are staged. Inputs are prompt, video, and geometry_npz.
 
-Official source is vendored at revision a31145ffffb61be92f93c1e0d2ac5d826f29a256.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — Camera-behavior adherence of re-rendered video.
 
-Launch `worldfoundry-eval run liveworld --pipeline.task-profile camera-controlled-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `ZichengD/LiveWorld`, `Wan-AI/Wan2.1-T2V-14B`, and `Qwen/Qwen3-VL-8B-Instruct` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh liveworld`.
-
-Status: **Runner parity pending**.
+- Prediction is gated on four missing checkpoint snapshots.
+- Needs a geometry NPZ alongside the video input.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="liveworld" locale="en" />

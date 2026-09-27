@@ -1,50 +1,40 @@
 ---
 title: "StarWM"
-description: "StarWM: multi-agent-world-model and starcraft-world-model; Runner parity pending."
-modelId: "starwm"
+description: "StarWM is a multi-agent world model for StarCraft-style environments: it predicts action-conditioned game video across many interacting units. WorldFoundry exposes the official offline inference client in-tree; jobs talk to an OpenAI-compa…"
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+
 StarWM is a multi-agent world model for StarCraft-style environments: it predicts action-conditioned game video across many interacting units. WorldFoundry exposes the official offline inference client in-tree; jobs talk to an OpenAI-compatible StarWM endpoint using the official prompt fixture format, with the confirmed yxzhang2024/StarWM checkpoint on Hugging Face.
 
-<ModelPaperFigures modelId="starwm" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [arXiv 2602.14857](https://arxiv.org/abs/2602.14857).
+## Upstream sources
 
-Project page: [star-wm.github.io](https://star-wm.github.io/). Code: [yxzzhang/StarWM](https://github.com/yxzzhang/StarWM).
+- [Project](https://star-wm.github.io/)
+- [Paper](https://arxiv.org/abs/2602.14857)
+- [GitHub](https://github.com/yxzzhang/StarWM)
+- [Hugging Face](https://huggingface.co/yxzhang2024/StarWM)
+- [Upstream README](https://github.com/yxzzhang/StarWM#readme)
 
 <ModelCommandBuilder modelId="starwm" locale="en" />
 
-## What it is for
-
-`starwm` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+## Architecture
 
 The runtime is an endpoint-client design: the route builds the official run_inference_client.py command and validates input_file, mode, and served_model_id/api_model_id before execution. Model architecture internals are not recorded in this repository.
 
-Catalog tasks include multi-agent-world-model, starcraft-world-model, action-conditioned-video, and starcraft-offline-client.
-
-Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Action-conditioned game-world rollout quality).
-
 ## Runtime contract
 
-Required `prompt`, `image`, and `video`; optional `actions` (starcraft_action, world_action); artifacts `generated_world` and `starwm_predictions.jsonl`.
+Actual generation requires a running OpenAI-compatible StarWM endpoint; the catalog route only prepares and validates the client command. Per-run validation evidence is tracked outside the model catalog.
 
-Recorded task profiles: `multi-agent-world-model`, `starcraft-world-model`, `action-conditioned-video`, and `starcraft-offline-client`. WorldFoundry binds `StarWMPipeline`.
+## Evaluation benchmarks
 
-Family status: **Runner parity pending**.
+- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Action-conditioned game-world rollout quality.
 
-Actual generation requires a running OpenAI-compatible StarWM endpoint; the catalog route only prepares and validates the client command.
+## Readiness and limitations
 
-WorldFoundry exposes the official offline inference client in-tree under synthesis/visual_generation/world_model/starwm/offline_infer.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run starwm --pipeline.task-profile starcraft-offline-client` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `yxzhang2024/StarWM`. Stage assets with `bash scripts/inference/prepare_model_infer.sh starwm`.
-
-Status: **Runner parity pending**.
+- Needs an externally served StarWM endpoint; nothing runs standalone in-tree.
+- Runner parity is pending; no GPU validation is recorded in this repository.
 
 <ModelRelatedRecipes modelId="starwm" locale="en" />

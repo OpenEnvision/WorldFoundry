@@ -1,48 +1,40 @@
 ---
 title: "Sora2"
-description: "Sora2（OpenAI）：文生视频、图生视频；Runner 一致性待确认。"
-modelId: "sora2"
+description: "Sora2 是 OpenAI Sora 2 托管视频模型在本 catalog 中的条目，记录了文生视频与图生视频任务。提示词提交给 OpenAI 的 API，生成的视频以标准 WorldFoundry 产物保存，使 Sora 2 的输出能够用与仓库内本地模型相同的工具链来评测。WorldFoundry 不会（也无法）在本地运行 Sora——该条目仅记录托管集成。"
 pageSource: generated
 ---
 
+**发表机构:** OpenAI · 企业
+text · image → video
+
 Sora2 是 OpenAI Sora 2 托管视频模型在本 catalog 中的条目，记录了文生视频与图生视频任务。提示词提交给 OpenAI 的 API，生成的视频以标准 WorldFoundry 产物保存，使 Sora 2 的输出能够用与仓库内本地模型相同的工具链来评测。WorldFoundry 不会（也无法）在本地运行 Sora——该条目仅记录托管集成。
 
-<ModelPaperFigures modelId="sora2" locale="zh" />
+**目录状态:** 已集成
 
-项目页：[openai.com/sora](https://openai.com/sora/)。
+## 上游来源
+
+- [项目主页](https://openai.com/sora/)
 
 <ModelCommandBuilder modelId="sora2" locale="zh" />
 
-## 用来做什么
-
-`sora2` 是托管推理线。卡片上没有本地 checkpoint 时从这里起步。
+## 架构
 
 OpenAI 曾公开将初代 Sora 描述为在视频潜空间时空 patch 上运行的扩散 Transformer；除这一公开表述外，Sora 2 的架构、规模与训练细节均未披露，本仓库亦未记录。
 
-catalog 记录的任务包括 文生视频、图生视频、托管 API。模态上，它接受文本、图像，输出视频。
-
-记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（对比托管文/图生视频输出的标准多维质量评测）、[Physics-IQ Original](/zh/docs/evaluation/benchmark-hub/physics-iq)（检验服务方视频模型是否遵循基本物理合理性）。
-
 ## 运行时契约
 
-本卡片未记录输入、旋钮或产物。
+Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。使用前需确认你的 OpenAI 账号在所在地区与订阅层级下拥有 Sora API 权限。
 
-记录的任务 profile：`text-to-video`、`image-to-video`、`hosted-api`。绑定的 pipeline 类是 `Sora2Pipeline`。
+## 评测 Benchmark
 
-系列状态：**Runner 一致性待确认**。
+- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — 对比托管文/图生视频输出的标准多维质量评测。
+- [Physics-IQ Original](/zh/docs/evaluation/benchmark-hub/physics-iq) — 检验服务方视频模型是否遵循基本物理合理性。
 
-Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。 本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。 使用前需确认你的 OpenAI 账号在所在地区与订阅层级下拥有 Sora API 权限。
+## 就绪状态与限制
 
-需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run sora2 --pipeline.task-profile text-to-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境未记录。
-
-就位权重用 `bash scripts/inference/prepare_model_infer.sh sora2`。
-
-状态：**Runner 一致性待确认**。
+- 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+- 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+- 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+- Sora API 的访问受 OpenAI 的地区与层级限制，可用性不受本仓库控制。
 
 <ModelRelatedRecipes modelId="sora2" locale="zh" />

@@ -27,6 +27,9 @@ COPY = {
         "min_vram": "Minimum VRAM",
         "recommended": "Recommended",
         "benchmarks": "Evaluation benchmarks",
+        "sources": "Upstream sources",
+        "limitations": "Readiness and limitations",
+        "status": "Catalog status",
         "publisher": "Publisher",
         "company": "Company",
         "university": "University",
@@ -40,11 +43,31 @@ COPY = {
         "min_vram": "最低显存",
         "recommended": "推荐配置",
         "benchmarks": "评测 Benchmark",
+        "sources": "上游来源",
+        "limitations": "就绪状态与限制",
+        "status": "目录状态",
         "publisher": "发表机构",
         "company": "企业",
         "university": "高校",
         "lab": "研究机构",
     },
+}
+
+STATUS_LABELS_ZH = {
+    "verified": "Runner 已验证",
+    "integrated": "已集成",
+    "runtime_ported": "运行时已移植",
+    "profile": "仅有运行环境配置",
+    "planned": "计划中",
+    "blocked": "已阻塞",
+}
+
+SOURCE_LABELS_ZH = {
+    "Project": "项目主页",
+    "Paper": "论文",
+    "Source": "源码",
+    "Upstream README": "上游 README",
+    "Documentation": "文档",
 }
 
 
@@ -105,7 +128,7 @@ def figure_block(figure: dict[str, Any], locale: str) -> str | None:
     src_l = src.lower()
     if kind == "video" or src_l.endswith((".mp4", ".webm", ".mov", ".m4v")) or "/demos/" in src_l:
         return None
-    image = f'<img src="{src}" alt="{alt}" />'
+    image = f'<DocsImage src="{src}" alt="{alt}" />'
     if caption:
         return (
             f'<figure className="wf-recipe-media is-diagram">\n  {image}\n  '
@@ -154,14 +177,16 @@ def render_model_page(recipe: dict[str, Any], locale: str) -> str:
     copy = COPY[locale]
     model_id = str(recipe["id"])
     name = str(recipe.get("name") or model_id)
-    summary = str(recipe.get("summary") or name)
     overview = locale_paragraphs(docs, "overview", locale)
+    summary = overview[0] if locale == "zh" and overview else str(recipe.get("summary") or name)
     architecture = locale_paragraphs(docs, "architecture", locale)
     usage = locale_paragraphs(docs, "usageNotes", locale)
+    limitations = locale_paragraphs(docs, "limitations", locale)
     use_cases = locale_paragraphs(docs, "useCases", locale)
     hardware = docs.get("hardware") or {}
     figures = [item for item in (docs.get("figures") or []) if isinstance(item, dict)]
     benchmarks = [item for item in (docs.get("benchmarks") or []) if isinstance(item, dict)]
+    sources = [item for item in (recipe.get("sources") or []) if isinstance(item, dict)]
     hub_prefix = "/zh/docs/evaluation/benchmark-hub" if locale == "zh" else "/docs/evaluation/benchmark-hub"
 
     chunks = [
@@ -180,6 +205,25 @@ def render_model_page(recipe: dict[str, Any], locale: str) -> str:
 
     for paragraph in overview:
         chunks.append(mdx_escape(paragraph))
+        chunks.append("")
+
+    status = recipe.get("status") or {}
+    status_label = str(status.get("label") or "").strip()
+    if locale == "zh":
+        status_label = STATUS_LABELS_ZH.get(str(status.get("group") or ""), status_label)
+    if status_label:
+        chunks.extend([f"**{copy['status']}:** {mdx_escape(status_label)}", ""])
+
+    if sources:
+        chunks.extend([f"## {copy['sources']}", ""])
+        for source in sources:
+            url = str(source.get("url") or "").strip()
+            if url.startswith(("https://", "http://")):
+                label = str(source.get("label") or source.get("kind") or "Source")
+                if locale == "zh":
+                    label = SOURCE_LABELS_ZH.get(label, label)
+                label = mdx_escape(label)
+                chunks.append(f"- [{label}]({url})")
         chunks.append("")
 
     if figures:
@@ -246,6 +290,12 @@ def render_model_page(recipe: dict[str, Any], locale: str) -> str:
             reason = str(reason or bench.get("reason") or "").strip()
             link = f"[{mdx_escape(bench_name)}]({hub_prefix}/{bench_id})"
             chunks.append(f"- {link}" + (f" — {mdx_escape(reason)}" if reason else ""))
+        chunks.append("")
+
+    if limitations:
+        chunks.extend([f"## {copy['limitations']}", ""])
+        for item in limitations:
+            chunks.append(f"- {mdx_escape(item)}")
         chunks.append("")
 
     chunks.append(f'<ModelRelatedRecipes modelId="{model_id}" locale="{locale}" />')

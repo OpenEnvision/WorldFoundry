@@ -1,48 +1,38 @@
 ---
 title: "MolmoBot"
-description: "MolmoBot from Allen Institute for AI (AI2): vla and vla action prediction; Planned; 2 variants."
-modelId: "molmobot"
+description: "MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, RBY1 multitask, and a Pi0-based DROID variant. WorldFoundry records the OLMo/MolmoBot-Pi0 action inference c…"
 pageSource: generated
 ---
 
+**Publisher:** Allen Institute for AI (AI2) · Research lab
+
 MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, RBY1 multitask, and a Pi0-based DROID variant. WorldFoundry records the OLMo/MolmoBot-Pi0 action inference contracts and calls a flattened in-tree inference wrapper.
 
-<ModelPaperFigures modelId="molmobot" locale="en" />
+**Catalog status:** Profile only
 
-The recorded paper is [arXiv 2603.16861](https://arxiv.org/abs/2603.16861).
+## Upstream sources
 
-Project page: [allenai.github.io/MolmoBot](https://allenai.github.io/MolmoBot). Code: [allenai/MolmoBot](https://github.com/allenai/MolmoBot).
+- [Project](https://allenai.github.io/MolmoBot)
+- [Paper](https://arxiv.org/abs/2603.16861)
+- [GitHub](https://github.com/allenai/MolmoBot)
+- [Hugging Face](https://huggingface.co/allenai/MolmoBot-DROID)
+- [Hugging Face](https://huggingface.co/allenai/MolmoBot-Img-DROID)
+- [Hugging Face](https://huggingface.co/allenai/MolmoBot-RBY1Multitask)
+- [Hugging Face](https://huggingface.co/allenai/MolmoBot-Pi0-DROID)
+- [Upstream README](https://github.com/allenai/MolmoBot#readme)
 
 <ModelCommandBuilder modelId="molmobot" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `molmobot-droid` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
-
-Two inference contracts are recorded: an OLMo-based MolmoBot path and a MolmoBot-Pi0 path. Resolver, runtime import, and compileall checks pass without an external checkout; further internals are not recorded in this repository. It is published by Allen Institute for AI (AI2).
-
-Catalog tasks include vla, vla action prediction, vla policy rollout, and robot policy. Catalog aliases include `molmob0t`, `molmobot-droid`, and `molmobot-pi0`. Also recorded: `molmobot-pi0-droid`.
+Two inference contracts are recorded: an OLMo-based MolmoBot path and a MolmoBot-Pi0 path. Resolver, runtime import, and compileall checks pass without an external checkout; further internals are not recorded in this repository.
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `state`; optional `model_id` (molmobot), `camera_keys` (exo_camera_1, wrist_camera), `state_keys` (qpos.arm, qpos.gripper), `policy_family`, and `action_representation`; artifacts `action_trace` and `molmobot_action_trace.json`.
-
-Recorded task profiles: `vla`, `vla.action_prediction`, `vla.policy_rollout`, and `robot_policy`. WorldFoundry binds `MolmoBotPipeline`.
-
-Start on `molmobot-droid`. The family registers 2 catalog variants (cards above): `molmobot-droid` (`vla.policy_rollout`) — Planned; `molmobot-pi0-droid` (`vla.policy_rollout`) — Planned. Family status: **Planned**.
-
 Checkpoint-backed action-chunk validation remains required before demo parity is claimed. Choose MolmoBot-DROID for Franka, RBY1Multitask for the RBY1 humanoid platform.
 
-WorldFoundry records MolmoBot OLMo/MolmoBot-Pi0 action inference contracts with an independent synthesis entrypoint.
+## Readiness and limitations
 
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run molmobot-droid --pipeline.task-profile vla.policy_rollout`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.3.1).
-
-Recorded weight repositories include `allenai/MolmoBot-DROID`, `allenai/MolmoBot-Pi0-DROID`, and `allenai/MolmoBot-Img-DROID` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh molmobot-droid`.
-
-Recorded licenses include apache-2.0; status: **Planned**.
+- Import verification is in progress; demo parity is not yet claimed.
 
 <ModelRelatedRecipes modelId="molmobot" locale="en" />

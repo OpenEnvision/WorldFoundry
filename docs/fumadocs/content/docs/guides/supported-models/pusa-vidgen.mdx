@@ -1,50 +1,41 @@
 ---
 title: "Pusa VidGen"
-description: "Pusa VidGen from City University of Hong Kong: image-to-video and text-to-video; Runner parity pending."
-modelId: "pusa-vidgen"
+description: "Pusa VidGen (Pusa V1) demonstrates vectorized timestep adaptation: instead of one shared diffusion timestep for the whole video, each frame gets its own, which unlocks image-to-video, text-to-video, and video extension from one cheap LoRA…"
 pageSource: generated
 ---
 
+**Publisher:** City University of Hong Kong · University
+image · text → video
+
 Pusa VidGen (Pusa V1) demonstrates vectorized timestep adaptation: instead of one shared diffusion timestep for the whole video, each frame gets its own, which unlocks image-to-video, text-to-video, and video extension from one cheap LoRA training run on Wan2.2. WorldFoundry assembles it entirely from canonical Wan2.2 components — no external runtime checkout is needed at inference time.
 
-<ModelPaperFigures modelId="pusa-vidgen" locale="en" />
+**Catalog status:** Integrated
 
-The recorded paper is [arXiv 2410.03160](https://arxiv.org/abs/2410.03160).
+## Upstream sources
 
-Project page: [pusav1.org](https://pusav1.org/). Code: [Yaofang-Liu/Pusa-VidGen](https://github.com/Yaofang-Liu/Pusa-VidGen).
+- [Project](https://pusav1.org/)
+- [Paper](https://arxiv.org/abs/2410.03160)
+- [GitHub](https://github.com/Yaofang-Liu/Pusa-VidGen)
+- [Hugging Face](https://huggingface.co/RaphaelLiu/Pusa-Wan2.2-V1)
+- [Upstream README](https://github.com/Yaofang-Liu/Pusa-VidGen#readme)
 
 <ModelCommandBuilder modelId="pusa-vidgen" locale="en" />
 
-## What it is for
+## Architecture
 
-`pusa-vidgen` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
-
-Pusa V1 = Wan2.2 base (canonical denoisers, conditioner, VAE, loaders, shared staged runner) + the official Pusa V1 LoRA checkpoint (RaphaelLiu/Pusa-Wan2.2-V1). The vectorized-timestep behavior comes from the LoRA; no alternate diffusion backend is involved. It is published by City University of Hong Kong.
-
-Catalog tasks include image-to-video, text-to-video, and video-extension. Catalog aliases include `pusa-v1` and `pusa-wan2.2-v1`. Documented modalities: image and text in, video out.
-
-Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (General T2V/I2V quality suite).
+Pusa V1 = Wan2.2 base (canonical denoisers, conditioner, VAE, loaders, shared staged runner) + the official Pusa V1 LoRA checkpoint (RaphaelLiu/Pusa-Wan2.2-V1). The vectorized-timestep behavior comes from the LoRA; no alternate diffusion backend is involved.
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `video`; artifacts `generated_video` and `pusa_vidgen_public_runner.mp4`.
+Runner status is 'configured': the model-specific pipeline exposes generated_video through execute=True and no longer emits request-plan artifacts on default calls. Per-run visual QA lives in the validation reference. Stage the Wan2.2 base weights plus the Pusa LoRA before running.
 
-Recorded task profiles: `image-to-video`, `text-to-video`, and `video-extension`. WorldFoundry binds `PusaVidGenPipeline`.
+## Evaluation benchmarks
 
-Family status: **Runner parity pending**.
+- [VBench](/docs/evaluation/benchmark-hub/vbench) — General T2V/I2V quality suite.
 
-The model-specific pipeline exposes generated_video through execute=True and no longer emits request-plan artifacts on default calls. Stage the Wan2.2 base weights plus the Pusa LoRA before running.
+## Readiness and limitations
 
-WorldFoundry assembles Pusa V1 from the canonical Wan2.2 denoisers, conditioner, VAE, checkpoint loaders, and shared staged runner; no external runtime checkout or alternate diffusion backend is required at inference time.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run pusa-vidgen --pipeline.task-profile image-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `RaphaelLiu/Pusa-Wan2.2-V1`, `Wan-AI/Wan2.2-T2V-A14B`, and `lightx2v/Wan2.2-Lightning`. Stage assets with `bash scripts/inference/prepare_model_infer.sh pusa-vidgen`.
-
-Status: **Runner parity pending**.
+- Requires both the Wan2.2 base checkpoints and the Pusa LoRA — the LoRA alone does nothing.
+- Checkpoint-backed visual parity is tracked in the validation reference, not yet summarized here.
 
 <ModelRelatedRecipes modelId="pusa-vidgen" locale="en" />

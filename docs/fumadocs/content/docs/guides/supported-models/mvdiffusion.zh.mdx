@@ -1,48 +1,43 @@
 ---
 title: "MVDiffusion"
-description: "MVDiffusion（Simon Fraser University）：3D 与 4D；Runner 一致性待确认。"
-modelId: "mvdiffusion"
+description: "MVDiffusion 利用对应感知注意力生成多视角图像和全景。树内图像扩展路线已在本地生成八张视角图及全景，但生成区域存在明显一致性问题。"
 pageSource: generated
 ---
 
-MVDiffusion 一次性生成一致的多视角图像——从文本或透视图生成全景，或为场景生成纹理视图——方法是让多个扩散分支相互注意。本 catalog 中它经树内运行时子进程适配器运行；runner parity 待运行时资产就位。
+**发表机构:** 西蒙菲莎大学（Simon Fraser University） · 高校
+[MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion](https://arxiv.org/abs/2307.01097) (NeurIPS 2023 (spotlight), 2023)
 
-<ModelPaperFigures modelId="mvdiffusion" locale="zh" />
+MVDiffusion 利用对应感知注意力生成多视角图像和全景。树内图像扩展路线已在本地生成八张视角图及全景，但生成区域存在明显一致性问题。
 
-记录论文为[MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion](https://arxiv.org/abs/2307.01097)（NeurIPS 2023 (spotlight), 2023）。
+**目录状态:** 已集成
 
-项目页：[mvdiffusion.github.io](https://mvdiffusion.github.io/)。代码：[Tangshitao/MVDiffusion](https://github.com/Tangshitao/MVDiffusion)。
+## 上游来源
+
+- [项目主页](https://mvdiffusion.github.io/)
+- [论文](https://arxiv.org/abs/2307.01097)
+- [GitHub](https://github.com/Tangshitao/MVDiffusion)
+- [Hugging Face](https://huggingface.co/spaces/tangshitao/MVDiffusion)
+- [上游 README](https://github.com/Tangshitao/MVDiffusion#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/mvdiffusion/paper.png" alt="MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion" />
+  <figcaption>MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="mvdiffusion" locale="zh" />
 
-## 用来做什么
+## 架构
 
-做前馈几何时选 `mvdiffusion`：视图进、重建/轨迹/点云出。需要 catalog 的 3D 路由、而不是仅深度先验时用它。
-
-按 NeurIPS 2023 论文（arXiv 2307.01097），多个并行扩散分支借助「对应感知注意力」同时生成所有视图并保持全局一致。源码、checkpoint 或 CUDA 依赖缺失会在推理时报告。该模型由西蒙菲莎大学（Simon Fraser University）发布。
-
-catalog 记录的任务包括 correspondence-aware multiview image generation and scene texturing。别名包括 `MVDiffusion: Enabling Holistic Multi-view Image Generation`。
+按 NeurIPS 2023 论文（arXiv 2307.01097），多个并行扩散分支借助「对应感知注意力」同时生成所有视图并保持全局一致。源码、checkpoint 或 CUDA 依赖缺失会在推理时报告。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions`；产物 `generated_3d_asset`、`mvdiffusion.png`。
+已验证的图像扩展路线需要一张输入图像，默认产物为全景 PNG；可选旋转视频和完整上游一致性尚未验证。
 
-记录的任务 profile：`correspondence-aware multiview image generation and scene texturing`。绑定的 pipeline 类是 `MVDiffusionPipeline`。
+## 就绪状态与限制
 
-系列状态：**Runner 一致性待确认**。
-
-当前集成已接通 plan-only 推理；完整产物一致性需要本地就位上游源码与 checkpoint。 期望得到真实多视角输出前请先完成资产就位。
-
-训练面向全景场景：自由相机轨迹不在其范围内。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run mvdiffusion --pipeline.task-profile 'correspondence-aware multiview image generation and scene texturing'` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-本卡片未记录公开 checkpoint id；按使用说明就位权重。就位权重用 `bash scripts/inference/prepare_model_infer.sh mvdiffusion`。
-
-状态：**Runner 一致性待确认**。
+- 各视角生成的墙面和物体可能明显偏离输入场景。
+- 可选旋转视频与上游 checkpoint 摘要尚未验证。
+- 训练面向全景场景：自由相机轨迹不在其范围内。
 
 <ModelRelatedRecipes modelId="mvdiffusion" locale="zh" />

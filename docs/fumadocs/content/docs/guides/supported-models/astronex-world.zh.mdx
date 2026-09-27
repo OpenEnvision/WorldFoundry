@@ -1,6 +1,6 @@
 ---
 title: "Astronex-World"
-description: "Astronex-World exposes causal and bidirectional camera/action-conditioned video inference."
+description: "Astronex-World 支持相机和动作条件下的因果及双向视频推理。"
 pageSource: generated
 ---
 
@@ -8,6 +8,13 @@ pageSource: generated
 text · image → video
 
 Astronex-World 支持相机和动作条件下的因果及双向视频推理。
+
+**目录状态:** 已集成
+
+## 上游来源
+
+- [源码](https://github.com/Astronex-Robotics/Astronex-World)
+- [上游 README](https://github.com/Astronex-Robotics/Astronex-World#readme)
 
 <ModelCommandBuilder modelId="astronex-world" locale="zh" />
 
@@ -18,5 +25,9 @@ Astronex-World 支持相机和动作条件下的因果及双向视频推理。
 ## 运行时契约
 
 选择 mode=causal 或 bidirectional，并提供 source_root 和 checkpoint_dir。execute=True 执行推理。latent_frames 为生成潜帧数；因果模式要求 (latent_frames + reference_count) 能被 8 整除。
+
+## 就绪状态与限制
+
+- 当前工作区仅完成 CPU 可执行的检查，GPU 推理和 checkpoint 产物仍待验证。
 
 <ModelRelatedRecipes modelId="astronex-world" locale="zh" />

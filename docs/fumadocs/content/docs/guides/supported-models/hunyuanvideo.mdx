@@ -20,14 +20,14 @@ The same stack also runs as HunyuanVideo-I2V. Image-to-video reconstructs the re
 HunyuanVideo denoises in a spatial-temporally compressed latent produced by a Causal 3D VAE. A large language model encodes the text prompt as the condition; the generator takes Gaussian noise plus that condition and outputs a latent, which the 3D VAE decoder turns into an image or a video.
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/overall.png" alt="HunyuanVideo overall architecture — Causal 3D VAE, LLM text encoder, and latent diffusion" />
+  <DocsImage src="/models/hunyuanvideo/overall.png" alt="HunyuanVideo overall architecture — Causal 3D VAE, LLM text encoder, and latent diffusion" />
   <figcaption>HunyuanVideo overall architecture — Causal 3D VAE, LLM text encoder, and latent diffusion</figcaption>
 </figure>
 
 The backbone is a Transformer with Full Attention and a Dual-stream to Single-stream layout: video and text tokens first pass through separate blocks so each modality can learn its own modulation, then they are concatenated and fused in later blocks.
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/backbone.png" alt="Dual-stream to single-stream Transformer backbone for unified image and video generation" />
+  <DocsImage src="/models/hunyuanvideo/backbone.png" alt="Dual-stream to single-stream Transformer backbone for unified image and video generation" />
   <figcaption>Dual-stream to single-stream Transformer backbone for unified image and video generation</figcaption>
 </figure>
 
@@ -36,7 +36,7 @@ The backbone is a Transformer with Full Attention and a Dual-stream to Single-st
 The text encoder is a pre-trained decoder-only multimodal LLM rather than CLIP or T5-XXL. It can attend to key phrases when a system instruction is prepended to the user prompt. Because the MLLM uses causal attention, an extra bidirectional token refiner is added to strengthen the text features.
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/text_encoder.png" alt="MLLM text encoder with a bidirectional token refiner" />
+  <DocsImage src="/models/hunyuanvideo/text_encoder.png" alt="MLLM text encoder with a bidirectional token refiner" />
   <figcaption>MLLM text encoder with a bidirectional token refiner</figcaption>
 </figure>
 
@@ -45,7 +45,7 @@ The text encoder is a pre-trained decoder-only multimodal LLM rather than CLIP o
 The CausalConv3D VAE compresses pixel-space video and images by 4× in time, 8× in space, and 16 channels, so the diffusion transformer can run at the source resolution and frame rate in latent space.
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/3dvae.png" alt="CausalConv3D VAE — temporal 4×, spatial 8×, 16-channel latent" />
+  <DocsImage src="/models/hunyuanvideo/3dvae.png" alt="CausalConv3D VAE — temporal 4×, spatial 8×, 16-channel latent" />
   <figcaption>CausalConv3D VAE — temporal 4×, spatial 8×, 16-channel latent</figcaption>
 </figure>
 
@@ -56,7 +56,7 @@ User prompts vary in style and length, so a Hunyuan-Large rewrite model maps the
 HunyuanVideo-I2V keeps this stack and inserts the reference image by token replace: the MLLM emits semantic image tokens that are concatenated with the video latents for full-attention computation across both modalities.
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/i2v_backbone.png" alt="HunyuanVideo-I2V architecture — token replace of the reference image into the video generator" />
+  <DocsImage src="/models/hunyuanvideo/i2v_backbone.png" alt="HunyuanVideo-I2V architecture — token replace of the reference image into the video generator" />
   <figcaption>HunyuanVideo-I2V architecture — token replace of the reference image into the video generator</figcaption>
 </figure>
 

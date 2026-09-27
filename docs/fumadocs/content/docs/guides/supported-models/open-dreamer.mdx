@@ -1,48 +1,48 @@
 ---
 title: "Open Dreamer"
-description: "Open Dreamer: interactive-world-model and minecraft-world-model; Runner parity pending; dedicated `open-dreamer`."
-modelId: "open-dreamer"
+description: "Open Dreamer is an open reimplementation of the Dreamer 4 interactive world model (paper arXiv 2509.24527): a diffusion world model that plays Minecraft-style scenes forward from a context clip and VPT-format actions."
 pageSource: generated
 ---
 
+**Publisher:** Open-source community reimplementation (institution not recorded) · Research lab
+[Training Agents Inside of Scalable World Models](https://arxiv.org/abs/2509.24527) (2025)
+
 Open Dreamer is an open reimplementation of the Dreamer 4 interactive world model (paper arXiv 2509.24527): a diffusion world model that plays Minecraft-style scenes forward from a context clip and VPT-format actions. In this catalog the JAX source is never vendored — upstream publishes an all-rights-reserved notice — so WorldFoundry drives a user-staged checkout as a subprocess.
 
-<ModelPaperFigures modelId="open-dreamer" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [Training Agents Inside of Scalable World Models](https://arxiv.org/abs/2509.24527) (2025).
+## Upstream sources
 
-Project page: [next-state.github.io/open-dreamer](https://next-state.github.io/open-dreamer/). Code: [next-state/open-dreamer](https://github.com/next-state/open-dreamer). Code: [reactor-team/open-dreamer](https://github.com/reactor-team/open-dreamer).
+- [Project](https://next-state.github.io/open-dreamer/)
+- [Paper](https://arxiv.org/abs/2509.24527)
+- [GitHub](https://github.com/next-state/open-dreamer)
+- [Source](https://github.com/reactor-team/open-dreamer)
+- [Upstream README](https://github.com/next-state/open-dreamer#readme)
+- [Upstream README](https://github.com/reactor-team/open-dreamer#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/open-dreamer/paper.png" alt="Training Agents Inside of Scalable World Models" />
+  <figcaption>Training Agents Inside of Scalable World Models</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="open-dreamer" locale="en" />
 
-## What it is for
-
-Pick `open-dreamer` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+## Architecture
 
 The WorldFoundry adapter is authored glue only: it resolves the staged checkout, gates on staging requirements, and builds the official inference.py command. WorldFoundry interaction tokens are rendered into Minecraft/VPT action JSONL so the shared world-model call surface drives the Dreamer 4 action space.
 
-Catalog tasks include interactive-world-model, minecraft-world-model, action-conditioned-video, and diffusion-world-model. Catalog aliases include `open_dreamer`, `opendreamer`, `dreamer-4`, and `dreamer4`.
-
-Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Action-conditioned world-rollout quality).
-
 ## Runtime contract
-
-Required `prompt`, `image`, and `video`; optional `actions` (minecraft_action, world_action, interaction); artifacts `generated_world`, `generated_video`, and `open-dreamer.mp4`.
-
-Recorded task profiles: `interactive-world-model`, `minecraft-world-model`, `action-conditioned-video`, and `diffusion-world-model`. WorldFoundry binds `OpenDreamerPipeline`.
-
-Family status: **Runner parity pending**.
 
 Stage the official checkout (at WORLDFOUNDRY_MODEL_SOURCE_DIR/open-dreamer-inference or $WORLDFOUNDRY_OPEN_DREAMER_SOURCE) with its own CUDA-12 JAX environment. Upstream has not released weights — train the Orbax checkpoint yourself or pass checkpoint_path. Context clips must be RGB 368x640 (or 360x640, zero-padded).
 
-WorldFoundry registers a source-bound runtime manifest that drives the official rollout entrypoint (reactor-team/open-dreamer inference.py) as a subprocess.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Action-conditioned world-rollout quality.
 
-The catalog launch is `worldfoundry-eval run open-dreamer --pipeline.task-profile interactive-world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh open-dreamer`.
-
-Status: **Runner parity pending**.
+- All-rights-reserved upstream: source is never vendored, redistribution is not granted.
+- No published weights — you must train or supply a checkpoint.
+- Requires a separate CUDA-12 JAX environment.
 
 <ModelRelatedRecipes modelId="open-dreamer" locale="en" />

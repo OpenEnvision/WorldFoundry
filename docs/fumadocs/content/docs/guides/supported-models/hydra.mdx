@@ -1,50 +1,41 @@
 ---
 title: "HyDRA"
-description: "HyDRA: camera-controlled-video and video-to-video; Runner parity pending."
-modelId: "hydra"
+description: "HyDRA is a camera-controlled video-to-video world model: it re-renders an input video along new camera behavior described by a camera JSON. The pinned runtime generated a coherent 77-frame continuation of an official example at 50 steps; a…"
 pageSource: generated
 ---
 
-HyDRA is a camera-controlled video-to-video world model: it re-renders an input video along new camera behavior described by a camera JSON. In this catalog the official source is vendored at a pinned revision and the in-tree runtime plus WRBench camera JSON route are wired; GPU artifact validation waits on checkpoints.
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+video → video
 
-<ModelPaperFigures modelId="hydra" locale="en" />
+HyDRA is a camera-controlled video-to-video world model: it re-renders an input video along new camera behavior described by a camera JSON. The pinned runtime generated a coherent 77-frame continuation of an official example at 50 steps; a separate synthetic camera case showed an occlusion.
 
-The recorded paper is [arXiv 2603.25716](https://arxiv.org/abs/2603.25716).
+**Catalog status:** Integrated
 
-Project page: [kj-chen666.github.io/Hybrid-Memory-in-Video-World-Models](https://kj-chen666.github.io/Hybrid-Memory-in-Video-World-Models/). Code: [H-EmbodVis/HyDRA](https://github.com/H-EmbodVis/HyDRA).
+## Upstream sources
+
+- [Project](https://kj-chen666.github.io/Hybrid-Memory-in-Video-World-Models/)
+- [Paper](https://arxiv.org/abs/2603.25716)
+- [GitHub](https://github.com/H-EmbodVis/HyDRA)
+- [Upstream README](https://github.com/H-EmbodVis/HyDRA#readme)
 
 <ModelCommandBuilder modelId="hydra" locale="en" />
 
-## What it is for
-
-Use `hydra` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+## Architecture
 
 Architecture internals are not recorded in this repository. The pinned public revision has no LICENSE file, so license review remains required before downstream use.
 
-Catalog tasks include camera-controlled-video, video-to-video, and world-model. Catalog aliases include `h-embodvis-hydra`. Documented modalities: video in, video out.
-
-Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-behavior adherence of re-rendered video), [WRBench](/docs/evaluation/benchmark-hub/wrbench) (Referenced in this model's manifest evidence notes).
-
 ## Runtime contract
 
-Required `prompt`, `video`, and `camera_json`; artifacts `hydra.mp4`.
+Bundled source is mandatory — external source checkouts are rejected. Inputs are prompt, video, and camera_json. The official example completed at 50 steps; synthetic-path visual quality needs review.
 
-Recorded task profiles: `camera-controlled-video`, `video-to-video`, and `world-model`. WorldFoundry binds `HydraPipeline`.
+## Evaluation benchmarks
 
-Family status: **Runner parity pending**.
+- [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — Camera-behavior adherence of re-rendered video.
 
-Bundled source is mandatory — external source checkouts are rejected. Inputs are prompt, video, and camera_json; stage checkpoints before expecting artifacts.
+## Readiness and limitations
 
-Official source is vendored at revision 48652becf0030edbaabde4d04f33bb33ad380410.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run hydra --pipeline.task-profile camera-controlled-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `H-EmbodVis/HyDRA` and `Wan-AI/Wan2.1-T2V-1.3B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh hydra`.
-
-Status: **Runner parity pending**.
+- No LICENSE in the pinned upstream revision: legal review required.
+- The official example looks coherent, while a separate synthetic-path artifact has a broad occlusion; quantitative camera adherence is unmeasured.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="hydra" locale="en" />

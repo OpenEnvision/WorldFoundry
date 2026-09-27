@@ -1,50 +1,42 @@
 ---
 title: "Hunyuan Game Craft"
-description: "Hunyuan Game Craft（Tencent (Hunyuan)）：交互式世界模型、图生视频；已验证; 独立环境 `HYGameCraft`。"
-modelId: "hunyuan-game-craft"
+description: "GameCraft 通过仅推理运行时和 WorldFoundry 共享模型组件，从场景图像生成动作条件世界视频。"
 pageSource: generated
 ---
 
-混元 GameCraft 把一张游戏场景图变成可交互的世界视频：发送键盘式动作（前/后/左/右），它就生成跟随动作的高动态游戏画面。本 catalog 中 runner 已验证——官方 village 图像条件 demo 以 129 帧 704x1216、50 步、CFG 2.0、8 个 torchrun rank 运行。
+**发表机构:** 腾讯（混元） · 企业
+image → video
 
-<ModelPaperFigures modelId="hunyuan-game-craft" locale="zh" />
+GameCraft 通过仅推理运行时和 WorldFoundry 共享模型组件，从场景图像生成动作条件世界视频。
 
-记录论文为[arXiv 2506.17201](https://arxiv.org/abs/2506.17201)。
+**目录状态:** 已集成
 
-项目页：[hunyuan-gamecraft.github.io](https://hunyuan-gamecraft.github.io/)。代码：[Tencent-Hunyuan/Hunyuan-GameCraft-1.0](https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0)。
+## 上游来源
+
+- [项目主页](https://hunyuan-gamecraft.github.io/)
+- [论文](https://arxiv.org/abs/2506.17201)
+- [GitHub](https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0)
+- [Hugging Face](https://huggingface.co/tencent/Hunyuan-GameCraft-1.0)
+- [上游 README](https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0#readme)
 
 <ModelCommandBuilder modelId="hunyuan-game-craft" locale="zh" />
 
-## 用来做什么
+## 架构
 
-`hunyuan-game-craft` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
-
-按上游发布，GameCraft 基于 HunyuanVideo，采用统一连续动作空间注入与历史条件自回归扩展。仅推理运行时保留在树内并拒绝外部源码根；其 Python 3.10 / torch 2.5.1 栈隔离在文档化的 HYGameCraft 环境中（许可：tencent-hunyuan-community）。该模型由腾讯（混元）发布。
-
-catalog 记录的任务包括 交互式世界模型、图生视频、相机控制、official-interactive-video。别名包括 `hunyuan-gamecraft`、`gamecraft`。模态上，它接受图像，输出视频。
-
-记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（动作跟随的世界滚动生成质量）。
+HunyuanVideo Transformer 结合 GameCraft 相机网络与历史条件自回归采样；基础层、VAE、编码器基础实现和调度器均复用共享代码。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (camera_path, navigation_action)；产物 `hunyuan-game-craft.mp4`。
+就位本地 GameCraft 权重。每个动作生成 33 帧；显式 num_frames 必须等于动作数量乘以 33。支持 CPU offload 与 output_path 导出。
 
-记录的任务 profile：`interactive-world-model`、`image-to-video`、`camera-control`、`official-interactive-video`。绑定的 pipeline 类是 `HunyuanGameCraftPipeline`。
+## 评测 Benchmark
 
-系列状态：**已验证**。
+- [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) — 动作跟随的世界滚动生成质量。
 
-`official-interactive-video` 记录默认值：frames=129, fps=24, height=704, width=1216, guidance_scale=2.0, seed=250160。
+## 就绪状态与限制
 
-官方推理使用 HYGameCraft conda 档案与 torchrun 分发——请准备多卡主机。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run hunyuan-game-craft --pipeline.task-profile official-interactive-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是独立 profile `HYGameCraft`（Python 3.10，CUDA 12.4，torch==2.5.1）。
-
-记录的权重仓库包括 `tencent/Hunyuan-GameCraft-1.0`。就位权重用 `bash scripts/inference/prepare_model_infer.sh hunyuan-game-craft`。
-
-状态：**已验证**。
+- 已验证单张 H100、CPU offload、单动作及标准权重；多卡推理未验证，FP8 转换不受支持。
+- 专属环境（Python 3.10 / torch 2.5.1），与统一档案隔离。
+- 遵循腾讯混元社区许可，见附带许可与来源说明。
 
 <ModelRelatedRecipes modelId="hunyuan-game-craft" locale="zh" />

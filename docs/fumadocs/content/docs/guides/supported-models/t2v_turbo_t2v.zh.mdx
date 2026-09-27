@@ -1,50 +1,48 @@
 ---
 title: "T2V Turbo T2V"
-description: "T2V Turbo T2V（University of California, Santa Barbara）：文生视频；仅静态加载; T2V-Turbo。"
-modelId: "t2v_turbo_t2v"
+description: "T2V-Turbo 是从 VideoCrafter2 蒸馏出的快速文生视频模型，结合一致性蒸馏与奖励反馈，4-8 步即可生成可看的视频。在本 catalog 中它由共享原生扩散组件装配：VideoCrafter2 基座与有序的 T2V-Turbo LoRA 是两个独立的声明式 checkpoint 输入。"
 pageSource: generated
 ---
 
+**发表机构:** 加州大学圣塔芭芭拉分校（UCSB） · 高校
+text → video
+[T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback](https://arxiv.org/abs/2405.18750) (2024)
+
 T2V-Turbo 是从 VideoCrafter2 蒸馏出的快速文生视频模型，结合一致性蒸馏与奖励反馈，4-8 步即可生成可看的视频。在本 catalog 中它由共享原生扩散组件装配：VideoCrafter2 基座与有序的 T2V-Turbo LoRA 是两个独立的声明式 checkpoint 输入。
 
-<ModelPaperFigures modelId="t2v_turbo_t2v" locale="zh" />
+**目录状态:** 已集成
 
-记录论文为[T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback](https://arxiv.org/abs/2405.18750)（2024）。
+## 上游来源
 
-项目页：[t2v-turbo.github.io](https://t2v-turbo.github.io/)。代码：[Ji4chenLi/t2v-turbo](https://github.com/Ji4chenLi/t2v-turbo)。
+- [项目主页](https://t2v-turbo.github.io/)
+- [论文](https://arxiv.org/abs/2405.18750)
+- [GitHub](https://github.com/Ji4chenLi/t2v-turbo)
+- [Hugging Face](https://huggingface.co/jiachenli-ucsb/T2V-Turbo-VC2)
+- [Hugging Face](https://huggingface.co/VideoCrafter/VideoCrafter2)
+- [上游 README](https://github.com/Ji4chenLi/t2v-turbo#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/t2v_turbo_t2v/paper.png" alt="T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback" />
+  <figcaption>T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="t2v_turbo_t2v" locale="zh" />
 
-## 用来做什么
+## 架构
 
-需要本系列的文生视频时选 `t2v_turbo_t2v`：prompt 进、生成视频出。它是 catalog 上的 T2V 起步线，不是编辑器，也不是世界模型步进器。
-
-基座：VideoCrafter2 的 U-Net 潜空间视频扩散。之上：以混合奖励反馈训练的一致性蒸馏 LoRA（见论文 arXiv 2405.18750）。WorldFoundry 使用共享原生装配器、runner、checkpoint 加载器、offload 策略与 LVDM 组件。该模型由加州大学圣塔芭芭拉分校（UCSB）发布。
-
-catalog 记录的任务包括 文生视频。别名包括 `t2v-turbo-t2v`、`t2v-turbo`。模态上，它接受文本，输出视频。
-
-记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（T2V-Turbo 的优化目标正是该评测的各维度）。
+基座：VideoCrafter2 的 U-Net 潜空间视频扩散。之上：以混合奖励反馈训练的一致性蒸馏 LoRA（见论文 arXiv 2405.18750）。WorldFoundry 使用共享原生装配器、runner、checkpoint 加载器、offload 策略与 LVDM 组件。
 
 ## 运行时契约
 
-本卡片未记录输入、旋钮或产物。
+runner 状态记录了原生 checkpoint 验证：本地 VideoCrafter2 与 T2V-Turbo VC2 资产可用于严格的组件与 LoRA 校验。适合需要大量快速文生视频草稿、而非极致质量的场景。
 
-记录的任务 profile：`text-to-video`。绑定的 pipeline 类是 `T2VTurboT2VPipeline`。
+## 评测 Benchmark
 
-系列状态：**仅静态加载**。
+- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — T2V-Turbo 的优化目标正是该评测的各维度。
 
-runner 状态记录了原生 checkpoint 验证：本地 VideoCrafter2 与 T2V-Turbo VC2 资产可用于严格的组件与 LoRA 校验。 适合需要大量快速文生视频草稿、而非极致质量的场景。
+## 就绪状态与限制
 
-少步生成以细节换速度——质量上限受 VideoCrafter2 基座限制。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run t2v_turbo_t2v --pipeline.task-profile text-to-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境未记录。
-
-记录的权重仓库包括 `jiachenli-ucsb/T2V-Turbo-VC2`、`VideoCrafter/VideoCrafter2`。就位权重用 `bash scripts/inference/prepare_model_infer.sh t2v_turbo_t2v`。
-
-状态：**仅静态加载**。
+- 少步生成以细节换速度——质量上限受 VideoCrafter2 基座限制。
+- 需要基座 checkpoint 与有序 LoRA 两个独立输入。
 
 <ModelRelatedRecipes modelId="t2v_turbo_t2v" locale="zh" />

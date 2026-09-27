@@ -1,48 +1,39 @@
 ---
 title: "Veo3"
-description: "Veo3（Google DeepMind）：文生视频、图生视频；Runner 一致性待确认。"
-modelId: "veo3"
+description: "Veo3 是 Google DeepMind 的 Veo 3 托管视频模型在本 catalog 中的条目，记录文生视频与图生视频任务。 WorldFoundry 通过 Google 的 API 提交生成请求并把渲染结果收为产物，使 Veo 3 的结果可以与开源模型在同一套评测框架下对比。模型本体始终运行在 Google 的基础设施上。"
 pageSource: generated
 ---
 
+**发表机构:** Google DeepMind · 企业
+text · image → video
+
 Veo3 是 Google DeepMind 的 Veo 3 托管视频模型在本 catalog 中的条目，记录文生视频与图生视频任务。 WorldFoundry 通过 Google 的 API 提交生成请求并把渲染结果收为产物，使 Veo 3 的结果可以与开源模型在同一套评测框架下对比。模型本体始终运行在 Google 的基础设施上。
 
-<ModelPaperFigures modelId="veo3" locale="zh" />
+**目录状态:** 已集成
 
-项目页：[deepmind.google/technologies/veo](https://deepmind.google/technologies/veo/)。
+## 上游来源
+
+- [项目主页](https://deepmind.google/technologies/veo/)
 
 <ModelCommandBuilder modelId="veo3" locale="zh" />
 
-## 用来做什么
-
-本卡是托管 API 而不是本地 checkpoint 时选 `veo3`：走记录的提供商路由，而不是就位权重。
+## 架构
 
 这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节，本仓库也未记录这些信息。WorldFoundry 记录的只是集成层——一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
 
-catalog 记录的任务包括 文生视频、图生视频、托管 API。模态上，它接受文本、图像，输出视频。
-
-记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（对比托管文/图生视频输出的标准多维质量评测）、[Physics-IQ Original](/zh/docs/evaluation/benchmark-hub/physics-iq)（检验服务方视频模型是否遵循基本物理合理性）。
-
 ## 运行时契约
 
-本卡片未记录输入、旋钮或产物。
+Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。Veo 的访问通过 Google 的 AI 开发者产品（如 Gemini API）开通，并受地区可用性限制。
 
-记录的任务 profile：`text-to-video`、`image-to-video`、`hosted-api`。绑定的 pipeline 类是 `Veo3Pipeline`。
+## 评测 Benchmark
 
-系列状态：**Runner 一致性待确认**。
+- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — 对比托管文/图生视频输出的标准多维质量评测。
+- [Physics-IQ Original](/zh/docs/evaluation/benchmark-hub/physics-iq) — 检验服务方视频模型是否遵循基本物理合理性。
 
-Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。 本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。 Veo 的访问通过 Google 的 AI 开发者产品（如 Gemini API）开通，并受地区可用性限制。
+## 就绪状态与限制
 
-需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run veo3 --pipeline.task-profile text-to-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境未记录。
-
-运行 Veo 3.1 前安装 `worldfoundry[api]` 并设置 `GEMINI_API_KEY`。它调用 Google 原生视频生成 API，无需本地权重。
-
-状态：**Runner 一致性待确认**。
+- 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+- 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+- 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
 
 <ModelRelatedRecipes modelId="veo3" locale="zh" />

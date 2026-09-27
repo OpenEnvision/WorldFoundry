@@ -1,50 +1,39 @@
 ---
 title: "Hy-Embodied-0.5-VLA"
-description: "Hy-Embodied-0.5-VLA（Tencent Hunyuan）：视觉-语言-动作（VLA）、VLA 策略执行；已验证; 2 个 variant。"
-modelId: "hy-embodied-vla"
+description: "Hy-Embodied-0.5-VLA 是腾讯混元的双臂操作 VLA，本 catalog 中已 GPU 验证：RoboTwin checkpoint 严格恢复，并在 A100 上从官方六帧三相机输入产出有限的 20x20 解码动作；UMI checkpoint 以 BF16 产出有限的 50x20 相对动作块。两个 Apache-2.0 checkpoint 均在 Hugging Face 与 ModelScope 上锁定 revision。"
 pageSource: generated
 ---
 
+**发表机构:** 腾讯混元 · 企业
+
 Hy-Embodied-0.5-VLA 是腾讯混元的双臂操作 VLA，本 catalog 中已 GPU 验证：RoboTwin checkpoint 严格恢复，并在 A100 上从官方六帧三相机输入产出有限的 20x20 解码动作；UMI checkpoint 以 BF16 产出有限的 50x20 相对动作块。两个 Apache-2.0 checkpoint 均在 Hugging Face 与 ModelScope 上锁定 revision。
 
-<ModelPaperFigures modelId="hy-embodied-vla" locale="zh" />
+**目录状态:** 已集成
 
-记录论文为[arXiv 2606.14409](https://arxiv.org/abs/2606.14409)。
+## 上游来源
 
-代码：[Tencent-Hunyuan/Hy-Embodied-0.5-VLA](https://github.com/Tencent-Hunyuan/Hy-Embodied-0.5-VLA)。
+- [论文](https://arxiv.org/abs/2606.14409)
+- [GitHub](https://github.com/Tencent-Hunyuan/Hy-Embodied-0.5-VLA)
+- [Hugging Face](https://huggingface.co/tencent/Hy-Embodied-0.5-VLA-UMI)
+- [Hugging Face](https://huggingface.co/tencent/Hy-Embodied-0.5-VLA-RoboTwin)
+- [上游 README](https://github.com/Tencent-Hunyuan/Hy-Embodied-0.5-VLA#readme)
 
 <ModelCommandBuilder modelId="hy-embodied-vla" locale="zh" />
 
-## 用来做什么
-
-用 `hy-embodied-vla-umi` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。
+## 架构
 
 推理专用的 mixture-of-transformers（MoT）骨干，预处理与动作解码内置树内。官方输入契约为三相机六帧；RoboTwin 解码绝对关节动作，UMI 解码相对动作。
 
-catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 策略执行、机器人策略、bimanual_manipulation。别名包括 `hy-vla`、`hy-embodied-0.5-vla`、`Hy-Embodied-0.5-VLA`。同系列还有 `hy-embodied-vla-robotwin`。
-
-记录的评测入口包括[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（GPU 已验证的 RoboTwin 策略 checkpoint）。
-
 ## 运行时契约
-
-必填 `image`、`instruction`、`prompt`、`state`；可选 `action_representation`、`actions` (actions, normalized_actions, relative_actions, absolute_actions)、`camera_keys` (observation.images.top_head, observation.images.hand_left, observation.images.hand_right)、`modalities` (image, language, state)、`model_id` (hy-embodied-vla)；产物 `action_trace`、`hy_embodied_vla_action_trace.json`。
-
-记录的任务 profile：`vla`、`vla.policy_rollout`、`robot_policy`、`bimanual_manipulation`。绑定的 pipeline 类是 `HyEmbodiedVLAPipeline`。
-
-起步 variant 是 `hy-embodied-vla-umi`。catalog 登记了 2 个 variant（上方卡片）：`hy-embodied-vla-umi`（`vla.policy_rollout`）：已验证、`hy-embodied-vla-robotwin`（`vla.policy_rollout`）：已验证。系列状态：**已验证**。
 
 模拟器基准工作选 RoboTwin checkpoint，UMI 式相对动作部署选 UMI checkpoint；两者共用同一树内运行时。
 
-验证覆盖 A100 上的动作解码；完整基准 rollout parity 单独跟踪。
+## 评测 Benchmark
 
-## 在 WorldFoundry 中运行
+- [RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin) — GPU 已验证的 RoboTwin 策略 checkpoint。
 
-catalog 启动命令是 `worldfoundry-eval run hy-embodied-vla-umi --pipeline.task-profile vla.policy_rollout`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+## 就绪状态与限制
 
-运行环境是独立 profile `worldfoundry-hy-embodied-vla-cu128`（Python 3.12，CUDA 12.8，torch>=2.7,\<2.8）。
-
-记录的权重仓库包括 `tencent/Hy-Embodied-0.5-VLA-UMI`、`tencent/Hy-Embodied-0.5-VLA-RoboTwin`。就位权重用 `bash scripts/inference/prepare_model_infer.sh hy-embodied-vla-umi`。
-
-记录 license 为 Apache-2.0；状态：**已验证**。
+- 验证覆盖 A100 上的动作解码；完整基准 rollout parity 单独跟踪。
 
 <ModelRelatedRecipes modelId="hy-embodied-vla" locale="zh" />

@@ -1,48 +1,37 @@
 ---
 title: "UniK3D"
-description: "UniK3D（ETH Zurich）：metric-3d-estimation、单目深度估计；已验证。"
-modelId: "unik3d-prior"
+description: "UniK3D 把米制 3D 估计推广到任意相机——针孔、鱼眼、乃至完整全景——单一模型通吃。本 catalog 中它是 checkpoint 已验证的通用相机几何先验：真实 checkpoint 推理已通过共享契约验证并支持自动相机估计，针孔与全景相机覆盖保持显式配置。"
 pageSource: generated
 ---
 
+**发表机构:** 苏黎世联邦理工学院（ETH Zurich） · 高校
+image → depth
+
 UniK3D 把米制 3D 估计推广到任意相机——针孔、鱼眼、乃至完整全景——单一模型通吃。本 catalog 中它是 checkpoint 已验证的通用相机几何先验：真实 checkpoint 推理已通过共享契约验证并支持自动相机估计，针孔与全景相机覆盖保持显式配置。
 
-<ModelPaperFigures modelId="unik3d-prior" locale="zh" />
+**目录状态:** 已集成
 
-记录论文为[arXiv 2503.16591](https://arxiv.org/abs/2503.16591)。
+## 上游来源
 
-项目页：[lpiccinelli-eth.github.io/pub/unik3d](https://lpiccinelli-eth.github.io/pub/unik3d/)。代码：[lpiccinelli-eth/UniK3D](https://github.com/lpiccinelli-eth/UniK3D)。
+- [项目主页](https://lpiccinelli-eth.github.io/pub/unik3d/)
+- [论文](https://arxiv.org/abs/2503.16591)
+- [GitHub](https://github.com/lpiccinelli-eth/UniK3D)
+- [Hugging Face](https://huggingface.co/lpiccinelli/unik3d-vitl)
+- [上游 README](https://github.com/lpiccinelli-eth/UniK3D#readme)
 
 <ModelCommandBuilder modelId="unik3d-prior" locale="zh" />
 
-## 用来做什么
+## 架构
 
-做前馈几何时选 `unik3d-prior`：视图进、重建/轨迹/点云出。需要 catalog 的 3D 路由、而不是仅深度先验时用它。
-
-按上游论文，UniK3D 用学习到的球谐基相机模型表示相机，把射线方向与径向深度解耦，无需针对畸变单独调参。默认 checkpoint 从 lpiccinelli/unik3d-vitl 解析；注册于 base_models/three_dimensions/depth/unik3d。该模型由苏黎世联邦理工学院（ETH Zurich）发布。
-
-catalog 记录的任务包括 panoramic-depth-estimation、metric-3d-estimation、单目深度估计、几何先验。别名包括 `unik3d`、`unik3d-vitl`。模态上，它接受图像，输出深度。
+按上游论文，UniK3D 用学习到的球谐基相机模型表示相机，把射线方向与径向深度解耦，无需针对畸变单独调参。默认 checkpoint 从 lpiccinelli/unik3d-vitl 解析；注册于 base_models/three_dimensions/depth/unik3d。
 
 ## 运行时契约
 
-必填 `image`；可选 `prompt`、`video`、`actions`；产物 `unik3d-prior.npz`。
+它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。当输入包含鱼眼或全景图像时，优先选它而非仅支持针孔的先验。上游发布为CC-BY-NC-4.0。
 
-记录的任务 profile：`panoramic-depth-estimation`、`metric-3d-estimation`、`monocular-depth-estimation`、`geometry-prior`。绑定的 pipeline 类是 `UniK3DPriorPipeline`。
+## 就绪状态与限制
 
-系列状态：**已验证**。
-
-它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。 上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。 当输入包含鱼眼或全景图像时，优先选它而非仅支持针孔的先验。 上游发布为CC-BY-NC-4.0。
-
-CC-BY-NC-4.0：下游适用非商用许可条款。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run unik3d-prior --pipeline.task-profile panoramic-depth-estimation`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `lpiccinelli/unik3d-vitl`。就位权重用 `bash scripts/inference/prepare_model_infer.sh unik3d-prior`。
-
-状态：**已验证**。
+- CC-BY-NC-4.0：下游适用非商用许可条款。
+- 自动相机估计可能误判特殊光学系统——已知相机类型时请显式指定针孔/全景覆盖。
 
 <ModelRelatedRecipes modelId="unik3d-prior" locale="zh" />

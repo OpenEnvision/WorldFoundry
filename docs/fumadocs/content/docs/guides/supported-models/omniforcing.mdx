@@ -1,48 +1,35 @@
 ---
 title: "OmniForcing"
-description: "OmniForcing: audio-visual-world-model and real-time-generation; Runner parity pending."
-modelId: "omniforcing"
+description: "OmniForcing is a real-time audio-visual world model built with distillation: it targets joint audio-video generation at interactive speed."
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+
 OmniForcing is a real-time audio-visual world model built with distillation: it targets joint audio-video generation at interactive speed. In this catalog the official source route is registered with the source bound at a pinned commit; checkpoints and runtime assets stay runtime-gated.
 
-<ModelPaperFigures modelId="omniforcing" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [arXiv 2603.11647](https://arxiv.org/abs/2603.11647).
+## Upstream sources
 
-Code: [OmniForcing/OmniForcing](https://github.com/OmniForcing/OmniForcing).
+- [Paper](https://arxiv.org/abs/2603.11647)
+- [GitHub](https://github.com/OmniForcing/OmniForcing)
+- [Upstream README](https://github.com/OmniForcing/OmniForcing#readme)
 
 <ModelCommandBuilder modelId="omniforcing" locale="en" />
 
-## What it is for
-
-Pick `omniforcing` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+## Architecture
 
 Architecture internals beyond the recorded tasks (audio-visual world model, real-time generation, distillation) are not stored in this repository. The upstream repository lacks a root license and is flagged for manual review.
 
-Catalog tasks include audio-visual-world-model, real-time-generation, and distillation.
-
 ## Runtime contract
-
-Required `audio`, `image`, `prompt`, and `video`; optional `actions` (forcing_signal, interaction); artifacts `generated_video` and `omniforcing_runtime_plan.json`.
-
-Recorded task profiles: `audio-visual-world-model`, `real-time-generation`, and `distillation`. WorldFoundry binds `OmniForcingPipeline`.
-
-Family status: **Runner parity pending**.
 
 Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
 
-OmniForcing official source route is registered; checkpoints/runtime assets are runtime-gated.
+## Readiness and limitations
 
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run omniforcing --pipeline.task-profile audio-visual-world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh omniforcing`.
-
-Status: **Runner parity pending**.
+- Missing root license upstream: legal review required.
+- Real generation is checkpoint/asset gated.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="omniforcing" locale="en" />

@@ -1,50 +1,40 @@
 ---
 title: "MosaicMem"
-description: "MosaicMem: world-model and memory-augmented-generation; Runner parity pending."
-modelId: "mosaicmem"
+description: "MosaicMem is a memory-augmented world-model component: it ingests keyframe patches, retrieves target views, summarizes coverage, and composes latent canvases — producing a memory index rather than video."
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+video
+
 MosaicMem is a memory-augmented world-model component: it ingests keyframe patches, retrieves target views, summarizes coverage, and composes latent canvases — producing a memory index rather than video. In this catalog the source route is registered for memory-plan artifacts and is exposed through worldfoundry.core.memory; generator assets stay runtime-gated.
 
-<ModelPaperFigures modelId="mosaicmem" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [arXiv 2603.17117](https://arxiv.org/abs/2603.17117).
+## Upstream sources
 
-Project page: [mosaicmem.github.io/mosaicmem](https://mosaicmem.github.io/mosaicmem/). Code: [AbdelStark/mosaicmem](https://github.com/AbdelStark/mosaicmem).
+- [Project](https://mosaicmem.github.io/mosaicmem/)
+- [Paper](https://arxiv.org/abs/2603.17117)
+- [GitHub](https://github.com/AbdelStark/mosaicmem)
+- [Upstream README](https://github.com/AbdelStark/mosaicmem#readme)
 
 <ModelCommandBuilder modelId="mosaicmem" locale="en" />
 
-## What it is for
-
-`mosaicmem` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+## Architecture
 
 Architecture internals are not recorded in this repository (MIT license); the source is bound at a pinned commit. The recorded artifact type is memory_index.
 
-Catalog tasks include world-model, memory-augmented-generation, and video-generation. Documented outputs include video.
-
-Recorded evaluation entry points include [MemoBench](/docs/evaluation/benchmark-hub/memobench) (Long-horizon memory consistency evaluation).
-
 ## Runtime contract
-
-Required `image`, `prompt`, and `video`; optional `actions` (memory_update, interaction); artifacts `memory_index` and `mosaicmem_runtime_plan.json`.
-
-Recorded task profiles: `world-model`, `memory-augmented-generation`, and `video-generation`. WorldFoundry binds `MosaicMemPipeline`.
-
-Family status: **Runner parity pending**.
 
 Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Use it as the memory side of a world-model stack, not as a standalone generator.
 
-MosaicMem source route is registered for memory-plan artifacts; generator assets remain runtime-gated.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [MemoBench](/docs/evaluation/benchmark-hub/memobench) — Long-horizon memory consistency evaluation.
 
-The catalog launch is `worldfoundry-eval run mosaicmem --pipeline.task-profile world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh mosaicmem`.
-
-Status: **Runner parity pending**.
+- Produces memory indexes, not video artifacts.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="mosaicmem" locale="en" />

@@ -1,50 +1,39 @@
 ---
 title: "Vchitect-2.0 T2V"
-description: "Vchitect-2.0 T2V from Shanghai AI Laboratory (Vchitect): text-to-video and video-generation; Static load only."
-modelId: "vchitect-2-t2v"
+description: "Vchitect-2.0 is Shanghai AI Lab's open text-to-video diffusion transformer; this entry serves the 2B checkpoint through a fully native assembly. It carries an unusually strong structural guarantee: the native DiT matches all 1019 checkpoin…"
 pageSource: generated
 ---
 
+**Publisher:** Shanghai AI Laboratory (Vchitect) · Research lab
+text → video
+
 Vchitect-2.0 is Shanghai AI Lab's open text-to-video diffusion transformer; this entry serves the 2B checkpoint through a fully native assembly. It carries an unusually strong structural guarantee: the native DiT matches all 1019 checkpoint tensors and the native SD3 decoder matches all 138 decoder tensors. Aliases include vchitect, vchitect-2, and vchitect2-t2v.
 
-<ModelPaperFigures modelId="vchitect-2-t2v" locale="en" />
+**Catalog status:** Integrated
 
-The recorded paper is [arXiv 2501.08453](https://arxiv.org/abs/2501.08453).
+## Upstream sources
 
-Code: [Vchitect/Vchitect-2.0](https://github.com/Vchitect/Vchitect-2.0).
+- [Paper](https://arxiv.org/abs/2501.08453)
+- [GitHub](https://github.com/Vchitect/Vchitect-2.0)
+- [Upstream README](https://github.com/Vchitect/Vchitect-2.0#readme)
 
 <ModelCommandBuilder modelId="vchitect-2-t2v" locale="en" />
 
-## What it is for
+## Architecture
 
-`vchitect-2-t2v` is the recorded prompt-to-video route — not image editing and not a policy. Start here when the job is a clip from text.
-
-A parallel diffusion transformer paired with an SD3-family VAE decoder, assembled from role-based DiT, conditioner, scheduler, initializer, and decoder components. The pinned official source revision is recorded in the profile (Vchitect-2.0 @ be56767f). It is published by Shanghai AI Laboratory (Vchitect).
-
-Catalog tasks include text-to-video and video-generation. Catalog aliases include `vchitect`, `vchitect-2`, `vchitect2-t2v`, and `vchitect_2_t2v`. Documented modalities: text in, video out.
-
-Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard T2V quality suite).
+A parallel diffusion transformer paired with an SD3-family VAE decoder, assembled from role-based DiT, conditioner, scheduler, initializer, and decoder components. The pinned official source revision is recorded in the profile (Vchitect-2.0 @ be56767f).
 
 ## Runtime contract
 
-Required `prompt`; optional `image`; artifacts `generated_video` and `vchitect_2_t2v_public_runner.mp4`.
+Runner status is native_checkpoint_validated: the default path loads the shared native pipeline and does not emit blocked plan artifacts. Weights are apache-2.0 at Vchitect/Vchitect-2.0-2B. Use id vchitect-2-t2v.
 
-Recorded task profiles: `text-to-video` and `video-generation`. WorldFoundry binds `Vchitect2T2VPipeline`.
+## Evaluation benchmarks
 
-Family status: **Static load only**.
+- [VBench](/docs/evaluation/benchmark-hub/vbench) — Standard T2V quality suite.
 
-Runner status is Static load only load only load only: the default path loads the shared native pipeline and does not emit blocked plan artifacts. Weights are apache-2.0 at Vchitect/Vchitect-2.0-2B. Use id vchitect-2-t2v.
+## Readiness and limitations
 
-Use id vchitect-2-t2v. The public pipeline is assembled from native role-based components.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run vchitect-2-t2v --pipeline.task-profile text-to-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `Vchitect/Vchitect-2.0-2B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh vchitect-2-t2v`.
-
-Recorded licenses include apache-2.0; status: **Static load only**.
+- Tensor-level validation is structural — full visual parity with upstream demos is a separate, unrecorded step.
+- 2B scale: quality below the 13B+ entries in this catalog.
 
 <ModelRelatedRecipes modelId="vchitect-2-t2v" locale="en" />

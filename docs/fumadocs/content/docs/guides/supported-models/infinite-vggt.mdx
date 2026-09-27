@@ -1,48 +1,43 @@
 ---
 title: "Infinite VGGT"
-description: "Infinite VGGT from Tsinghua University: 3d-reconstruction and streaming-3d; Runner parity pending; Streaming 4D Visual Geometry Transformer."
-modelId: "infinite-vggt"
+description: "Infinite VGGT (StreamVGGT) turns the feed-forward VGGT reconstructor into a streaming model: it processes incoming frames causally with cached tokens, so reconstruction extends indefinitely instead of being bounded by a fixed window. The i…"
 pageSource: generated
 ---
 
+**Publisher:** Tsinghua University · University
+[Streaming 4D Visual Geometry Transformer](https://arxiv.org/abs/2507.11539) (2025)
+
 Infinite VGGT (StreamVGGT) turns the feed-forward VGGT reconstructor into a streaming model: it processes incoming frames causally with cached tokens, so reconstruction extends indefinitely instead of being bounded by a fixed window. The in-tree pipeline is registered for streaming 3D reconstruction.
 
-<ModelPaperFigures modelId="infinite-vggt" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [Streaming 4D Visual Geometry Transformer](https://arxiv.org/abs/2507.11539) (2025).
+## Upstream sources
 
-Project page: [wzzheng.net/StreamVGGT](https://wzzheng.net/StreamVGGT/). Code: [wzzheng/StreamVGGT](https://github.com/wzzheng/StreamVGGT).
+- [Project](https://wzzheng.net/StreamVGGT/)
+- [Paper](https://arxiv.org/abs/2507.11539)
+- [GitHub](https://github.com/wzzheng/StreamVGGT)
+- [Hugging Face](https://huggingface.co/lch01/StreamVGGT)
+- [Upstream README](https://github.com/wzzheng/StreamVGGT#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/infinite-vggt/paper.png" alt="Streaming 4D Visual Geometry Transformer" />
+  <figcaption>Streaming 4D Visual Geometry Transformer</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="infinite-vggt" locale="en" />
 
-## What it is for
+## Architecture
 
-`infinite-vggt` is the recorded reconstruction line. Start here to emit geometry from the documented views.
-
-A causal transformer with cached-token knowledge distillation from VGGT (per arXiv 2507.11539). License is CC-BY-NC-4.0 — non-commercial. It is published by Tsinghua University.
-
-Catalog tasks include 3d-reconstruction and streaming-3d. Catalog aliases include `stream-vggt` and `streamvggt`.
+A causal transformer with cached-token knowledge distillation from VGGT (per arXiv 2507.11539). License is CC-BY-NC-4.0 — non-commercial.
 
 ## Runtime contract
 
-Inputs, knobs, and artifacts are not recorded on this card.
+Runner parity is pending: checkpoint-backed inference depends on staged StreamVGGT weights. Use the vggt entry for offline reconstruction and this one when frames arrive as a stream.
 
-Recorded task profiles: `3d-reconstruction` and `streaming-3d`. WorldFoundry binds `InfiniteVGGTPipeline`.
+## Readiness and limitations
 
-Family status: **Runner parity pending**.
-
-Use the vggt entry for offline reconstruction and this one when frames arrive as a stream.
-
-In-tree StreamVGGT (Infinite VGGT) pipeline is registered for streaming 3D reconstruction.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run infinite-vggt --pipeline.task-profile 3d-reconstruction`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-The environment profile is not recorded.
-
-Recorded weight repositories include `lch01/StreamVGGT`. Stage assets with `bash scripts/inference/prepare_model_infer.sh infinite-vggt`.
-
-Status: **Runner parity pending**.
+- CC-BY-NC-4.0: non-commercial license.
+- Checkpoint-backed parity is pending.
+- Causal streaming accumulates drift relative to offline joint reconstruction.
 
 <ModelRelatedRecipes modelId="infinite-vggt" locale="en" />

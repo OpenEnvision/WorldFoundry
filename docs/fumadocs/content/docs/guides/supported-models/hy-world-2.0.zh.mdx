@@ -1,50 +1,40 @@
 ---
 title: "HY-World 2.0"
-description: "HY-World 2.0（Tencent (Hunyuan)）：世界模型；计划中。"
-modelId: "hy-world-2.0"
+description: "HY-World 2.0 是腾讯第二代世界生成栈，此处按组件记录：HY-Pano 2.0 全景生成（树内支持）、 WorldMirror 2.0 重建（已通过 Workspace 推理路径验证），以及完整文/图到 3D 世界生成（上游已开源， WorldFoundry 侧迁移待完成）。已验证的重建路径导出深度、法线、点云、高斯泼溅、相机参数、COLMAP 文件与 RRD 场景元数据。"
 pageSource: generated
 ---
 
+**发表机构:** 腾讯（混元） · 企业
+
 HY-World 2.0 是腾讯第二代世界生成栈，此处按组件记录：HY-Pano 2.0 全景生成（树内支持）、 WorldMirror 2.0 重建（已通过 Workspace 推理路径验证），以及完整文/图到 3D 世界生成（上游已开源， WorldFoundry 侧迁移待完成）。已验证的重建路径导出深度、法线、点云、高斯泼溅、相机参数、COLMAP 文件与 RRD 场景元数据。
 
-<ModelPaperFigures modelId="hy-world-2.0" locale="zh" />
+**目录状态:** 仅有运行环境配置
 
-记录论文为[arXiv 2604.14268](https://arxiv.org/abs/2604.14268)。
+## 上游来源
 
-项目页：[3d-models.hunyuan.tencent.com/world](https://3d-models.hunyuan.tencent.com/world/)。代码：[Tencent-Hunyuan/HY-World-2.0](https://github.com/Tencent-Hunyuan/HY-World-2.0)。
+- [项目主页](https://3d-models.hunyuan.tencent.com/world/)
+- [论文](https://arxiv.org/abs/2604.14268)
+- [GitHub](https://github.com/Tencent-Hunyuan/HY-World-2.0)
+- [Hugging Face](https://huggingface.co/tencent/HY-World-2.0)
+- [上游 README](https://github.com/Tencent-Hunyuan/HY-World-2.0#readme)
 
 <ModelCommandBuilder modelId="hy-world-2.0" locale="zh" />
 
-## 用来做什么
+## 架构
 
-需要动作条件世界步进时选 `hy-world-2.0`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
-
-上游的五阶段世界生成串联 WorldNav 轨迹生成、轨迹渲染、视频生成、GS 数据准备与 3DGS 组合（traj_generate.py 到 world_gs_trainer.py），另需 VLM 端点。WorldFoundry 已树内封装 HY-Pano 2.0 与 WorldMirror 2.0；其余阶段尚未迁移。该模型由腾讯（混元）发布。
-
-catalog 记录的任务包括 default。别名包括 `hyworld2.0`、`hyworld-2.0`、`hy-world2.0`、`hy-world-2p0` 等。
-
-记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（生成可探索世界的标准评分）。
+上游的五阶段世界生成串联 WorldNav 轨迹生成、轨迹渲染、视频生成、GS 数据准备与 3DGS 组合（traj_generate.py 到 world_gs_trainer.py），另需 VLM 端点。WorldFoundry 已树内封装 HY-Pano 2.0 与 WorldMirror 2.0；其余阶段尚未迁移。
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`video`；可选 `actions` (worldrecon, panorama)；产物 `hy-world-2.0.mp4`。
+当下请使用已验证的 WorldMirror 2.0 重建路径；在五阶段运行时迁移并验证之前，完整世界生成请视为仅上游可用。轨迹渲染阶段单独记录为 hyworld-worldgen 条目。
 
-记录的任务 profile：`default`。绑定的 pipeline 类是 `HYWorld2Pipeline`。
+## 评测 Benchmark
 
-系列状态：**计划中**。
+- [WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore) — 生成可探索世界的标准评分。
 
-当下请使用已验证的 WorldMirror 2.0 重建路径；在五阶段运行时迁移并验证之前，完整世界生成请视为仅上游可用。 轨迹渲染阶段单独记录为 hyworld-worldgen 条目。
+## 就绪状态与限制
 
-完整文/图到 3D 世界生成在 WorldFoundry 侧待迁移。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run hy-world-2.0 --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `tencent/HY-World-2.0`。就位权重用 `bash scripts/inference/prepare_model_infer.sh hy-world-2.0`。
-
-状态：**计划中**。
+- 完整文/图到 3D 世界生成在 WorldFoundry 侧待迁移。
+- worldgen 各阶段需要原生扩展与 VLM 端点。
 
 <ModelRelatedRecipes modelId="hy-world-2.0" locale="zh" />

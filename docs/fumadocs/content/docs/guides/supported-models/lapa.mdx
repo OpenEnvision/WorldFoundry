@@ -1,48 +1,35 @@
 ---
 title: "Latent Action Pretraining"
-description: "Latent Action Pretraining: va and vam; Runner parity pending; dedicated `worldfoundry-lapa-jax-cu118`."
-modelId: "lapa"
+description: "LAPA (Latent Action Pretraining) learns actions without action labels: it pretrains a video-action model on unlabeled video by discovering latent actions, then transfers to real robot control. The MIT-licensed LAPA-7B-openx checkpoint is c…"
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+
 LAPA (Latent Action Pretraining) learns actions without action labels: it pretrains a video-action model on unlabeled video by discovering latent actions, then transfers to real robot control. The MIT-licensed LAPA-7B-openx checkpoint is confirmed and pinned; WorldFoundry vendors the latent-action inference runtime in-tree.
 
-<ModelPaperFigures modelId="lapa" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [arXiv 2410.11758](https://arxiv.org/abs/2410.11758).
+## Upstream sources
 
-Code: [LatentActionPretraining/LAPA](https://github.com/LatentActionPretraining/LAPA).
+- [Paper](https://arxiv.org/abs/2410.11758)
+- [GitHub](https://github.com/LatentActionPretraining/LAPA)
+- [Hugging Face](https://huggingface.co/latent-action-pretraining/LAPA-7B-openx)
+- [Upstream README](https://github.com/LatentActionPretraining/LAPA#readme)
 
 <ModelCommandBuilder modelId="lapa" locale="en" />
 
-## What it is for
-
-Pick `lapa-7b-openx` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+## Architecture
 
 A 7B video-action model trained on Open X-Embodiment scale data with latent action quantization. The in-tree runtime passed py_compile, from_pretrained, plan-only execution, and alias validation.
 
-Catalog tasks include va, vam, latent action, and video action modeling. Catalog aliases include `LAPA` and `LAPA-7B-openx`.
-
 ## Runtime contract
-
-Required `image`, `instruction`, `prompt`, and `video`; optional `actions` (latent_action_tokens, video_context); artifacts `lapa_action_tokens.json`.
-
-Recorded task profiles: `va`, `vam`, `latent_action`, `video_action_modeling`, and `vam.video_action_modeling`. WorldFoundry binds `LAPAPipeline`.
-
-Family status: **Runner parity pending**.
 
 Real 7B inference is currently blocked by environment issues: the prepare environment lacks tux and the gpu-jax0325 environment has incompatible JAX. Plan-only execution works; full inference needs a compatible JAX environment.
 
-LAPA latent action runtime is vendored in-tree; py_compile, from_pretrained, plan-only execution, and alias validation passed.
+## Readiness and limitations
 
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run lapa-7b-openx --pipeline.task-profile vam.video_action_modeling` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the dedicated environment `worldfoundry-lapa-jax-cu118` (Python 3.10, CUDA 11.8).
-
-Recorded weight repositories include `latent-action-pretraining/LAPA-7B-openx`. Stage assets with `bash scripts/inference/prepare_model_infer.sh lapa-7b-openx`.
-
-Recorded licenses include mit; status: **Runner parity pending**.
+- Real inference is blocked by JAX/tux environment incompatibilities.
+- JAX/Flax stack, not PyTorch — environment setup differs from most catalog entries.
 
 <ModelRelatedRecipes modelId="lapa" locale="en" />

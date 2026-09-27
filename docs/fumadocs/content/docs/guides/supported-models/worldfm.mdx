@@ -1,50 +1,42 @@
 ---
 title: "InSpatio-WorldFM"
-description: "InSpatio-WorldFM from InSpatio: world and video; Verified."
-modelId: "worldfm"
+description: "InSpatio-WorldFM is a 3D world foundation model for spatial intelligence and frame generation, released with confirmed code and weights (inspatio/WorldFM on Hugging Face, Apache-2.0)."
 pageSource: generated
 ---
 
-InSpatio-WorldFM is a 3D world foundation model for spatial intelligence and frame generation, released with confirmed code and weights (inspatio/WorldFM on Hugging Face, Apache-2.0). In this catalog the integration is Verified: the WorldFoundry runner supports the official meta.json demo in the unified environment profile with local WorldFM assets, and emits the official video and panorama artifact structure.
+**Publisher:** InSpatio · Company
+video
 
-<ModelPaperFigures modelId="worldfm" locale="en" />
+InSpatio-WorldFM is a 3D world foundation model for spatial intelligence and frame generation, released with confirmed code and weights (inspatio/WorldFM on Hugging Face, Apache-2.0). In this catalog the integration is verified: the WorldFoundry runner supports the official meta.json demo in the unified environment profile with local WorldFM assets, and emits the official video and panorama artifact structure.
 
-The recorded paper is [arXiv 2603.11911](https://arxiv.org/abs/2603.11911).
+**Catalog status:** Runner verified
 
-Project page: [inspatio.github.io/worldfm](https://inspatio.github.io/worldfm). Code: [inspatio/worldfm](https://github.com/inspatio/worldfm). Code: [world-fm/worldfm](https://github.com/world-fm/worldfm).
+## Upstream sources
+
+- [Project](https://inspatio.github.io/worldfm)
+- [Paper](https://arxiv.org/abs/2603.11911)
+- [GitHub](https://github.com/inspatio/worldfm)
+- [Hugging Face](https://huggingface.co/inspatio/WorldFM)
+- [Source](https://github.com/world-fm/worldfm)
+- [Upstream README](https://github.com/inspatio/worldfm#readme)
+- [Upstream README](https://github.com/world-fm/worldfm#readme)
 
 <ModelCommandBuilder modelId="worldfm" locale="en" />
 
-## What it is for
-
-`worldfm` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+## Architecture
 
 Outputs cover both video and panorama artifacts, reflecting a world-generation design that renders beyond a single fixed viewport. Architecture internals beyond the official repository and checkpoint pointers are not recorded in this repository.
 
-Catalog tasks include world, video, world model, and official-meta-demo. Documented outputs include video.
-
-Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Unified world-generation quality for 3D world output).
-
 ## Runtime contract
 
-Required `prompt`, `image`, and `video`; optional `actions`; artifacts `generated_world` and `worldfm.mp4`.
+Drive runs through the official meta.json demo format with local WorldFM assets staged. Per-run artifact checks are tracked outside the model catalog.
 
-Recorded task profiles: `world`, `video`, `world_model`, and `official-meta-demo`. WorldFoundry binds `WorldFMPipeline`.
+## Evaluation benchmarks
 
-Family status: **Verified**.
+- [WorldScore](/docs/evaluation/benchmark-hub/worldscore) — Unified world-generation quality for 3D world output.
 
-Recorded `official-meta-demo` defaults: fps=30.
+## Readiness and limitations
 
-Drive runs through the official meta.json demo format with local WorldFM assets staged.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run worldfm --pipeline.task-profile official-meta-demo`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `inspatio/WorldFM`. Stage assets with `bash scripts/inference/prepare_model_infer.sh worldfm`.
-
-Status: **Verified**.
+- Per-run visual QA is tracked outside the catalog; verified status covers the runner path, not output quality.
 
 <ModelRelatedRecipes modelId="worldfm" locale="en" />

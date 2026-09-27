@@ -9,6 +9,16 @@ image → depth
 
 UniDepth V2 is a universal monocular metric-depth model: from a single image of any camera it predicts a metric 3D point cloud directly, without external intrinsics. In this catalog it is a checkpoint-verified geometry prior — real checkpoint inference and official point export are verified through the shared geometry-prior contract and Workspace route.
 
+**Catalog status:** Integrated
+
+## Upstream sources
+
+- [Project](https://lpiccinelli-eth.github.io/pub/unidepth/)
+- [Paper](https://arxiv.org/abs/2502.20110)
+- [GitHub](https://github.com/lpiccinelli-eth/UniDepth)
+- [Hugging Face](https://huggingface.co/lpiccinelli/unidepth-v2-vitl14)
+- [Upstream README](https://github.com/lpiccinelli-eth/UniDepth#readme)
+
 <ModelCommandBuilder modelId="unidepth-v2-prior" locale="en" />
 
 ## Architecture
@@ -18,5 +28,10 @@ Per the upstream publication, a camera self-prompting module predicts a dense ca
 ## Runtime contract
 
 It is integrated as an independent geometry prior under worldfoundry/base_models and exposed through the shared geometry-prior pipeline/operator contract. Higher-level pipelines (e.g. ViPE) import it from this canonical owner instead of keeping private copies. Mind the license: the upstream release is CC-BY-NC-4.0, so respect non-commercial terms when enabling this prior.
+
+## Readiness and limitations
+
+- CC-BY-NC-4.0: non-commercial license terms apply downstream.
+- Single-image estimation; temporal stability on video is out of scope.
 
 <ModelRelatedRecipes modelId="unidepth-v2-prior" locale="en" />

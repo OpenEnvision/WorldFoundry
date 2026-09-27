@@ -1,50 +1,40 @@
 ---
 title: "HunyuanWorld 1.0"
-description: "HunyuanWorld 1.0 from Tencent (Hunyuan): world model; Runner parity pending."
-modelId: "hunyuanworld-1"
+description: "HunyuanWorld 1.0 generates immersive, explorable 3D worlds from text or an image — the first generation of Tencent's open world-generation stack, exporting layered panoramas and mesh scenes."
 pageSource: generated
 ---
 
+**Publisher:** Tencent (Hunyuan) · Company
+
 HunyuanWorld 1.0 generates immersive, explorable 3D worlds from text or an image — the first generation of Tencent's open world-generation stack, exporting layered panoramas and mesh scenes. In this catalog the official source route is registered; checkpoints and third-party assets stay runtime-gated.
 
-<ModelPaperFigures modelId="hunyuanworld-1" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [arXiv 2507.21809](https://arxiv.org/abs/2507.21809).
+## Upstream sources
 
-Project page: [3d.hunyuan.tencent.com](https://3d.hunyuan.tencent.com/). Code: [Tencent-Hunyuan/HunyuanWorld-1.0](https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0).
+- [Project](https://3d.hunyuan.tencent.com/)
+- [Paper](https://arxiv.org/abs/2507.21809)
+- [GitHub](https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0)
+- [Hugging Face](https://huggingface.co/tencent/HunyuanWorld-1)
+- [Upstream README](https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0#readme)
 
 <ModelCommandBuilder modelId="hunyuanworld-1" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `hunyuanworld-1` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
-
-Per the upstream release, generation goes panorama-first: a panoramic proxy is generated, semantically layered, and lifted to a 3D world representation. Architecture internals beyond this are not recorded in this repository. It is published by Tencent (Hunyuan).
-
-Catalog tasks include world model.
-
-Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for generated explorable worlds).
+Per the upstream release, generation goes panorama-first: a panoramic proxy is generated, semantically layered, and lifted to a 3D world representation. Architecture internals beyond this are not recorded in this repository.
 
 ## Runtime contract
 
-Artifacts `generated_world` and `hunyuanworld_1_runtime_plan.json`.
-
-Recorded task profiles: `world_model`. WorldFoundry binds `HunyuanWorld1Pipeline`.
-
-Family status: **Runner parity pending**.
-
 Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. For the newer component-verified stack, see the hy-world-2.0 entry.
 
-HunyuanWorld 1.0 official source route is registered; checkpoints and third-party assets are runtime-gated.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [WorldScore](/docs/evaluation/benchmark-hub/worldscore) — Standard scoring for generated explorable worlds.
 
-Launch `worldfoundry-eval run hunyuanworld-1 --pipeline.task-profile world_model` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `tencent/HunyuanWorld-1`. Stage assets with `bash scripts/inference/prepare_model_infer.sh hunyuanworld-1`.
-
-Status: **Runner parity pending**.
+- Real generation is checkpoint/asset gated.
+- Superseded by HY-World 2.0 for most world-generation use.
 
 <ModelRelatedRecipes modelId="hunyuanworld-1" locale="en" />

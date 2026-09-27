@@ -1,48 +1,43 @@
 ---
 title: "Pi3"
-description: "Pi3: 3d-reconstruction and trajectory; Runner parity pending; $π^3$."
-modelId: "pi3"
+description: "Pi3 (π³) is a feed-forward visual-geometry model that reconstructs 3D scenes, camera trajectories, and point clouds without relying on a fixed reference view — its permutation-equivariant design treats all input views symmetrically."
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+point cloud
+[$π^3$: Permutation-Equivariant Visual Geometry Learning](https://arxiv.org/abs/2507.13347) (2025)
+
 Pi3 (π³) is a feed-forward visual-geometry model that reconstructs 3D scenes, camera trajectories, and point clouds without relying on a fixed reference view — its permutation-equivariant design treats all input views symmetrically. In this catalog the in-tree point-cloud navigation pipeline is registered for reconstruction and trajectory rendering.
 
-<ModelPaperFigures modelId="pi3" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [$π^3$: Permutation-Equivariant Visual Geometry Learning](https://arxiv.org/abs/2507.13347) (2025).
+## Upstream sources
 
-Project page: [yyfz.github.io/pi3](https://yyfz.github.io/pi3/). Code: [yyfz/Pi3](https://github.com/yyfz/Pi3).
+- [Project](https://yyfz.github.io/pi3/)
+- [Paper](https://arxiv.org/pdf/2507.13347)
+- [GitHub](https://github.com/yyfz/Pi3)
+- [Hugging Face](https://huggingface.co/yyfz233/Pi3X)
+- [Upstream README](https://github.com/yyfz/Pi3#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/pi3/paper.png" alt="$π^3$: Permutation-Equivariant Visual Geometry Learning" />
+  <figcaption>$π^3$: Permutation-Equivariant Visual Geometry Learning</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="pi3" locale="en" />
 
-## What it is for
-
-`pi3` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+## Architecture
 
 Per the paper (arXiv 2507.13347), Pi3 predicts affine-invariant camera poses and scale-invariant local pointmaps with a permutation-equivariant transformer, removing the need for a reference-view heuristic. Weights are apache-2.0; internals beyond the recorded tasks are not stored here.
 
-Catalog tasks include 3d-reconstruction, trajectory, and point-cloud.
-
 ## Runtime contract
 
-Inputs, knobs, and artifacts are not recorded on this card.
+Integration is runtime_ported with runner parity pending; per-run validation evidence is tracked outside the catalog. Stage the upstream Pi3 weights before expecting real reconstruction output.
 
-Recorded task profiles: `3d-reconstruction`, `trajectory`, and `point-cloud`. WorldFoundry binds `Pi3Pipeline`.
+## Readiness and limitations
 
-Family status: **Runner parity pending**.
-
-Stage the upstream Pi3 weights before expecting real reconstruction output.
-
-In-tree Pi3 point-cloud navigation pipeline is registered for reconstruction and trajectory rendering.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run pi3 --pipeline.task-profile 3d-reconstruction` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-The environment profile is not recorded.
-
-Recorded weight repositories include `yyfz233/Pi3X`. Stage assets with `bash scripts/inference/prepare_model_infer.sh pi3`.
-
-Status: **Runner parity pending**.
+- Runner parity is pending in this workspace.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="pi3" locale="en" />

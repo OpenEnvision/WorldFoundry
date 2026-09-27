@@ -1,48 +1,45 @@
 ---
 title: "MoVerse"
-description: "MoVerse：相机可控视频；Runner 一致性待确认; 独立环境 `moverse`。"
-modelId: "moverse"
+description: "MoVerse 把一张图变成可游走的世界：从输入构建全景高斯脚手架，并在移动过程中生成相机可控视频。本 catalog 中其无头推理闭包已在树内、checkpoint 仅本地解析；本地 H100 已验证完整 161 帧路径；完整上游产物一致性及标定相机精度仍未验证。"
 pageSource: generated
 ---
 
-MoVerse 把一张图变成可游走的世界：从输入构建全景高斯脚手架，并在移动过程中生成相机可控视频。本 catalog 中其无头推理闭包已在树内、checkpoint 仅本地解析；完整 GPU 一致性待 checkpoint、FLUX 权限、CUDA 内核与至少 24 GB 显存就位。
+**发表机构:** 开源研究发布（仓库未记录正式机构） · 研究机构
+image → world state
 
-<ModelPaperFigures modelId="moverse" locale="zh" />
+MoVerse 把一张图变成可游走的世界：从输入构建全景高斯脚手架，并在移动过程中生成相机可控视频。本 catalog 中其无头推理闭包已在树内、checkpoint 仅本地解析；本地 H100 已验证完整 161 帧路径；完整上游产物一致性及标定相机精度仍未验证。
 
-记录论文为[arXiv 2606.13376](https://arxiv.org/abs/2606.13376)。
+**目录状态:** 运行时已移植
 
-项目页：[orange-3dv-team.github.io/MoVerse](https://orange-3dv-team.github.io/MoVerse)。代码：[Orange-3DV-Team/MoVerse](https://github.com/Orange-3DV-Team/MoVerse)。代码：[ByteDance-Seed/Depth-Anything-3](https://github.com/ByteDance-Seed/Depth-Anything-3)。
+## 上游来源
+
+- [项目主页](https://orange-3dv-team.github.io/MoVerse)
+- [论文](https://arxiv.org/abs/2606.13376)
+- [GitHub](https://github.com/Orange-3DV-Team/MoVerse)
+- [Hugging Face](https://huggingface.co/Orange-3DV-Team/MoVerse)
+- [源码](https://github.com/ByteDance-Seed/Depth-Anything-3)
+- [上游 README](https://github.com/Orange-3DV-Team/MoVerse#readme)
+- [上游 README](https://github.com/ByteDance-Seed/Depth-Anything-3#readme)
 
 <ModelCommandBuilder modelId="moverse" locale="zh" />
 
-## 用来做什么
-
-`moverse` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
+## 架构
 
 记录的组装复用 WorldFoundry 共享的 GeoCalib AutoLevel、Depth Anything 3、SHARP 全景、 Wan（视频基座 Wan2.1-T2V-1.3B）与 TAEHV 组件，另加作为全景基座的 FLUX.1-Fill-dev 与 MoVerse 自有组件权重。上游无许可文件——下游使用前请审查。
 
-catalog 记录的任务包括 image-to-navigable-world、相机可控视频、panoramic-gaussian-scaffold。别名包括 `mo-verse`、`Orange-3DV-Team/MoVerse`。模态上，它接受图像，输出世界状态。
-
-记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（可游走生成世界的质量）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（游走过程的相机控制贴合度）。
-
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions`；产物 `generated_world`、`gaussian_scaffold`、`generated_video`。
+执行为离线模式，需要预先就位四个 Hugging Face snapshot，另加 ffmpeg、gsplat 与兼容的 CUDA 内核。运行时规划与缺失资产诊断无需导入重量级模型栈。
 
-记录的任务 profile：`image-to-navigable-world`、`camera-controlled-video`、`panoramic-gaussian-scaffold`。绑定的 pipeline 类是 `MoVersePipeline`。
+## 评测 Benchmark
 
-系列状态：**Runner 一致性待确认**。
+- [WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore) — 可游走生成世界的质量。
+- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 游走过程的相机控制贴合度。
 
-执行为离线模式，需要预先就位四个 Hugging Face snapshot，另加 ffmpeg、gsplat 与兼容的 CUDA 内核。 运行时规划与缺失资产诊断无需导入重量级模型栈。
+## 就绪状态与限制
 
-上游无许可文件：需要法律审查。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run moverse --pipeline.task-profile image-to-navigable-world`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-记录的权重仓库包括 `Orange-3DV-Team/MoVerse`、`black-forest-labs/FLUX.1-Fill-dev`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh moverse`。
-
-状态：**Runner 一致性待确认**。
+- 上游无许可文件：需要法律审查。
+- 需要 gated FLUX 权限与 ≥24 GB 显存。
+- 发表机构在本仓库中未记录。
 
 <ModelRelatedRecipes modelId="moverse" locale="zh" />

@@ -1,48 +1,56 @@
 ---
 title: "Show-o"
-description: "Show-o（National University of Singapore (Show Lab)）：文生图；已验证。"
-modelId: "show-o"
+description: "Show-o（Xie 等，新加坡国立大学 Show Lab 与 ByteDance，arXiv 2408.12528）是一个 1.3B 的单一 Transformer，把多模态理解与生成放在同一套权重里。它从 Phi-1.5 初始化，而不是把独立扩散专家接到 MLLM 上。"
 pageSource: generated
 ---
 
+**发表机构:** 新加坡国立大学（Show Lab） · 高校
+text · image → image · text
+[Show-o: One Single Transformer to Unify Multimodal Understanding and Generation](https://arxiv.org/abs/2408.12528) (ICLR 2025, 2024)
+
 Show-o（Xie 等，新加坡国立大学 Show Lab 与 ByteDance，arXiv 2408.12528）是一个 1.3B 的单一 Transformer，把多模态理解与生成放在同一套权重里。它从 Phi-1.5 初始化，而不是把独立扩散专家接到 MLLM 上。
 
-<ModelPaperFigures modelId="show-o" locale="zh" />
+文本是离散 token，用自回归 next-token prediction；图像经 MAGVIT-v2 无查找量化，256×256 变成 16×16、码本 8,192，再用 MaskGIT 式离散扩散（mask-token prediction）和全注意力生成。Omni-attention 对文本因果、对图像 token 双向。文本条件由 LLM 自己编码，没有额外的 T5/CLIP 文本编码器。
 
-记录论文为[Show-o: One Single Transformer to Unify Multimodal Understanding and Generation](https://arxiv.org/abs/2408.12528)（ICLR 2025, 2024）。
+论文中同一套权重可做 VQA/配文、文生图，以及无需额外微调的文本引导补全与外推，也支持混合模态序列。默认生成数字是 1.3B 参数、约 3500 万图文对（MSCOCO FID-30K 9.24），接近只做理解的 LLaVA-v1.5-Phi-1.5 基线。本 catalog 只接通 T2I；MMU、补全与外推仍是后续工作。
 
-项目页：[showlab.github.io/Show-o](https://showlab.github.io/Show-o/)。代码：[showlab/Show-o](https://github.com/showlab/Show-o)。
+**目录状态:** Runner 已验证
+
+## 上游来源
+
+- [项目主页](https://showlab.github.io/Show-o/)
+- [论文](https://arxiv.org/abs/2408.12528)
+- [GitHub](https://github.com/showlab/Show-o)
+- [上游 README](https://github.com/showlab/Show-o#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/show-o/paper.png" alt="Show-o: One Single Transformer to Unify Multimodal Understanding and Generation" />
+  <figcaption>Show-o: One Single Transformer to Unify Multimodal Understanding and Generation</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="show-o" locale="zh" />
 
-## 用来做什么
+## 架构
 
-任务是 catalog 静帧而不是视频时，用 `show-o`。
+Transformer 是带逐层 QK-Norm 的 Phi-1.5，词表额外增加 8,192 个可学习图像 token。统一 prompt 用 [MMU]/[T2I] 标明任务，用 [SOT]/[EOT]、[SOI]/[EOI] 框住文本与图像。训练同时做 mask-token prediction 与 next-token prediction（L_MTP + α L_NTP）。生成从全 [MASK] 开始、按 T 步逐步揭开，步数大约是自回归解码图像的 1/20；树内运行时默认 256 像素、CFG 3.0、18 步。
 
-Transformer 是带逐层 QK-Norm 的 Phi-1.5，词表额外增加 8,192 个可学习图像 token。统一 prompt 用 [MMU]/[T2I] 标明任务，用 [SOT]/[EOT]、[SOI]/[EOI] 框住文本与图像。训练同时做 mask-token prediction 与 next-token prediction（L_MTP + α L_NTP）。生成从全 [MASK] 开始、按 T 步逐步揭开，步数大约是自回归解码图像的 1/20；树内运行时默认 256 像素、CFG 3.0、18 步。该模型由新加坡国立大学（Show Lab）发布。
-
-catalog 记录的任务包括 multimodal-generation、文生图。别名包括 `show_o`、`showo`。模态上，它接受文本、图像，输出图像、文本。
+图像编解码用 MAGVIT-v2 VQ（showlab/magvitv2）。论文还试过把 MAGVIT 或 CLIP-ViT 连续特征用于理解（Show-o† / Show-o‡）；发布的默认权重和本 catalog 对理解与生成都用离散 token。WorldFoundry 运行时在 synthesis/visual_generation/show_o，契约为 mode/prompt/image，权重为 microsoft/phi-1_5 与 showlab/show-o。
 
 ## 运行时契约
 
-必填 `prompt`；可选 `image`、`mode` (t2i)；产物 `show_o.png`。
+已验证的 WorldFoundry 路径仅 T2I——请相应设置 mode，预期产物为 generated_image。论文默认分辨率 256；封装使用 classifier-free guidance（默认 3.0）和 18 步离散扩散。权重为 MIT，位于 showlab/show-o，并记录 MAGVIT-v2 与 Phi-1.5。论文中的图像理解与编辑模式此处尚未接线。
 
-记录的任务 profile：`multimodal-generation`、`text-to-image`。绑定的 pipeline 类是 `ShowOPipeline`。
+## 典型用途
 
-系列状态：**已验证**。
+- 文生图（已接通）
+- 视觉问答与配文（论文能力，尚未接线）
+- 文本引导补全与外扩（论文能力，尚未接线）
+- 混合模态交错生成（论文）
 
-已验证的 WorldFoundry 路径仅 T2I——请相应设置 mode，预期产物为 generated_image。 论文默认分辨率 256；封装使用 classifier-free guidance（默认 3.0）和 18 步离散扩散。 权重为 MIT，位于 showlab/show-o，并记录 MAGVIT-v2 与 Phi-1.5。 论文中的图像理解与编辑模式此处尚未接线。
+## 就绪状态与限制
 
-仅接通文生图；MMU、补全与外推是后续工作。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run show-o --pipeline.task-profile multimodal-generation`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.10，CUDA 11.3）。
-
-记录的权重仓库包括 `showlab/show-o`、`showlab/magvitv2`、`microsoft/phi-1_5`。就位权重用 `bash scripts/inference/prepare_model_infer.sh show-o`。
-
-记录 license 为 mit；状态：**已验证**。
+- 仅接通文生图；MMU、补全与外推是后续工作。
+- 该条目产出图像，不是视频。
+- 论文默认是 1.3B Phi-1.5、256 像素离散 token，不是视频骨干。
 
 <ModelRelatedRecipes modelId="show-o" locale="zh" />

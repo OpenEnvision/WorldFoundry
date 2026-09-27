@@ -1,44 +1,38 @@
 ---
 title: "MiniMax H3"
-description: "MiniMax H3 from MiniMaxAI: text-to-video and image-to-video; Planned."
-modelId: "minimax-h3"
+description: "Joint audio+video generation; 32kHz stereo audio track muxed into the mp4."
 pageSource: generated
 ---
 
+text · image → video
+
 MiniMax H3 is a video generation model from MiniMaxAI. The catalog records it for text-to-video, image-to-video, and reference-to-video. It is also cataloged under the aliases minimax_h3, minimax-h3-t2va, and minimax-h3-fl2va.
 
-<ModelPaperFigures modelId="minimax-h3" locale="en" />
+WorldFoundry records a binding to the worldfoundry.pipelines.minimax.pipeline_minimax_h3:NativeMiniMaxH3Pipeline pipeline via worldfoundry.pipeline; this binding alone does not establish a successful run.
 
-Code: [sgl-project/sglang](https://github.com/sgl-project/sglang).
+It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).
+
+Weights are pulled from the Hugging Face repository MiniMaxAI/MiniMax-H3 (license: apache-2.0), plus 1 more recorded repository.
+
+No runner or native-demo evidence is recorded; a catalog entry alone is not proof of a successful GPU run.
+
+**Catalog status:** Planned
+
+## Upstream sources
+
+- [GitHub](https://github.com/sgl-project/sglang)
+- [Upstream README](https://github.com/sgl-project/sglang#readme)
 
 <ModelCommandBuilder modelId="minimax-h3" locale="en" />
 
-## What it is for
+## Hardware guidance
 
-`minimax-h3` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
+- **Minimum VRAM:** 80 GB
 
-Catalog tasks include text-to-video, image-to-video, and reference-to-video. Catalog aliases include `minimax_h3`, `minimax-h3-t2va`, `minimax-h3-fl2va`, and `minimax-h3-ref2va`. Documented modalities: text and image in, video out.
+## Readiness and limitations
 
-## Runtime contract
-
-Required `prompt`, `image`, `video`, and `audio`; optional `actions` (seed, task, flow_shift, audio_flow_shift); artifacts `minimax-h3.mp4`.
-
-Recorded task profiles: `text-to-video`, `image-to-video`, and `reference-to-video`. WorldFoundry binds `NativeMiniMaxH3Pipeline`.
-
-Family status: **Planned**.
-
-Joint audio+video generation; 32kHz stereo audio track muxed into the mp4.
-
-Ported faithfully from SGLang multimodal_gen (Apache-2.0), single-GPU PyTorch.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run minimax-h3 --pipeline.task-profile text-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `MiniMaxAI/MiniMax-H3`. Stage assets with `bash scripts/inference/prepare_model_infer.sh minimax-h3`.
-
-Recorded licenses include apache-2.0; catalog VRAM 80 GB; status: **Planned**.
+- A pipeline binding is recorded, but a successful run has not been established for this entry.
+- Runner evidence: Not recorded. No verified end-to-end WorldFoundry GPU artifact exists for this model.
+- Native demo evidence: Not recorded.
 
 <ModelRelatedRecipes modelId="minimax-h3" locale="en" />

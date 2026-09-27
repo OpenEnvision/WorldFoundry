@@ -42,11 +42,11 @@ WorldFoundry 遵循一条最重要的设计规则：**把模型执行与 benchma
 
 ## Catalog：先知道系统中有什么
 
-**Model Zoo** 为世界模型系统分配稳定 ID 与 alias。一个模型 manifest 可以记录任务、上游来源、checkpoint 引用、variant、runtime binding、安装 profile、硬件预期、验证说明与已知 blocker。仓库当前收录了 270 个模型，但这个数字描述的是 catalog 覆盖，不是统一的 runtime 成熟度。
+**Model Zoo** 为世界模型系统分配稳定 ID 与 alias。一个模型 manifest 可以记录任务、上游来源、checkpoint 引用、variant、runtime binding、安装 profile、硬件预期、验证说明与已知 blocker。当前覆盖范围见[模型目录](/zh/docs/guides/supported-models)；收录条目不代表 runtime 一定可运行。
 
 这些条目分布在五个操作家族中。视频目录覆盖文本、图像与视频条件生成、编辑、动画和音视频系统；世界模型目录关注交互世界、导航、动作或相机条件生成与 simulator；3D/4D 目录包含重建、深度、点云、scene 表征与动态几何；VLA/VA/WAM 目录覆盖具身 policy 与 world-action 系统；托管 API 目录则对应权重从不在本地加载的 provider-backed 系统。
 
-**Benchmark Zoo** 为评测 protocol 提供同样的声明层。连同可复用 metric，当前版本覆盖近 100 套 benchmark / metric 实现：生成视频质量、物理与动态一致性、相机和 3D/4D 行为、世界模型能力、安全、记忆与具身控制。Benchmark manifest 可以声明 dataset、生成输出 layout、metric 资产、官方命令、normalizer、runtime profile、eligibility 条件与 blocker。
+**Benchmark Zoo** 为评测 protocol 提供同样的声明层。[评测中心](/zh/docs/evaluation/benchmark-hub)覆盖生成视频质量、物理与动态一致性、相机和 3D/4D 行为、世界模型能力、安全、记忆与具身控制。Benchmark manifest 可以声明 dataset、生成输出 layout、metric 资产、官方命令、normalizer、runtime profile、eligibility 条件与 blocker。
 
 下载任何资产之前，先查询 catalog：
 
@@ -107,7 +107,7 @@ WorldFoundry 把 run 目录当作研究记录，而不是一次性 cache。典�
 
 WorldFoundry 不转发模型 checkpoint、受限权重、完整 benchmark 数据集、simulator 资产、API key、私有 endpoint，也不保存普通用户输出。它同样不会 vendor 每一套上游训练栈，也不保证任意 model × benchmark 组合都有意义。
 
-这些边界让仓库保持可审查，并尊重上游许可。仓库内的代码只描述外部资产如何接入一次 run，并在资产缺失时如实报告；它不会静默下载或替换受保护资源。`base_models` 仓内副本的许可名称和正式文本见[仓内上游许可证](/zh/docs/reference/vendored-licenses)。
+这些边界让仓库保持可审查，并尊重上游许可。仓库内的代码只描述外部资产如何接入一次 run，并在资产缺失时如实报告；它不会静默下载或替换受保护资源。仓内上游代码的许可与来源记录见[第三方许可与来源](/zh/docs/reference/vendored-licenses)所链接的仓库文件。
 
 ## 各层在仓库中的位置
 

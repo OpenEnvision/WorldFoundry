@@ -1,48 +1,35 @@
 ---
 title: "WildWorld"
-description: "WildWorld: world-model-benchmark and dataset; Runner parity pending."
-modelId: "wildworld"
+description: "WildWorld is a benchmark-and-dataset entry rather than a generative model: it evaluates world models on in-the-wild footage, producing evaluation reports. WorldFoundry registers the official source route in-tree (ShandaAI/WildWorld, pinned…"
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+
 WildWorld is a benchmark-and-dataset entry rather than a generative model: it evaluates world models on in-the-wild footage, producing evaluation reports. WorldFoundry registers the official source route in-tree (ShandaAI/WildWorld, pinned head 23971043); benchmark and dataset assets are runtime-gated.
 
-<ModelPaperFigures modelId="wildworld" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [arXiv 2603.23497](https://arxiv.org/abs/2603.23497).
+## Upstream sources
 
-Project page: [alaya-studio.github.io/wildworld-project](https://alaya-studio.github.io/wildworld-project/). Code: [ShandaAI/WildWorld](https://github.com/ShandaAI/WildWorld).
+- [Project](https://alaya-studio.github.io/wildworld-project/)
+- [Paper](https://arxiv.org/abs/2603.23497)
+- [GitHub](https://github.com/ShandaAI/WildWorld)
+- [Upstream README](https://github.com/ShandaAI/WildWorld#readme)
 
 <ModelCommandBuilder modelId="wildworld" locale="en" />
 
-## What it is for
-
-Pick `wildworld` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+## Architecture
 
 As an evaluation entry its output artifact is an evaluation_report. Source status is recorded as unknown upstream; structure beyond the pinned repository is not recorded in this repository.
 
-Catalog tasks include world-model-benchmark, dataset, and evaluation.
-
 ## Runtime contract
-
-Required `image`, `prompt`, and `video`; optional `actions`; artifacts `evaluation_report` and `wildworld_runtime_plan.json`.
-
-Recorded task profiles: `world-model-benchmark`, `dataset`, and `evaluation`. WorldFoundry binds `WildWorldPipeline`.
-
-Family status: **Runner parity pending**.
 
 Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. The license is non-commercial research only.
 
-WildWorld official source route is registered; benchmark/dataset assets are runtime-gated.
+## Readiness and limitations
 
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run wildworld --pipeline.task-profile world-model-benchmark` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh wildworld`.
-
-Status: **Runner parity pending**.
+- Source status is recorded as unknown; treat provenance with care.
+- Non-commercial research license.
 
 <ModelRelatedRecipes modelId="wildworld" locale="en" />

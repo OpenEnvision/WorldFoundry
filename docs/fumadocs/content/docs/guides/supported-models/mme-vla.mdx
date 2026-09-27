@@ -1,50 +1,42 @@
 ---
 title: "MME-VLA"
-description: "MME-VLA: vla and vla action prediction; Static load only."
-modelId: "mme-vla"
+description: "MME-VLA is the policy-learning line of the RoboMME project, centered on perceptual frame sampling for memory-heavy manipulation. Four Apache-2.0 checkpoint repos are confirmed from the README — the best perceptual-framesamp module, the mme…"
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+
 MME-VLA is the policy-learning line of the RoboMME project, centered on perceptual frame sampling for memory-heavy manipulation. Four Apache-2.0 checkpoint repos are confirmed from the README — the best perceptual-framesamp module, the mme_vla_suite collection, a pi05 baseline, and a VLM subgoal predictor. WorldFoundry calls create_trained_policy(...).infer in-process from a vendored subset.
 
-<ModelPaperFigures modelId="mme-vla" locale="en" />
+**Catalog status:** Profile only
 
-The recorded paper is [arXiv 2603.04639](https://arxiv.org/abs/2603.04639).
+## Upstream sources
 
-Project page: [robomme.github.io/challenge.html](https://robomme.github.io/challenge.html). Code: [RoboMME/robomme_policy_learning](https://github.com/RoboMME/robomme_policy_learning).
+- [Project](https://robomme.github.io/challenge.html)
+- [Paper](https://arxiv.org/abs/2603.04639)
+- [GitHub](https://github.com/RoboMME/robomme_policy_learning)
+- [Hugging Face](https://huggingface.co/Yinpei/perceptual-framesamp-modul)
+- [Hugging Face](https://huggingface.co/Yinpei/mme_vla_suite)
+- [Hugging Face](https://huggingface.co/Yinpei/pi05_baseline)
+- [Hugging Face](https://huggingface.co/Yinpei/vlm_subgoal_predictor)
+- [Upstream README](https://github.com/RoboMME/robomme_policy_learning#readme)
 
 <ModelCommandBuilder modelId="mme-vla" locale="en" />
 
-## What it is for
-
-Pick `perceptual-framesamp-modul` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+## Architecture
 
 The recorded design combines a perceptual frame-sampling module with policy learning and an optional VLM subgoal predictor. Resolver, runtime import, and compileall checks pass without an external checkout; further internals are not recorded in this repository.
 
-Catalog tasks include vla, vla action prediction, vla policy rollout, and embodied benchmark. Catalog aliases include `mme_vla`, `robomme-policy-learning`, and `perceptual-framesamp-modul`.
-
-Recorded evaluation entry points include [RoboMME](/docs/evaluation/benchmark-hub/robomme) (Native benchmark of the RoboMME project).
-
 ## Runtime contract
-
-Required `image`, `prompt`, and `state`; optional `model_id` (mme-vla), `image_keys` (observation/image, observation/wrist_image), `state_key` (observation/state), `memory_keys` (static_image_emb, static_pos_emb, static_state_emb, static_mask, recur_image_emb, recur_pos_emb, recur_state_emb, recur_mask, simple_subgoal, grounded_subgoal), and `policy_family`; artifacts `action_trace` and `mme-vla_action_trace.json`.
-
-Recorded task profiles: `vla`, `vla.action_prediction`, `vla.policy_rollout`, and `embodied_benchmark`. WorldFoundry binds `MMEVLAPipeline`.
-
-Family status: **Static load only**.
 
 Checkpoint-backed action-chunk validation remains required before demo parity is claimed; stage the framesamp module checkpoint first.
 
-WorldFoundry records the MME-VLA policy contract with an independent synthesis entrypoint.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [RoboMME](/docs/evaluation/benchmark-hub/robomme) — Native benchmark of the RoboMME project.
 
-The catalog launch is `worldfoundry-eval run perceptual-framesamp-modul --pipeline.task-profile vla.policy_rollout`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch==2.7.1).
-
-Recorded weight repositories include `Yinpei/perceptual-framesamp-modul`, `Yinpei/mme_vla_suite`, and `Yinpei/pi05_baseline` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh perceptual-framesamp-modul`.
-
-Recorded licenses include apache-2.0; status: **Static load only**.
+- Demo parity is not yet claimed; checkpoint-backed validation is pending.
 
 <ModelRelatedRecipes modelId="mme-vla" locale="en" />

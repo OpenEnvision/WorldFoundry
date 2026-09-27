@@ -1,50 +1,51 @@
 ---
 title: "Stable Video Infinity 2.0"
-description: "Stable Video Infinity 2.0 from EPFL (VITA lab): image-to-video and long-video-generation; Verified."
-modelId: "stable-video-infinity"
+description: "Stable Video Infinity 2.0 (SVI) generates arbitrarily long videos by chaining clips with five-frame continuation and per-clip seed changes, driven by prompt streams. This is one of the strongest evidence entries in the catalog: runner stat…"
 pageSource: generated
 ---
 
-Stable Video Infinity 2.0 (SVI) generates arbitrarily long videos by chaining clips with five-frame continuation and per-clip seed changes, driven by prompt streams. This is one of the strongest evidence entries in the catalog: runner status is Verified, with a recorded A100 run producing two linked 81-frame clips at 832x544 and a 157-frame H.264 artifact, plus 31.03 dB PSNR exact-setting parity against the pinned official runtime.
+**Publisher:** EPFL (VITA lab) · University
+image → video
+[Stable Video Infinity: Infinite-Length Video Generation with Error Recycling](https://arxiv.org/abs/2510.09212) (2025)
 
-<ModelPaperFigures modelId="stable-video-infinity" locale="en" />
+Stable Video Infinity 2.0 (SVI) generates arbitrarily long videos by chaining clips with five-frame continuation and per-clip seed changes, driven by prompt streams. This is one of the strongest evidence entries in the catalog: runner status is full_default_gpu_parity_verified, with a recorded A100 run producing two linked 81-frame clips at 832x544 and a 157-frame H.264 artifact, plus 31.03 dB PSNR exact-setting parity against the pinned official runtime.
 
-The recorded paper is [Stable Video Infinity: Infinite-Length Video Generation with Error Recycling](https://arxiv.org/abs/2510.09212) (2025).
+**Catalog status:** Integrated
 
-Project page: [stable-video-infinity.github.io/homepage](https://stable-video-infinity.github.io/homepage/). Code: [vita-epfl/Stable-Video-Infinity](https://github.com/vita-epfl/Stable-Video-Infinity). Code: [epfl-vita/svi-model](https://huggingface.co/epfl-vita/svi-model).
+## Upstream sources
+
+- [Project](https://stable-video-infinity.github.io/homepage/)
+- [Paper](https://arxiv.org/abs/2510.09212)
+- [GitHub](https://github.com/vita-epfl/Stable-Video-Infinity)
+- [Hugging Face](https://huggingface.co/vita-video-gen/svi-model)
+- [Hugging Face](https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P)
+- [Source](https://huggingface.co/epfl-vita/svi-model)
+- [Upstream README](https://github.com/vita-epfl/Stable-Video-Infinity#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/stable-video-infinity/paper.png" alt="Stable Video Infinity: Infinite-Length Video Generation with Error Recycling" />
+  <figcaption>Stable Video Infinity: Infinite-Length Video Generation with Error Recycling</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="stable-video-infinity" locale="en" />
 
-## What it is for
+## Architecture
 
-`stable-video-infinity` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
-
-SVI 2.0 is a LoRA on top of Wan2.1-I2V-14B-480P: the adapter reuses WorldFoundry's canonical Wan components and staged runner, preserving five-frame continuation, reference-frame padding, and prompt-stream repetition. Released training-pipeline LoRA keys are normalized to bare Wan DiT module names, and loading fails unless every discovered LoRA pair merges. It is published by EPFL (VITA lab).
-
-Catalog tasks include image-to-video, long-video-generation, prompt-stream-video-generation, and prompt-stream-i2v. Catalog aliases include `SVI`, `SVI-2.0`, `stable_video_infinity`, and `stable-video-infinity-2.0`. Documented modalities: image in, video out.
-
-Recorded evaluation entry points include [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) (Long-horizon suite matching SVI's infinite-video goal), [VBench](/docs/evaluation/benchmark-hub/vbench) (Per-clip quality yardstick).
+SVI 2.0 is a LoRA on top of Wan2.1-I2V-14B-480P: the adapter reuses WorldFoundry's canonical Wan components and staged runner, preserving five-frame continuation, reference-frame padding, and prompt-stream repetition. Released training-pipeline LoRA keys are normalized to bare Wan DiT module names, and loading fails unless every discovered LoRA pair merges.
 
 ## Runtime contract
 
-Required `prompt`, `prompt_stream`, and `image`; optional `video` and `actions` (seed, num_clips, num_motion_frames); artifacts `generated_video` and `stable-video-infinity.mp4`.
-
-Recorded task profiles: `image-to-video`, `long-video-generation`, `prompt-stream-video-generation`, and `prompt-stream-i2v`. WorldFoundry binds `StableVideoInfinityPipeline`.
-
-Family status: **Verified**.
-
-Recorded `prompt-stream-i2v` defaults: num_frames=81, num_inference_steps=50, seed=0, fps=24.
-
 Defaults follow the official recipe: five-motion-frame continuation, full reference padding, each clip a distinct seed, prompts repeated twice before advancing. The official 999-clip cap is bounded to two clips per prompt unless use_first_prompt_only is enabled. Stage both the SVI LoRA (vita-video-gen/svi-model, MIT) and the Wan2.1 base.
 
-## Running in WorldFoundry
+## Evaluation benchmarks
 
-Launch `worldfoundry-eval run stable-video-infinity --pipeline.task-profile prompt-stream-i2v` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+- [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) — Long-horizon suite matching SVI's infinite-video goal.
+- [VBench](/docs/evaluation/benchmark-hub/vbench) — Per-clip quality yardstick.
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.5).
+## Readiness and limitations
 
-Recorded weight repositories include `vita-video-gen/svi-model`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `epfl-vita/svi-model`. Stage assets with `bash scripts/inference/prepare_model_infer.sh stable-video-infinity`.
-
-Recorded licenses include mit and apache-2.0; status: **Verified**.
+- Requires both the SVI LoRA and the Wan2.1-I2V-14B base checkpoint.
+- Long-video drift is mitigated, not eliminated — quality can still degrade over many chained clips.
+- Training launchers and datasets are outside the source tree; this is an inference-only port.
 
 <ModelRelatedRecipes modelId="stable-video-infinity" locale="en" />

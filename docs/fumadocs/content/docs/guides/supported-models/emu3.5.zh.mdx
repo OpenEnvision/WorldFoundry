@@ -1,12 +1,20 @@
 ---
 title: "Emu3.5"
-description: "Emu3.5 is BAAI's native multimodal model for interleaved text and images. WorldFoundry uses the pinned official implementation and emits its protobuf response. Checkpoint-backed GPU inference has produced text and decoded images; no video…"
+description: "Emu3.5 是北京智源（BAAI）面向交错文本与图像的原生多模态模型。WorldFoundry 调用固定版本的官方实现并输出其 protobuf 响应。权重支持的 GPU 推理已生成文本和可解码图像；不宣称视频输出。"
 pageSource: generated
 ---
 
 **发表机构:** 北京智源人工智能研究院（BAAI） · 研究机构
 
 Emu3.5 是北京智源（BAAI）面向交错文本与图像的原生多模态模型。WorldFoundry 调用固定版本的官方实现并输出其 protobuf 响应。权重支持的 GPU 推理已生成文本和可解码图像；不宣称视频输出。
+
+**目录状态:** 已集成
+
+## 上游来源
+
+- [GitHub](https://huggingface.co/BAAI/Emu3.5)
+- [源码](https://github.com/baaivision/Emu3.5)
+- [上游 README](https://github.com/baaivision/Emu3.5#readme)
 
 <ModelCommandBuilder modelId="emu3.5" locale="zh" />
 
@@ -17,5 +25,10 @@ Emu3.5 预测统一的图文 token 序列，并以离散扩散生成视觉 token
 ## 运行时契约
 
 就位 BAAI/Emu3.5、BAAI/Emu3.5-VisionTokenizer 权重和固定版本的官方源码。默认 story 和 howto 任务返回官方 protobuf 响应。
+
+## 就绪状态与限制
+
+- 本工作区尚未验证与官方 CLI 的逐字节一致性或更大尺寸图像。
+- 官方权重说明的是文本/图像生成，而非视频生成。
 
 <ModelRelatedRecipes modelId="emu3.5" locale="zh" />

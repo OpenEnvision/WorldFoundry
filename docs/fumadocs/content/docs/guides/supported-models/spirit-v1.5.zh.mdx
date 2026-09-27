@@ -1,46 +1,34 @@
 ---
 title: "Spirit-VLA v1.5"
-description: "Spirit-VLA v1.5（Spirit AI）：VLA 动作预测、VLA 策略执行；Runner 一致性待确认; 独立环境 `worldfoundry-vla-spirit-v1-5`。"
-modelId: "spirit-v1.5"
+description: "Spirit-VLA v1.5 是 Spirit AI（千寻智能）基于 Qwen3-VL 骨干的视觉-语言-动作策略，发布已确认的 Spirit-AI-robotics/Spirit-v1.5 base checkpoint。WorldFoundry 将原生推理架构与预处理内置树内；运行时加载官方 checkpoint 与 Qwen3-VL 骨干，禁用远程 Python。"
 pageSource: generated
 ---
 
+**发表机构:** Spirit AI（千寻智能） · 企业
+
 Spirit-VLA v1.5 是 Spirit AI（千寻智能）基于 Qwen3-VL 骨干的视觉-语言-动作策略，发布已确认的 Spirit-AI-robotics/Spirit-v1.5 base checkpoint。WorldFoundry 将原生推理架构与预处理内置树内；运行时加载官方 checkpoint 与 Qwen3-VL 骨干，禁用远程 Python。
 
-<ModelPaperFigures modelId="spirit-v1.5" locale="zh" />
+**目录状态:** 运行时已移植
 
-代码：[Spirit-AI-Team/spirit-v1.5](https://github.com/Spirit-AI-Team/spirit-v1.5)。
+## 上游来源
+
+- [GitHub](https://github.com/Spirit-AI-Team/spirit-v1.5)
+- [Hugging Face](https://huggingface.co/Spirit-AI-robotics/Spirit-v1.5)
+- [上游 README](https://github.com/Spirit-AI-Team/spirit-v1.5#readme)
 
 <ModelCommandBuilder modelId="spirit-v1.5" locale="zh" />
 
-## 用来做什么
-
-需要 catalog 上的 VLA 策略时选 `spirit-v1.5`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+## 架构
 
 Qwen3-VL 视觉-语言骨干配 Spirit 的动作预测头。官方仓库指针之外的架构内部细节仓库未记录。
 
-catalog 记录的任务包括 VLA 动作预测、VLA 策略执行。别名包括 `spirit-vla`、`spirit-v1p5`、`spirit_v1p5`。
-
 ## 运行时契约
-
-必填 `image`、`prompt`、`state`；可选 `model_id` (spirit-v1.5)、`policy_family`、`action_representation`；产物 `action_trace`、`spirit-v1.5_action_trace.json`。
-
-记录的任务 profile：`vla.action_prediction`、`vla.policy_rollout`。绑定的 pipeline 类是 `SpiritV15Pipeline`。
-
-系列状态：**Runner 一致性待确认**。
 
 导入与 checkpoint 门控已验证；数值 parity 需本地就位 21.6 GB checkpoint。
 
-21.6 GB checkpoint 未就位；数值 parity 待定。
+## 就绪状态与限制
 
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run spirit-v1.5 --pipeline.task-profile vla.action_prediction` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是独立 profile `worldfoundry-vla-spirit-v1-5`（Python 3.11，CUDA 12.8，torch>=2.8）。
-
-记录的权重仓库包括 `Spirit-AI-robotics/Spirit-v1.5`、`Qwen/Qwen3-VL-4B-Instruct`。就位权重用 `bash scripts/inference/prepare_model_infer.sh spirit-v1.5`。
-
-状态：**Runner 一致性待确认**。
+- 21.6 GB checkpoint 未就位；数值 parity 待定。
+- 仓库未记录许可证。
 
 <ModelRelatedRecipes modelId="spirit-v1.5" locale="zh" />

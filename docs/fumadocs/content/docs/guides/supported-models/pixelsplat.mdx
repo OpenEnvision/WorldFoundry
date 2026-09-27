@@ -1,48 +1,36 @@
 ---
 title: "pixelSplat"
-description: "pixelSplat from Massachusetts Institute of Technology (MIT): 3d-reconstruction and gaussian-splatting; Planned."
-modelId: "pixelsplat"
+description: "pixelSplat reconstructs a 3D Gaussian scene from two calibrated views in a single forward pass (CVPR 2024). The in-tree runtime supports the original convolutional RE10K and ACID checkpoints and has been verified with real posed inputs on…"
 pageSource: generated
 ---
 
-pixelSplat reconstructs a 3D Gaussian-splat scene from just two images in a single forward pass — feed-forward 3DGS rather than per-scene optimization (CVPR 2024). In this catalog the runtime source is vendored in-tree, but inference stays blocked until a local Gaussian rasterization extension is provided and the re10k.ckpt checkpoint is staged.
+**Publisher:** Massachusetts Institute of Technology (MIT) · University
 
-<ModelPaperFigures modelId="pixelsplat" locale="en" />
+pixelSplat reconstructs a 3D Gaussian scene from two calibrated views in a single forward pass (CVPR 2024). The in-tree runtime supports the original convolutional RE10K and ACID checkpoints and has been verified with real posed inputs on GPU.
 
-The recorded paper is [arXiv 2312.12337](https://arxiv.org/abs/2312.12337).
+**Catalog status:** Integrated
 
-Project page: [dcharatan.github.io/pixelsplat](https://dcharatan.github.io/pixelsplat). Code: [dcharatan/pixelsplat](https://github.com/dcharatan/pixelsplat).
+## Upstream sources
+
+- [Project](https://dcharatan.github.io/pixelsplat)
+- [Paper](https://arxiv.org/abs/2312.12337)
+- [GitHub](https://github.com/dcharatan/pixelsplat)
+- [Upstream README](https://github.com/dcharatan/pixelsplat#readme)
 
 <ModelCommandBuilder modelId="pixelsplat" locale="en" />
 
-## What it is for
+## Architecture
 
-Use `pixelsplat` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.
-
-Per the publication, an epipolar transformer resolves scale ambiguity between the two views, and the network predicts a probabilistic distribution over Gaussian parameters. WorldFoundry vendors the source under base_models/three_dimensions/point_clouds/pixelsplat with a lazy wrapper around the official test entrypoint (MIT license; checkpoint mirror dylanebert/pixelSplat). It is published by Massachusetts Institute of Technology (MIT).
-
-Catalog tasks include 3d-reconstruction, gaussian-splatting, and novel-view-synthesis. Catalog aliases include `pixel-splat` and `pixel_splat`.
+Per the publication, an epipolar transformer resolves scale ambiguity between the two views, and the network predicts a probabilistic distribution over Gaussian parameters. WorldFoundry vendors the source under base_models/three_dimensions/point_clouds/pixelsplat with a lazy wrapper around the official test entrypoint (MIT license; checkpoint mirror dylanebert/pixelSplat).
 
 ## Runtime contract
 
-Required `image`; optional `actions` and `prompt`; artifacts `pixelsplat.ply`.
+Provide model_path pointing to re10k.ckpt or acid.ckpt, the matching experiment, and posed dataset_roots/index_path. Install the declared runtime dependencies and local Gaussian rasterizer. Bare image lists use a synthetic baseline. PLY output exports normalized geometry and DC color with standard opacity logits.
 
-Recorded task profiles: `3d-reconstruction`, `gaussian-splatting`, and `novel-view-synthesis`. WorldFoundry binds `PixelSplatPipeline`.
+## Readiness and limitations
 
-Family status: **Planned**.
-
-PixelSplatSynthesis wraps the official test entrypoint but fails fast without the local Gaussian rasterization extension and the staged re10k.ckpt. Build/stage both before submitting jobs.
-
-Runtime source is vendored in-tree; inference is blocked until a local Gaussian rasterization extension is provided and re10k.ckpt is staged.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run pixelsplat --pipeline.task-profile 3d-reconstruction` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, CUDA 11.3).
-
-Recorded weight repositories include `dylanebert/pixelSplat`. Stage assets with `bash scripts/inference/prepare_model_infer.sh pixelsplat`.
-
-Recorded licenses include mit; status: **Planned**.
+- Supports the original convolutional checkpoints; newer camera-ready architectures are not interchangeable.
+- Validation covers two scenes per dataset, not the complete benchmark. Unposed input does not establish geometric accuracy.
+- PLY export retains only DC color; view-dependent appearance is available in the native renderer.
 
 <ModelRelatedRecipes modelId="pixelsplat" locale="en" />

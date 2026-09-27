@@ -1,50 +1,41 @@
 ---
 title: "Pusa VidGen"
-description: "Pusa VidGen（City University of Hong Kong）：图生视频、文生视频；Runner 一致性待确认。"
-modelId: "pusa-vidgen"
+description: "Pusa VidGen（Pusa V1）展示了向量化时间步适配：不再让整段视频共享一个扩散时间步，而是每帧独立时间步，从而用一次低成本的 Wan2.2 LoRA 训练同时解锁图生视频、文生视频与视频延展。WorldFoundry 完全用规范化 Wan2.2 组件装配它——推理时不需要外部运行时检出。"
 pageSource: generated
 ---
 
+**发表机构:** 香港城市大学 · 高校
+image · text → video
+
 Pusa VidGen（Pusa V1）展示了向量化时间步适配：不再让整段视频共享一个扩散时间步，而是每帧独立时间步，从而用一次低成本的 Wan2.2 LoRA 训练同时解锁图生视频、文生视频与视频延展。WorldFoundry 完全用规范化 Wan2.2 组件装配它——推理时不需要外部运行时检出。
 
-<ModelPaperFigures modelId="pusa-vidgen" locale="zh" />
+**目录状态:** 已集成
 
-记录论文为[arXiv 2410.03160](https://arxiv.org/abs/2410.03160)。
+## 上游来源
 
-项目页：[pusav1.org](https://pusav1.org/)。代码：[Yaofang-Liu/Pusa-VidGen](https://github.com/Yaofang-Liu/Pusa-VidGen)。
+- [项目主页](https://pusav1.org/)
+- [论文](https://arxiv.org/abs/2410.03160)
+- [GitHub](https://github.com/Yaofang-Liu/Pusa-VidGen)
+- [Hugging Face](https://huggingface.co/RaphaelLiu/Pusa-Wan2.2-V1)
+- [上游 README](https://github.com/Yaofang-Liu/Pusa-VidGen#readme)
 
 <ModelCommandBuilder modelId="pusa-vidgen" locale="zh" />
 
-## 用来做什么
+## 架构
 
-`pusa-vidgen` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
-
-Pusa V1 = Wan2.2 基座（规范化去噪器、条件器、VAE、加载器与共享分段 runner）+ 官方 Pusa V1 LoRA checkpoint（RaphaelLiu/Pusa-Wan2.2-V1）。向量化时间步行为来自 LoRA；不涉及其它扩散后端。该模型由香港城市大学发布。
-
-catalog 记录的任务包括 图生视频、文生视频、视频延展。别名包括 `pusa-v1`、`pusa-wan2.2-v1`。模态上，它接受图像、文本，输出视频。
-
-记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（通用文生/图生视频质量评测）。
+Pusa V1 = Wan2.2 基座（规范化去噪器、条件器、VAE、加载器与共享分段 runner）+ 官方 Pusa V1 LoRA checkpoint（RaphaelLiu/Pusa-Wan2.2-V1）。向量化时间步行为来自 LoRA；不涉及其它扩散后端。
 
 ## 运行时契约
 
-必填 `image`、`prompt`、`video`；产物 `generated_video`、`pusa_vidgen_public_runner.mp4`。
+runner 状态为 configured：模型专属 pipeline 通过 execute=True 暴露 generated_video，默认调用不再产生请求计划产物。每次运行的视觉 QA 在验证参考中跟踪。运行前请同时就位 Wan2.2 基座权重与 Pusa LoRA。
 
-记录的任务 profile：`image-to-video`、`text-to-video`、`video-extension`。绑定的 pipeline 类是 `PusaVidGenPipeline`。
+## 评测 Benchmark
 
-系列状态：**Runner 一致性待确认**。
+- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — 通用文生/图生视频质量评测。
 
-模型专属 pipeline 通过 execute=True 暴露 generated_video，默认调用不再产生请求计划产物。每次运行的视觉 QA 在验证参考中跟踪。运行前请同时就位 Wan2.2 基座权重与 Pusa LoRA。
+## 就绪状态与限制
 
-需要同时就位 Wan2.2 基座 checkpoint 与 Pusa LoRA——只有 LoRA 无法运行。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run pusa-vidgen --pipeline.task-profile image-to-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `RaphaelLiu/Pusa-Wan2.2-V1`、`Wan-AI/Wan2.2-T2V-A14B`、`lightx2v/Wan2.2-Lightning`。就位权重用 `bash scripts/inference/prepare_model_infer.sh pusa-vidgen`。
-
-状态：**Runner 一致性待确认**。
+- 需要同时就位 Wan2.2 基座 checkpoint 与 Pusa LoRA——只有 LoRA 无法运行。
+- checkpoint 加载的视觉一致性在验证参考中跟踪，本页尚无汇总结论。
 
 <ModelRelatedRecipes modelId="pusa-vidgen" locale="zh" />

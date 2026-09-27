@@ -28,6 +28,7 @@ import {
   WORLDFOUNDRY_WECHAT_QR,
 } from '@/lib/site-links';
 import { modelRecipeIndex } from '@/lib/model-recipe-index';
+import { catalogCoverage } from '@/lib/catalog-coverage';
 import { catalogReadinessLabel } from '@/lib/model-recipe-types';
 import { withBasePath } from '@/lib/site-path';
 
@@ -213,16 +214,16 @@ export default function HomePage() {
                   definition — without flattening them into a single interface.
                 </p>
                 <div className="wf-home-hero-actions">
-                  <Link href="/docs/guides/supported-models" className="wf-home-button wf-home-button-primary">
-                    <span>Explore model recipes</span>
+                  <Link href="/docs/quickstart" className="wf-home-button wf-home-button-primary">
+                    <span>Get started</span>
                     <ArrowRight aria-hidden="true" size={16} strokeWidth={1.8} />
                   </Link>
-                  <Link href="/docs#operational-definition" className="wf-home-button wf-home-button-secondary">
-                    <span>Read the definition</span>
+                  <Link href="/docs/guides/supported-models" className="wf-home-button wf-home-button-secondary">
+                    <span>Explore model recipes</span>
                   </Link>
                 </div>
                 <Link className="wf-home-hero-catalog-link" href="/docs/guides/supported-models">
-                  270 models · nearly 100 benchmark and metric implementations
+                  {catalogCoverage.modelsTotal} model entries · {catalogCoverage.benchmarksTotal} browsable benchmarks
                   <ArrowRight aria-hidden="true" size={13} strokeWidth={1.7} />
                 </Link>
               </div>
@@ -281,7 +282,7 @@ export default function HomePage() {
               Catalog
             </p>
             <h2 id="wf-catalog-title">
-              270 models, <span>one</span> operational vocabulary.
+              {catalogCoverage.modelsTotal} model entries, <span>one</span> operational vocabulary.
             </h2>
             <p>
               Video, 3D/4D, interactive worlds, and embodied systems share manifests and readiness

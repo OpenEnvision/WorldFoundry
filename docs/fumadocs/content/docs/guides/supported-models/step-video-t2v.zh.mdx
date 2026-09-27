@@ -1,48 +1,39 @@
 ---
 title: "Step-Video-T2V"
-description: "Step-Video-T2V（StepFun）：文生视频；已验证 204 帧 GPU 推理。"
-modelId: "step-video-t2v"
+description: "Step-Video-T2V 是阶跃星辰的大规模开源文生视频模型（上游 300 亿参数，MIT 权重位于 stepfun-ai/stepvideo-t2v）。在 WorldFoundry 中，公开 pipeline 由原生角色化组件与共享扩散 runner 装配—— DiT、Step-LLM 文本编码器、CLIP、调度器、潜变量初始化与 VAE 解码全部进程内执行。"
 pageSource: generated
 ---
 
+**发表机构:** 阶跃星辰（StepFun） · 企业
+text → video
+
 Step-Video-T2V 是阶跃星辰的大规模开源文生视频模型（上游 300 亿参数，MIT 权重位于 stepfun-ai/stepvideo-t2v）。在 WorldFoundry 中，公开 pipeline 由原生角色化组件与共享扩散 runner 装配—— DiT、Step-LLM 文本编码器、CLIP、调度器、潜变量初始化与 VAE 解码全部进程内执行。
 
-<ModelPaperFigures modelId="step-video-t2v" locale="zh" />
+**目录状态:** Runner 已验证
 
-记录论文为[arXiv 2502.10248](https://arxiv.org/abs/2502.10248)。
+## 上游来源
 
-代码：[stepfun-ai/Step-Video-T2V](https://github.com/stepfun-ai/Step-Video-T2V)。
+- [论文](https://arxiv.org/abs/2502.10248)
+- [GitHub](https://github.com/stepfun-ai/Step-Video-T2V)
+- [上游 README](https://github.com/stepfun-ai/Step-Video-T2V#readme)
 
 <ModelCommandBuilder modelId="step-video-t2v" locale="zh" />
 
-## 用来做什么
+## 架构
 
-需要本系列的文生视频时选 `step-video-t2v`：prompt 进、生成视频出。它是 catalog 上的 T2V 起步线，不是编辑器，也不是世界模型步进器。
-
-上游：30B DiT，配深压缩 Video-VAE（空间 16x16、时间 8x）与双语文本编码器。本仓库的原生 pipeline 在进程内运行，不依赖原 xFuser 与 caption/VAE HTTP 服务；已验证一个受控提示词的 204 帧 GPU 产物。
-
-catalog 记录的任务包括 文生视频、视频生成。别名包括 `step-video`、`stepvideo-t2v`、`step_video_t2v`。模态上，它接受文本，输出视频。
-
-记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（标准开源文生视频质量评测）。
+上游：30B DiT，配深压缩 Video-VAE（空间 16x16、时间 8x）与双语文本编码器。本仓库在进程内重装配原生 pipeline；原 xFuser 与 caption/VAE HTTP 服务运行时不再是后端。已验证使用真实权重的 204 帧 GPU 产物（一个受控提示词）。
 
 ## 运行时契约
 
-必填 `prompt`；不接受图像输入。产物：`generated_video`、`step_video_t2v.mp4`。
+已验证使用真实权重在 GPU 上以 992x544、50 步生成的 204 帧视频（一个受控提示词）。请使用 id step-video-t2v。30B 规模需要充足显存或多卡配置。
 
-记录的任务 profile：`text-to-video`、`video-generation`。绑定的 pipeline 类是 `StepVideoT2VPipeline`。
+## 评测 Benchmark
 
-系列状态：**已验证一个受控提示词的 204 帧真实权重 GPU 推理**。
+- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — 标准开源文生视频质量评测。
 
-公开 pipeline 在一张 H100 上按 992×544、25 FPS、50 步、CFG 9、time shift 13 生成并解码了 204/204 帧。这验证了所记录配置的输出，不代表与官方代码逐像素一致或已有基准分数。请使用 id `step-video-t2v`；30B 规模需要数据中心级显存。
+## 就绪状态与限制
 
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run step-video-t2v --pipeline.task-profile text-to-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `stepfun-ai/stepvideo-t2v`。就位权重用 `bash scripts/inference/prepare_model_infer.sh step-video-t2v`。
-
-记录 license 为 MIT；GPU 验证结果仅覆盖一个受控提示词。
+- 204 帧结果仅覆盖一个提示词；尚未测量基准分数或官方逐像素一致性。
+- 30B 规模需要数据中心级 GPU；单张消费级显卡不可行。
 
 <ModelRelatedRecipes modelId="step-video-t2v" locale="zh" />

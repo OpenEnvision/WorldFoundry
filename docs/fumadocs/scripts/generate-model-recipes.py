@@ -337,6 +337,9 @@ def status_data(item: dict[str, Any], profile: dict[str, Any] | None) -> dict[st
     elif normalized in {"planned", "todo", "proposed"}:
         group = "planned"
         label = "Planned"
+    elif normalized == "integrated_checkpoint_gated":
+        group = "runtime_ported"
+        label = "Runtime ported"
     elif normalized in {"integrated", "verified", "ready", "supported"}:
         group = "integrated"
         label = "Integrated"
@@ -1367,12 +1370,15 @@ def synthesize_overview(
             route_zh += f"默认路径绑定到 {pipeline_target} pipeline。"
         en.append(route_en)
         zh.append(route_zh)
-    elif pipeline_target and status["group"] not in {"planned", "profile", "blocked"}:
-        route_en = f"WorldFoundry binds it to the {pipeline_target} pipeline"
-        route_zh = f"WorldFoundry 将它绑定到 {pipeline_target} pipeline"
+    elif pipeline_target:
+        route_en = f"WorldFoundry records a binding to the {pipeline_target} pipeline"
+        route_zh = f"WorldFoundry 记录了到 {pipeline_target} pipeline 的绑定"
         if runner:
             route_en += f" via {runner}"
             route_zh += f"（runner：{runner}）"
+        if status["group"] in {"planned", "profile", "runtime_ported", "blocked"}:
+            route_en += "; this binding alone does not establish a successful run"
+            route_zh += "；仅有绑定记录并不代表已成功运行"
         en.append(route_en + ".")
         zh.append(route_zh + "。")
     else:
@@ -1490,6 +1496,7 @@ def synthesize_highlights(
 def synthesize_limitations(
     item: dict[str, Any],
     status: dict[str, str],
+    runtime: dict[str, Any],
     checkpoints: list[dict[str, Any]],
 ) -> tuple[list[str], list[str]]:
     en: list[str] = []
@@ -1499,11 +1506,15 @@ def synthesize_limitations(
         en.append("This entry is currently blocked; see the manifest notes below for the recorded blocker.")
         zh.append("该条目当前处于 blocked 状态；具体 blocker 见下方 manifest 记录。")
     elif group in {"planned", "profile"}:
-        en.append(
-            "No runnable WorldFoundry route exists yet. The entry records provenance and readiness only; "
-            "run commands are intentionally omitted."
-        )
-        zh.append("尚无可运行的 WorldFoundry 路径。该条目只记录来源与就绪状态，因此有意省略了运行命令。")
+        if runtime.get("pipelineTarget"):
+            en.append("A pipeline binding is recorded, but a successful run has not been established for this entry.")
+            zh.append("该条目已记录 pipeline 绑定，但尚未建立成功运行的证据。")
+        else:
+            en.append(
+                "No runnable WorldFoundry route exists yet. The entry records provenance and readiness only; "
+                "run commands are intentionally omitted."
+            )
+            zh.append("尚无可运行的 WorldFoundry 路径。该条目只记录来源与就绪状态，因此有意省略了运行命令。")
     runner_status = status.get("runner", "not_recorded").lower().replace("-", "_")
     if runner_status not in {"verified", "validated", "passed"}:
         if runner_status == "not_recorded":
@@ -1582,7 +1593,7 @@ def docs_data(
     limitations = unique_strings(as_list(docs.get("limitations")), limit=8)
     limitations_zh = unique_strings(as_list(docs.get("limitations_zh")), limit=8)
     if not limitations or not limitations_zh:
-        synthesized_l_en, synthesized_l_zh = synthesize_limitations(item, status, checkpoints)
+        synthesized_l_en, synthesized_l_zh = synthesize_limitations(item, status, runtime, checkpoints)
         limitations = limitations or synthesized_l_en
         limitations_zh = limitations_zh or synthesized_l_zh
 

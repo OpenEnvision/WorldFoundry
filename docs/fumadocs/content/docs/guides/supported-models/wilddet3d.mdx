@@ -1,48 +1,36 @@
 ---
 title: "WildDet3D"
-description: "WildDet3D from Allen Institute for AI (AI2): 3d-detection and wild-3d-perception; Runner parity pending."
-modelId: "wilddet3d"
+description: "WildDet3D from the Allen Institute for AI tackles 3D detection in the wild: recovering 3D object boxes from unconstrained real-world imagery as a world-understanding capability. Both the official GitHub repository and the allenai/WildDet3D…"
 pageSource: generated
 ---
 
+**Publisher:** Allen Institute for AI (AI2) · Research lab
+
 WildDet3D from the Allen Institute for AI tackles 3D detection in the wild: recovering 3D object boxes from unconstrained real-world imagery as a world-understanding capability. Both the official GitHub repository and the allenai/WildDet3D Hugging Face model are confirmed; WorldFoundry registers the official inference route in-tree with detector assets runtime-gated.
 
-<ModelPaperFigures modelId="wilddet3d" locale="en" />
+**Catalog status:** Runtime ported
 
-The recorded paper is [arXiv 2604.08626](https://arxiv.org/abs/2604.08626).
+## Upstream sources
 
-Project page: [allenai.github.io/WildDet3D](https://allenai.github.io/WildDet3D/). Code: [allenai/WildDet3D](https://github.com/allenai/WildDet3D).
+- [Project](https://allenai.github.io/WildDet3D/)
+- [Paper](https://arxiv.org/abs/2604.08626)
+- [GitHub](https://github.com/allenai/WildDet3D)
+- [Hugging Face](https://huggingface.co/allenai/WildDet3D)
+- [Upstream README](https://github.com/allenai/WildDet3D#readme)
 
 <ModelCommandBuilder modelId="wilddet3d" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `wilddet3d` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
-
-This is a perception entry rather than a generator: outputs are 3D detection artifacts (generated_3d_asset) instead of video. Architecture internals beyond the official repository pointer (pinned head 1b8aa52b) are not recorded in this repository. It is published by Allen Institute for AI (AI2).
-
-Catalog tasks include 3d-detection, wild-3d-perception, and world-understanding.
+This is a perception entry rather than a generator: outputs are 3D detection artifacts (generated_3d_asset) instead of video. Architecture internals beyond the official repository pointer (pinned head 1b8aa52b) are not recorded in this repository.
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `video`; optional `actions`; artifacts `generated_3d_asset` and `wilddet3d_runtime_plan.json`.
-
-Recorded task profiles: `3d-detection`, `wild-3d-perception`, and `world-understanding`. WorldFoundry binds `WildDet3DPipeline`.
-
-Family status: **Runner parity pending**.
-
 Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Note the SAM-derived license recorded upstream (other:sam-license).
 
-WildDet3D official inference route is registered; detector assets are runtime-gated.
+## Readiness and limitations
 
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run wilddet3d --pipeline.task-profile 3d-detection` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `allenai/WildDet3D`. Stage assets with `bash scripts/inference/prepare_model_infer.sh wilddet3d`.
-
-Recorded licenses include other:sam-license; status: **Runner parity pending**.
+- Perception-only: no video or world generation output.
+- License is recorded as other:sam-license; review before commercial use.
 
 <ModelRelatedRecipes modelId="wilddet3d" locale="en" />

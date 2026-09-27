@@ -1,48 +1,37 @@
 ---
 title: "UniAnimate-DiT"
-description: "UniAnimate-DiT from Alibaba (Tongyi Lab): human-image-animation and image-to-video; Runner parity pending."
-modelId: "unianimate-dit"
+description: "UniAnimate-DiT is Alibaba ali-vilab's human image animation model built on Wan2.1-I2V: it animates a person photo to follow a driving pose sequence. The in-tree route is wired with local checkpoint assets and exposes max_frames, resolution…"
 pageSource: generated
 ---
 
+**Publisher:** Alibaba (Tongyi Lab) · Company
+image → video
+
 UniAnimate-DiT is Alibaba ali-vilab's human image animation model built on Wan2.1-I2V: it animates a person photo to follow a driving pose sequence. The in-tree route is wired with local checkpoint assets and exposes max_frames, resolution, step count, and seed controls.
 
-<ModelPaperFigures modelId="unianimate-dit" locale="en" />
+**Catalog status:** Integrated
 
-The recorded paper is [arXiv 2504.11289](https://arxiv.org/abs/2504.11289).
+## Upstream sources
 
-Code: [ali-vilab/unianimate-dit](https://github.com/ali-vilab/unianimate-dit).
+- [Paper](https://arxiv.org/abs/2504.11289)
+- [GitHub](https://github.com/ali-vilab/unianimate-dit)
+- [Hugging Face](https://huggingface.co/ZheWang123/UniAnimate-DiT)
+- [Upstream README](https://github.com/ali-vilab/unianimate-dit#readme)
 
 <ModelCommandBuilder modelId="unianimate-dit" locale="en" />
 
-## What it is for
+## Architecture
 
-Use `unianimate-dit` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.
-
-Built on the Wan2.1 image-to-video diffusion transformer with pose-sequence conditioning for human animation (checkpoint: ZheWang123/UniAnimate-DiT). Deeper conditioning internals are not recorded in this repository. It is published by Alibaba (Tongyi Lab).
-
-Catalog tasks include human-image-animation, image-to-video, and video-generation. Documented modalities: image in, video out.
+Built on the Wan2.1 image-to-video diffusion transformer with pose-sequence conditioning for human animation (checkpoint: ZheWang123/UniAnimate-DiT). Deeper conditioning internals are not recorded in this repository.
 
 ## Runtime contract
 
-Required `prompt` and `image`; artifacts `unianimate-dit.mp4`.
+A checkpoint-backed short GPU smoke test passed; full runner parity is pending. Prepare a clean subject photo and a driving pose sequence for best results.
 
-Recorded task profiles: `human-image-animation`, `image-to-video`, and `video-generation`. WorldFoundry binds `UniAnimateDiTPipeline`.
+## Readiness and limitations
 
-Family status: **Runner parity pending**.
-
-Prepare a clean subject photo and a driving pose sequence for best results.
-
-Human animation candidate built on Wan2.1-I2V.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run unianimate-dit --pipeline.task-profile human-image-animation`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `ZheWang123/UniAnimate-DiT`. Stage assets with `bash scripts/inference/prepare_model_infer.sh unianimate-dit`.
-
-Status: **Runner parity pending**.
+- A nine-frame, four-step GPU smoke artifact has been verified; official 81-frame, 50-step quality and pose-control parity have not been measured.
+- Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+- Specialized for human subjects — not a general I2V model.
 
 <ModelRelatedRecipes modelId="unianimate-dit" locale="en" />

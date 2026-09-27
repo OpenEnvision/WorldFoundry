@@ -1,48 +1,37 @@
 ---
 title: "UniAnimate-DiT"
-description: "UniAnimate-DiT（Alibaba (Tongyi Lab)）：图生视频、视频生成；Runner 一致性待确认。"
-modelId: "unianimate-dit"
+description: "UniAnimate-DiT 是阿里 ali-vilab 基于 Wan2.1-I2V 的人物图像动画模型：让人物照片按驱动姿态序列动起来。树内路径已配好本地 checkpoint 资产，暴露 max_frames、分辨率、步数与 seed 控制。"
 pageSource: generated
 ---
 
+**发表机构:** 阿里巴巴（通义实验室） · 企业
+image → video
+
 UniAnimate-DiT 是阿里 ali-vilab 基于 Wan2.1-I2V 的人物图像动画模型：让人物照片按驱动姿态序列动起来。树内路径已配好本地 checkpoint 资产，暴露 max_frames、分辨率、步数与 seed 控制。
 
-<ModelPaperFigures modelId="unianimate-dit" locale="zh" />
+**目录状态:** 已集成
 
-记录论文为[arXiv 2504.11289](https://arxiv.org/abs/2504.11289)。
+## 上游来源
 
-代码：[ali-vilab/unianimate-dit](https://github.com/ali-vilab/unianimate-dit)。
+- [论文](https://arxiv.org/abs/2504.11289)
+- [GitHub](https://github.com/ali-vilab/unianimate-dit)
+- [Hugging Face](https://huggingface.co/ZheWang123/UniAnimate-DiT)
+- [上游 README](https://github.com/ali-vilab/unianimate-dit#readme)
 
 <ModelCommandBuilder modelId="unianimate-dit" locale="zh" />
 
-## 用来做什么
+## 架构
 
-用 `unianimate-dit` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。
-
-构建在 Wan2.1 图生视频扩散 Transformer 之上，以姿态序列为条件驱动人物动画（checkpoint： ZheWang123/UniAnimate-DiT）。更深的条件机制细节仓库未记录。该模型由阿里巴巴（通义实验室）发布。
-
-catalog 记录的任务包括 human-image-animation、图生视频、视频生成。模态上，它接受图像，输出视频。
+构建在 Wan2.1 图生视频扩散 Transformer 之上，以姿态序列为条件驱动人物动画（checkpoint： ZheWang123/UniAnimate-DiT）。更深的条件机制细节仓库未记录。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；产物 `unianimate-dit.mp4`。
+已通过真实权重的短片 GPU 冒烟验证；完整 runner parity 仍待验证。为获得最佳效果，请准备干净的人物照片与驱动姿态序列。
 
-记录的任务 profile：`human-image-animation`、`image-to-video`、`video-generation`。绑定的 pipeline 类是 `UniAnimateDiTPipeline`。
+## 就绪状态与限制
 
-系列状态：**Runner 一致性待确认**。
-
-为获得最佳效果，请准备干净的人物照片与驱动姿态序列。
-
-Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run unianimate-dit --pipeline.task-profile human-image-animation`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `ZheWang123/UniAnimate-DiT`。就位权重用 `bash scripts/inference/prepare_model_infer.sh unianimate-dit`。
-
-状态：**Runner 一致性待确认**。
+- 已验证 9 帧、4 步的 GPU 冒烟产物；官方 81 帧、50 步的质量与姿态控制一致性尚未测量。
+- Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+- 专精人物主体——不是通用图生视频模型。
 
 <ModelRelatedRecipes modelId="unianimate-dit" locale="zh" />

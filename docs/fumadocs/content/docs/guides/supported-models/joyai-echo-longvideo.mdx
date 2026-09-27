@@ -1,46 +1,39 @@
 ---
 title: "JoyAI-Echo 1.5 / Echo-LongVideo"
-description: "JoyAI-Echo 1.5 / Echo-LongVideo from JD.com (JoyAI / Echo Team): reference-to-video and audio-video-generation; Runner parity pending; dedicated `joyai-echo-longvideo`."
-modelId: "joyai-echo-longvideo"
+description: "JoyAI-Echo 1.5 is an inference-only long-form audio-video generator. Its R2V request can combine a prompt, an optional first frame, and as many as seven ordered image/audio memory slots so identity, voice, and story context persist across…"
 pageSource: generated
 ---
 
+**Publisher:** JD.com (JoyAI / Echo Team) · Company
+image → video
+
 JoyAI-Echo 1.5 is an inference-only long-form audio-video generator. Its R2V request can combine a prompt, an optional first frame, and as many as seven ordered image/audio memory slots so identity, voice, and story context persist across independently editable shots.
 
-<ModelPaperFigures modelId="joyai-echo-longvideo" locale="en" />
+**Catalog status:** Integrated
 
-Code: [jd-opensource/JoyAI-Echo](https://github.com/jd-opensource/JoyAI-Echo).
+## Upstream sources
+
+- [Source](https://github.com/jd-opensource/JoyAI-Echo)
+- [Upstream README](https://github.com/jd-opensource/JoyAI-Echo#readme)
 
 <ModelCommandBuilder modelId="joyai-echo-longvideo" locale="en" />
 
-## What it is for
+## Architecture
 
-Use `joyai-echo-longvideo` for catalog text-to-video inference. The recipe exists so you can launch a recorded T2V profile without assembling an upstream demo.
-
-The release builds on LTX-2.3 and adds few-step DMD generation plus a paired cross-modal memory bank. WorldFoundry keeps the official Python 3.11, PyTorch 2.8, CUDA 12.8 runtime external and communicates through the checked-in CLI contract. It is published by JD.com (JoyAI / Echo Team).
-
-Catalog tasks include reference-to-video, audio-video-generation, and long-video-generation. Catalog aliases include `joyai-echo`, `echo-longvideo`, and `joyai-echo-1.5`. Documented modalities: image in, video out.
-
-Recorded evaluation entry points include [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) (Long-horizon temporal continuity across generated shots), [VBench](/docs/evaluation/benchmark-hub/vbench) (Baseline video quality and motion evaluation).
+The release builds on LTX-2.3 and adds few-step DMD generation plus a paired cross-modal memory bank. WorldFoundry keeps the official Python 3.11, PyTorch 2.8, CUDA 12.8 runtime external and communicates through the checked-in CLI contract.
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `memory_slots`; optional `video`; artifacts `generated_video` and `joyai-echo-longvideo.mp4`.
-
-Recorded task profiles: `reference-to-video`, `audio-video-generation`, and `long-video-generation`. WorldFoundry binds `JoyAIEchoLongVideoPipeline`.
-
-Family status: **Runner parity pending**.
-
 Clone JoyAI-Echo at the recorded revision, prepare its dedicated environment, and pass source_root plus local Echo and gated Gemma checkpoints. Generation is safety-gated behind execute=True. FP4 also needs NVIDIA ModelOpt; production voice-memory extraction needs the upstream MSST setup.
 
-Command construction and official request-schema mapping are CPU-tested.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) — Long-horizon temporal continuity across generated shots.
+- [VBench](/docs/evaluation/benchmark-hub/vbench) — Baseline video quality and motion evaluation.
 
-Launch `worldfoundry-eval run joyai-echo-longvideo --pipeline.task-profile reference-to-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-Recorded weight repositories include `jdopensource/JoyAI-Echo` and `google/gemma-3-12b-it`. Stage assets with `bash scripts/inference/prepare_model_infer.sh joyai-echo-longvideo`.
-
-Status: **Runner parity pending**.
+- The upstream release is marked for academic research and non-commercial use and remains subject to the LTX-2 Community License.
+- Checkpoints, Gemma access, MSST assets, and the upstream source checkout are external and are never downloaded during prediction.
 
 <ModelRelatedRecipes modelId="joyai-echo-longvideo" locale="en" />

@@ -2,8 +2,8 @@
 
 [![Python](https://img.shields.io/badge/python-3.10%20--%203.13-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
-[![CLI](https://img.shields.io/badge/CLI-worldfoundry--eval-purple)](docs/fumadocs/content/docs/reference/cli.mdx)
-[![Docs](https://img.shields.io/badge/docs-Fumadocs-orange)](docs/fumadocs)
+[![CLI](https://img.shields.io/badge/CLI-worldfoundry--eval-purple)](https://openenvision.github.io/WorldFoundry/docs/reference/cli)
+[![Docs](https://img.shields.io/badge/docs-Fumadocs-orange)](https://openenvision.github.io/WorldFoundry/docs)
 
 WorldFoundry is an open-source infrastructure for world models: a shared stack for in-tree runners, local asset staging, inference (TUI / CLI / Studio), and benchmark evaluation across video generation, 3D/4D representation, embodied action, and interactive worlds.
 
@@ -57,25 +57,24 @@ Join the **WorldFoundry Community** on Slack, [Discord](https://discord.gg/ybUQM
 
 - **[2026-07-12]** 🔥 **WorldFoundry reached 100+ stars on its very first day!** Thanks to the community for the incredible support and encouragement. More exciting updates are coming!
 - **[2026-07-11]** 🎉 **WorldFoundry is officially open-sourced.** We welcome ⭐ stars, bug reports, feature requests, and pull requests from the community!
-- **[Coming Soon]** Documentation improvements and additional benchmark integrations.
 
 
 ![WorldFoundry teaser](docs/fumadocs/public/teaser.png)
 
 ## Links
 
-- [Documentation](docs/fumadocs/content/docs/index.mdx)
-- [Design and architecture](docs/fumadocs/content/docs/overview/design.mdx)
-- [Quickstart](docs/fumadocs/content/docs/quickstart.mdx)
-- [Environment reference](docs/fumadocs/content/docs/reference/environments.mdx)
-- [Local asset preparation](docs/fumadocs/content/docs/guides/local-assets.mdx)
-- [TUI](docs/fumadocs/content/docs/guides/tui.mdx)
-- [Inference guide](docs/fumadocs/content/docs/guides/inference.mdx)
-- [Studio guide](docs/fumadocs/content/docs/guides/studio.mdx)
-- [CLI reference](docs/fumadocs/content/docs/reference/cli.mdx)
-- [Python API reference](docs/fumadocs/content/docs/api-reference/index.mdx)
-- [Supported models](docs/fumadocs/content/docs/guides/supported-models/index.mdx)
-- [Benchmark hub](docs/fumadocs/content/docs/evaluation/benchmark-hub/index.mdx)
+- [Documentation](https://openenvision.github.io/WorldFoundry/docs)
+- [Design and architecture](https://openenvision.github.io/WorldFoundry/docs/overview/design)
+- [Quickstart](https://openenvision.github.io/WorldFoundry/docs/quickstart)
+- [Environment reference](https://openenvision.github.io/WorldFoundry/docs/reference/environments)
+- [Local asset preparation](https://openenvision.github.io/WorldFoundry/docs/guides/local-assets)
+- [TUI](https://openenvision.github.io/WorldFoundry/docs/guides/tui)
+- [Inference guide](https://openenvision.github.io/WorldFoundry/docs/guides/inference)
+- [Studio guide](https://openenvision.github.io/WorldFoundry/docs/guides/studio)
+- [CLI reference](https://openenvision.github.io/WorldFoundry/docs/reference/cli)
+- [Python API reference](https://openenvision.github.io/WorldFoundry/docs/api-reference)
+- [Supported models](https://openenvision.github.io/WorldFoundry/docs/guides/supported-models)
+- [Benchmark hub](https://openenvision.github.io/WorldFoundry/docs/evaluation/benchmark-hub)
 - [Contributing](CONTRIBUTING.md)
 
 ## What WorldFoundry Provides
@@ -107,7 +106,7 @@ kernels must be built inside the exact target PyTorch environment.
 For GPU work, start with the unified environment and use a dedicated
 environment only when a model profile documents an ABI or simulator conflict.
 The full day-one path lives in the
-[Quickstart](docs/fumadocs/content/docs/quickstart.mdx).
+[Quickstart](https://openenvision.github.io/WorldFoundry/docs/quickstart).
 
 Model demo videos are served from GitHub CDN; docs development does not need `git lfs pull`.
 
@@ -125,7 +124,7 @@ conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 To download local demo video binaries later, install Git LFS and run `git lfs pull` inside the clone.
 
 Checkpoints, datasets, evaluator weights, API keys, and generated artifacts are **not** in git.
-See [Local asset preparation](docs/fumadocs/content/docs/guides/local-assets.mdx) for cache layout, Hugging Face downloads, non-HF aliases, and benchmark assets.
+See [Local asset preparation](https://openenvision.github.io/WorldFoundry/docs/guides/local-assets) for cache layout, Hugging Face downloads, non-HF aliases, and benchmark assets.
 
 On modern CUDA 12.8 hosts the installer resolves `worldfoundry-unified-cu128`. Pin a wheel tier only when the host requires it:
 
@@ -146,7 +145,7 @@ bash scripts/setup/bootstrap_worldfoundry.sh \
 
 Hugging Face models use native Hub loading (`from_pretrained`, `snapshot_download`, `HF_HOME` / `HF_HUB_CACHE`, and `HF_TOKEN` for gated assets). `WORLDFOUNDRY_CKPT_DIR` remains for non-HF checkpoints and compatibility aliases.
 
-Some VLA/action policies need a documented model-specific environment (for example OpenVLA-OFT / CogACT). Embodied simulator benchmarks follow the Docker VLA harness pattern — see the [environment reference](docs/fumadocs/content/docs/reference/environments.mdx).
+Some VLA/action policies need a documented model-specific environment (for example OpenVLA-OFT / CogACT). Embodied simulator benchmarks follow the Docker VLA harness pattern — see the [environment reference](https://openenvision.github.io/WorldFoundry/docs/reference/environments).
 
 After the environment is active:
 
@@ -219,7 +218,7 @@ python -m worldfoundry.studio.workspace_job infer \
   --device cuda
 ```
 
-Each successful run should write media, logs, and manifest metadata under the output directory. Treat a file as demo evidence only after visual check and matching runtime-profile assumptions. Details: [Inference guide](docs/fumadocs/content/docs/guides/inference.mdx).
+Each successful run should write media, logs, and manifest metadata under the output directory. Treat a file as demo evidence only after visual check and matching runtime-profile assumptions. Details: [Inference guide](https://openenvision.github.io/WorldFoundry/docs/guides/inference).
 
 ### Opt-in inference acceleration
 
@@ -305,7 +304,7 @@ source tmp/worldfoundry_unified_env.sh
 bash scripts/workspace/run_workspace.sh
 ```
 
-Configure jobs in **Create Job**; optional shared defaults can use `WORLDFOUNDRY_STUDIO_SETTINGS_FILE`. Expensive runtime checks and preview builders are opt-in via `WORLDFOUNDRY_STUDIO_*` — see the [Studio guide](docs/fumadocs/content/docs/guides/studio.mdx).
+Configure jobs in **Create Job**; optional shared defaults can use `WORLDFOUNDRY_STUDIO_SETTINGS_FILE`. Expensive runtime checks and preview builders are opt-in via `WORLDFOUNDRY_STUDIO_*` — see the [Studio guide](https://openenvision.github.io/WorldFoundry/docs/guides/studio).
 
 Use the **Visualizers** tab as the browser entrypoint for local preview services (World / Gradio, Spark, Viser, Rerun, Embodied bridge). On a remote machine, forward port `7870` plus any viewer ports you launch.
 

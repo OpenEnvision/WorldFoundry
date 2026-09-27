@@ -1,48 +1,35 @@
 ---
 title: "LagrNVS"
-description: "LagrNVS（Meta AI (FAIR)）：新视角合成、3d-scene-rendering；Runner 一致性待确认。"
-modelId: "lagernvs"
+description: "LagrNVS 是 Meta 的新视角合成模型，用于沿新的相机路径渲染场景（facebook/lagernvs_general_512）。 WorldFoundry 用树内适配器封装上游 minimal_inference.py 命令；checkpoint 在 Hugging Face 上为 gated， HF_TOKEN 缺失会在推理时报告。"
 pageSource: generated
 ---
 
+**发表机构:** Meta AI（FAIR） · 企业
+
 LagrNVS 是 Meta 的新视角合成模型，用于沿新的相机路径渲染场景（facebook/lagernvs_general_512）。 WorldFoundry 用树内适配器封装上游 minimal_inference.py 命令；checkpoint 在 Hugging Face 上为 gated， HF_TOKEN 缺失会在推理时报告。
 
-<ModelPaperFigures modelId="lagernvs" locale="zh" />
+**目录状态:** 已集成
 
-记录论文为[arXiv 2603.20176](https://arxiv.org/abs/2603.20176)。
+## 上游来源
 
-项目页：[szymanowiczs.github.io/lagernvs](https://szymanowiczs.github.io/lagernvs)。代码：[facebookresearch/lagernvs](https://github.com/facebookresearch/lagernvs)。
+- [项目主页](https://szymanowiczs.github.io/lagernvs)
+- [论文](https://arxiv.org/abs/2603.20176)
+- [GitHub](https://github.com/facebookresearch/lagernvs)
+- [上游 README](https://github.com/facebookresearch/lagernvs#readme)
 
 <ModelCommandBuilder modelId="lagernvs" locale="zh" />
 
-## 用来做什么
+## 架构
 
-用 `lagernvs` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
-
-catalog 记录其为 512 分辨率的新视角/相机路径渲染模型；内部细节仓库未记录。许可为 FAIR 非商用研究许可。该模型由Meta AI（FAIR）发布。
-
-catalog 记录的任务包括 新视角合成、3d-scene-rendering、camera-path-rendering。别名包括 `lager-nvs`、`facebook/lagernvs_general_512`、`facebookresearch/lagernvs`。
+catalog 记录其为 512 分辨率的新视角/相机路径渲染模型；内部细节仓库未记录。许可为 FAIR 非商用研究许可。
 
 ## 运行时契约
 
-必填 `image`；可选 `prompt`、`video`、`actions`；产物 `generated_video`、`lagernvs.mp4`。
+runner parity 为 pending：pipeline 导入与 plan-only 推理已接好，完整产物一致性需要 gated checkpoint 与 CUDA。运行前请先接受 gated 条款并设置 HF_TOKEN。
 
-记录的任务 profile：`novel-view-synthesis`、`3d-scene-rendering`、`camera-path-rendering`。绑定的 pipeline 类是 `LagrNVSPipeline`。
+## 就绪状态与限制
 
-系列状态：**Runner 一致性待确认**。
-
-运行前请先接受 gated 条款并设置 HF_TOKEN。
-
-checkpoint 为 gated，受 FAIR 非商用研究许可约束。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run lagernvs --pipeline.task-profile novel-view-synthesis` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.10，CUDA 12.8）。
-
-记录的权重仓库包括 `facebook/lagernvs_general_512`。就位权重用 `bash scripts/inference/prepare_model_infer.sh lagernvs`。
-
-gated `facebook/lagernvs_general_512`，下载前需在上游接受条款；状态：**Runner 一致性待确认**。
+- checkpoint 为 gated，受 FAIR 非商用研究许可约束。
+- 完整产物一致性待 gated 权限与 CUDA 验证。
 
 <ModelRelatedRecipes modelId="lagernvs" locale="zh" />

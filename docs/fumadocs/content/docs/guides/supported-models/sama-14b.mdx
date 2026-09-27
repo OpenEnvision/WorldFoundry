@@ -1,48 +1,38 @@
 ---
 title: "SAMA"
-description: "SAMA: video-editing and reference-guided-video; Runner parity pending."
-modelId: "sama-14b"
+description: "SAMA 14B is an open instruction-guided video editing model: it takes a source video and a text instruction. The released inference route does not accept a spatial mask or separate reference image. WorldFoundry reports missing checkpoints a…"
 pageSource: generated
 ---
 
-SAMA 14B is an open 14B video editing model recorded for reference-guided and mask-conditioned video editing: you supply a source video plus a mask or reference and it rewrites the masked content. The WorldFoundry route is complete and reports missing checkpoints at runtime; weights are apache-2.0 at syxbb/SAMA-14B.
+**Publisher:** Open-source research release (institution not recorded) · Research lab
 
-<ModelPaperFigures modelId="sama-14b" locale="en" />
+SAMA 14B is an open instruction-guided video editing model: it takes a source video and a text instruction. The released inference route does not accept a spatial mask or separate reference image. WorldFoundry reports missing checkpoints at runtime; weights are apache-2.0 at syxbb/SAMA-14B.
 
-The recorded paper is [arXiv 2603.19228](https://arxiv.org/abs/2603.19228).
+**Catalog status:** Integrated
 
-Project page: [cynthiazxy123.github.io/SAMA](https://cynthiazxy123.github.io/SAMA/). Code: [Cynthiazxy123/SAMA](https://github.com/Cynthiazxy123/SAMA).
+## Upstream sources
+
+- [Project](https://cynthiazxy123.github.io/SAMA/)
+- [Paper](https://arxiv.org/abs/2603.19228)
+- [GitHub](https://github.com/Cynthiazxy123/SAMA)
+- [Hugging Face](https://huggingface.co/syxbb/SAMA-14B)
+- [Upstream README](https://github.com/Cynthiazxy123/SAMA#readme)
 
 <ModelCommandBuilder modelId="sama-14b" locale="en" />
 
-## What it is for
-
-Use `sama-14b` for catalog video-to-video inference. Start here when the input is already a video.
+## Architecture
 
 The catalog records a 14B-parameter editing model with a prompt/image/video input contract; the publishing institution and architecture internals are not recorded in this repository — consult the upstream GitHub (Cynthiazxy123/SAMA) for details.
 
-Catalog tasks include video-editing, reference-guided-video, and mask-conditioned-video.
-
 ## Runtime contract
 
-Required `prompt`; optional `image` and `video`; artifacts `sama-14b.mp4`.
+Supply a source video and edit instruction. A checkpoint-backed 17-frame run was compared with the official implementation; broader editing quality remains unverified.
 
-Recorded task profiles: `video-editing`, `reference-guided-video`, and `mask-conditioned-video`. WorldFoundry binds `SAMA14BPipeline`.
+## Readiness and limitations
 
-Family status: **Runner parity pending**.
-
-Prepare source video, mask, and reference assets before launching; the route reports missing assets explicitly.
-
-WorldFoundry route is complete; missing checkpoint/assets are reported at runtime.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run sama-14b --pipeline.task-profile video-editing` to edit the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `syxbb/SAMA-14B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh sama-14b`.
-
-Recorded licenses include apache-2.0; status: **Runner parity pending**.
+- A 17-frame checkpoint-backed run was checked against official inference; other inputs and longer videos require separate validation.
+- The released SAMA inference entrypoint has no spatial mask or separate reference-image input.
+- Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="sama-14b" locale="en" />

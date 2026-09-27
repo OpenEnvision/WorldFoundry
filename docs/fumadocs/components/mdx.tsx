@@ -111,6 +111,7 @@ export function getMDXComponents(components?: MDXComponents) {
     DedicatedEnvCatalog,
     CallChainDiagram,
     DocsMoved,
+    DocsImage,
     DocsWelcomeAcknowledgements,
     MathBlock,
     MathInline,

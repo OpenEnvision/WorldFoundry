@@ -1,46 +1,33 @@
 ---
 title: "SpatialLadder"
-description: "SpatialLadder: multimodal-reasoning and spatial-reasoning; Runner parity pending."
-modelId: "spatial-ladder"
+description: "SpatialLadder is a 3B multimodal model specialized in spatial reasoning — answering questions about spatial relations in images and videos. The catalog records it for multimodal/spatial reasoning and image/video QA with model_response arti…"
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+
 SpatialLadder is a 3B multimodal model specialized in spatial reasoning — answering questions about spatial relations in images and videos. The catalog records it for multimodal/spatial reasoning and image/video QA with model_response artifacts; weights live at hongxingli/SpatialLadder-3B.
 
-<ModelPaperFigures modelId="spatial-ladder" locale="en" />
+**Catalog status:** Integrated
 
-Code: [hongxingli/SpatialLadder-3B](https://huggingface.co/hongxingli/SpatialLadder-3B).
+## Upstream sources
+
+- [GitHub](https://huggingface.co/hongxingli/SpatialLadder-3B)
 
 <ModelCommandBuilder modelId="spatial-ladder" locale="en" />
 
-## What it is for
-
-Use `spatial-ladder` for multimodal reasoning inference on this card.
+## Architecture
 
 A 3B-parameter vision-language model; the staged-training design implied by its name (progressive spatial reasoning) is described upstream, and the publishing institution and internals are not recorded in this repository.
 
-Catalog tasks include multimodal-reasoning, spatial-reasoning, image-question-answering, and video-question-answering. Catalog aliases include `spatial_ladder` and `hongxingli/SpatialLadder-3B`.
-
 ## Runtime contract
 
-Required `prompt`; optional `image` and `video`; artifacts `spatial-ladder.json`.
+Runner parity is pending. Use it as a lightweight spatial-QA judge for generated scenes; the 3B scale runs on modest GPUs.
 
-Recorded task profiles: `multimodal-reasoning`, `spatial-reasoning`, `image-question-answering`, and `video-question-answering`. WorldFoundry binds `SpatialLadderPipeline`.
+## Readiness and limitations
 
-Family status: **Runner parity pending**.
-
-Use it as a lightweight spatial-QA judge for generated scenes; the 3B scale runs on modest GPUs.
-
-WorldFoundry route is complete; missing checkpoint/assets are reported at runtime.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run spatial-ladder --pipeline.task-profile multimodal-reasoning`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `hongxingli/SpatialLadder-3B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh spatial-ladder`.
-
-Status: **Runner parity pending**.
+- Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.
+- Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="spatial-ladder" locale="en" />

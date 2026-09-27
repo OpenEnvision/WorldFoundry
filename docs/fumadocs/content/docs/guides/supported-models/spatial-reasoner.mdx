@@ -1,46 +1,32 @@
 ---
 title: "SpatialReasoner"
-description: "SpatialReasoner from Johns Hopkins University (CCVL): multimodal-reasoning and spatial-reasoning; Runner parity pending."
-modelId: "spatial-reasoner"
+description: "SpatialReasoner is a vision-language model from the JHU CCVL group focused on explicit, step-wise spatial reasoning over images and video."
 pageSource: generated
 ---
 
+**Publisher:** Johns Hopkins University (CCVL) · University
+
 SpatialReasoner is a vision-language model from the JHU CCVL group focused on explicit, step-wise spatial reasoning over images and video. In this catalog it is an understanding entry — spatial and multimodal reasoning plus image/video QA — returning model_response artifacts.
 
-<ModelPaperFigures modelId="spatial-reasoner" locale="en" />
+**Catalog status:** Integrated
 
-Code: [ccvl/SpatialReasoner](https://huggingface.co/ccvl/SpatialReasoner).
+## Upstream sources
+
+- [GitHub](https://huggingface.co/ccvl/SpatialReasoner)
 
 <ModelCommandBuilder modelId="spatial-reasoner" locale="en" />
 
-## What it is for
+## Architecture
 
-Use `spatial-reasoner` for multimodal reasoning inference on this card.
-
-A vision-language model with explicit 3D-aware spatial reasoning stages (per the upstream release at ccvl/SpatialReasoner). This repository records the prompt/image/video contract; scale and training details are not recorded here. It is published by Johns Hopkins University (CCVL).
-
-Catalog tasks include multimodal-reasoning, spatial-reasoning, image-question-answering, and video-question-answering. Catalog aliases include `spatial_reasoner` and `ccvl/SpatialReasoner`.
+A vision-language model with explicit 3D-aware spatial reasoning stages (per the upstream release at ccvl/SpatialReasoner). This repository records the prompt/image/video contract; scale and training details are not recorded here.
 
 ## Runtime contract
 
-Required `prompt`; optional `image` and `video`; artifacts `spatial-reasoner.json`.
+Runner parity is pending. Pair it with generation entries to audit spatial consistency of generated worlds — e.g. object positions and relative depths.
 
-Recorded task profiles: `multimodal-reasoning`, `spatial-reasoning`, `image-question-answering`, and `video-question-answering`. WorldFoundry binds `SpatialReasonerPipeline`.
+## Readiness and limitations
 
-Family status: **Runner parity pending**.
-
-Pair it with generation entries to audit spatial consistency of generated worlds — e.g. object positions and relative depths.
-
-WorldFoundry route is complete; missing checkpoint/assets are reported at runtime.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run spatial-reasoner --pipeline.task-profile multimodal-reasoning` to run the reasoning route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `ccvl/SpatialReasoner`. Stage assets with `bash scripts/inference/prepare_model_infer.sh spatial-reasoner`.
-
-Status: **Runner parity pending**.
+- Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.
+- Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
 
 <ModelRelatedRecipes modelId="spatial-reasoner" locale="en" />

@@ -25,7 +25,7 @@ Visual plausibility measures observation quality. It is not sufficient evidence 
 
 We therefore treat a **generative world model** as a learned, history- and control-conditioned latent dynamical system. It infers and maintains a persistent environmental state, evolves that state under endogenous dynamics and external interventions, and assimilates new observations so later predictions remain accountable to what just happened.
 
-<img
+<DocsImage
   src="/paper/operational-definition.webp"
   alt="Operational definition of a world model: state inference, forward simulation, and interactive response, closed by observation feedback"
   width={1800}
@@ -52,7 +52,7 @@ Here <MathInline tex="h_t" /> is the observation–control history, <MathInline 
 
 WorldFoundry does not assign every model a single discrete level. It records a **capability profile**: which functions a system actually supports, and whether those functions are coupled.
 
-<img
+<DocsImage
   src="/paper/capability-progression.webp"
   alt="Capability progression from perceptual grounding through the world-model spine of persistent state, dynamics, and closed-loop interaction, with controllable transformation as an orthogonal capability"
   width={1800}
@@ -71,7 +71,7 @@ The taxonomy is functional, not a ranking of visual quality.
 
 **Generative world models** do integrate that loop. Intervention effects persist across subsequent transitions, and new observations revise the state that governs later predictions. Higher fidelity, broader prompting, or larger scale does not by itself promote a system from the first class to the second.
 
-That is why WorldFoundry separates catalog inclusion, runnable inference, inspectable artifacts, and benchmark-eligible evidence. A convincing demo can still be only perceptual grounding. The current release integrates 270 models and nearly 100 benchmark and metric implementations. Catalog inclusion is not a runnable runtime. A demo is not benchmark evidence. An ingested score is not official leaderboard parity. Those states stay separate, with provenance.
+That is why WorldFoundry separates catalog inclusion, runnable inference, inspectable artifacts, and benchmark-eligible evidence. A convincing demo can still be only perceptual grounding. The [model catalog](/docs/guides/supported-models) and [benchmark hub](/docs/evaluation/benchmark-hub) show current coverage and readiness. Catalog inclusion is not a runnable runtime. A demo is not benchmark evidence. An ingested score is not official leaderboard parity. Those states stay separate, with provenance.
 
 <h2 id="why-a-shared-workflow">Why a shared workflow</h2>
 

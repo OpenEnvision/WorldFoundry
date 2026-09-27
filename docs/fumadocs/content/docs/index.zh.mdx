@@ -25,7 +25,7 @@ worldfoundry-eval run matrix-game-2-universal-action-validation \
 
 因此，我们把**生成式世界模型**定义为一个学习得到的、由历史与控制条件化的潜在动力学系统。它推断并维护持久的环境状态，在内生动力学与外部干预下演化该状态，并吸收新的观察，使后续预测对刚刚发生的事情负责。
 
-<img
+<DocsImage
   src="/paper/operational-definition.webp"
   alt="世界模型的操作定义：状态推断、前向仿真与交互响应，并由观察反馈闭合"
   width={1800}
@@ -52,7 +52,7 @@ worldfoundry-eval run matrix-game-2-universal-action-validation \
 
 WorldFoundry 并不给每个模型贴一个互斥等级，而是记录**能力剖面**：系统实际支持哪些功能，以及这些功能是否耦合。
 
-<img
+<DocsImage
   src="/paper/capability-progression.webp"
   alt="从感知锚定到世界模型主轴（持久状态、动力学、闭环交互）的能力分层，可控变换作为正交能力"
   width={1800}
@@ -71,7 +71,7 @@ WorldFoundry 并不给每个模型贴一个互斥等级，而是记录**能力�
 
 **生成式世界模型**集成了这个环。干预效果会在后续转移中保持，新的观察会修正此后预测所依赖的状态。更高保真度、更宽的 prompt 或更大的规模，本身并不会把系统从第一类提升到第二类。
 
-正因为如此，WorldFoundry 把 catalog 收录、可运行推理、可检查 artifact 与可进入 benchmark 的证据分开记录。一次好看的 demo 仍然可能只是感知锚定。当前版本集成了 270 个模型与近 100 套 benchmark / metric 实现。被 catalog 收录，不等于 runtime 能跑；demo 效果好，不等于已有 benchmark 证据；分数导入成功，也不等于官方 leaderboard 水平。这些状态分开记录，并保留 provenance。
+正因为如此，WorldFoundry 把 catalog 收录、可运行推理、可检查 artifact 与可进入 benchmark 的证据分开记录。一次好看的 demo 仍然可能只是感知锚定。当前覆盖范围和 readiness 以[模型目录](/zh/docs/guides/supported-models)与[评测中心](/zh/docs/evaluation/benchmark-hub)为准。被 catalog 收录，不等于 runtime 能跑；demo 效果好，不等于已有 benchmark 证据；分数导入成功，也不等于官方 leaderboard 水平。这些状态分开记录，并保留 provenance。
 
 <h2 id="why-a-shared-workflow">为什么需要共享工作流</h2>
 

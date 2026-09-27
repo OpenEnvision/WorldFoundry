@@ -1,48 +1,42 @@
 ---
 title: "Splatt3R"
-description: "Splatt3R（University of Oxford (Active Vision Lab)）：3D 重建、高斯泼溅；已验证。"
-modelId: "splatt3r"
+description: "Splatt3R 直接从未标定的图像对预测 3D 高斯泼溅场景——零样本、无需相机参数、无需逐场景优化。本 catalog 中它已完整验证：checkpoint 加载的 GPU 推理从内置官方风格视图产出含 344,064 个高斯的有限 PLY，证据记录在 inference_evidence.yaml。"
 pageSource: generated
 ---
 
+**发表机构:** 牛津大学（Active Vision Lab） · 高校
+[Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs](https://arxiv.org/abs/2408.13912) (2024)
+
 Splatt3R 直接从未标定的图像对预测 3D 高斯泼溅场景——零样本、无需相机参数、无需逐场景优化。本 catalog 中它已完整验证：checkpoint 加载的 GPU 推理从内置官方风格视图产出含 344,064 个高斯的有限 PLY，证据记录在 inference_evidence.yaml。
 
-<ModelPaperFigures modelId="splatt3r" locale="zh" />
+**目录状态:** Runner 已验证
 
-记录论文为[Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs](https://arxiv.org/abs/2408.13912)（2024）。
+## 上游来源
 
-项目页：[splatt3r.active.vision](https://splatt3r.active.vision/)。代码：[btsmart/splatt3r](https://github.com/btsmart/splatt3r)。
+- [项目主页](https://splatt3r.active.vision/)
+- [论文](https://arxiv.org/abs/2408.13912)
+- [GitHub](https://github.com/btsmart/splatt3r)
+- [Hugging Face](https://huggingface.co/brandonsmart/splatt3r_v1.0)
+- [上游 README](https://github.com/btsmart/splatt3r#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/splatt3r/paper.png" alt="Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs" />
+  <figcaption>Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="splatt3r" locale="zh" />
 
-## 用来做什么
+## 架构
 
-`splatt3r` 是记录的重建线。从记录的视图写出几何时从这里起步。
-
-按论文（arXiv 2408.13912），Splatt3R 在 MASt3R 的双视图几何主干上增加高斯参数头。 WorldFoundry 将运行时放在 base_models/three_dimensions/general_3d/splatt3r/splatt3r_runtime，并从规范兄弟路径导入 MASt3R/DUSt3R；打包的运行时仅含推理（训练加载器与 demo 代码已裁剪）。该模型由牛津大学（Active Vision Lab）发布。
-
-catalog 记录的任务包括 3D 重建、高斯泼溅。别名包括 `splattr`、`splatt3r-official`。
+按论文（arXiv 2408.13912），Splatt3R 在 MASt3R 的双视图几何主干上增加高斯参数头。 WorldFoundry 将运行时放在 base_models/three_dimensions/general_3d/splatt3r/splatt3r_runtime，并从规范兄弟路径导入 MASt3R/DUSt3R；打包的运行时仅含推理（训练加载器与 demo 代码已裁剪）。
 
 ## 运行时契约
 
-必填 `image`；可选 `actions`、`prompt`；产物 `splatt3r.ply`。
+Splatt3RSynthesis 在进程内加载树内运行时，输出 PLY 高斯泼溅产物。checkpoint 保持为外部资产（brandonsmart/splatt3r_v1.0）——运行前请先就位。
 
-记录的任务 profile：`3d-reconstruction`、`gaussian-splatting`。绑定的 pipeline 类是 `Splatt3RPipeline`。
+## 就绪状态与限制
 
-系列状态：**已验证**。
-
-Splatt3RSynthesis 在进程内加载树内运行时，输出 PLY 高斯泼溅产物。 checkpoint 保持为外部资产（brandonsmart/splatt3r_v1.0）——运行前请先就位。
-
-双视图输入：大场景需要多对图像并在外部合并。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run splatt3r --pipeline.task-profile 3d-reconstruction`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.10，CUDA 11.3）。
-
-记录的权重仓库包括 `brandonsmart/splatt3r_v1.0`。就位权重用 `bash scripts/inference/prepare_model_infer.sh splatt3r`。
-
-状态：**已验证**。
+- 双视图输入：大场景需要多对图像并在外部合并。
+- 经主干继承 MASt3R/DUSt3R 的许可注意事项。
 
 <ModelRelatedRecipes modelId="splatt3r" locale="zh" />

@@ -20,14 +20,14 @@ HunyuanVideo 是腾讯的开源视频基础模型：同一套约 130 亿参数�
 HunyuanVideo 在因果 3D VAE 压缩后的时空潜空间上去噪。文本提示由大语言模型编码为条件；生成模型以高斯噪声和该条件为输入，输出隐变量，再由 3D VAE 解码器还原为图像或视频。
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/overall.png" alt="HunyuanVideo 整体架构：因果 3D VAE、大语言模型文本编码与潜空间扩散" />
+  <DocsImage src="/models/hunyuanvideo/overall.png" alt="HunyuanVideo 整体架构：因果 3D VAE、大语言模型文本编码与潜空间扩散" />
   <figcaption>HunyuanVideo 整体架构：因果 3D VAE、大语言模型文本编码与潜空间扩散</figcaption>
 </figure>
 
 骨干是带 Full Attention 的 Transformer，采用「双流到单流」结构：视频与文本 token 先经独立 Block 学习各自的调制，再拼接后在后续 Block 中融合。
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/backbone.png" alt="双流到单流 Transformer 骨干，用于统一的图视频生成" />
+  <DocsImage src="/models/hunyuanvideo/backbone.png" alt="双流到单流 Transformer 骨干，用于统一的图视频生成" />
   <figcaption>双流到单流 Transformer 骨干，用于统一的图视频生成</figcaption>
 </figure>
 
@@ -36,7 +36,7 @@ HunyuanVideo 在因果 3D VAE 压缩后的时空潜空间上去噪。文本提�
 文本编码器是预训练的 Decoder-Only 多模态大语言模型，而不是 CLIP 或 T5-XXL。它可以跟随写在用户提示前的系统指令。由于 MLLM 使用因果注意力，官方额外加入双向 token 优化器以增强文本特征。
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/text_encoder.png" alt="带双向 token 优化器的 MLLM 文本编码器" />
+  <DocsImage src="/models/hunyuanvideo/text_encoder.png" alt="带双向 token 优化器的 MLLM 文本编码器" />
   <figcaption>带双向 token 优化器的 MLLM 文本编码器</figcaption>
 </figure>
 
@@ -45,7 +45,7 @@ HunyuanVideo 在因果 3D VAE 压缩后的时空潜空间上去噪。文本提�
 CausalConv3D VAE 将像素空间视频与图像按时间 4 倍、空间 8 倍、通道 16 压缩，使扩散 Transformer 能在源分辨率和帧率下、于潜空间中运行。
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/3dvae.png" alt="CausalConv3D VAE：时间 4 倍、空间 8 倍压缩，16 通道潜空间" />
+  <DocsImage src="/models/hunyuanvideo/3dvae.png" alt="CausalConv3D VAE：时间 4 倍、空间 8 倍压缩，16 通道潜空间" />
   <figcaption>CausalConv3D VAE：时间 4 倍、空间 8 倍压缩，16 通道潜空间</figcaption>
 </figure>
 
@@ -56,7 +56,7 @@ CausalConv3D VAE 将像素空间视频与图像按时间 4 倍、空间 8 倍、
 HunyuanVideo-I2V 沿用上述结构，并用 token replace 写入参考图：MLLM 给出的语义图像 token 与视频潜变量拼接后，在图文两个模态上做全注意力计算。
 
 <figure className="wf-recipe-media is-diagram">
-  <img src="/models/hunyuanvideo/i2v_backbone.png" alt="HunyuanVideo-I2V 架构：用 token replace 将参考图写入视频生成过程" />
+  <DocsImage src="/models/hunyuanvideo/i2v_backbone.png" alt="HunyuanVideo-I2V 架构：用 token replace 将参考图写入视频生成过程" />
   <figcaption>HunyuanVideo-I2V 架构：用 token replace 将参考图写入视频生成过程</figcaption>
 </figure>
 

@@ -1,50 +1,47 @@
 ---
 title: "Self-Forcing"
-description: "Self-Forcing from Adobe Research / The University of Texas at Austin: text-to-video and image-to-video; Runner parity pending; Self Forcing."
-modelId: "self-forcing"
+description: "Self-Forcing bridges the train-test gap in autoregressive video diffusion: by simulating the inference process during training — conditioning each frame on its own previously generated frames — it enables real-time streaming text-to-video…"
 pageSource: generated
 ---
 
+**Publisher:** Adobe Research / The University of Texas at Austin · Company
+text · image → video
+[Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion](https://arxiv.org/abs/2506.08009) (NeurIPS 2025 spotlight, 2025)
+
 Self-Forcing bridges the train-test gap in autoregressive video diffusion: by simulating the inference process during training — conditioning each frame on its own previously generated frames — it enables real-time streaming text-to-video on a single GPU (arXiv 2506.08009). In this catalog the official infer-only runtime is vendored in-tree; parity waits on the Self-Forcing DMD checkpoint plus Wan2.1 weights.
 
-<ModelPaperFigures modelId="self-forcing" locale="en" />
+**Catalog status:** Integrated
 
-The recorded paper is [Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion](https://arxiv.org/abs/2506.08009) (NeurIPS 2025 spotlight, 2025).
+## Upstream sources
 
-Project page: [self-forcing.github.io](https://self-forcing.github.io). Code: [guandeh17/Self-Forcing](https://github.com/guandeh17/Self-Forcing).
+- [Project](https://self-forcing.github.io)
+- [Paper](https://arxiv.org/abs/2506.08009)
+- [GitHub](https://github.com/guandeh17/Self-Forcing)
+- [Hugging Face](https://huggingface.co/gdhe17/Self-Forcing)
+- [Upstream README](https://github.com/guandeh17/Self-Forcing#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/self-forcing/paper.png" alt="Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion" />
+  <figcaption>Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="self-forcing" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `self-forcing` when one recipe covers text-to-video and image-to-video: a prompt in, an optional still, a clip out. Start here instead of wiring two upstream demos.
-
-It is published by Adobe Research / The University of Texas at Austin.
-
-Catalog tasks include text-to-video, image-to-video, and autoregressive-video-generation. Catalog aliases include `Self-Forcing`, `selfforcing`, and `self_forcing`. Documented modalities: text and image in, video out.
-
-Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Video quality for streaming text-to-video).
+Per the paper, a Wan2.1-based causal student is trained with holistic distribution matching over self-generated rollouts, plus KV caching for streaming. The runner owns prompt/i2v data materialization, Wan weight symlinks, command construction, and output loading in-tree (checkpoint: gdhe17/Self-Forcing).
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (seed); artifacts `self-forcing.mp4`.
-
-Recorded task profiles: `text-to-video`, `image-to-video`, and `autoregressive-video-generation`. WorldFoundry binds `SelfForcingPipeline`.
-
-Family status: **Runner parity pending**.
-
 The default checkpoint path follows the official HF layout under $\{WORLDFOUNDRY_CKPT_DIR\}/Self-Forcing — override checkpoint_path if staged elsewhere. Full parity needs Wan2.1 weights under a wan_models-compatible layout; supply benchmark prompt lists separately through your local input configuration.
 
-WorldFoundry vendors the official infer-only Self-Forcing runtime under worldfoundry/synthesis/visual_generation/forcing/self_forcing_runtime; the runner owns prompt/i2v data materialization, Wan weight symlinks, command construction, output loading, and pipeline/catalog exposure in-tree.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [VBench](/docs/evaluation/benchmark-hub/vbench) — Video quality for streaming text-to-video.
 
-The catalog launch is `worldfoundry-eval run self-forcing --pipeline.task-profile text-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, CUDA 12.8).
-
-Recorded weight repositories include `gdhe17/Self-Forcing`. Stage assets with `bash scripts/inference/prepare_model_infer.sh self-forcing`.
-
-Status: **Runner parity pending**.
+- Runner parity is pending staged Self-Forcing and Wan2.1 weights.
+- Distilled few-step student: quality trails the bidirectional teacher.
 
 <ModelRelatedRecipes modelId="self-forcing" locale="en" />

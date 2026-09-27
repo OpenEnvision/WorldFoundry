@@ -48,7 +48,15 @@ docs:
   overview: Eight-step MiniMax-H3 adapter with joint video/audio, first/last-frame conditioning and ordered multimodal references.
   overview_zh: MiniMax-H3 的八步推理适配器，支持联合音视频、首尾帧条件与有序多模态参考。
   usage_notes: Supply a complete local diffusers MiniMax-H3 snapshot, weights_path and the dedicated Python executable. The upstream loader supplies the fixed grid; num_inference_steps must be 8 and output fps must be 24.
+  usage_notes_zh: 提供完整的本地 Diffusers 格式 MiniMax-H3 权重快照、weights_path 和专用 Python 可执行文件。上游加载器使用固定网格；num_inference_steps 必须为 8，输出帧率必须为 24 fps。
   limitations:
   - GPU inference requires substantial VRAM and host RAM; the upstream single-GPU measurements use an H200.
   - The official frame count is aligned upward to 17n+5, with supported aligned counts from 124 to 345 at 24 fps.
   - Ref2VA requires transformer_ref weights; audio-only references are unsupported.
+  limitations_zh:
+  - Runner parity 仍待验证；已完成的单卡烟测不代表端到端 Runner 与官方结果一致。原生 Demo 证据未记录。
+  - T2VA、单图 FL2VA 和图像参考 Ref2VA 已在单张 H100 上完成 640×384、124 帧、8 步烟测，包含完整视频与立体声音频解码。
+  - GPU 推理需要大量显存和主机内存；上游公布的单卡测量使用 H200。
+  - 官方帧数会向上对齐到 17n+5；在 24 fps 下支持对齐后的 124 至 345 帧。
+  - Ref2VA 需要 transformer_ref 权重；不支持仅音频参考。
+  - 高分辨率质量一致性、多卡推理、末帧条件以及视频/音频参考条件尚未验证。

@@ -1,50 +1,40 @@
 ---
 title: "TesserAct"
-description: "TesserAct（University of Massachusetts Amherst (Embodied AGI Lab)）：具身世界模型、机器人世界模型；Runner 一致性待确认。"
-modelId: "tesseract"
+description: "TesserAct 是面向机器人的具身 4D 世界模型：预测操作场景的动作条件视频，并保持时序一致的几何。官方 WorldArena 收录源码已内置树内，WorldFoundry 为其注册了运行时 manifest pipeline，并引用 Hugging Face 上已确认的 anyeZHY/tesseract checkpoint。"
 pageSource: generated
 ---
 
+**发表机构:** 马萨诸塞大学阿默斯特分校（Embodied AGI 实验室） · 高校
+
 TesserAct 是面向机器人的具身 4D 世界模型：预测操作场景的动作条件视频，并保持时序一致的几何。官方 WorldArena 收录源码已内置树内，WorldFoundry 为其注册了运行时 manifest pipeline，并引用 Hugging Face 上已确认的 anyeZHY/tesseract checkpoint。
 
-<ModelPaperFigures modelId="tesseract" locale="zh" />
+**目录状态:** 运行时已移植
 
-记录论文为[arXiv 2504.20995](https://arxiv.org/abs/2504.20995)。
+## 上游来源
 
-项目页：[tesseractworld.github.io](https://tesseractworld.github.io/)。代码：[UMass-Embodied-AGI/TesserAct](https://github.com/UMass-Embodied-AGI/TesserAct)。
+- [项目主页](https://tesseractworld.github.io/)
+- [论文](https://arxiv.org/abs/2504.20995)
+- [GitHub](https://github.com/UMass-Embodied-AGI/TesserAct)
+- [Hugging Face](https://huggingface.co/anyeZHY/tesseract)
+- [上游 README](https://github.com/UMass-Embodied-AGI/TesserAct#readme)
 
 <ModelCommandBuilder modelId="tesseract" locale="zh" />
 
-## 用来做什么
+## 架构
 
-用 `tesseract` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
-
-内置运行时位于 synthesis/visual_generation/tesseract/tesseract_runtime，解析官方推理入口。除内置源码外的架构内部细节仓库未记录。该模型由马萨诸塞大学阿默斯特分校（Embodied AGI 实验室）发布。
-
-catalog 记录的任务包括 具身世界模型、机器人世界模型、动作条件视频、robot-action-video。别名包括 `tesser-act`。
-
-记录的评测入口包括[EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)（具身操作世界模型质量）、[WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena)（WorldArena 开源世界模型榜单收录）。
+内置运行时位于 synthesis/action_generation/tesseract/tesseract_runtime，解析官方推理入口。除内置源码外的架构内部细节仓库未记录。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (world_action, robot_action)；产物 `tesseract.mp4`。
+在 checkpoint 与具身任务资产本地就位前，pipeline 返回 blocked 运行时诊断。请先就位 anyeZHY/tesseract 与任务资产，再重新运行。
 
-记录的任务 profile：`embodied-world-model`、`robotics-world-model`、`action-conditioned-video`、`robot-action-video`。绑定的 pipeline 类是 `TesserActPipeline`。
+## 评测 Benchmark
 
-系列状态：**Runner 一致性待确认**。
+- [EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench) — 具身操作世界模型质量。
+- [WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena) — WorldArena 开源世界模型榜单收录。
 
-`robot-action-video` 记录默认值：height=256, width=320, num_frames=49, num_inference_steps=4, guidance_scale=7.5, fps=8。
+## 就绪状态与限制
 
-在 checkpoint 与具身任务资产本地就位前，pipeline 返回 blocked 运行时诊断。 请先就位 anyeZHY/tesseract 与任务资产，再重新运行。
-
-## 在 WorldFoundry 中运行
-
-启动 `worldfoundry-eval run tesseract --pipeline.task-profile robot-action-video` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `anyeZHY/tesseract`、`THUDM/CogVideoX-5b-I2V`。就位权重用 `bash scripts/inference/prepare_model_infer.sh tesseract`。
-
-状态：**Runner 一致性待确认**。
+- checkpoint 与具身任务资产为运行时门控；仓库未记录 GPU 验证。
 
 <ModelRelatedRecipes modelId="tesseract" locale="zh" />

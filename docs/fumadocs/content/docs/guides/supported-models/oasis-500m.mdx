@@ -1,48 +1,39 @@
 ---
 title: "Oasis 500M"
-description: "Oasis 500M from Etched / Decart: interactive-world-model and minecraft-world-model; Runner parity pending."
-modelId: "oasis-500m"
+description: "Oasis 500M (open-oasis) is the open release of the playable-Minecraft world model: an action-conditioned diffusion transformer that renders the next game frame from context frames and keyboard/mouse actions. The in-tree runtime has complet…"
 pageSource: generated
 ---
 
-Oasis 500M (open-oasis) is the open release of the famous playable-Minecraft world model: an action-conditioned diffusion transformer that renders the next game frame from context frames and keyboard/mouse actions. In this catalog the source is vendored in-tree; execution waits on the Etched/oasis-500m checkpoint plus prompt image/video and action tensors.
+**Publisher:** Etched / Decart · Company
 
-<ModelPaperFigures modelId="oasis-500m" locale="en" />
+Oasis 500M (open-oasis) is the open release of the playable-Minecraft world model: an action-conditioned diffusion transformer that renders the next game frame from context frames and keyboard/mouse actions. The in-tree runtime has completed checkpoint-backed GPU inference; each installation must stage the Etched/oasis-500m checkpoint plus prompt image/video and action tensors.
 
-Project page: [oasis-model.github.io](https://oasis-model.github.io/). Code: [etched-ai/open-oasis](https://github.com/etched-ai/open-oasis).
+**Catalog status:** Runtime ported
+
+## Upstream sources
+
+- [Project](https://oasis-model.github.io/)
+- [GitHub](https://github.com/etched-ai/open-oasis)
+- [Hugging Face](https://huggingface.co/Etched/oasis-500m)
+- [Upstream README](https://github.com/etched-ai/open-oasis#readme)
 
 <ModelCommandBuilder modelId="oasis-500m" locale="en" />
 
-## What it is for
+## Architecture
 
-Pick `oasis-500m` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
-
-Per the upstream release, a ViT VAE compresses frames and a 500M diffusion transformer generates the next frame conditioned on past frames and actions (MIT license). Internals beyond this are not recorded here. It is published by Etched / Decart.
-
-Catalog tasks include interactive-world-model, minecraft-world-model, and action-conditioned-video. Catalog aliases include `open-oasis` and `oasis`.
-
-Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Action-conditioned game-world rollout quality).
+Per the upstream release, a ViT VAE compresses frames and a 500M diffusion transformer generates the next frame conditioned on past frames and actions (MIT license). Internals beyond this are not recorded here.
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `video`; optional `actions` (minecraft_action, world_action); artifacts `oasis-500m.mp4`.
+Supply 25-column action tensors in the official Open-Oasis format. The upstream converter maps cameraX from MineRL camera[0] and cameraY from camera[1], then normalizes each as (raw-40)/40. MineRL defines camera[0] as vertical pitch and camera[1] as horizontal yaw, so cameraX is pitch despite its name. Sources: https://github.com/etched-ai/open-oasis/blob/f59deef2c019c212bd0c5a3a5b986a51f3701847/utils.py and https://github.com/minerllabs/minerl/blob/cdeae668c2f334e3c9117adf651b5a94436b45f8/minerl/herobraine/hero/handlers/agent/actions/camera.py. Set WORLDFOUNDRY_CKPT_DIR to the directory containing Etched--oasis-500m when using local weights; missing assets return blocked diagnostics.
 
-Recorded task profiles: `interactive-world-model`, `minecraft-world-model`, and `action-conditioned-video`. WorldFoundry binds `Oasis500MPipeline`.
+## Evaluation benchmarks
 
-Family status: **Runner parity pending**.
+- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Action-conditioned game-world rollout quality.
 
-The pipeline resolves the official generate entrypoint and returns blocked diagnostics until checkpoints and action assets are staged. Supply action tensors in the official format.
+## Readiness and limitations
 
-WorldFoundry registers an in-tree runtime manifest pipeline for the vendored Open-Oasis source.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run oasis-500m --pipeline.task-profile interactive-world-model` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `Etched/oasis-500m`. Stage assets with `bash scripts/inference/prepare_model_infer.sh oasis-500m`.
-
-Recorded licenses include mit; status: **Runner parity pending**.
+- Execution is checkpoint/environment/action-asset gated.
+- 500M research model: short-horizon drift and low resolution versus commercial demos.
 
 <ModelRelatedRecipes modelId="oasis-500m" locale="en" />

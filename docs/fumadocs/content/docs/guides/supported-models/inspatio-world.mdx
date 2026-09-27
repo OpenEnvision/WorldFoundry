@@ -1,50 +1,42 @@
 ---
 title: "InSpatio-World"
-description: "InSpatio-World: video-conditioned-world-generation and trajectory-conditioned-video; Verified."
-modelId: "inspatio-world"
+description: "InSpatio-World is a 1.3B video-conditioned world generator: given a video and a target trajectory it synthesizes trajectory-conditioned novel views of the same world."
 pageSource: generated
 ---
 
+**Publisher:** InSpatio (formal institution not recorded) · Research lab
+
 InSpatio-World is a 1.3B video-conditioned world generator: given a video and a target trajectory it synthesizes trajectory-conditioned novel views of the same world. In this catalog it is fully verified — the in-tree pipeline generated and visually validated a 297-frame video through the Workspace on 2026-07-10, with every default component resolving from local checkpoint storage.
 
-<ModelPaperFigures modelId="inspatio-world" locale="en" />
+**Catalog status:** Runner verified
 
-The recorded paper is [arXiv 2604.07209](https://arxiv.org/abs/2604.07209).
+## Upstream sources
 
-Project page: [inspatio.github.io/inspatio-world](https://inspatio.github.io/inspatio-world/). Code: [inspatio/inspatio-world](https://github.com/inspatio/inspatio-world). Code: [madebyollin/taehv](https://github.com/madebyollin/taehv).
+- [Project](https://inspatio.github.io/inspatio-world/)
+- [Paper](https://arxiv.org/abs/2604.07209)
+- [GitHub](https://github.com/inspatio/inspatio-world)
+- [Hugging Face](https://huggingface.co/inspatio/world)
+- [Source](https://github.com/madebyollin/taehv)
+- [Upstream README](https://github.com/inspatio/inspatio-world#readme)
+- [Upstream README](https://github.com/madebyollin/taehv#readme)
 
 <ModelCommandBuilder modelId="inspatio-world" locale="en" />
 
-## What it is for
-
-`inspatio-world` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+## Architecture
 
 The recorded checkpoint is inspatio/world (apache-2.0); official inference source is retained in-tree. An optional use_tae path resolves taew2_1.pth from the shared checkpoint root but is not required for the default Wan VAE path.
 
-Catalog tasks include video-conditioned-world-generation, trajectory-conditioned-video, and novel-view-synthesis. Catalog aliases include `inspatio-world-1.3b`.
-
-Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Trajectory-following accuracy of generated views).
-
 ## Runtime contract
-
-Required `prompt` and `image`; optional `video` and `actions`; artifacts `inspatio-world.mp4`.
-
-Recorded task profiles: `video-conditioned-world-generation`, `trajectory-conditioned-video`, and `novel-view-synthesis`. WorldFoundry binds `InspatioWorldPipeline`.
-
-Family status: **Verified**.
 
 Every default component resolves from local checkpoint storage only — stage the inspatio/world weights first, then run the standard pipeline.
 
-The in-tree InSpatio-World pipeline generated and visually validated a 297-frame video through Workspace on 2026-07-10.
+## Evaluation benchmarks
 
-## Running in WorldFoundry
+- [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — Trajectory-following accuracy of generated views.
 
-Launch `worldfoundry-eval run inspatio-world --pipeline.task-profile video-conditioned-world-generation` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+## Readiness and limitations
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `inspatio/world`, `Wan-AI/Wan2.1-T2V-1.3B`, and `depth-anything/DA3NESTED-GIANT-LARGE-1.1` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh inspatio-world`.
-
-Recorded licenses include apache-2.0; status: **Verified**.
+- Video-conditioned by design: it needs an input video, not just an image or prompt.
+- The formal publishing institution behind the InSpatio organization is not recorded.
 
 <ModelRelatedRecipes modelId="inspatio-world" locale="en" />

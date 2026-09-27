@@ -8,6 +8,15 @@ pageSource: generated
 
 SolarWM provides dataset-indexed camera-controlled inference across Wan 5B/14B, LTX-2.5 and MiniMax-H3 releases.
 
+**Catalog status:** Integrated
+
+## Upstream sources
+
+- [Project](https://junchao-cs.github.io/SolarWM-Web/)
+- [Paper](https://arxiv.org/abs/2609.02886)
+- [Source](https://github.com/Junchao-cs/SolarWM)
+- [Upstream README](https://github.com/Junchao-cs/SolarWM#readme)
+
 <ModelCommandBuilder modelId="solarwm" locale="en" />
 
 ## Architecture
@@ -21,5 +30,11 @@ Default variant=wan-5b-dmd. Provide source_root, checkpoint_dir, base_path and d
 ## Evaluation benchmarks
 
 - [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Long-horizon camera-controlled world consistency.
+
+## Readiness and limitations
+
+- Only the infer action is exposed. Training, preencoding and data-engine commands are excluded.
+- Code is Apache-2.0; LTX and H3 base/adapter weights retain their respective community licenses and restrictions.
+- Checkpoint-backed GPU generation is pending.
 
 <ModelRelatedRecipes modelId="solarwm" locale="en" />

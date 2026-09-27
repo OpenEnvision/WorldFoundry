@@ -1,52 +1,43 @@
 ---
 title: "LingBot-Video"
-description: "LingBot-Video from Robbyant (Ant Group): text-to-image and text-to-video; Runner parity pending."
-modelId: "lingbot-video"
+description: "LingBot-Video is Robbyant's video generation family, recorded for text-to-image, text-to-video, text+image-to-video, and video refinement. Two checkpoint lines are recorded: a dense 1.3B model and a MoE 30B-A3B model that ships with a refi…"
 pageSource: generated
 ---
 
+**Publisher:** Robbyant (Ant Group) · Company
+text · image → image · video
+
 LingBot-Video is Robbyant's video generation family, recorded for text-to-image, text-to-video, text+image-to-video, and video refinement. Two checkpoint lines are recorded: a dense 1.3B model and a MoE 30B-A3B model that ships with a refiner. WorldFoundry flattens the inference package in-tree under synthesis/visual_generation/lingbot_video and deliberately excludes the prompt rewriter, training, and benchmark sources.
 
-<ModelPaperFigures modelId="lingbot-video" locale="en" />
+**Catalog status:** Integrated
 
-The recorded paper is [arXiv 2607.07675](https://arxiv.org/abs/2607.07675).
+## Upstream sources
 
-Project page: [technology.robbyant.com/lingbot-video](https://technology.robbyant.com/lingbot-video). Code: [Robbyant/lingbot-video](https://github.com/Robbyant/lingbot-video).
+- [Project](https://technology.robbyant.com/lingbot-video)
+- [Paper](https://arxiv.org/abs/2607.07675)
+- [GitHub](https://github.com/Robbyant/lingbot-video)
+- [Hugging Face](https://huggingface.co/robbyant/lingbot-video-dense-1.3b)
+- [Hugging Face](https://huggingface.co/robbyant/lingbot-video-moe-30b-a3b)
+- [Upstream README](https://github.com/Robbyant/lingbot-video#readme)
 
 <ModelCommandBuilder modelId="lingbot-video" locale="en" />
 
-## What it is for
+## Architecture
 
-Use `lingbot-video` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.
-
-The dense 1.3B and MoE 30B-A3B (3B active) checkpoints share the inference surface; the MoE line adds a refiner stage. The preserved code paths include direct Diffusers, optional SGLang, FSDP, context-parallel, and CFG-parallel execution. The upstream-recommended stack pins a dedicated Transformers 5 / Diffusers 0.39 environment. It is published by Robbyant (Ant Group).
-
-Catalog tasks include text-to-image, text-to-video, text-image-to-video, and video-refinement. Catalog aliases include `lingbot-video-dense` and `lingbot-video-moe`. Documented modalities: text and image in, image and video out.
-
-Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (General T2V quality suite for both checkpoint lines).
+The dense 1.3B and MoE 30B-A3B (3B active) checkpoints share the inference surface; the MoE line adds a refiner stage. The preserved code paths include direct Diffusers, optional SGLang, FSDP, context-parallel, and CFG-parallel execution. The upstream-recommended stack pins a dedicated Transformers 5 / Diffusers 0.39 environment.
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `prompt_json`; artifacts `generated_image`, `generated_video`, and `lingbot_video.mp4`.
+Full checkpoint-backed artifact and visual parity are pending. The released Dense 1.3B checkpoint already has a recorded 121-frame, 832x480 quality-oriented Workspace artifact. Note one quirk from the profile: T2I produces an image even though the default artifact type is the T2V video route. Dense and MoE weights are external (apache-2.0) and never tracked in git.
 
-Recorded task profiles: `text-to-image`, `text-to-video`, `text-image-to-video`, `video-refinement`, `t2v`, and `ti2v` among others. WorldFoundry binds `LingBotVideoGenerationPipeline`.
+## Evaluation benchmarks
 
-Family status: **MoE short-clip T2V compared with the official runner; other modes pending**.
+- [VBench](/docs/evaluation/benchmark-hub/vbench) — General T2V quality suite for both checkpoint lines.
 
-Recorded `t2v` defaults: height=480, width=832, num_frames=121, num_inference_steps=40, guidance_scale=3.0, seed=42 Recorded `ti2v` defaults: height=480, width=832, num_frames=121, num_inference_steps=40, guidance_scale=3.0, seed=42.
+## Readiness and limitations
 
-For structured `prompt_json` with a `duration`, the runner derives the video length from `duration × fps` and rounds it to a `4n+1` frame count. Omit `num_frames` to use that duration, or set it to the same derived count; conflicting explicit values fail before checkpoint loading. The Studio preset includes `num_frames=121`, so remove or adjust that field when supplying a prompt JSON with a different duration.
-
-The released Dense 1.3B checkpoint has a recorded 121-frame, 832x480 quality-oriented Workspace artifact. For MoE 30B-A3B, the pinned official script and the WorldFoundry runner both produced coherent 25-frame, 832x480 videos from official T2V example 1 with only its duration shortened from five to one second, using 40 steps and the same seed. Their decoded frame-aligned RGB MAE averaged 10.48/255, so this supports visual and task-level agreement for that configuration, not pixel-exact parity. The earlier 20-step small-toy-car result remains a prompt-specific quality concern; the five-second recipe, refiner, and other modes still need validation. T2I produces an image even though the default artifact type is the T2V video route. Dense and MoE weights are external (apache-2.0) and never tracked in git.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run lingbot-video --pipeline.task-profile t2v`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch==2.11.0+cu128).
-
-Recorded weight repositories include `robbyant/lingbot-video-dense-1.3b` and `robbyant/lingbot-video-moe-30b-a3b`. Stage assets with `bash scripts/inference/prepare_model_infer.sh lingbot-video`.
-
-Recorded licenses include apache-2.0; status: **Runner parity pending**.
+- Full checkpoint-backed artifact and visual parity validation remains pending.
+- Requires the dedicated Transformers 5 / Diffusers 0.39 environment recorded upstream.
+- Prompt rewriter and training surfaces are outside this integration.
 
 <ModelRelatedRecipes modelId="lingbot-video" locale="en" />

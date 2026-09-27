@@ -477,7 +477,7 @@
       "id": "world_models",
       "label": "World models",
       "blurb": "Interactive worlds, camera/action conditioning, navigation, and simulator-shaped systems.",
-      "count": 102,
+      "count": 103,
       "entries": [
         {
           "id": "abot-world-0-5b-lf",
@@ -1164,6 +1164,14 @@
           ]
         },
         {
+          "id": "uniworld-view",
+          "name": "UniWorld-View",
+          "status": "integrated",
+          "aliases": [
+            "uniworld-view"
+          ]
+        },
+        {
           "id": "versecrafter",
           "name": "VerseCrafter",
           "status": "integrated",
@@ -1621,7 +1629,7 @@
       "id": "vla_va_wam",
       "label": "VLA / VA / WAM",
       "blurb": "Embodied policies, world-action models, and robot control stacks.",
-      "count": 54,
+      "count": 53,
       "entries": [
         {
           "id": "a1",
@@ -1941,14 +1949,6 @@
           "status": "runtime_ported",
           "aliases": [
             "rdt-1b"
-          ]
-        },
-        {
-          "id": "real-time-chunking",
-          "name": "Real-Time Chunking",
-          "status": "runtime_ported",
-          "aliases": [
-            "real-time-chunking"
           ]
         },
         {

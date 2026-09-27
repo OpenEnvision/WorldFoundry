@@ -38,7 +38,7 @@ const footerColumns: FooterColumn[] = [
     title: 'Product',
     links: [
       { label: 'Studio', href: '/docs/guides/studio' },
-      { label: 'CLI', href: '/docs/guides/cli' },
+      { label: 'CLI', href: '/docs/reference/cli' },
       { label: 'TUI', href: '/docs/guides/tui' },
       { label: 'Run inference', href: '/docs/guides/inference' },
       { label: 'Evaluation', href: '/docs/evaluation' },
@@ -50,7 +50,7 @@ const footerColumns: FooterColumn[] = [
       { label: 'Slack', href: WORLDFOUNDRY_SLACK_INVITE, external: true },
       { label: 'GitHub Issues', href: WORLDFOUNDRY_GITHUB_ISSUES, external: true },
       { label: 'GitHub Discussions', href: WORLDFOUNDRY_GITHUB_DISCUSSIONS, external: true },
-      { label: 'Contributing', href: '/docs/contributing' },
+      { label: 'Contributing', href: '/docs/maintainers/contributing' },
     ],
   },
   {

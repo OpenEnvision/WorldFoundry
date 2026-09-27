@@ -1,48 +1,48 @@
 ---
 title: "Open Dreamer"
-description: "Open Dreamer：交互式世界模型、Minecraft 世界模型；Runner 一致性待确认; 独立环境 `open-dreamer`。"
-modelId: "open-dreamer"
+description: "Open Dreamer 是 Dreamer 4 交互世界模型的开源复现（论文 arXiv 2509.24527）：扩散世界模型，从上下文片段与 VPT 格式动作向前推演 Minecraft 风格场景。本 catalog 中绝不内置其 JAX 源码——上游声明「保留所有权利」——因此 WorldFoundry 以子进程驱动用户自备的检出。"
 pageSource: generated
 ---
 
+**发表机构:** 开源社区复现项目（仓库未记录正式机构） · 研究机构
+[Training Agents Inside of Scalable World Models](https://arxiv.org/abs/2509.24527) (2025)
+
 Open Dreamer 是 Dreamer 4 交互世界模型的开源复现（论文 arXiv 2509.24527）：扩散世界模型，从上下文片段与 VPT 格式动作向前推演 Minecraft 风格场景。本 catalog 中绝不内置其 JAX 源码——上游声明「保留所有权利」——因此 WorldFoundry 以子进程驱动用户自备的检出。
 
-<ModelPaperFigures modelId="open-dreamer" locale="zh" />
+**目录状态:** 运行时已移植
 
-记录论文为[Training Agents Inside of Scalable World Models](https://arxiv.org/abs/2509.24527)（2025）。
+## 上游来源
 
-项目页：[next-state.github.io/open-dreamer](https://next-state.github.io/open-dreamer/)。代码：[next-state/open-dreamer](https://github.com/next-state/open-dreamer)。代码：[reactor-team/open-dreamer](https://github.com/reactor-team/open-dreamer)。
+- [项目主页](https://next-state.github.io/open-dreamer/)
+- [论文](https://arxiv.org/abs/2509.24527)
+- [GitHub](https://github.com/next-state/open-dreamer)
+- [源码](https://github.com/reactor-team/open-dreamer)
+- [上游 README](https://github.com/next-state/open-dreamer#readme)
+- [上游 README](https://github.com/reactor-team/open-dreamer#readme)
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/open-dreamer/paper.png" alt="Training Agents Inside of Scalable World Models" />
+  <figcaption>Training Agents Inside of Scalable World Models</figcaption>
+</figure>
 
 <ModelCommandBuilder modelId="open-dreamer" locale="zh" />
 
-## 用来做什么
-
-需要动作条件世界步进时选 `open-dreamer`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+## 架构
 
 WorldFoundry 适配器只是自研的胶水层：解析就位的检出、检查就位条件并构造官方 inference.py 命令。WorldFoundry 交互 token 被渲染为 Minecraft/VPT 动作 JSONL，使共享的世界模型调用面驱动 Dreamer 4 的动作空间。
 
-catalog 记录的任务包括 交互式世界模型、Minecraft 世界模型、动作条件视频、diffusion-world-model。别名包括 `open_dreamer`、`opendreamer`、`dreamer-4`、`dreamer4`。
-
-记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（动作条件世界滚动生成质量）。
-
 ## 运行时契约
 
-必填 `prompt`、`image`、`video`；可选 `actions` (minecraft_action, world_action, interaction)；产物 `generated_world`、`generated_video`、`open-dreamer.mp4`。
+请就位官方检出（位于 WORLDFOUNDRY_MODEL_SOURCE_DIR/open-dreamer-inference 或 $WORLDFOUNDRY_OPEN_DREAMER_SOURCE），并带其自身的 CUDA-12 JAX 环境。上游未发布权重——需自行训练 Orbax checkpoint 或传入 checkpoint_path。上下文片段须为 RGB 368x640（或 360x640，自动零填充）。
 
-记录的任务 profile：`interactive-world-model`、`minecraft-world-model`、`action-conditioned-video`、`diffusion-world-model`。绑定的 pipeline 类是 `OpenDreamerPipeline`。
+## 评测 Benchmark
 
-系列状态：**Runner 一致性待确认**。
+- [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) — 动作条件世界滚动生成质量。
 
-请就位官方检出（位于 WORLDFOUNDRY_MODEL_SOURCE_DIR/open-dreamer-inference 或 $WORLDFOUNDRY_OPEN_DREAMER_SOURCE），并带其自身的 CUDA-12 JAX 环境。 上游未发布权重——需自行训练 Orbax checkpoint 或传入 checkpoint_path。 上下文片段须为 RGB 368x640（或 360x640，自动零填充）。
+## 就绪状态与限制
 
-上游保留所有权利：源码绝不内置，亦无再分发授权。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run open-dreamer --pipeline.task-profile interactive-world-model`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-本卡片未记录公开 checkpoint id；按使用说明就位权重。就位权重用 `bash scripts/inference/prepare_model_infer.sh open-dreamer`。
-
-状态：**Runner 一致性待确认**。
+- 上游保留所有权利：源码绝不内置，亦无再分发授权。
+- 无公开权重——需自行训练或提供 checkpoint。
+- 需要独立的 CUDA-12 JAX 环境。
 
 <ModelRelatedRecipes modelId="open-dreamer" locale="zh" />

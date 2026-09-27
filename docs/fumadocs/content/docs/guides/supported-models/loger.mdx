@@ -1,48 +1,36 @@
 ---
 title: "LoGeR"
-description: "LoGeR: 3d-reconstruction and trajectory; Verified."
-modelId: "loger"
+description: "LoGeR reconstructs 3D scenes with camera trajectories and point clouds from input views, and is one of the verified 3D routes in this catalog: checkpoint-backed Studio inference produced finite poses, depth, and a 601,570-vertex point clou…"
 pageSource: generated
 ---
 
+**Publisher:** Open-source research release (institution not recorded) · Research lab
+point cloud
+
 LoGeR reconstructs 3D scenes with camera trajectories and point clouds from input views, and is one of the verified 3D routes in this catalog: checkpoint-backed Studio inference produced finite poses, depth, and a 601,570-vertex point cloud, with evidence in inference_evidence.yaml.
 
-<ModelPaperFigures modelId="loger" locale="en" />
+**Catalog status:** Runner verified
 
-The recorded paper is [arXiv 2603.03269](https://arxiv.org/abs/2603.03269).
+## Upstream sources
 
-Project page: [LoGeR-project.github.io](https://LoGeR-project.github.io/). Code: [Junyi42/LoGeR](https://github.com/Junyi42/LoGeR).
+- [Project](https://LoGeR-project.github.io/)
+- [Paper](https://arxiv.org/abs/2603.03269)
+- [GitHub](https://github.com/Junyi42/LoGeR)
+- [Hugging Face](https://huggingface.co/Junyi42/LoGeR)
+- [Upstream README](https://github.com/Junyi42/LoGeR#readme)
 
 <ModelCommandBuilder modelId="loger" locale="en" />
 
-## What it is for
-
-Pick `loger` for feed-forward geometry: views in, reconstruction / trajectory / point cloud out. Use it when you need the catalog 3D route rather than a depth-only prior.
+## Architecture
 
 The catalog records a reconstruction-plus-trajectory model exporting binary PLY artifacts; the publishing institution and architecture internals are not recorded in this repository (upstream: Junyi42/LoGeR, apache-2.0).
 
-Catalog tasks include 3d-reconstruction, trajectory, and point-cloud. Documented outputs include point cloud.
-
 ## Runtime contract
-
-Required `image`; optional `prompt`, `video`, and `actions` (multi_view_reconstruction, camera_navigation); artifacts `result.ply`.
-
-Recorded task profiles: `3d-reconstruction`, `trajectory`, and `point-cloud`. WorldFoundry binds `LoGeRPipeline`.
-
-Family status: **Verified**.
 
 Verified end to end in the shared worldfoundry-unified-cu128 environment — a dependable choice for point-cloud navigation pipelines.
 
-In-tree LoGeR point-cloud navigation pipeline is registered for reconstruction and trajectory rendering.
+## Readiness and limitations
 
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run loger --pipeline.task-profile 3d-reconstruction`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-Recorded weight repositories include `Junyi42/LoGeR`. Stage assets with `bash scripts/inference/prepare_model_infer.sh loger`.
-
-Status: **Verified**.
+- The publishing institution is not recorded in this repository.
 
 <ModelRelatedRecipes modelId="loger" locale="en" />

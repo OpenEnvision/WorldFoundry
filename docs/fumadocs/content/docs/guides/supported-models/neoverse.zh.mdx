@@ -1,50 +1,41 @@
 ---
 title: "NeoVerse"
-description: "NeoVerse（CreateAI (formerly TuSimple)）：3D 与 4D；已验证。"
-modelId: "neoverse"
+description: "NeoVerse 是一个 4D 世界模型，由规范 Wan 组件加模型专属的控制与重建角色原生组装而成，用 4D 感知条件增强世界生成。本 catalog 中其 runner 已针对 README 风格的 tilt_up 视频 demo（使用本地 NeoVerse 资产）验证；官方视频输入路径使用 static_scene=false。"
 pageSource: generated
 ---
 
+**发表机构:** CreateAI（原图森未来） · 企业
+[NeoVerse: Enhancing 4D World Model with in-the-wild Monocular Videos](https://arxiv.org/abs/2601.00393) (CVPR 2026, 2026)
+
 NeoVerse 是一个 4D 世界模型，由规范 Wan 组件加模型专属的控制与重建角色原生组装而成，用 4D 感知条件增强世界生成。本 catalog 中其 runner 已针对 README 风格的 tilt_up 视频 demo（使用本地 NeoVerse 资产）验证；官方视频输入路径使用 static_scene=false。
 
-<ModelPaperFigures modelId="neoverse" locale="zh" />
+**目录状态:** Runner 已验证
 
-记录论文为[NeoVerse: Enhancing 4D World Model with in-the-wild Monocular Videos](https://arxiv.org/abs/2601.00393)（CVPR 2026, 2026）。
+## 上游来源
 
-项目页：[neoverse-4d.github.io](https://neoverse-4d.github.io/)。代码：[IamCreateAI/NeoVerse](https://github.com/IamCreateAI/NeoVerse)。
+- [项目主页](https://neoverse-4d.github.io/)
+- [论文](https://arxiv.org/abs/2601.00393)
+- [GitHub](https://github.com/IamCreateAI/NeoVerse)
+- [上游 README](https://github.com/IamCreateAI/NeoVerse#readme)
 
 <ModelCommandBuilder modelId="neoverse" locale="zh" />
 
-## 用来做什么
+## 架构
 
-`neoverse` 是记录的交互世界线。要用动作推进世界时从这里起步。
-
-按上游发布（arXiv 2601.00393），NeoVerse 在 Wan 视频基座上叠加 4D 重建与控制角色。 WorldFoundry 将其表达为共享 Wan 基础设施上的原生组装——真实推理仍受 checkpoint/GPU 限制，不使用仅元数据的 runner 壳。该模型由CreateAI（原图森未来）发布。
-
-catalog 记录的任务包括 4D world modeling from in-the-wild monocular videos、official-tilt-up-video。别名包括 `NeoVerse: Enhancing 4D World Model`。
-
-记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（评估可游走的生成世界）、[4DWorldBench](/zh/docs/evaluation/benchmark-hub/4dworldbench)（契合该条目的 4D 世界模型定位）。
+按上游发布（arXiv 2601.00393），NeoVerse 在 Wan 视频基座上叠加 4D 重建与控制角色。 WorldFoundry 将其表达为共享 Wan 基础设施上的原生组装——真实推理仍受 checkpoint/GPU 限制，不使用仅元数据的 runner 壳。
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`video`；可选 `actions` (camera_actions, predefined_trajectory, trajectory_file)；产物 `generated_world`、`generated_4d_scene`、`neoverse.mp4`。
+运行需要 NeoVerse、Wan、重建器、LoRA 与 CUDA 资产。视频输入请按官方路径使用 static_scene=false；每次运行的视觉 QA 与产物检查在 catalog 外跟踪。
 
-记录的任务 profile：`4D world modeling from in-the-wild monocular videos`、`official-tilt-up-video`。绑定的 pipeline 类是 `NeoVersePipeline`。
+## 评测 Benchmark
 
-系列状态：**已验证**。
+- [WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore) — 评估可游走的生成世界。
+- [4DWorldBench](/zh/docs/evaluation/benchmark-hub/4dworldbench) — 契合该条目的 4D 世界模型定位。
 
-`official-tilt-up-video` 记录默认值：num_frames=81, height=336, width=560, num_inference_steps=4, seed=42。
+## 就绪状态与限制
 
-运行需要 NeoVerse、Wan、重建器、LoRA 与 CUDA 资产。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run neoverse --pipeline.task-profile official-tilt-up-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-记录的权重仓库包括 `Yuppie1204/NeoVerse`。就位权重用 `bash scripts/inference/prepare_model_infer.sh neoverse`。
-
-状态：**已验证**。
+- 需要完整的记录资产组合（NeoVerse + Wan + 重建器 + LoRA）。
+- 已验证范围是 README 风格 demo；更广场景覆盖在 catalog 外跟踪。
 
 <ModelRelatedRecipes modelId="neoverse" locale="zh" />

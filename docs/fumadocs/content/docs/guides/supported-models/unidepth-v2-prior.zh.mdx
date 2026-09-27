@@ -1,6 +1,6 @@
 ---
 title: "UniDepth V2"
-description: "UniDepth V2 is a universal monocular metric-depth model: from a single image of any camera it predicts a metric 3D point cloud directly, without external intrinsics."
+description: "UniDepth V2 是通用单目米制深度模型：对任意相机的单张图像直接预测米制 3D 点云，无需外部内参。本 catalog 中它是 checkpoint 已验证的几何先验——真实 checkpoint 推理与官方点云导出已通过共享 geometry-prior 契约与 Workspace 路径验证。"
 pageSource: generated
 ---
 
@@ -8,6 +8,16 @@ pageSource: generated
 image → depth
 
 UniDepth V2 是通用单目米制深度模型：对任意相机的单张图像直接预测米制 3D 点云，无需外部内参。本 catalog 中它是 checkpoint 已验证的几何先验——真实 checkpoint 推理与官方点云导出已通过共享 geometry-prior 契约与 Workspace 路径验证。
+
+**目录状态:** 已集成
+
+## 上游来源
+
+- [项目主页](https://lpiccinelli-eth.github.io/pub/unidepth/)
+- [论文](https://arxiv.org/abs/2502.20110)
+- [GitHub](https://github.com/lpiccinelli-eth/UniDepth)
+- [Hugging Face](https://huggingface.co/lpiccinelli/unidepth-v2-vitl14)
+- [上游 README](https://github.com/lpiccinelli-eth/UniDepth#readme)
 
 <ModelCommandBuilder modelId="unidepth-v2-prior" locale="zh" />
 
@@ -18,5 +28,10 @@ UniDepth V2 是通用单目米制深度模型：对任意相机的单张图像�
 ## 运行时契约
 
 它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。注意许可：上游发布为 CC-BY-NC-4.0，启用该先验时需遵守非商用条款。
+
+## 就绪状态与限制
+
+- CC-BY-NC-4.0：下游适用非商用许可条款。
+- 单帧估计；视频时序稳定性不在其范围内。
 
 <ModelRelatedRecipes modelId="unidepth-v2-prior" locale="zh" />
