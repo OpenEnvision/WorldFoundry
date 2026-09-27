@@ -14,18 +14,18 @@ official_sources:
   github:
     url: https://github.com/Little-Podi/AdaWorld
 integration:
-  status: blocked
-  blocked_reasons:
-  - Official source is vendored in-tree, and public checkpoints are available, but the official runner still requires
-    AdaWorld-specific dependencies and task/demo video assets that are not reproducibly available in the unified Studio
-    environment.
+  status: runtime_ported
   notes:
-  - AdaWorld is retained as open-source provenance/source-only metadata and hidden from the formal Studio infer catalog.
+  - The public pipeline runs the in-tree official FDM inference with the released main checkpoint and a supplied source video.
 runner_parity:
-  status: not_applicable
+  status: verified_inference_only
   notes:
-  - No release-facing WorldFoundry infer runner is advertised until official environment and asset parity is reproducible.
+  - A synthetic-video, four-frame, two-step GPU probe passed through the public pipeline and matched the direct in-tree
+    official runner byte-for-byte.
+  - No task success, long-horizon consistency, or benchmark parity is claimed.
 runtime_profile: runtime-profile:adaworld
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: adaworld
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked entries retain
   upstream provenance without runnable backends.
@@ -33,15 +33,16 @@ docs:
   publisher: The Hong Kong University of Science and Technology / MIT
   publisher_kind: university
   publisher_zh: 香港科技大学 / 麻省理工学院
-  overview: 'AdaWorld learns adaptable world models with latent actions: by extracting actions from unlabeled videos it can transfer control across domains with minimal finetuning. In this catalog it is retained as open-source provenance/source-only metadata and hidden from the formal Studio infer catalog.'
-  overview_zh: AdaWorld 用潜在动作学习可适配的世界模型：从无标注视频中提取动作，使控制能力以极少微调迁移到新领域。本 catalog 中它作为开源溯源/仅源码元数据保留，并在正式的 Studio 推理 catalog 中隐藏。
+  overview: AdaWorld extracts latent actions from video to condition an adaptable world model. The public pipeline now runs
+    its released checkpoint on a supplied source video; a short GPU probe verified the inference path.
+  overview_zh: AdaWorld 从视频中提取潜在动作来驱动可适配世界模型。公开 pipeline 现可使用发布权重和用户提供的源视频推理；短时 GPU 测试已验证推理链路。
   architecture: Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/world_model/adaworld; public checkpoints exist upstream.
   architecture_zh: 按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。官方源码已内置于 synthesis/visual_generation/world_model/adaworld；上游存在公开 checkpoint。
-  usage_notes: 'Blocked for release-facing inference: the official runner still requires AdaWorld-specific dependencies and task/demo video assets that are not reproducibly available in the unified Studio environment. Use the upstream repository directly until parity is restored.'
-  usage_notes_zh: 面向发布的推理被 blocked：官方 runner 仍需要 AdaWorld 专属依赖与任务/demo 视频资产，而这些在统一 Studio 环境中无法可复现地获得。在一致性恢复之前请直接使用上游仓库。
+  usage_notes: Supply the released adaworld.safetensors checkpoint and a readable source video. The main checkpoint includes
+    the active CLIP and LAM encoder weights; a separate lam.ckpt is not needed for this inference path.
+  usage_notes_zh: 提供发布的 adaworld.safetensors 权重和可读取的源视频。主权重已包含推理所需的 CLIP 与 LAM 编码器参数，此推理路径不需要单独的 lam.ckpt。
   limitations:
-  - Hidden from Studio inference until official environment and asset parity is reproducible.
-  - No release-facing WorldFoundry infer runner is advertised for this entry.
+  - The verified probe used four generated frames and two sampling steps with synthetic video input; task behavior and
+    long-horizon consistency remain unmeasured.
   limitations_zh:
-  - 在官方环境与资产一致性可复现之前，对 Studio 推理隐藏。
-  - 该条目不对外宣传任何面向发布的 WorldFoundry 推理 runner。
+  - 已验证的测试使用合成视频输入、生成 4 帧并采样 2 步；任务效果和长时一致性尚未测量。

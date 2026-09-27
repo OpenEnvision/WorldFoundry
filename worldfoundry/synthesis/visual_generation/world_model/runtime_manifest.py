@@ -59,12 +59,9 @@ WORLD_MODEL_RUNTIME_SPECS: Mapping[str, WorldModelRuntimeSpec] = {
         model_id="adaworld",
         display_name="AdaWorld",
         runtime_module="worldfoundry.synthesis.visual_generation.world_model.adaworld.worldfoundry_runtime",
-        blocked_reason=(
-            "AdaWorld is source-only in the open-source Studio catalog until the official dependency environment, "
-            "checkpoints, and task assets are reproducibly runnable from the unified environment."
-        ),
-        required_assets=("Little-Podi/AdaWorld adaworld.safetensors and lam.ckpt", "AdaWorld task/demo videos"),
-        input_schema=_ROBOT_INPUTS,
+        blocked_reason="",
+        required_assets=("Little-Podi/AdaWorld adaworld.safetensors", "source video"),
+        input_schema={"prompt": False, "image": False, "video": True, "actions": []},
     ),
     "ctrl-world": WorldModelRuntimeSpec(
         model_id="ctrl-world",
@@ -523,7 +520,7 @@ class WorldModelRuntimeSynthesis(BaseSynthesis):
 
     def _checkpoint_paths(self) -> list[Path]:
         paths: list[Path] = []
-        for key in ("checkpoint_path", "checkpoint_dir", "ckpt_path", "model_path", "pretrained_model_path"):
+        for key in ("checkpoint_path", "checkpoint_dir", "ckpt_path", "ckpt_base_path", "model_path", "pretrained_model_path"):
             value = self.options.get(key)
             if isinstance(value, (str, Path)) and str(value).strip():
                 paths.append(expand_worldfoundry_path(value))

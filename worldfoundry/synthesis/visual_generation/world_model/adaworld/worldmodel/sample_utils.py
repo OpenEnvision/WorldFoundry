@@ -32,10 +32,25 @@ def load_model_from_config(config, ckpt: str = None):
         else:
             raise NotImplementedError
         missing, unexpected = model.load_state_dict(sd, strict=False)
-        if len(missing) > 0:
-            print(f"Missing keys: {missing}")
-        if len(unexpected) > 0:
-            print(f"Unexpected keys: {unexpected}")
+        if missing:
+            raise RuntimeError(
+                f"AdaWorld checkpoint is missing {len(missing)} model tensors: {missing[:8]}"
+            )
+        # The released checkpoint also contains the LAM decoder, while this
+        # inference runtime only uses its encoder to extract latent actions.
+        unused_lam_prefixes = (
+            "conditioner.embedders.2.lam.lam.decoder.",
+            "conditioner.embedders.2.lam.lam.action_up.",
+            "conditioner.embedders.2.lam.lam.patch_up.",
+        )
+        unexpected_active = [key for key in unexpected if not key.startswith(unused_lam_prefixes)]
+        if unexpected_active:
+            raise RuntimeError(
+                "AdaWorld checkpoint has unexpected active model tensors: "
+                f"{unexpected_active[:8]}"
+            )
+        if unexpected:
+            print(f"Ignored {len(unexpected)} LAM decoder-only tensors in AdaWorld checkpoint")
 
     model = model.cuda()
     model.eval()

@@ -547,11 +547,17 @@ class AC3DRuntime:
         )
 
         output_target = Path(output_path).expanduser() if output_path is not None else None
-        output_dir = (
-            output_target.parent
-            if output_target is not None and output_target.suffix.lower() == ".mp4"
-            else Path(output_target or tempfile.mkdtemp(prefix="ac3d_"))
-        ).expanduser().resolve()
+        is_video_target = output_target is not None and output_target.suffix.lower() == ".mp4"
+        if is_video_target:
+            assert output_target is not None
+            output_target.parent.mkdir(parents=True, exist_ok=True)
+            # The official CLI skips generation when 00000_out.mp4 already exists.
+            # Isolate each file-targeted run so a prior run cannot be returned as fresh output.
+            output_dir = Path(
+                tempfile.mkdtemp(prefix=f".{output_target.stem}_ac3d_", dir=output_target.parent)
+            ).resolve()
+        else:
+            output_dir = Path(output_target or tempfile.mkdtemp(prefix="ac3d_")).expanduser().resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
         plan = self.runtime_plan(**options)
@@ -586,11 +592,13 @@ class AC3DRuntime:
             generated_path = candidates[0]
 
         artifact_path = generated_path
-        if output_target is not None and output_target.suffix.lower() == ".mp4":
+        if is_video_target:
+            assert output_target is not None
             output_target = output_target.resolve()
             if generated_path != output_target:
                 shutil.copyfile(generated_path, output_target)
             artifact_path = output_target
+            shutil.rmtree(output_dir)
 
         frames = _load_video_frames(artifact_path)
         result = {

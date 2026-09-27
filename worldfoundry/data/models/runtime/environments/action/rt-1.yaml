@@ -2,13 +2,16 @@ conda_packages:
 - python
 - pip
 cuda_profile: cpu
-driver_status: prepare_only_savedmodel_checkpoint_missing
+driver_status: cpu_reference_environment_gpu_inference_verified_separately
 env_name: worldfoundry-unified-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
 model_id: rt-1
 notes:
-- Prepare-only RT-1 policy profile. Real TensorFlow SavedModel inference requires users to stage an rt1main SavedModel checkpoint
-  locally; the current workspace does not include one.
+- This declared environment is a CPU reference profile. The official RT-1 SavedModels
+  completed offline GPU action inference in a separate TensorFlow 2.15.1 environment
+  with CuDNN 8.9.7; users need a compatible GPU TensorFlow environment for GPU runs.
+- A checkpoint-compatible 512-D language embedding must be supplied to every action
+  request. The released SavedModel does not encode prompt text internally.
 pip_packages:
 - numpy
 - Pillow

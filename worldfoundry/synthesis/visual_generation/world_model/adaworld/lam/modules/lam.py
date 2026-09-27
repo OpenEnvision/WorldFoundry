@@ -45,9 +45,17 @@ class LatentActionModel(nn.Module):
         del dec_blocks
 
     def encode(self, videos: Tensor) -> Dict:
-        # Preprocess videos
+        # AdaWorld supplies two source frames and one target frame. The target
+        # is for reconstruction during LAM training; its latent action is
+        # encoded from the two source frames, as in the official LAM runtime.
         B, T = videos.shape[:2]
-        patches = patchify(videos, self.patch_size)
+        if T == 2:
+            patches = patchify(videos, self.patch_size)
+        elif T == 3:
+            T = 2
+            patches = patchify(videos[:, :2], self.patch_size)
+        else:
+            raise ValueError(f"LAM expects two source frames or two source frames plus target; got {T}")
         action_pad = self.action_prompt.expand(B, T, -1, -1)
         padded_patches = torch.cat([action_pad, patches], dim=2)
 

@@ -1,12 +1,12 @@
 ---
 title: "RT-1"
-description: "RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 将 RT-1 SavedModel 运行时与上游源码内置树内；py_compile、导入与计划生成已通过，但配置的 checkpoint 目录尚未本地就位。"
+description: "RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 的树内 SavedModel 适配器已用官方权重和传入的合成 512 维向量完成离线 GPU 动作结构验证；任务语义编码仍未核验。"
 pageSource: generated
 ---
 
 **发表机构:** 谷歌研究院（Google Research） · 企业
 
-RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 将 RT-1 SavedModel 运行时与上游源码内置树内；py_compile、导入与计划生成已通过，但配置的 checkpoint 目录尚未本地就位。
+RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 的树内 SavedModel 适配器已用官方权重和传入的合成 512 维向量完成离线 GPU 动作结构验证；任务语义编码仍未核验。
 
 **目录状态:** 运行时已移植
 
@@ -25,11 +25,11 @@ EfficientNet-B3 图像 token 化配 FiLM 语言条件、TokenLearner 压缩与 d
 
 ## 运行时契约
 
-在验证官方 checkpoint 与 TensorFlow rollout 命令前不会进入 integrated 状态；就位 SavedModel checkpoint 目录后方可超出计划生成执行。这是 TensorFlow 条目，与 catalog 中多数 PyTorch 策略不同。
+传入图像、指令以及由兼容编码器生成的 512 维 language_embedding。发布的 SavedModel 不会自行把指令文本编码成该向量；WorldFoundry 对只有文本的推理明确报错，不会默默使用零向量。GPU 推理需要兼容的 TensorFlow/CuDNN 环境。
 
 ## 就绪状态与限制
 
-- TensorFlow SavedModel 栈；checkpoint 目录尚未就位。
+- 仅输入文本还需要另行准备与 checkpoint 兼容的语言编码器；离线动作结构验证不代表任务成功。
 - 仓库未记录许可证。
 
 <ModelRelatedRecipes modelId="rt-1" locale="zh" />

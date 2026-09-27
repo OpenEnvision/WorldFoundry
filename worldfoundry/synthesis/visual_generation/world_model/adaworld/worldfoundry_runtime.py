@@ -4,13 +4,9 @@ from pathlib import Path
 
 from worldfoundry.core.io.paths import resolve_data_path
 
-
 RUNTIME_DIR = Path(__file__).resolve().parent
 OFFICIAL_ENTRYPOINT = RUNTIME_DIR / "worldmodel" / "sample.py"
-BLOCKED_REASON = (
-    "AdaWorld is source-only in the open-source Studio catalog; execution requires "
-    "the official dependency environment, checkpoints, and task assets."
-)
+BLOCKED_REASON = ""
 
 
 def _option(options: dict, *names: str, default: str | None = None) -> str | None:
@@ -21,16 +17,21 @@ def _option(options: dict, *names: str, default: str | None = None) -> str | Non
     return default
 
 
+def _path_option(options: dict, *names: str, default: str | None = None) -> str | None:
+    value = _option(options, *names, default=default)
+    return str(Path(value).expanduser().resolve()) if value else None
+
+
 def _default_config() -> str:
     return str(resolve_data_path("models", "runtime", "configs", "adaworld", "worldmodel/inference/adaworld.yaml"))
 
 
 def missing_requirements(*, options, runtime_root, entrypoint, profile):
     del runtime_root, profile
-    checkpoint = _option(options, "checkpoint", "checkpoint_path", "ckpt", "model_path")
-    config = _option(options, "config", "config_path", default=_default_config())
-    data_root = _option(options, "data_root", "input_dir")
-    source_video = _option(options, "source_video", "input_path", "video_path")
+    checkpoint = _path_option(options, "checkpoint", "checkpoint_path", "ckpt", "ckpt_path", "model_path")
+    config = _path_option(options, "config", "config_path", default=_default_config())
+    data_root = _path_option(options, "data_root", "input_dir")
+    source_video = _path_option(options, "source_video", "input_path", "video_path")
     missing = []
     for key, value in {"checkpoint": checkpoint, "config": config}.items():
         if not value:
@@ -54,9 +55,9 @@ def build_command(context):
         context["python"],
         context["entrypoint"],
         "--checkpoint",
-        _option(options, "checkpoint", "checkpoint_path", "ckpt", "model_path", default="") or "",
+        _path_option(options, "checkpoint", "checkpoint_path", "ckpt", "ckpt_path", "model_path") or "",
         "--config",
-        _option(options, "config", "config_path", default=_default_config()) or "",
+        _path_option(options, "config", "config_path", default=_default_config()) or "",
         "--output-path",
         context["output_path"],
         "--num-samples",
@@ -77,10 +78,12 @@ def build_command(context):
         str(options.get("aug_level", 0.1)),
         "--fps",
         str(options.get("fps", 5)),
+        "--seed",
+        str(options.get("seed", 32)),
     ]
-    data_root = _option(options, "data_root", "input_dir")
-    source_video = _option(options, "source_video", "input_path", "video_path")
-    target_video = _option(options, "target_video")
+    data_root = _path_option(options, "data_root", "input_dir")
+    source_video = _path_option(options, "source_video", "input_path", "video_path")
+    target_video = _path_option(options, "target_video")
     if data_root:
         command.extend(["--data-root", data_root])
     if source_video:

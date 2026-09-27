@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+from importlib.machinery import PathFinder
 from pathlib import Path
 
 from worldfoundry.core.io.paths import resolve_data_path
@@ -28,6 +30,33 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
     for module_name in ("gym", "hydra", "omegaconf", "einops", "torch"):
         if importlib.util.find_spec(module_name) is None:
             missing.append({"kind": "python_module", "path": module_name, "reason": "required DINO-WM runtime package is not importable"})
+    # The official planner loads task trajectories before it constructs the
+    # checkpoint-backed model.  A staged checkpoint alone is not runnable.
+    dataset_package = importlib.util.find_spec("datasets")
+    dataset_loader = (
+        PathFinder.find_spec("datasets.wall_dset", dataset_package.submodule_search_locations)
+        if dataset_package is not None and dataset_package.submodule_search_locations
+        else None
+    )
+    if dataset_loader is None:
+        missing.append({
+            "kind": "python_module",
+            "path": "datasets.wall_dset",
+            "reason": "official DINO-WM task dataset loader is not importable",
+        })
+    dataset_root = os.environ.get("DATASET_DIR", "").strip()
+    if not dataset_root:
+        missing.append({
+            "kind": "environment",
+            "path": "DATASET_DIR",
+            "reason": "official DINO-WM planning requires task trajectories under DATASET_DIR",
+        })
+    elif not Path(dataset_root).expanduser().is_dir():
+        missing.append({
+            "kind": "asset",
+            "path": dataset_root,
+            "reason": "DINO-WM DATASET_DIR does not exist",
+        })
     if not ckpt_base_path:
         missing.append({"kind": "checkpoint", "path": "ckpt_base_path", "reason": "DINO-WM requires ckpt_base_path/checkpoint_dir"})
     elif not ckpt_base_dir.is_dir():

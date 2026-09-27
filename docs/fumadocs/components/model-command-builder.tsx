@@ -111,6 +111,9 @@ function commandPlaceholder(field: { field: string; required?: boolean; default?
   if (!field.required || (field.default !== undefined && field.default !== null && field.default !== '')) {
     return null;
   }
+  if (field.field === 'language_embedding') {
+    return '/path/to/embedding.json';
+  }
   if (['prompt', 'instruction', 'text', 'caption'].includes(field.field)) {
     return '"Describe the desired output."';
   }

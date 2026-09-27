@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 
+from ...core.io.paths import checkpoint_root_candidates
 from ...operators.world_model_runtime_operator import WorldModelRuntimeOperator
 from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
 from ...synthesis.visual_generation.world_model.runtime_manifest import WorldModelRuntimeSynthesis
@@ -84,6 +85,51 @@ class WorldModelRuntimePipeline(PipelineABC):
 class AdaWorldPipeline(WorldModelRuntimePipeline):
     """Pipeline implementation for AdaWorld visual generation."""
     MODEL_ID = "adaworld"
+    RUNTIME_GATED_OPTION_KEYS = (
+        "checkpoint",
+        "checkpoint_path",
+        "ckpt",
+        "ckpt_path",
+        "model_path",
+        "config",
+        "config_path",
+        "source_video",
+        "input_path",
+        "video_path",
+        "target_video",
+        "data_root",
+        "input_dir",
+        "num_samples",
+        "start_index",
+        "resolution",
+        "video_len",
+        "context_frame",
+        "num_steps",
+        "cfg_scale",
+        "aug_level",
+        "fps",
+        "seed",
+    )
+
+    @classmethod
+    def from_pretrained(cls, model_path=None, *args, **kwargs):
+        if model_path is None or isinstance(model_path, dict):
+            options = dict(model_path or {})
+            if not any(options.get(key) for key in ("checkpoint", "checkpoint_path", "ckpt_path", "model_path")):
+                for root in checkpoint_root_candidates("Little-Podi--AdaWorld"):
+                    candidate = root / "adaworld.safetensors"
+                    if candidate.is_file():
+                        options["checkpoint_path"] = str(candidate)
+                        break
+            model_path = options
+        return super().from_pretrained(model_path, *args, **kwargs)
+
+    def _promote_call_options(self, kwargs: dict) -> dict:
+        if not kwargs.get("source_video"):
+            candidate = kwargs.get("video")
+            if isinstance(candidate, (str, os.PathLike)):
+                kwargs["source_video"] = os.fspath(candidate)
+        return kwargs
 
 
 class CausalRCMPipeline(WorldModelRuntimePipeline):

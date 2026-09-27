@@ -1,50 +1,41 @@
 ---
 title: "AdaWorld"
-description: "AdaWorld from The Hong Kong University of Science and Technology / MIT: latent-action-world-model and action-conditioned-video; Planned."
+description: "AdaWorld runs its released latent-action world-model checkpoint on a source video; short-form inference verified."
 modelId: "adaworld"
 pageSource: authored
 ---
 
-AdaWorld learns adaptable world models with latent actions: by extracting actions from unlabeled videos it can transfer control across domains with minimal finetuning.
+AdaWorld extracts latent actions from video to condition an adaptable world model. WorldFoundry runs the released checkpoint through its public pipeline using a supplied source video.
 
 <ModelPaperFigures modelId="adaworld" locale="en" />
 
-The recorded paper is [arXiv 2503.18938](https://arxiv.org/abs/2503.18938).
-
-Project page: [adaptable-world-model.github.io](https://adaptable-world-model.github.io/). Code: [Little-Podi/AdaWorld](https://github.com/Little-Podi/AdaWorld).
-
-This card is **blocked** for release-facing inference. The official source is vendored under `worldfoundry/synthesis/visual_generation/world_model/adaworld` and public checkpoints exist upstream, but the official runner still needs AdaWorld-specific dependencies and task/demo video assets that are **not reproducible** in the unified Studio environment. WorldFoundry hides it from the formal Studio infer catalog. There is **no** advertised `worldfoundry-eval` path until that parity returns.
+The project is described in [arXiv 2503.18938](https://arxiv.org/abs/2503.18938). See the [project page](https://adaptable-world-model.github.io/) and [official code](https://github.com/Little-Podi/AdaWorld).
 
 <ModelCommandBuilder modelId="adaworld" locale="en" />
 
-## What it is for
+## What it does
 
-Pick `adaworld` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+AdaWorld's latent-action autoencoder extracts motion representations from video, which condition the world model's generated frames. The in-tree runtime follows the official FDM inference path. The recorded catalog tasks are `latent-action-world-model`, `action-conditioned-video`, and `multi-domain-world-model`; the completed GPU check covers a short source-video rollout, not separate task benchmarks.
 
-Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/world_model/adaworld; public checkpoints exist upstream. It is published by The Hong Kong University of Science and Technology / MIT.
+## Inputs and checkpoint
 
-Catalog tasks include latent-action-world-model, action-conditioned-video, and multi-domain-world-model.
+Provide a readable source `video`. This inference route does not use `prompt` or `image`; direct action-token input has not been validated. The output artifact is `adaworld.mp4`.
 
-## Runtime contract
+Place the released `Little-Podi/AdaWorld` checkpoint at `${WORLDFOUNDRY_CKPT_DIR}/Little-Podi--AdaWorld/adaworld.safetensors`, or pass its path explicitly as shown below. The main checkpoint already contains the CLIP and LAM encoder weights used for this inference path, so it does not need a separate `lam.ckpt`.
 
-Required `prompt`, `image`, and `video`; optional `actions` (world_action, robot_action); artifacts `adaworld.mp4`.
+```python
+from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import AdaWorldPipeline
 
-Recorded task profiles: `latent-action-world-model`, `action-conditioned-video`, and `multi-domain-world-model`.
+pipeline = AdaWorldPipeline.from_pretrained(
+    {"checkpoint_path": "/path/to/adaworld.safetensors"}, device="cuda"
+)
+result = pipeline(video="/path/to/source.mp4", output_path="adaworld.mp4", start_index=0)
+```
 
-Family status: **Planned**.
+The catalog profile names `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8); the GPU probe used the local CUDA 12.1 environment. For short source clips, set `start_index` to an existing frame; the underlying runner defaults to frame 50.
 
-Blocked for release-facing inference: the official runner still requires AdaWorld-specific dependencies and task/demo video assets that are not reproducibly available in the unified Studio environment. Use the upstream repository directly until parity is restored.
+## Verification scope
 
-AdaWorld is retained as open-source provenance/source-only metadata and hidden from the formal Studio infer catalog.
-
-## Running in WorldFoundry
-
-Launch `worldfoundry-eval run adaworld --pipeline.task-profile latent-action-world-model` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh adaworld`.
-
-Status: **Planned**.
+The public pipeline generated and decoded a four-frame, 256 × 256 MP4 from synthetic video with two sampling steps. Its MP4 matched the direct in-tree official runner byte for byte. This verifies checkpoint loading and the short inference path. Task success, long-horizon consistency, and output quality have not been measured.
 
 <ModelRelatedRecipes modelId="adaworld" locale="en" />

@@ -140,9 +140,6 @@ def cogvideox_runtime_model_id(model_id: str, variant_id: str = "") -> str | Non
 
 STUDIO_HIDDEN_CATALOG_MODEL_IDS: frozenset[str] = frozenset(
     {
-        # AdaWorld is tracked as source/provenance only until the official env, checkpoints, and task assets are
-        # reproducibly runnable from the unified Studio environment.
-        "adaworld",
         # Internal shared operator/contract surface. Concrete priors such as metric3d-prior,
         # unidepth-v2-prior, dap, and video-depth-anything-prior are the user-facing entries.
         "geometry-prior",
@@ -6333,7 +6330,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "category": "Embodied Action",
         "default_prompt": "follow the language-conditioned robot instruction",
         "default_interactions": ("robot_action",),
-        "default_call_kwargs": {"plan_only": True},
+        "default_call_kwargs": {"plan_only": False},
         "call_params": (
             "prompt",
             "images",
@@ -6341,6 +6338,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "output_path",
             "fps",
             "checkpoint_dir",
+            "language_embedding",
             "rt1_observation",
             "action_space",
             "policy_controls",
@@ -6348,7 +6346,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         ),
         "aliases": ("rt-1", "robotics-transformer"),
         "tags": ("vla", "policy", "robotics-transformer"),
-        "notes": "Robotics Transformer policy pipeline. Defaults to plan-only until an official SavedModel checkpoint is staged.",
+        "notes": "Robotics Transformer policy pipeline. Action inference requires a checkpoint-compatible 512-D language embedding; prompt text alone is not encoded.",
     },
     "diffusion-policy": {
         "display_name": "Diffusion Policy",

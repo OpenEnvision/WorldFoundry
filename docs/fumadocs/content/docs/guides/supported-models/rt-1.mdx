@@ -1,12 +1,12 @@
 ---
 title: "RT-1"
-description: "RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry vendors the RT-1 SavedModel runtime a…"
+description: "RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry's in-tree SavedModel adapter has comp…"
 pageSource: generated
 ---
 
 **Publisher:** Google Research · Company
 
-RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry vendors the RT-1 SavedModel runtime and upstream source in-tree; py_compile, import, and plan generation passed, but the configured checkpoint directory is not yet staged locally.
+RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry's in-tree SavedModel adapter has completed structural offline GPU action inference with the official checkpoints and supplied synthetic 512-D embeddings; task-grounded encoding remains unverified.
 
 **Catalog status:** Runtime ported
 
@@ -25,11 +25,11 @@ An EfficientNet-B3 image tokenizer with FiLM language conditioning, TokenLearner
 
 ## Runtime contract
 
-The official checkpoint and TensorFlow rollout command must be validated before integrated status; stage the SavedModel checkpoint directory to run beyond plan generation. This is a TensorFlow entry, unlike most PyTorch policies in the catalog.
+Supply a 512-D language_embedding from an encoder compatible with the checkpoint along with the image and prompt. The released SavedModel does not turn prompt text into that embedding; WorldFoundry rejects text-only inference instead of silently using zeros. GPU inference needs a TensorFlow/CuDNN-compatible environment.
 
 ## Readiness and limitations
 
-- TensorFlow SavedModel stack; checkpoint directory is not yet staged.
+- Text-only inference requires a separately staged, checkpoint-compatible language encoder; offline action structure validation does not prove task success.
 - No license is recorded in this repository.
 
 <ModelRelatedRecipes modelId="rt-1" locale="en" />

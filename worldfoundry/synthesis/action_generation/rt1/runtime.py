@@ -1,6 +1,7 @@
 # Inference-only RT-1 source retained in-tree.
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -56,6 +57,32 @@ def _load_rgb_array(image: Any, *, size: tuple[int, int]) -> np.ndarray:
     return np.asarray(array, dtype=np.uint8)
 
 
+def _language_embedding_array(value: Any) -> np.ndarray:
+    """Validate the 512-D embedding consumed by the official RT-1 network."""
+    if value is None:
+        raise ValueError(
+            "RT-1 requires language_embedding: a 512-D embedding from the "
+            "encoder used for this checkpoint. A prompt string alone is not "
+            "encoded by the released SavedModel."
+        )
+    if isinstance(value, (str, Path)):
+        source = Path(value).expanduser()
+        if source.suffix.lower() == ".npy":
+            value = np.load(source, allow_pickle=False)
+        elif source.suffix.lower() == ".json":
+            value = json.loads(source.read_text(encoding="utf-8"))
+        else:
+            raise ValueError("RT-1 language_embedding file must be .json or .npy")
+    array = np.asarray(value, dtype=np.float32)
+    if array.shape == (512,):
+        array = array[None, :]
+    if array.shape != (1, 512):
+        raise ValueError(f"RT-1 language_embedding must have shape (512,) or (1, 512), got {array.shape}")
+    if not np.isfinite(array).all() or not np.any(array):
+        raise ValueError("RT-1 language_embedding must contain finite, nonzero values")
+    return np.ascontiguousarray(array)
+
+
 class RT1SavedModelRuntime:
     """Run the in-tree RT-1 TensorFlow SavedModel action signature.
 
@@ -98,6 +125,7 @@ class RT1SavedModelRuntime:
         self,
         *,
         instruction: str,
+        language_embedding: Any = None,
         image: Any,
         output_path: str | Path,
         extra_metadata: Mapping[str, Any] | None = None,
@@ -106,11 +134,13 @@ class RT1SavedModelRuntime:
 
         Args:
             instruction: Natural-language task instruction for the policy.
+            language_embedding: Checkpoint-compatible 512-D language embedding.
             image: RGB image path or array used as the current observation.
             output_path: JSON artifact path for the action trace.
             extra_metadata: Additional serializable context included in output.
         """
 
+        embedding = _language_embedding_array(language_embedding)
         started = time.monotonic()
         model = self._load_model()
         tf = self._tf
@@ -120,7 +150,7 @@ class RT1SavedModelRuntime:
         image_array = _load_rgb_array(image, size=(320, 256))[None]
         with tf.device(self.tf_device):
             action_inputs = {
-                "0/observation/natural_language_embedding": zeros((1, 512), tf.float32),
+                "0/observation/natural_language_embedding": tf.convert_to_tensor(embedding, dtype=tf.float32),
                 "0/observation/orientation_start": tf.constant([[0.0, 0.0, 0.0, 1.0]], dtype=tf.float32),
                 "0/observation/orientation_box": zeros((1, 2, 3), tf.float32),
                 "1/step_num": initial_state["step_num"],
@@ -163,6 +193,7 @@ class RT1SavedModelRuntime:
             "checkpoint_dir": str(self.config.checkpoint_dir),
             "runtime_root": str(RUNTIME_ROOT),
             "instruction": instruction,
+            "language_embedding_sha256": hashlib.sha256(embedding.tobytes()).hexdigest(),
             "device": self.tf_device,
             "action": action,
             "actions": [action],

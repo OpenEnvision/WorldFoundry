@@ -183,6 +183,8 @@ def generate_video(
         video_generate_all = pipe(
             prompt=prompt,
             controlnet_latents=controlnet_latents,  # The path of the image to be used as the background of the video
+            height=height,
+            width=width,
             num_videos_per_prompt=num_videos_per_prompt,  # Number of videos to generate per prompt
             num_inference_steps=num_inference_steps,  # Number of inference steps
             num_frames=num_frames,  # Number of frames to generate，changed to 49 for diffusers version `0.30.3` and after.

@@ -750,6 +750,11 @@ def input_contract(profile: dict[str, Any] | None) -> list[dict[str, str]]:
         return []
     output: list[dict[str, str]] = []
     for key, value in schema.items():
+        # AdaWorld's verified source-video route explicitly disables prompt,
+        # image, and direct actions. Keep legacy profiles' presentation stable
+        # until their input contracts are audited model by model.
+        if profile.get("model_id") == "adaworld" and (value is False or value == []):
+            continue
         if isinstance(value, bool):
             detail = "Required" if value else "Optional"
         elif isinstance(value, list):
@@ -1654,6 +1659,8 @@ def command_placeholder(field: dict[str, Any]) -> str | None:
     if not field.get("required") or field.get("default") not in (None, ""):
         return None
     field_id = str(field.get("field") or "")
+    if field_id == "language_embedding":
+        return "/path/to/embedding.json"
     if field_id in {"prompt", "instruction", "text", "caption"}:
         return '"Describe the desired output."'
     if field_id in {"input_path", "image", "video", "audio", "images", "input"}:

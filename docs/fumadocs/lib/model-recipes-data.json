@@ -72745,6 +72745,333 @@
       "catalogPath": "worldfoundry/data/models/catalog/vla_va_wam/abot-m0.yaml"
     },
     {
+      "id": "adaworld",
+      "name": "AdaWorld",
+      "category": "world_models",
+      "categoryLabel": "World models",
+      "categoryLabelZh": "世界模型",
+      "provider": "The Hong Kong University of Science and Technology / MIT",
+      "summary": "AdaWorld extracts latent actions from video to condition an adaptable world model. The public pipeline now runs its released checkpoint on a supplied source video; a short GPU probe verified the inference path.",
+      "aliases": [],
+      "tasks": [
+        "latent-action-world-model",
+        "action-conditioned-video",
+        "multi-domain-world-model"
+      ],
+      "status": {
+        "group": "runtime_ported",
+        "label": "Runtime ported",
+        "integration": "runtime_ported",
+        "runner": "verified_inference_only",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "adaworld",
+        "bindingId": "adaworld",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:AdaWorldPipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "in_tree_runtime_manifest",
+        "runtimeStatus": "checkpoint_backed_gpu_inference_verified_synthetic_video",
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "AdaWorld's in-tree official FDM runner accepts a source video and the released adaworld.safetensors checkpoint.",
+          "The released main checkpoint includes the active OpenCLIP and LAM encoder weights; its additional LAM decoder tensors are unused by the inference-only runtime.",
+          "A four-frame 256x256, two-step synthetic-video probe completed through the public pipeline and matched the direct official in-tree runner byte-for-byte. This checks inference wiring, not task quality or long-horizon behavior.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "project",
+          "label": "Project",
+          "url": "https://adaptable-world-model.github.io/"
+        },
+        {
+          "kind": "paper",
+          "label": "Paper",
+          "url": "https://arxiv.org/abs/2503.18938"
+        },
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/Little-Podi/AdaWorld"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/Little-Podi/AdaWorld#readme"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "Little-Podi/AdaWorld",
+          "role": "adaworld_checkpoint"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "latent-action-world-model",
+          "label": "Latent Action World Model",
+          "description": "Generate an AdaWorld video from a readable source video using the official FDM checkpoint.",
+          "source": "inference_spec",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "video",
+              "detail": "Required",
+              "kind": "path",
+              "target": "input_path",
+              "required": true,
+              "default": null,
+              "choices": [],
+              "description": "Readable RGB video used to extract AdaWorld's latent action conditioning."
+            },
+            {
+              "field": "checkpoint_path",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "load_kwargs",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Optional explicit adaworld.safetensors path; the default checkpoint root is discovered automatically."
+            },
+            {
+              "field": "start_index",
+              "detail": "Optional; default=0",
+              "kind": "integer",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 0,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "video_len",
+              "detail": "Optional; default=20",
+              "kind": "integer",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 20,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "resolution",
+              "detail": "Optional; default=256",
+              "kind": "integer",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 256,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "context_frame",
+              "detail": "Optional; default=6",
+              "kind": "integer",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 6,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "num_steps",
+              "detail": "Optional; default=5",
+              "kind": "integer",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 5,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "cfg_scale",
+              "detail": "Optional; default=1.1",
+              "kind": "number",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 1.1,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "aug_level",
+              "detail": "Optional; default=0.1",
+              "kind": "number",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 0.1,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "fps",
+              "detail": "Optional; default=5",
+              "kind": "integer",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 5,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "seed",
+              "detail": "Optional; default=32",
+              "kind": "integer",
+              "target": "call_kwargs",
+              "required": false,
+              "default": 32,
+              "choices": [],
+              "description": ""
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "video",
+              "filename": "video",
+              "description": ""
+            },
+            {
+              "kind": "manifest",
+              "filename": "manifest",
+              "description": ""
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "video",
+          "detail": "Required"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": "adaworld.mp4"
+        }
+      ],
+      "notes": [
+        "The public pipeline runs the in-tree official FDM inference with the released main checkpoint and a supplied source video.",
+        "A synthetic-video, four-frame, two-step GPU probe passed through the public pipeline and matched the direct in-tree official runner byte-for-byte.",
+        "No task success, long-horizon consistency, or benchmark parity is claimed.",
+        "AdaWorld's in-tree official FDM runner accepts a source video and the released adaworld.safetensors checkpoint.",
+        "The released main checkpoint includes the active OpenCLIP and LAM encoder weights; its additional LAM decoder tensors are unused by the inference-only runtime.",
+        "A four-frame 256x256, two-step synthetic-video probe completed through the public pipeline and matched the direct official in-tree runner byte-for-byte. This checks inference wiring, not task quality or long-horizon behavior."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "The Hong Kong University of Science and Technology / MIT",
+          "nameZh": "香港科技大学 / 麻省理工学院",
+          "kind": "university"
+        },
+        "overview": [
+          "AdaWorld extracts latent actions from video to condition an adaptable world model. The public pipeline now runs its released checkpoint on a supplied source video; a short GPU probe verified the inference path."
+        ],
+        "overviewZh": [
+          "AdaWorld 从视频中提取潜在动作来驱动可适配世界模型。公开 pipeline 现可使用发布权重和用户提供的源视频推理；短时 GPU 测试已验证推理链路。"
+        ],
+        "architecture": [
+          "Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/world_model/adaworld; public checkpoints exist upstream."
+        ],
+        "architectureZh": [
+          "按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。官方源码已内置于 synthesis/visual_generation/world_model/adaworld；上游存在公开 checkpoint。"
+        ],
+        "usageNotes": [
+          "Supply the released adaworld.safetensors checkpoint and a readable source video. The main checkpoint includes the active CLIP and LAM encoder weights; a separate lam.ckpt is not needed for this inference path."
+        ],
+        "usageNotesZh": [
+          "提供发布的 adaworld.safetensors 权重和可读取的源视频。主权重已包含推理所需的 CLIP 与 LAM 编码器参数，此推理路径不需要单独的 lam.ckpt。"
+        ],
+        "highlights": [
+          "Latent Action World Model",
+          "Action Conditioned Video",
+          "Multi Domain World Model",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "latent-action-world-model",
+          "动作条件视频生成",
+          "multi-domain-world-model",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [],
+          "outputs": []
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "The verified probe used four generated frames and two sampling steps with synthetic video input; task behavior and long-horizon consistency remain unmeasured."
+        ],
+        "limitationsZh": [
+          "已验证的测试使用合成视频输入、生成 4 帧并采样 2 步；任务效果和长时一致性尚未测量。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh adaworld",
+        "install": "bash scripts/setup/model_env_install.sh --model adaworld",
+        "inspect": "worldfoundry-eval zoo model-show --model-id adaworld --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id adaworld --check-local --json",
+        "run": "worldfoundry-eval run \\\n  adaworld \\\n  --pipeline.task-profile latent-action-world-model \\\n  --pipeline.video /path/to/input \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/world_models/adaworld.yaml"
+    },
+    {
       "id": "being-h07",
       "name": "Being-H0.7",
       "category": "vla_va_wam",
@@ -92382,7 +92709,7 @@
       "categoryLabel": "Embodied",
       "categoryLabelZh": "具身智能",
       "provider": "Google Research",
-      "summary": "RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry vendors the RT-1 SavedModel runtime a…",
+      "summary": "RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry's in-tree SavedModel adapter has comp…",
       "aliases": [
         "rt1",
         "robotics-transformer"
@@ -92409,14 +92736,14 @@
         "loadingMethod": "from_pretrained",
         "invocationMode": "native_or_standard_invocation",
         "backendStage": "in_tree_runtime",
-        "runtimeStatus": "in_tree_rt1_runtime_ported_savedmodel_checkpoint_missing",
+        "runtimeStatus": "in_tree_savedmodel_action_inference_gpu_verified_embedding_required",
         "environmentId": "rt-1",
         "environmentName": "worldfoundry-unified-cu128",
         "environmentKind": "unified",
         "python": "3.10",
         "cudaProfile": "cpu",
         "cudaLabel": "CPU",
-        "driverStatus": "prepare_only_savedmodel_checkpoint_missing",
+        "driverStatus": "cpu_reference_environment_gpu_inference_verified_separately",
         "condaPackages": [
           "python",
           "pip"
@@ -92440,10 +92767,12 @@
         ],
         "notes": [
           "RT-1/Robotics Transformer is modeled as a language-conditioned robot policy.",
-          "The profile expects an RT-1 TensorFlow SavedModel directory at ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/rt-1/rt1main when users stage one locally. The current workspace does not include that SavedModel.",
+          "The profile expects an RT-1 TensorFlow SavedModel directory at ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/rt-1/rt1main.",
+          "Pass a checkpoint-compatible 512-D language_embedding with each inference request; the released SavedModel does not encode prompt strings, and text-only calls fail explicitly.",
           "The profile emits action_trace artifacts; benchmark wrappers are responsible for environment replay and success metrics.",
-          "WorldFoundry vendors RT-1 SavedModel runtime and upstream source under worldfoundry/synthesis/action_generation/rt1/rt1_runtime. py_compile, import/from_pretrained, and plan generation passed; real predict_action remains blocked because the profile checkpoint directory is not staged locally.",
-          "Prepare-only RT-1 policy profile. Real TensorFlow SavedModel inference requires users to stage an rt1main SavedModel checkpoint locally; the current workspace does not include one."
+          "The in-tree RT-1 SavedModel adapter completed offline GPU action inference with rt1main, rt1multirobot, and rt1simreal official checkpoints and supplied embeddings.",
+          "This declared environment is a CPU reference profile. The official RT-1 SavedModels completed offline GPU action inference in a separate TensorFlow 2.15.1 environment with CuDNN 8.9.7; users need a compatible GPU TensorFlow environment for GPU runs.",
+          "A checkpoint-compatible 512-D language embedding must be supplied to every action request. The released SavedModel does not encode prompt text internally."
         ]
       },
       "sources": [
@@ -92473,221 +92802,67 @@
       "inferenceTasks": [
         {
           "id": "vla",
-          "label": "Vla",
-          "description": "Catalog task profile used by the model runtime.",
-          "source": "catalog",
+          "label": "Robot action prediction",
+          "description": "Run one RT-1 SavedModel action step with an image and a checkpoint-compatible language embedding.",
+          "source": "inference_spec",
           "variantIds": [],
           "inputs": [
             {
-              "field": "actions",
-              "detail": "robot_action, proprio, action_space",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "image",
+              "field": "input_path",
               "detail": "Required",
-              "kind": "string",
-              "target": "input",
+              "kind": "path",
+              "target": "input_path",
               "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "instruction",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
+              "default": null,
+              "choices": [],
+              "description": ""
             },
             {
               "field": "prompt",
               "detail": "Required",
               "kind": "string",
-              "target": "input",
+              "target": "prompt",
               "required": true,
-              "description": "Recorded input field from the runtime profile."
+              "default": null,
+              "choices": [],
+              "description": ""
             },
             {
-              "field": "video",
+              "field": "language_embedding",
+              "detail": "Required",
+              "kind": "path",
+              "target": "call_kwargs",
+              "required": true,
+              "default": null,
+              "choices": [],
+              "description": "Path to a JSON or NPY file containing a checkpoint-compatible 512-D vector. Plain text alone is not encoded."
+            },
+            {
+              "field": "checkpoint_dir",
               "detail": "Optional",
-              "kind": "string",
-              "target": "input",
+              "kind": "path",
+              "target": "load_kwargs",
               "required": false,
-              "description": "Recorded input field from the runtime profile."
+              "default": null,
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "plan_only",
+              "detail": "Optional; default=False",
+              "kind": "boolean",
+              "target": "call_kwargs",
+              "required": false,
+              "default": false,
+              "choices": [],
+              "description": ""
             }
           ],
           "artifacts": [
             {
               "kind": "action_trace",
-              "filename": "rt1_action_trace.json"
-            }
-          ]
-        },
-        {
-          "id": "vla.policy_rollout",
-          "label": "Vla.Policy Rollout",
-          "description": "Catalog task profile used by the model runtime.",
-          "source": "catalog",
-          "variantIds": [],
-          "inputs": [
-            {
-              "field": "actions",
-              "detail": "robot_action, proprio, action_space",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "image",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "instruction",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "prompt",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "video",
-              "detail": "Optional",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "action_trace",
-              "filename": "rt1_action_trace.json"
-            }
-          ]
-        },
-        {
-          "id": "robot_policy",
-          "label": "Robot Policy",
-          "description": "Catalog task profile used by the model runtime.",
-          "source": "catalog",
-          "variantIds": [],
-          "inputs": [
-            {
-              "field": "actions",
-              "detail": "robot_action, proprio, action_space",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "image",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "instruction",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "prompt",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "video",
-              "detail": "Optional",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "action_trace",
-              "filename": "rt1_action_trace.json"
-            }
-          ]
-        },
-        {
-          "id": "robotics_transformer",
-          "label": "Robotics Transformer",
-          "description": "Catalog task profile used by the model runtime.",
-          "source": "catalog",
-          "variantIds": [],
-          "inputs": [
-            {
-              "field": "actions",
-              "detail": "robot_action, proprio, action_space",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "image",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "instruction",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "prompt",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "video",
-              "detail": "Optional",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "action_trace",
-              "filename": "rt1_action_trace.json"
+              "filename": "rt1_action_trace.json",
+              "description": ""
             }
           ]
         }
@@ -92706,6 +92881,10 @@
           "detail": "Required"
         },
         {
+          "field": "language_embedding",
+          "detail": "Required"
+        },
+        {
           "field": "prompt",
           "detail": "Required"
         },
@@ -92721,12 +92900,13 @@
         }
       ],
       "notes": [
-        "Official checkpoint and TensorFlow rollout command must be validated before integrated status.",
-        "RT-1 SavedModel runtime and upstream source are vendored in-tree; py_compile, import/from_pretrained, and plan generation passed, but the configured checkpoint directory is missing locally.",
+        "The released SavedModel consumes a precomputed 512-D language embedding; passing only a prompt string is rejected because the SavedModel does not encode text.",
+        "The official rt1main, rt1multirobot, and rt1simreal SavedModels completed structural offline GPU action inference through the public pipeline with synthetic embeddings.",
         "RT-1/Robotics Transformer is modeled as a language-conditioned robot policy.",
-        "The profile expects an RT-1 TensorFlow SavedModel directory at ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/rt-1/rt1main when users stage one locally. The current workspace does not include that SavedModel.",
+        "The profile expects an RT-1 TensorFlow SavedModel directory at ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/rt-1/rt1main.",
+        "Pass a checkpoint-compatible 512-D language_embedding with each inference request; the released SavedModel does not encode prompt strings, and text-only calls fail explicitly.",
         "The profile emits action_trace artifacts; benchmark wrappers are responsible for environment replay and success metrics.",
-        "WorldFoundry vendors RT-1 SavedModel runtime and upstream source under worldfoundry/synthesis/action_generation/rt1/rt1_runtime. py_compile, import/from_pretrained, and plan generation passed; real predict_action remains blocked because the profile checkpoint directory is not staged locally."
+        "The in-tree RT-1 SavedModel adapter completed offline GPU action inference with rt1main, rt1multirobot, and rt1simreal official checkpoints and supplied embeddings."
       ],
       "docs": {
         "curated": true,
@@ -92736,10 +92916,10 @@
           "kind": "company"
         },
         "overview": [
-          "RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry vendors the RT-1 SavedModel runtime and upstream source in-tree; py_compile, import, and plan generation passed, but the configured checkpoint directory is not yet staged locally."
+          "RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry's in-tree SavedModel adapter has completed structural offline GPU action inference with the official checkpoints and supplied synthetic 512-D embeddings; task-grounded encoding remains unverified."
         ],
         "overviewZh": [
-          "RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 将 RT-1 SavedModel 运行时与上游源码内置树内；py_compile、导入与计划生成已通过，但配置的 checkpoint 目录尚未本地就位。"
+          "RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 的树内 SavedModel 适配器已用官方权重和传入的合成 512 维向量完成离线 GPU 动作结构验证；任务语义编码仍未核验。"
         ],
         "architecture": [
           "An EfficientNet-B3 image tokenizer with FiLM language conditioning, TokenLearner compression, and a decoder-only transformer emitting discretized action tokens — served as a TensorFlow SavedModel."
@@ -92748,10 +92928,10 @@
           "EfficientNet-B3 图像 token 化配 FiLM 语言条件、TokenLearner 压缩与 decoder-only transformer，输出离散化动作 token——以 TensorFlow SavedModel 提供。"
         ],
         "usageNotes": [
-          "The official checkpoint and TensorFlow rollout command must be validated before integrated status; stage the SavedModel checkpoint directory to run beyond plan generation. This is a TensorFlow entry, unlike most PyTorch policies in the catalog."
+          "Supply a 512-D language_embedding from an encoder compatible with the checkpoint along with the image and prompt. The released SavedModel does not turn prompt text into that embedding; WorldFoundry rejects text-only inference instead of silently using zeros. GPU inference needs a TensorFlow/CuDNN-compatible environment."
         ],
         "usageNotesZh": [
-          "在验证官方 checkpoint 与 TensorFlow rollout 命令前不会进入 integrated 状态；就位 SavedModel checkpoint 目录后方可超出计划生成执行。这是 TensorFlow 条目，与 catalog 中多数 PyTorch 策略不同。"
+          "传入图像、指令以及由兼容编码器生成的 512 维 language_embedding。发布的 SavedModel 不会自行把指令文本编码成该向量；WorldFoundry 对只有文本的推理明确报错，不会默默使用零向量。GPU 推理需要兼容的 TensorFlow/CuDNN 环境。"
         ],
         "highlights": [
           "Vla",
@@ -92778,11 +92958,11 @@
         },
         "benchmarks": [],
         "limitations": [
-          "TensorFlow SavedModel stack; checkpoint directory is not yet staged.",
+          "Text-only inference requires a separately staged, checkpoint-compatible language encoder; offline action structure validation does not prove task success.",
           "No license is recorded in this repository."
         ],
         "limitationsZh": [
-          "TensorFlow SavedModel 栈；checkpoint 目录尚未就位。",
+          "仅输入文本还需要另行准备与 checkpoint 兼容的语言编码器；离线动作结构验证不代表任务成功。",
           "仓库未记录许可证。"
         ],
         "paper": null,
@@ -92793,7 +92973,7 @@
         "install": "bash scripts/setup/model_env_install.sh --model rt-1",
         "inspect": "worldfoundry-eval zoo model-show --model-id rt-1 --include-manifest --json",
         "check": "worldfoundry-eval zoo model-download --model-id rt-1 --check-local --json",
-        "run": "worldfoundry-eval run \\\n  rt-1 \\\n  --pipeline.task-profile vla \\\n  --pipeline.image /path/to/input \\\n  --pipeline.instruction \"Describe the desired output.\" \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --json"
+        "run": "worldfoundry-eval run \\\n  rt-1 \\\n  --pipeline.task-profile vla \\\n  --pipeline.input-path /path/to/input \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.language-embedding /path/to/embedding.json \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/vla_va_wam/rt-1.yaml"
     },
@@ -108726,12 +108906,12 @@
       },
       "runtime": {
         "profileId": "last-r1",
-        "bindingId": null,
+        "bindingId": "last-r1",
         "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
-        "runner": null,
-        "pipelineTarget": null,
-        "loadingMethod": null,
-        "invocationMode": null,
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.component_pipelines:LastR1Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
         "backendStage": "official_latent_action_token_rollout",
         "runtimeStatus": "verified_inference_only",
         "environmentId": "_unified",
@@ -110428,349 +110608,6 @@
         "run": "worldfoundry-eval run \\\n  worldlabs-marble-1.1 \\\n  --pipeline.task-profile world-generation \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.image /path/to/input \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/world_models/worldlabs-marble-1.1.yaml"
-    },
-    {
-      "id": "adaworld",
-      "name": "AdaWorld",
-      "category": "world_models",
-      "categoryLabel": "World models",
-      "categoryLabelZh": "世界模型",
-      "provider": "The Hong Kong University of Science and Technology / MIT",
-      "summary": "AdaWorld learns adaptable world models with latent actions: by extracting actions from unlabeled videos it can transfer control across domains with minimal finetuning.",
-      "aliases": [],
-      "tasks": [
-        "latent-action-world-model",
-        "action-conditioned-video",
-        "multi-domain-world-model"
-      ],
-      "status": {
-        "group": "blocked",
-        "label": "Blocked",
-        "integration": "blocked",
-        "runner": "not_applicable",
-        "demo": "not_recorded"
-      },
-      "runtime": {
-        "profileId": "adaworld",
-        "bindingId": null,
-        "runnerTarget": null,
-        "runner": null,
-        "pipelineTarget": null,
-        "loadingMethod": null,
-        "invocationMode": null,
-        "backendStage": "source_only_unavailable",
-        "runtimeStatus": "studio_unavailable_official_env_and_task_assets_required",
-        "environmentId": "_unified",
-        "environmentName": "worldfoundry-unified-cu128",
-        "environmentKind": "unified",
-        "python": "3.11",
-        "cudaProfile": "cu128",
-        "cudaLabel": "CUDA 12.8",
-        "driverStatus": "compatible_unified_default",
-        "condaPackages": [
-          "python=3.11",
-          "pip",
-          "ffmpeg",
-          "setuptools",
-          "wheel"
-        ],
-        "pipPackages": [
-          "torch",
-          "torchvision",
-          "torchaudio",
-          "xfuser"
-        ],
-        "packageVersions": {
-          "torch": "torch",
-          "torchvision": "torchvision",
-          "torchaudio": "torchaudio",
-          "xfuser": "xfuser"
-        },
-        "validationImports": [
-          "torch",
-          "torchvision",
-          "numpy",
-          "transformers",
-          "diffusers",
-          "xfuser",
-          "worldfoundry"
-        ],
-        "notes": [
-          "AdaWorld source is vendored in-tree under synthesis/visual_generation/world_model/adaworld.",
-          "Local checkpoints may exist, but official AdaWorld dependencies and task/demo video assets are not reproducibly runnable from the unified Studio environment.",
-          "AdaWorld is hidden from release-facing Studio inference until runnable parity is restored.",
-          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
-          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
-          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
-          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
-        ]
-      },
-      "sources": [
-        {
-          "kind": "project",
-          "label": "Project",
-          "url": "https://adaptable-world-model.github.io/"
-        },
-        {
-          "kind": "paper",
-          "label": "Paper",
-          "url": "https://arxiv.org/abs/2503.18938"
-        },
-        {
-          "kind": "source",
-          "label": "GitHub",
-          "url": "https://github.com/Little-Podi/AdaWorld"
-        },
-        {
-          "kind": "docs",
-          "label": "Upstream README",
-          "url": "https://github.com/Little-Podi/AdaWorld#readme"
-        }
-      ],
-      "checkpoints": [],
-      "variants": [],
-      "inferenceTasks": [
-        {
-          "id": "latent-action-world-model",
-          "label": "Latent Action World Model",
-          "description": "Catalog task profile used by the model runtime.",
-          "source": "catalog",
-          "variantIds": [],
-          "inputs": [
-            {
-              "field": "prompt",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "image",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "video",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "actions",
-              "detail": "world_action, robot_action",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "generated_world",
-              "filename": "adaworld.mp4"
-            }
-          ]
-        },
-        {
-          "id": "action-conditioned-video",
-          "label": "Action Conditioned Video",
-          "description": "Catalog task profile used by the model runtime.",
-          "source": "catalog",
-          "variantIds": [],
-          "inputs": [
-            {
-              "field": "prompt",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "image",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "video",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "actions",
-              "detail": "world_action, robot_action",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "generated_world",
-              "filename": "adaworld.mp4"
-            }
-          ]
-        },
-        {
-          "id": "multi-domain-world-model",
-          "label": "Multi Domain World Model",
-          "description": "Catalog task profile used by the model runtime.",
-          "source": "catalog",
-          "variantIds": [],
-          "inputs": [
-            {
-              "field": "prompt",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "image",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "video",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "actions",
-              "detail": "world_action, robot_action",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "generated_world",
-              "filename": "adaworld.mp4"
-            }
-          ]
-        }
-      ],
-      "inputContract": [
-        {
-          "field": "prompt",
-          "detail": "Required"
-        },
-        {
-          "field": "image",
-          "detail": "Required"
-        },
-        {
-          "field": "video",
-          "detail": "Required"
-        },
-        {
-          "field": "actions",
-          "detail": "world_action, robot_action"
-        }
-      ],
-      "artifacts": [
-        {
-          "kind": "generated_world",
-          "filename": "adaworld.mp4"
-        }
-      ],
-      "notes": [
-        "AdaWorld is retained as open-source provenance/source-only metadata and hidden from the formal Studio infer catalog.",
-        "No release-facing WorldFoundry infer runner is advertised until official environment and asset parity is reproducible.",
-        "AdaWorld source is vendored in-tree under synthesis/visual_generation/world_model/adaworld.",
-        "Local checkpoints may exist, but official AdaWorld dependencies and task/demo video assets are not reproducibly runnable from the unified Studio environment.",
-        "AdaWorld is hidden from release-facing Studio inference until runnable parity is restored."
-      ],
-      "docs": {
-        "curated": true,
-        "publisher": {
-          "name": "The Hong Kong University of Science and Technology / MIT",
-          "nameZh": "香港科技大学 / 麻省理工学院",
-          "kind": "university"
-        },
-        "overview": [
-          "AdaWorld learns adaptable world models with latent actions: by extracting actions from unlabeled videos it can transfer control across domains with minimal finetuning. In this catalog it is retained as open-source provenance/source-only metadata and hidden from the formal Studio infer catalog."
-        ],
-        "overviewZh": [
-          "AdaWorld 用潜在动作学习可适配的世界模型：从无标注视频中提取动作，使控制能力以极少微调迁移到新领域。本 catalog 中它作为开源溯源/仅源码元数据保留，并在正式的 Studio 推理 catalog 中隐藏。"
-        ],
-        "architecture": [
-          "Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/world_model/adaworld; public checkpoints exist upstream."
-        ],
-        "architectureZh": [
-          "按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。官方源码已内置于 synthesis/visual_generation/world_model/adaworld；上游存在公开 checkpoint。"
-        ],
-        "usageNotes": [
-          "Blocked for release-facing inference: the official runner still requires AdaWorld-specific dependencies and task/demo video assets that are not reproducibly available in the unified Studio environment. Use the upstream repository directly until parity is restored."
-        ],
-        "usageNotesZh": [
-          "面向发布的推理被 blocked：官方 runner 仍需要 AdaWorld 专属依赖与任务/demo 视频资产，而这些在统一 Studio 环境中无法可复现地获得。在一致性恢复之前请直接使用上游仓库。"
-        ],
-        "highlights": [
-          "Latent Action World Model",
-          "Action Conditioned Video",
-          "Multi Domain World Model",
-          "Unified env · Python 3.11 · CUDA 12.8"
-        ],
-        "highlightsZh": [
-          "latent-action-world-model",
-          "动作条件视频生成",
-          "multi-domain-world-model",
-          "统一环境 · Python 3.11 · CUDA 12.8"
-        ],
-        "modalities": {
-          "inputs": [],
-          "outputs": []
-        },
-        "useCases": [],
-        "useCasesZh": [],
-        "hardware": {
-          "minVramGb": null,
-          "recommended": null,
-          "notes": []
-        },
-        "benchmarks": [],
-        "limitations": [
-          "Hidden from Studio inference until official environment and asset parity is reproducible.",
-          "No release-facing WorldFoundry infer runner is advertised for this entry."
-        ],
-        "limitationsZh": [
-          "在官方环境与资产一致性可复现之前，对 Studio 推理隐藏。",
-          "该条目不对外宣传任何面向发布的 WorldFoundry 推理 runner。"
-        ],
-        "paper": null,
-        "figures": []
-      },
-      "commands": {
-        "prepare": "bash scripts/inference/prepare_model_infer.sh adaworld",
-        "install": "bash scripts/setup/model_env_install.sh --model adaworld",
-        "inspect": "worldfoundry-eval zoo model-show --model-id adaworld --include-manifest --json",
-        "check": "worldfoundry-eval zoo model-download --model-id adaworld --check-local --json",
-        "run": "worldfoundry-eval run \\\n  adaworld \\\n  --pipeline.task-profile latent-action-world-model \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.image /path/to/input \\\n  --pipeline.video /path/to/input \\\n  --json"
-      },
-      "catalogPath": "worldfoundry/data/models/catalog/world_models/adaworld.yaml"
     }
   ]
 }

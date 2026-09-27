@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: last-r1
+model_id: last-r1
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.component_pipelines:LastR1Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

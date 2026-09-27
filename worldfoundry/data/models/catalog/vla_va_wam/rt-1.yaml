@@ -6,9 +6,10 @@ availability: open_source
 id: rt-1
 integration:
   notes:
-  - Official checkpoint and TensorFlow rollout command must be validated before integrated status.
-  - RT-1 SavedModel runtime and upstream source are vendored in-tree; py_compile, import/from_pretrained, and plan generation
-    passed, but the configured checkpoint directory is missing locally.
+  - The released SavedModel consumes a precomputed 512-D language embedding; passing
+    only a prompt string is rejected because the SavedModel does not encode text.
+  - The official rt1main, rt1multirobot, and rt1simreal SavedModels completed
+    structural offline GPU action inference through the public pipeline with synthetic embeddings.
   status: runtime_ported
 name: RT-1
 official_sources:
@@ -33,15 +34,15 @@ docs:
   publisher: Google Research
   publisher_kind: company
   publisher_zh: 谷歌研究院（Google Research）
-  overview: RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry vendors the RT-1 SavedModel runtime and upstream source in-tree; py_compile, import, and plan generation passed, but the configured checkpoint directory is not yet staged locally.
-  overview_zh: RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 将 RT-1 SavedModel 运行时与上游源码内置树内；py_compile、导入与计划生成已通过，但配置的 checkpoint 目录尚未本地就位。
+  overview: RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry's in-tree SavedModel adapter has completed structural offline GPU action inference with the official checkpoints and supplied synthetic 512-D embeddings; task-grounded encoding remains unverified.
+  overview_zh: RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 的树内 SavedModel 适配器已用官方权重和传入的合成 512 维向量完成离线 GPU 动作结构验证；任务语义编码仍未核验。
   architecture: An EfficientNet-B3 image tokenizer with FiLM language conditioning, TokenLearner compression, and a decoder-only transformer emitting discretized action tokens — served as a TensorFlow SavedModel.
   architecture_zh: EfficientNet-B3 图像 token 化配 FiLM 语言条件、TokenLearner 压缩与 decoder-only transformer，输出离散化动作 token——以 TensorFlow SavedModel 提供。
-  usage_notes: The official checkpoint and TensorFlow rollout command must be validated before integrated status; stage the SavedModel checkpoint directory to run beyond plan generation. This is a TensorFlow entry, unlike most PyTorch policies in the catalog.
-  usage_notes_zh: 在验证官方 checkpoint 与 TensorFlow rollout 命令前不会进入 integrated 状态；就位 SavedModel checkpoint 目录后方可超出计划生成执行。这是 TensorFlow 条目，与 catalog 中多数 PyTorch 策略不同。
+  usage_notes: Supply a 512-D language_embedding from an encoder compatible with the checkpoint along with the image and prompt. The released SavedModel does not turn prompt text into that embedding; WorldFoundry rejects text-only inference instead of silently using zeros. GPU inference needs a TensorFlow/CuDNN-compatible environment.
+  usage_notes_zh: 传入图像、指令以及由兼容编码器生成的 512 维 language_embedding。发布的 SavedModel 不会自行把指令文本编码成该向量；WorldFoundry 对只有文本的推理明确报错，不会默默使用零向量。GPU 推理需要兼容的 TensorFlow/CuDNN 环境。
   limitations:
-  - TensorFlow SavedModel stack; checkpoint directory is not yet staged.
+  - Text-only inference requires a separately staged, checkpoint-compatible language encoder; offline action structure validation does not prove task success.
   - No license is recorded in this repository.
   limitations_zh:
-  - TensorFlow SavedModel 栈；checkpoint 目录尚未就位。
+  - 仅输入文本还需要另行准备与 checkpoint 兼容的语言编码器；离线动作结构验证不代表任务成功。
   - 仓库未记录许可证。

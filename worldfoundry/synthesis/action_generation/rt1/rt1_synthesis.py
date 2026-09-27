@@ -12,10 +12,11 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, Mapping, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
+
 from ..base_action_synthesis import ActionModelSynthesis
 
 if TYPE_CHECKING:
@@ -283,6 +284,16 @@ class RT1Synthesis(ActionModelSynthesis):
         del timeout_seconds
         # Determine if only a plan should be generated, without actual model execution.
         plan_only = bool(kwargs.pop("plan_only", False)) or bool(self.runtime_options.get("plan_only"))
+        # The released SavedModel consumes a precomputed 512-D embedding. Do not
+        # serialize it into the generic plan or silently substitute a zero vector.
+        language_embedding = kwargs.pop("language_embedding", None)
+        observation = kwargs.get("rt1_observation")
+        if isinstance(observation, Mapping) and "natural_language_embedding" in observation:
+            if language_embedding is None:
+                language_embedding = observation["natural_language_embedding"]
+            kwargs["rt1_observation"] = {
+                key: value for key, value in observation.items() if key != "natural_language_embedding"
+            }
         # Set up a temporary directory for run artifacts if not provided.
         run_dir = Path(kwargs.pop("run_dir", "") or tempfile.mkdtemp(prefix="rt1_"))
         run_dir = run_dir.expanduser().resolve()
@@ -341,6 +352,7 @@ class RT1Synthesis(ActionModelSynthesis):
         # Execute the RT-1 model's action prediction.
         result = self._runtime_for(runtime_config).predict_action(
             instruction=prompt,
+            language_embedding=language_embedding,
             image=image,
             output_path=context["output_path"],
             # Aggregate additional metadata to be included in the prediction results.
