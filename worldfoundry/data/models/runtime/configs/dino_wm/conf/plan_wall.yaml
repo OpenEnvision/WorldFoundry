@@ -36,6 +36,7 @@ objective:
   mode: last
 planner:
   _target_: worldfoundry.synthesis.visual_generation.world_model.dino_wm.inference_planning.mpc.MPCPlanner
+  max_iter: null
   n_taken_actions: 5
   sub_planner:
     target: worldfoundry.synthesis.visual_generation.world_model.dino_wm.inference_planning.cem.CEMPlanner

@@ -33241,7 +33241,7 @@
         "group": "integrated",
         "label": "Integrated",
         "integration": "integrated",
-        "runner": "pending",
+        "runner": "verified_inference_only",
         "demo": "not_recorded"
       },
       "runtime": {
@@ -33253,7 +33253,7 @@
         "loadingMethod": "from_pretrained",
         "invocationMode": "native_or_standard_invocation",
         "backendStage": "in_tree_runtime_manifest",
-        "runtimeStatus": "in_tree_runtime_manifest_command_preflight_ready",
+        "runtimeStatus": "checkpoint_backed_wall_gpu_inference_verified",
         "environmentId": "_unified",
         "environmentName": "worldfoundry-unified-cu128",
         "environmentKind": "unified",
@@ -33292,6 +33292,8 @@
         "notes": [
           "DINO-WM source is vendored in-tree under synthesis/visual_generation/world_model/dino_wm.",
           "The official planning/eval route is exposed through an infer-only WorldFoundry wrapper and runtime configs under data/models/runtime/configs/dino_wm/conf.",
+          "The wall_single checkpoint, official wall trajectories, and DINOv2 encoder completed GPU planning inference and produced decodable simulator videos. Prompt, standalone image/video, and direct action inputs are not this route's contract.",
+          "Pusht and point_maze remain untested with their own task assets; no general planning-quality conclusion is claimed.",
           "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
           "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
           "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
@@ -33342,23 +33344,23 @@
             },
             {
               "field": "ckpt_base_path",
-              "detail": "Required; default=/ckpt/dino_wm",
+              "detail": "Required; default=/home/ubuntu/.cache/worldfoundry/checkpoints/dino_wm",
               "kind": "path",
               "target": "load_kwargs",
               "required": true,
-              "default": "/ckpt/dino_wm",
+              "default": "/home/ubuntu/.cache/worldfoundry/checkpoints/dino_wm",
               "choices": [],
               "description": ""
             },
             {
               "field": "model_name",
-              "detail": "Required; default=wall; choices=wall, pusht, point_maze",
+              "detail": "Required; default=wall_single; choices=wall_single, pusht, point_maze",
               "kind": "string",
               "target": "load_kwargs",
               "required": true,
-              "default": "wall",
+              "default": "wall_single",
               "choices": [
-                "wall",
+                "wall_single",
                 "pusht",
                 "point_maze"
               ],
@@ -33376,11 +33378,11 @@
             },
             {
               "field": "seed",
-              "detail": "Optional; default=0",
+              "detail": "Optional; default=99",
               "kind": "integer",
               "target": "load_kwargs",
               "required": false,
-              "default": 0,
+              "default": 99,
               "choices": [],
               "description": ""
             },
@@ -33396,11 +33398,21 @@
             },
             {
               "field": "goal_source",
-              "detail": "Optional; default=random_state",
+              "detail": "Optional; default=dset",
               "kind": "string",
               "target": "load_kwargs",
               "required": false,
-              "default": "random_state",
+              "default": "dset",
+              "choices": [],
+              "description": ""
+            },
+            {
+              "field": "goal_H",
+              "detail": "Optional; default=1",
+              "kind": "integer",
+              "target": "load_kwargs",
+              "required": false,
+              "default": 1,
               "choices": [],
               "description": ""
             },
@@ -33439,24 +33451,7 @@
           ]
         }
       ],
-      "inputContract": [
-        {
-          "field": "prompt",
-          "detail": "Required"
-        },
-        {
-          "field": "image",
-          "detail": "Required"
-        },
-        {
-          "field": "video",
-          "detail": "Required"
-        },
-        {
-          "field": "actions",
-          "detail": "robot_action, planning_action"
-        }
-      ],
+      "inputContract": [],
       "artifacts": [
         {
           "kind": "generated_world",
@@ -33471,11 +33466,14 @@
         "WorldFoundry vendors the official DINO-WM planning/evaluation route in-tree under synthesis/visual_generation/world_model/dino_wm.",
         "The WorldFoundry infer entrypoint loads runtime configs from worldfoundry/data/models/runtime/configs/dino_wm/conf.",
         "The vendored `dino_wm/env/` simulators are required for official planning runs and are intentionally kept in-tree.",
-        "Execution remains checkpoint/task-asset gated but no longer depends on an external repo checkout.",
-        "The pipeline resolves the in-tree infer.py wrapper and official planning_main route.",
-        "Full runtime parity remains blocked until the OSF checkpoint/task-asset layout is staged; per-run validation evidence is tracked outside the model catalog.",
+        "The wall_single route completed checkpoint-backed inference with official wall trajectories; other task routes still require their own assets and validation.",
+        "The public wall_single route loaded the released epoch-65 checkpoint, official wall trajectories, and DINOv2 encoder; GPU inference completed and produced two fully decodable 26-frame MP4 artifacts with finite result metrics.",
+        "These small-budget wall runs verify execution only. One target was already within the task's success threshold, while a nontrivial target was not solved; neither establishes planning quality.",
+        "The released pusht and point_maze checkpoints have not been validated with their task datasets and simulators.",
         "DINO-WM source is vendored in-tree under synthesis/visual_generation/world_model/dino_wm.",
-        "The official planning/eval route is exposed through an infer-only WorldFoundry wrapper and runtime configs under data/models/runtime/configs/dino_wm/conf."
+        "The official planning/eval route is exposed through an infer-only WorldFoundry wrapper and runtime configs under data/models/runtime/configs/dino_wm/conf.",
+        "The wall_single checkpoint, official wall trajectories, and DINOv2 encoder completed GPU planning inference and produced decodable simulator videos. Prompt, standalone image/video, and direct action inputs are not this route's contract.",
+        "Pusht and point_maze remain untested with their own task assets; no general planning-quality conclusion is claimed."
       ],
       "docs": {
         "curated": true,
@@ -33497,10 +33495,10 @@
           "按上游项目，ViT 预测器在动作条件下向前滚动 DINOv2 patch 特征；规划是特征空间中的模型预测控制。推理入口从 data/models/runtime/configs/dino_wm/conf 加载运行时配置，内置的 dino_wm/env 仿真器为官方规划运行有意保留在树内。"
         ],
         "usageNotes": [
-          "Execution remains checkpoint/task-asset gated but no longer depends on an external repo checkout. Full runtime parity is blocked until the OSF checkpoint/task-asset layout is staged."
+          "The wall_single planning route requires its released model_latest.pth, a DINOv2 encoder, and DATASET_DIR set to the parent directory containing the complete official wall_single trajectory dataset. These assets are not bundled with WorldFoundry; the in-tree runtime no longer needs an external DINO-WM checkout."
         ],
         "usageNotesZh": [
-          "执行仍受 checkpoint/任务资产限制，但不再依赖外部仓库检出。完整运行时一致性在 OSF checkpoint/任务资产布局就位前保持 blocked。"
+          "wall_single 规划路径需要发布的 model_latest.pth、DINOv2 编码器，并将 DATASET_DIR 指向包含完整官方 wall_single 轨迹数据集的父目录。这些资源不随 WorldFoundry 分发；仓内运行时不再需要外部 DINO-WM 检出。"
         ],
         "highlights": [
           "Visual Feature World Model",
@@ -33527,12 +33525,14 @@
         },
         "benchmarks": [],
         "limitations": [
-          "Full parity waits on the OSF checkpoint/task-asset layout.",
-          "Feature-space world model: it plans, it does not render pixels."
+          "Only wall_single has checkpoint-backed GPU inference evidence; pusht and point_maze remain untested.",
+          "The wall smoke tests do not establish planning quality or general task success.",
+          "The model predicts in feature space; the MP4 is a simulator/planning visualization, not pixel generation."
         ],
         "limitationsZh": [
-          "完整一致性待 OSF checkpoint/任务资产布局就位。",
-          "特征空间世界模型：用于规划，不渲染像素。"
+          "只有 wall_single 具备权重驱动的 GPU 推理证据；pusht 和 point_maze 尚未验证。",
+          "wall 简短测试不能证明规划质量或一般任务成功率。",
+          "模型在特征空间中预测；MP4 是仿真/规划可视化，并非像素生成。"
         ],
         "paper": null,
         "figures": []
@@ -52402,6 +52402,484 @@
         "run": "worldfoundry-eval run \\\n  modelscope-t2v \\\n  --pipeline.task-profile text-to-video \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/video/modelscope-t2v.yaml"
+    },
+    {
+      "id": "molmobot",
+      "name": "MolmoBot",
+      "category": "vla_va_wam",
+      "categoryLabel": "Embodied",
+      "categoryLabelZh": "具身智能",
+      "provider": "Allen Institute for AI (AI2)",
+      "summary": "MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, and RBY1 multitask; the Pi0-based DROID checkpoint is Gemma-licensed. WorldFoundry records both action infer…",
+      "aliases": [
+        "molmob0t",
+        "molmobot-droid",
+        "molmobot-pi0"
+      ],
+      "tasks": [
+        "vla",
+        "vla.action_prediction",
+        "vla.policy_rollout",
+        "robot_policy"
+      ],
+      "status": {
+        "group": "integrated",
+        "label": "Integrated",
+        "integration": "integrated",
+        "runner": "verified_inference_only",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "molmobot",
+        "bindingId": "molmobot",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.component_pipelines:MolmoBotPipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "in_tree_inference_only_checkpoint_runtime",
+        "runtimeStatus": "checkpoint_backed_offline_gpu_inference_verified",
+        "environmentId": "molmobot-pi0-droid",
+        "environmentName": "worldfoundry-molmobot-pi0-cu128",
+        "environmentKind": "dedicated",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible",
+        "condaPackages": [
+          "python",
+          "pip"
+        ],
+        "pipPackages": [
+          "torch==2.7.1",
+          "transformers==4.53.2",
+          "jax[cuda12]==0.5.3",
+          "numpy>2.0,<2.4",
+          "molmobot-pi0 @ git+https://github.com/allenai/MolmoBot.git@33c0ca77bf6062a23d60ffd4a6859334c4a46d30#subdirectory=MolmoBot-Pi0"
+        ],
+        "packageVersions": {
+          "torch": "torch==2.7.1",
+          "transformers": "transformers==4.53.2"
+        },
+        "validationImports": [
+          "numpy",
+          "torch",
+          "transformers",
+          "openpi",
+          "molmobot_pi0"
+        ],
+        "notes": [
+          "Official MolmoBot-DROID serves with launch_scripts/serve_molmo.py; MolmoBot-Pi0 demo uses PiJointPosPolicy.get_action.",
+          "WorldFoundry directly imports its flattened inference-only SynthManipMolmoInferenceWrapper; no external MolmoBot checkout is used at runtime. The Pi0 route uses pinned isolated OpenPI dependencies.",
+          "MolmoBot-DROID, MolmoBot-Img-DROID, and Pi0-DROID completed checkpoint-backed offline GPU action inference. No closed-loop success is claimed.",
+          "Minimal runtime excludes MolmoSpaces, real robot clients, training, W&B/SPoC paths, and benchmark assets.",
+          "Use a dedicated Python 3.11 environment; OpenPI pins Torch and Transformers independently of MolmoBot's OLMo runtime.",
+          "After installation run python -m worldfoundry.synthesis.action_generation.molmobot.openpi_setup inside this environment.",
+          "Stage the validated PaliGemma tokenizer under OPENPI_DATA_HOME/big_vision before inference; the runtime does not fetch it implicitly.",
+          "The WorldFoundry Pi0 adapter does not import MolmoSpaces or its simulator resources."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "project",
+          "label": "Project",
+          "url": "https://allenai.github.io/MolmoBot"
+        },
+        {
+          "kind": "paper",
+          "label": "Paper",
+          "url": "https://arxiv.org/abs/2603.16861"
+        },
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/allenai/MolmoBot"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/allenai/MolmoBot-DROID"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/allenai/MolmoBot-Img-DROID"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/allenai/MolmoBot-RBY1Multitask"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/allenai/MolmoBot-Pi0-DROID"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/allenai/MolmoBot#readme"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "allenai/MolmoBot-DROID",
+          "license": "apache-2.0"
+        },
+        {
+          "id": "allenai/MolmoBot-Pi0-DROID",
+          "license": "gemma"
+        },
+        {
+          "id": "allenai/MolmoBot-Img-DROID",
+          "role": "image_droid_checkpoint"
+        },
+        {
+          "id": "allenai/MolmoBot-RBY1Multitask",
+          "role": "rby1_multitask_checkpoint"
+        }
+      ],
+      "variants": [
+        {
+          "id": "molmobot-droid",
+          "label": "molmobot-droid",
+          "task": "vla.policy_rollout",
+          "runtimeProfile": "molmobot",
+          "pipelineBinding": "molmobot",
+          "status": "integrated",
+          "pipelineTarget": "worldfoundry.pipelines.component_pipelines:MolmoBotPipeline",
+          "runner": "worldfoundry.pipeline",
+          "loadingMethod": "from_pretrained",
+          "invocationMode": "native_or_standard_invocation",
+          "environmentName": "worldfoundry-unified-cu128",
+          "environmentKind": "unified",
+          "python": "3.11",
+          "cudaLabel": "CUDA 12.8",
+          "backendStage": "in_tree_inference_only_checkpoint_runtime",
+          "runtimeStatus": "checkpoint_backed_offline_gpu_inference_verified",
+          "inputContract": [
+            {
+              "field": "model_id",
+              "detail": "molmobot"
+            },
+            {
+              "field": "image",
+              "detail": "Required"
+            },
+            {
+              "field": "prompt",
+              "detail": "Required"
+            },
+            {
+              "field": "state",
+              "detail": "Required"
+            },
+            {
+              "field": "camera_keys",
+              "detail": "exo_camera_1, wrist_camera"
+            },
+            {
+              "field": "state_keys",
+              "detail": "qpos.arm, qpos.gripper"
+            },
+            {
+              "field": "policy_family",
+              "detail": "molmobot_action_chunk_policy"
+            },
+            {
+              "field": "action_representation",
+              "detail": "robot_specific_action_chunk"
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "action_trace",
+              "filename": ""
+            },
+            {
+              "kind": "action_trace",
+              "filename": "molmobot_action_trace.json"
+            }
+          ]
+        },
+        {
+          "id": "molmobot-pi0-droid",
+          "label": "molmobot-pi0-droid",
+          "task": "vla.policy_rollout",
+          "runtimeProfile": "molmobot",
+          "pipelineBinding": "molmobot",
+          "status": "integrated",
+          "pipelineTarget": "worldfoundry.pipelines.component_pipelines:MolmoBotPipeline",
+          "runner": "worldfoundry.pipeline",
+          "loadingMethod": "from_pretrained",
+          "invocationMode": "native_or_standard_invocation",
+          "environmentName": "worldfoundry-molmobot-pi0-cu128",
+          "environmentKind": "dedicated",
+          "python": "3.11",
+          "cudaLabel": "CUDA 12.8",
+          "backendStage": "in_tree_inference_only_checkpoint_runtime",
+          "runtimeStatus": "checkpoint_backed_offline_gpu_inference_verified",
+          "inputContract": [
+            {
+              "field": "model_id",
+              "detail": "molmobot"
+            },
+            {
+              "field": "image",
+              "detail": "Required"
+            },
+            {
+              "field": "prompt",
+              "detail": "Required"
+            },
+            {
+              "field": "state",
+              "detail": "Required"
+            },
+            {
+              "field": "camera_keys",
+              "detail": "exo_camera_1, wrist_camera"
+            },
+            {
+              "field": "state_keys",
+              "detail": "qpos.arm, qpos.gripper"
+            },
+            {
+              "field": "policy_family",
+              "detail": "molmobot_action_chunk_policy"
+            },
+            {
+              "field": "action_representation",
+              "detail": "robot_specific_action_chunk"
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "action_trace",
+              "filename": ""
+            },
+            {
+              "kind": "action_trace",
+              "filename": "molmobot_action_trace.json"
+            }
+          ]
+        }
+      ],
+      "inferenceTasks": [
+        {
+          "id": "vla.policy_rollout",
+          "label": "Vla.Policy Rollout",
+          "description": "Catalog task profile used by the model runtime.",
+          "source": "catalog",
+          "variantIds": [
+            "molmobot-droid",
+            "molmobot-pi0-droid"
+          ],
+          "inputs": [
+            {
+              "field": "model_id",
+              "detail": "molmobot",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "image",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "state",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "camera_keys",
+              "detail": "exo_camera_1, wrist_camera",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "state_keys",
+              "detail": "qpos.arm, qpos.gripper",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "policy_family",
+              "detail": "molmobot_action_chunk_policy",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "action_representation",
+              "detail": "robot_specific_action_chunk",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "action_trace",
+              "filename": ""
+            },
+            {
+              "kind": "action_trace",
+              "filename": "molmobot_action_trace.json"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "model_id",
+          "detail": "molmobot"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "state",
+          "detail": "Required"
+        },
+        {
+          "field": "camera_keys",
+          "detail": "exo_camera_1, wrist_camera"
+        },
+        {
+          "field": "state_keys",
+          "detail": "qpos.arm, qpos.gripper"
+        },
+        {
+          "field": "policy_family",
+          "detail": "molmobot_action_chunk_policy"
+        },
+        {
+          "field": "action_representation",
+          "detail": "robot_specific_action_chunk"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "action_trace",
+          "filename": ""
+        },
+        {
+          "kind": "action_trace",
+          "filename": "molmobot_action_trace.json"
+        }
+      ],
+      "notes": [
+        "WorldFoundry runs OLMo-based MolmoBot and Pi0-based DROID policies through in-tree inference-only pipelines.",
+        "The released MolmoBot-DROID and MolmoBot-Img-DROID checkpoints completed offline GPU action inference; the Pi0-DROID checkpoint also completed official and public Pipeline GPU inference.",
+        "The Pi0 route uses a pinned isolated OpenPI environment, without importing the MolmoSpaces simulator at runtime.",
+        "Public Pi0 input preparation matched the official policy for both cameras, arm and gripper state, and prompt.",
+        "Evidence covers offline action inference only; MolmoSpaces simulation, real robot execution, training, and benchmarks were not run.",
+        "Official MolmoBot-DROID serves with launch_scripts/serve_molmo.py; MolmoBot-Pi0 demo uses PiJointPosPolicy.get_action.",
+        "WorldFoundry directly imports its flattened inference-only SynthManipMolmoInferenceWrapper; no external MolmoBot checkout is used at runtime. The Pi0 route uses pinned isolated OpenPI dependencies.",
+        "MolmoBot-DROID, MolmoBot-Img-DROID, and Pi0-DROID completed checkpoint-backed offline GPU action inference. No closed-loop success is claimed.",
+        "Minimal runtime excludes MolmoSpaces, real robot clients, training, W&B/SPoC paths, and benchmark assets."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "Allen Institute for AI (AI2)",
+          "nameZh": "艾伦人工智能研究所（AI2）",
+          "kind": "lab"
+        },
+        "overview": [
+          "MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, and RBY1 multitask; the Pi0-based DROID checkpoint is Gemma-licensed. WorldFoundry records both action inference contracts."
+        ],
+        "overviewZh": [
+          "MolmoBot 是 AI2 围绕 Molmo VLM 的机器人策略家族。Franka DROID、图像条件 DROID 和 RBY1 多任务 checkpoint 采用 Apache-2.0；基于 Pi0 的 DROID checkpoint 标注为 Gemma 许可。WorldFoundry 记录两条动作推理路径。"
+        ],
+        "architecture": [
+          "The in-tree OLMo-based path returns robot-specific action chunks; the separate Pi0-DROID path loads the released OpenPI checkpoint and decodes joint-position arm/gripper actions. Both paths have checkpoint-backed offline GPU evidence."
+        ],
+        "architectureZh": [
+          "仓内基于 OLMo 的路径输出机器人专用动作块；独立的 Pi0-DROID 路径加载发布的 OpenPI 权重并解码关节位置手臂/夹爪动作。两条路径都有权重驱动的离线 GPU 推理证据。"
+        ],
+        "usageNotes": [
+          "MolmoBot-DROID, MolmoBot-Img-DROID, and MolmoBot-Pi0-DROID passed offline inference on a real DROID observation. Pi0 requires its pinned OpenPI dependencies and PaliGemma tokenizer. RBY1Multitask has not been validated here."
+        ],
+        "usageNotesZh": [
+          "MolmoBot-DROID、MolmoBot-Img-DROID 和 MolmoBot-Pi0-DROID 已在真实 DROID 观测上通过离线推理。Pi0 需要固定版本的 OpenPI 依赖与 PaliGemma tokenizer；RBY1Multitask 尚未在这里验证。"
+        ],
+        "highlights": [
+          "Vla",
+          "Vla.Action Prediction",
+          "Vla.Policy Rollout",
+          "2 runnable WorldFoundry variants",
+          "Dedicated env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "视觉-语言-动作（VLA）",
+          "VLA 动作预测",
+          "VLA 策略执行",
+          "2 个可运行的 WorldFoundry variant",
+          "独立环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [],
+          "outputs": []
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "No closed-loop robot task success or semantic action quality has been measured.",
+          "The Pi0 probe used an out-of-distribution real observation for a simulation-trained policy."
+        ],
+        "limitationsZh": [
+          "尚未测量闭环机器人任务成功率或动作语义质量。",
+          "Pi0 测试对仿真训练的策略使用了分布外的真实观测。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh molmobot-droid",
+        "install": "bash scripts/setup/model_env_install.sh --model molmobot-droid",
+        "inspect": "worldfoundry-eval zoo model-show --model-id molmobot --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id molmobot --check-local --json",
+        "run": "worldfoundry-eval run \\\n  molmobot-droid \\\n  --pipeline.task-profile vla.policy_rollout \\\n  --pipeline.image /path/to/input \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.state VALUE \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/vla_va_wam/molmobot.yaml"
     },
     {
       "id": "multiworld",
@@ -98389,7 +98867,7 @@
       "categoryLabel": "World models",
       "categoryLabelZh": "世界模型",
       "provider": "Allen Institute for AI (AI2)",
-      "summary": "WildDet3D from the Allen Institute for AI tackles 3D detection in the wild: recovering 3D object boxes from unconstrained real-world imagery as a world-understanding capability. Both the official GitHub repository and the allenai/WildDet3D…",
+      "summary": "WildDet3D from the Allen Institute for AI recovers 3D object boxes from unconstrained RGB imagery. WorldFoundry calls the pinned official detector through a small adapter and stores its detections and depth map in a NumPy archive.",
       "aliases": [],
       "tasks": [
         "3d-detection",
@@ -98400,7 +98878,7 @@
         "group": "runtime_ported",
         "label": "Runtime ported",
         "integration": "runtime_ported",
-        "runner": "implemented_checkpoint_pending",
+        "runner": "selected_checkpoint_gpu_validated",
         "demo": "not_recorded"
       },
       "runtime": {
@@ -98411,8 +98889,8 @@
         "pipelineTarget": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:WildDet3DPipeline",
         "loadingMethod": "from_pretrained",
         "invocationMode": "native_or_standard_invocation",
-        "backendStage": "worldfoundry_runtime_plan",
-        "runtimeStatus": "route_ready_assets_pending",
+        "backendStage": "in_tree_runtime_manifest",
+        "runtimeStatus": "official_runtime_checkpoint_bound",
         "environmentId": "_unified",
         "environmentName": "worldfoundry-unified-cu128",
         "environmentKind": "unified",
@@ -98449,11 +98927,10 @@
           "worldfoundry"
         ],
         "notes": [
-          "WildDet3D official inference route is registered; detector assets are runtime-gated.",
-          "Missing checkpoints/assets are reported by the runtime plan and are not catalog blockers.",
-          "WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline is registered.",
-          "Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/WildDet3D at 1b8aa52b6ff3f00d0ebfa07175efc0c0c440964a.",
-          "Real 3D detection remains blocked until allenai/WildDet3D assets and official inference parity are staged.",
+          "Runs the pinned official checkout through a small WorldFoundry launcher; upstream SAM-licensed source is not vendored.",
+          "Set WORLDFOUNDRY_WILDDET3D_SOURCE to the cloned checkout with SAM3 and LingBot-Depth submodules, or stage it under the configured model source root.",
+          "Requires the full detector checkpoint and official robbyant/lingbot-depth-postrain-dc-vitl14/model.pt for geometry architecture construction.",
+          "Pass image_path and a comma-separated class prompt; optional intrinsics_path is a 3x3 NumPy matrix. Output is a NumPy archive of detections and depth.",
           "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
           "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
           "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
@@ -98490,7 +98967,11 @@
       "checkpoints": [
         {
           "id": "allenai/WildDet3D",
-          "license": "other:sam-license"
+          "role": "trained_detector"
+        },
+        {
+          "id": "robbyant/lingbot-depth-postrain-dc-vitl14",
+          "role": "geometry_architecture_config"
         }
       ],
       "variants": [],
@@ -98528,10 +99009,10 @@
             },
             {
               "field": "video",
-              "detail": "Required",
+              "detail": "Optional",
               "kind": "string",
               "target": "input",
-              "required": true,
+              "required": false,
               "description": "Recorded input field from the runtime profile."
             }
           ],
@@ -98542,7 +99023,7 @@
             },
             {
               "kind": "generated_3d_asset",
-              "filename": "wilddet3d_runtime_plan.json"
+              "filename": "wilddet3d_predictions.npz"
             }
           ]
         },
@@ -98579,10 +99060,10 @@
             },
             {
               "field": "video",
-              "detail": "Required",
+              "detail": "Optional",
               "kind": "string",
               "target": "input",
-              "required": true,
+              "required": false,
               "description": "Recorded input field from the runtime profile."
             }
           ],
@@ -98593,7 +99074,7 @@
             },
             {
               "kind": "generated_3d_asset",
-              "filename": "wilddet3d_runtime_plan.json"
+              "filename": "wilddet3d_predictions.npz"
             }
           ]
         },
@@ -98630,10 +99111,10 @@
             },
             {
               "field": "video",
-              "detail": "Required",
+              "detail": "Optional",
               "kind": "string",
               "target": "input",
-              "required": true,
+              "required": false,
               "description": "Recorded input field from the runtime profile."
             }
           ],
@@ -98644,7 +99125,7 @@
             },
             {
               "kind": "generated_3d_asset",
-              "filename": "wilddet3d_runtime_plan.json"
+              "filename": "wilddet3d_predictions.npz"
             }
           ]
         }
@@ -98664,7 +99145,7 @@
         },
         {
           "field": "video",
-          "detail": "Required"
+          "detail": "Optional"
         }
       ],
       "artifacts": [
@@ -98674,16 +99155,16 @@
         },
         {
           "kind": "generated_3d_asset",
-          "filename": "wilddet3d_runtime_plan.json"
+          "filename": "wilddet3d_predictions.npz"
         }
       ],
       "notes": [
-        "WildDet3D official inference route is registered; detector assets are runtime-gated.",
-        "resolve_model_zoo_config and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged.",
-        "Missing checkpoints/assets are reported by the runtime plan and are not catalog blockers.",
-        "WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline is registered.",
-        "Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/WildDet3D at 1b8aa52b6ff3f00d0ebfa07175efc0c0c440964a.",
-        "Real 3D detection remains blocked until allenai/WildDet3D assets and official inference parity are staged."
+        "The pinned official WildDet3D detector is launched through a small WorldFoundry adapter; source, submodules, and checkpoints remain external.",
+        "RGB images and comma-separated text classes run through official preprocessing and detector inference; missing assets are reported by the runtime preflight.",
+        "Runs the pinned official checkout through a small WorldFoundry launcher; upstream SAM-licensed source is not vendored.",
+        "Set WORLDFOUNDRY_WILDDET3D_SOURCE to the cloned checkout with SAM3 and LingBot-Depth submodules, or stage it under the configured model source root.",
+        "Requires the full detector checkpoint and official robbyant/lingbot-depth-postrain-dc-vitl14/model.pt for geometry architecture construction.",
+        "Pass image_path and a comma-separated class prompt; optional intrinsics_path is a 3x3 NumPy matrix. Output is a NumPy archive of detections and depth."
       ],
       "docs": {
         "curated": true,
@@ -98693,22 +99174,22 @@
           "kind": "lab"
         },
         "overview": [
-          "WildDet3D from the Allen Institute for AI tackles 3D detection in the wild: recovering 3D object boxes from unconstrained real-world imagery as a world-understanding capability. Both the official GitHub repository and the allenai/WildDet3D Hugging Face model are confirmed; WorldFoundry registers the official inference route in-tree with detector assets runtime-gated."
+          "WildDet3D from the Allen Institute for AI recovers 3D object boxes from unconstrained RGB imagery. WorldFoundry calls the pinned official detector through a small adapter and stores its detections and depth map in a NumPy archive."
         ],
         "overviewZh": [
-          "艾伦人工智能研究所（AI2）的 WildDet3D 面向野外 3D 检测：从不受约束的真实图像中恢复 3D 物体框，作为世界理解能力。官方 GitHub 仓库与 allenai/WildDet3D Hugging Face 模型均已确认；WorldFoundry 树内注册了官方推理路由，检测器资产为运行时门控。"
+          "艾伦人工智能研究所（AI2）的 WildDet3D 从真实 RGB 图像中恢复物体的三维框。WorldFoundry 通过薄适配器调用固定版本的官方检测器，将检测框和深度图保存为 NumPy 文件。"
         ],
         "architecture": [
-          "This is a perception entry rather than a generator: outputs are 3D detection artifacts (generated_3d_asset) instead of video. Architecture internals beyond the official repository pointer (pinned head 1b8aa52b) are not recorded in this repository."
+          "This is a perception entry, not a video generator. The official model combines SAM3 image features and LingBot-Depth geometry; upstream source and submodules are loaded from a pinned external checkout."
         ],
         "architectureZh": [
-          "这是感知类条目而非生成器：输出为 3D 检测产物（generated_3d_asset）而非视频。官方仓库指针（锁定 head 1b8aa52b）之外的架构内部细节仓库未记录。"
+          "这是感知模型，而非视频生成器。官方模型结合 SAM3 图像特征与 LingBot-Depth 几何信息；源码和子模块从仓库外的固定版本检出加载。"
         ],
         "usageNotes": [
-          "Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Note the SAM-derived license recorded upstream (other:sam-license)."
+          "Provide image_path and comma-separated classes in the prompt; optionally provide intrinsics_path for a finite 3x3 .npy matrix. Stage the full allenai/WildDet3D checkpoint, robbyant/lingbot-depth-postrain-dc-vitl14/model.pt, and pinned official checkout with submodules. The upstream source uses the SAM License."
         ],
         "usageNotesZh": [
-          "配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。注意上游记录的 SAM 派生许可（other:sam-license）。"
+          "传入 image_path，并用英文逗号分隔 prompt 中的检测类别；可选传入 3x3 的 intrinsics_path（.npy）。需要完整的 allenai/WildDet3D checkpoint、robbyant/lingbot-depth-postrain-dc-vitl14/model.pt，以及含子模块的官方固定版本源码。上游源码使用 SAM License。"
         ],
         "highlights": [
           "3D Detection",
@@ -98752,7 +99233,7 @@
         "install": "bash scripts/setup/model_env_install.sh --model wilddet3d",
         "inspect": "worldfoundry-eval zoo model-show --model-id wilddet3d --include-manifest --json",
         "check": "worldfoundry-eval zoo model-download --model-id wilddet3d --check-local --json",
-        "run": "worldfoundry-eval run \\\n  wilddet3d \\\n  --pipeline.task-profile 3d-detection \\\n  --pipeline.image /path/to/input \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.video /path/to/input \\\n  --json"
+        "run": "worldfoundry-eval run \\\n  wilddet3d \\\n  --pipeline.task-profile 3d-detection \\\n  --pipeline.image /path/to/input \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/world_models/wilddet3d.yaml"
     },
@@ -103879,495 +104360,6 @@
         "run": "worldfoundry-eval run \\\n  perceptual-framesamp-modul \\\n  --pipeline.task-profile vla.policy_rollout \\\n  --pipeline.image /path/to/input \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.state VALUE \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/vla_va_wam/mme-vla.yaml"
-    },
-    {
-      "id": "molmobot",
-      "name": "MolmoBot",
-      "category": "vla_va_wam",
-      "categoryLabel": "Embodied",
-      "categoryLabelZh": "具身智能",
-      "provider": "Allen Institute for AI (AI2)",
-      "summary": "MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, RBY1 multitask, and a Pi0-based DROID variant. WorldFoundry records the OLMo/MolmoBot-Pi0 action inference c…",
-      "aliases": [
-        "molmob0t",
-        "molmobot-droid",
-        "molmobot-pi0"
-      ],
-      "tasks": [
-        "vla",
-        "vla.action_prediction",
-        "vla.policy_rollout",
-        "robot_policy"
-      ],
-      "status": {
-        "group": "profile",
-        "label": "Profile only",
-        "integration": "in_tree_import_verification_in_progress",
-        "runner": "in_tree_inference_ready_checkpoint_pending",
-        "demo": "not_recorded"
-      },
-      "runtime": {
-        "profileId": "molmobot",
-        "bindingId": "molmobot",
-        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
-        "runner": "worldfoundry.pipeline",
-        "pipelineTarget": "worldfoundry.pipelines.component_pipelines:MolmoBotPipeline",
-        "loadingMethod": "from_pretrained",
-        "invocationMode": "native_or_standard_invocation",
-        "backendStage": "in_tree_inference_only_checkpoint_runtime",
-        "runtimeStatus": "in_tree_import_verification_in_progress",
-        "environmentId": "molmobot",
-        "environmentName": "worldfoundry-unified-cu128",
-        "environmentKind": "unified",
-        "python": "3.11",
-        "cudaProfile": "cu128",
-        "cudaLabel": "CUDA 12.8",
-        "driverStatus": "compatible",
-        "condaPackages": [
-          "python",
-          "pip"
-        ],
-        "pipPackages": [
-          "torch>=2.3.1",
-          "torchvision>=0.18.1",
-          "transformers>=4.37.1",
-          "accelerate",
-          "huggingface-hub",
-          "tokenizers",
-          "sentencepiece",
-          "numpy",
-          "Pillow",
-          "einops",
-          "einops-exts",
-          "omegaconf",
-          "rich",
-          "cached_path>=1.6.4",
-          "datasets",
-          "requests",
-          "imageio",
-          "decord",
-          "av"
-        ],
-        "packageVersions": {
-          "torch": "torch>=2.3.1",
-          "torchvision": "torchvision>=0.18.1",
-          "transformers": "transformers>=4.37.1",
-          "accelerate": "accelerate"
-        },
-        "validationImports": [
-          "numpy",
-          "PIL",
-          "torch",
-          "torchvision",
-          "transformers",
-          "omegaconf",
-          "requests"
-        ],
-        "notes": [
-          "Official MolmoBot-DROID serves with launch_scripts/serve_molmo.py; MolmoBot-Pi0 demo uses PiJointPosPolicy.get_action.",
-          "WorldFoundry directly imports its flattened inference-only SynthManipMolmoInferenceWrapper; no external MolmoBot checkout is used at runtime. Pi0 remains dependency-gated.",
-          "Minimal runtime excludes MolmoSpaces, real robot clients, training, W&B/SPoC paths, and benchmark assets.",
-          "MolmoBot main package targets Python 3.11 and torch>=2.3.1; MolmoBot-Pi0 uses OpenPI extras for the PiJointPosPolicy route.",
-          "MolmoSpaces simulator, real robot infrastructure, and W&B training dependencies are excluded from lightweight runtime checks."
-        ]
-      },
-      "sources": [
-        {
-          "kind": "project",
-          "label": "Project",
-          "url": "https://allenai.github.io/MolmoBot"
-        },
-        {
-          "kind": "paper",
-          "label": "Paper",
-          "url": "https://arxiv.org/abs/2603.16861"
-        },
-        {
-          "kind": "source",
-          "label": "GitHub",
-          "url": "https://github.com/allenai/MolmoBot"
-        },
-        {
-          "kind": "weights",
-          "label": "Hugging Face",
-          "url": "https://huggingface.co/allenai/MolmoBot-DROID"
-        },
-        {
-          "kind": "weights",
-          "label": "Hugging Face",
-          "url": "https://huggingface.co/allenai/MolmoBot-Img-DROID"
-        },
-        {
-          "kind": "weights",
-          "label": "Hugging Face",
-          "url": "https://huggingface.co/allenai/MolmoBot-RBY1Multitask"
-        },
-        {
-          "kind": "weights",
-          "label": "Hugging Face",
-          "url": "https://huggingface.co/allenai/MolmoBot-Pi0-DROID"
-        },
-        {
-          "kind": "docs",
-          "label": "Upstream README",
-          "url": "https://github.com/allenai/MolmoBot#readme"
-        }
-      ],
-      "checkpoints": [
-        {
-          "id": "allenai/MolmoBot-DROID",
-          "license": "apache-2.0"
-        },
-        {
-          "id": "allenai/MolmoBot-Pi0-DROID",
-          "license": "apache-2.0"
-        },
-        {
-          "id": "allenai/MolmoBot-Img-DROID",
-          "role": "image_droid_checkpoint"
-        },
-        {
-          "id": "allenai/MolmoBot-RBY1Multitask",
-          "role": "rby1_multitask_checkpoint"
-        }
-      ],
-      "variants": [
-        {
-          "id": "molmobot-droid",
-          "label": "molmobot-droid",
-          "task": "vla.policy_rollout",
-          "runtimeProfile": "molmobot",
-          "pipelineBinding": "molmobot",
-          "status": "in_tree_import_verification_in_progress",
-          "pipelineTarget": "worldfoundry.pipelines.component_pipelines:MolmoBotPipeline",
-          "runner": "worldfoundry.pipeline",
-          "loadingMethod": "from_pretrained",
-          "invocationMode": "native_or_standard_invocation",
-          "environmentName": "worldfoundry-unified-cu128",
-          "environmentKind": "unified",
-          "python": "3.11",
-          "cudaLabel": "CUDA 12.8",
-          "backendStage": "in_tree_inference_only_checkpoint_runtime",
-          "runtimeStatus": "in_tree_import_verification_in_progress",
-          "inputContract": [
-            {
-              "field": "model_id",
-              "detail": "molmobot"
-            },
-            {
-              "field": "image",
-              "detail": "Required"
-            },
-            {
-              "field": "prompt",
-              "detail": "Required"
-            },
-            {
-              "field": "state",
-              "detail": "Required"
-            },
-            {
-              "field": "camera_keys",
-              "detail": "exo_camera_1, wrist_camera"
-            },
-            {
-              "field": "state_keys",
-              "detail": "qpos.arm, qpos.gripper"
-            },
-            {
-              "field": "policy_family",
-              "detail": "molmobot_action_chunk_policy"
-            },
-            {
-              "field": "action_representation",
-              "detail": "robot_specific_action_chunk"
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "action_trace",
-              "filename": ""
-            },
-            {
-              "kind": "action_trace",
-              "filename": "molmobot_action_trace.json"
-            }
-          ]
-        },
-        {
-          "id": "molmobot-pi0-droid",
-          "label": "molmobot-pi0-droid",
-          "task": "vla.policy_rollout",
-          "runtimeProfile": "molmobot",
-          "pipelineBinding": "molmobot",
-          "status": "in_tree_import_verification_in_progress",
-          "pipelineTarget": "worldfoundry.pipelines.component_pipelines:MolmoBotPipeline",
-          "runner": "worldfoundry.pipeline",
-          "loadingMethod": "from_pretrained",
-          "invocationMode": "native_or_standard_invocation",
-          "environmentName": "worldfoundry-unified-cu128",
-          "environmentKind": "unified",
-          "python": "3.11",
-          "cudaLabel": "CUDA 12.8",
-          "backendStage": "in_tree_inference_only_checkpoint_runtime",
-          "runtimeStatus": "in_tree_import_verification_in_progress",
-          "inputContract": [
-            {
-              "field": "model_id",
-              "detail": "molmobot"
-            },
-            {
-              "field": "image",
-              "detail": "Required"
-            },
-            {
-              "field": "prompt",
-              "detail": "Required"
-            },
-            {
-              "field": "state",
-              "detail": "Required"
-            },
-            {
-              "field": "camera_keys",
-              "detail": "exo_camera_1, wrist_camera"
-            },
-            {
-              "field": "state_keys",
-              "detail": "qpos.arm, qpos.gripper"
-            },
-            {
-              "field": "policy_family",
-              "detail": "molmobot_action_chunk_policy"
-            },
-            {
-              "field": "action_representation",
-              "detail": "robot_specific_action_chunk"
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "action_trace",
-              "filename": ""
-            },
-            {
-              "kind": "action_trace",
-              "filename": "molmobot_action_trace.json"
-            }
-          ]
-        }
-      ],
-      "inferenceTasks": [
-        {
-          "id": "vla.policy_rollout",
-          "label": "Vla.Policy Rollout",
-          "description": "Catalog task profile used by the model runtime.",
-          "source": "catalog",
-          "variantIds": [
-            "molmobot-droid",
-            "molmobot-pi0-droid"
-          ],
-          "inputs": [
-            {
-              "field": "model_id",
-              "detail": "molmobot",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "image",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "prompt",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "state",
-              "detail": "Required",
-              "kind": "string",
-              "target": "input",
-              "required": true,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "camera_keys",
-              "detail": "exo_camera_1, wrist_camera",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "state_keys",
-              "detail": "qpos.arm, qpos.gripper",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "policy_family",
-              "detail": "molmobot_action_chunk_policy",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            },
-            {
-              "field": "action_representation",
-              "detail": "robot_specific_action_chunk",
-              "kind": "string",
-              "target": "input",
-              "required": false,
-              "description": "Recorded input field from the runtime profile."
-            }
-          ],
-          "artifacts": [
-            {
-              "kind": "action_trace",
-              "filename": ""
-            },
-            {
-              "kind": "action_trace",
-              "filename": "molmobot_action_trace.json"
-            }
-          ]
-        }
-      ],
-      "inputContract": [
-        {
-          "field": "model_id",
-          "detail": "molmobot"
-        },
-        {
-          "field": "image",
-          "detail": "Required"
-        },
-        {
-          "field": "prompt",
-          "detail": "Required"
-        },
-        {
-          "field": "state",
-          "detail": "Required"
-        },
-        {
-          "field": "camera_keys",
-          "detail": "exo_camera_1, wrist_camera"
-        },
-        {
-          "field": "state_keys",
-          "detail": "qpos.arm, qpos.gripper"
-        },
-        {
-          "field": "policy_family",
-          "detail": "molmobot_action_chunk_policy"
-        },
-        {
-          "field": "action_representation",
-          "detail": "robot_specific_action_chunk"
-        }
-      ],
-      "artifacts": [
-        {
-          "kind": "action_trace",
-          "filename": ""
-        },
-        {
-          "kind": "action_trace",
-          "filename": "molmobot_action_trace.json"
-        }
-      ],
-      "notes": [
-        "WorldFoundry records MolmoBot OLMo/MolmoBot-Pi0 action inference contracts with an independent synthesis entrypoint.",
-        "The current runtime directly calls the flattened in-tree SynthManip MolmoBot inference wrapper under worldfoundry/synthesis/action_generation/molmobot.",
-        "Resolver, runtime import, and compileall checks pass without an external github_repos checkout; checkpoint-backed action chunk validation remains required before demo parity is claimed.",
-        "MolmoSpaces simulator, real robot clients, training code, W&B/SPoC paths, and benchmark assets are excluded.",
-        "Official MolmoBot-DROID serves with launch_scripts/serve_molmo.py; MolmoBot-Pi0 demo uses PiJointPosPolicy.get_action.",
-        "WorldFoundry directly imports its flattened inference-only SynthManipMolmoInferenceWrapper; no external MolmoBot checkout is used at runtime. Pi0 remains dependency-gated.",
-        "Minimal runtime excludes MolmoSpaces, real robot clients, training, W&B/SPoC paths, and benchmark assets."
-      ],
-      "docs": {
-        "curated": true,
-        "publisher": {
-          "name": "Allen Institute for AI (AI2)",
-          "nameZh": "艾伦人工智能研究所（AI2）",
-          "kind": "lab"
-        },
-        "overview": [
-          "MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, RBY1 multitask, and a Pi0-based DROID variant. WorldFoundry records the OLMo/MolmoBot-Pi0 action inference contracts and calls a flattened in-tree inference wrapper."
-        ],
-        "overviewZh": [
-          "MolmoBot 是 AI2 围绕 Molmo VLM 的机器人策略家族，Apache-2.0 checkpoint 覆盖 Franka DROID、图像条件 DROID、RBY1 多任务与基于 Pi0 的 DROID 变体。WorldFoundry 记录 OLMo/MolmoBot-Pi0 动作推理契约，并调用扁平化树内推理封装。"
-        ],
-        "architecture": [
-          "Two inference contracts are recorded: an OLMo-based MolmoBot path and a MolmoBot-Pi0 path. Resolver, runtime import, and compileall checks pass without an external checkout; further internals are not recorded in this repository."
-        ],
-        "architectureZh": [
-          "仓库记录两个推理契约：基于 OLMo 的 MolmoBot 路径与 MolmoBot-Pi0 路径。解析器、运行时导入与 compileall 检查无需外部 checkout 即通过；更多内部细节仓库未记录。"
-        ],
-        "usageNotes": [
-          "Checkpoint-backed action-chunk validation remains required before demo parity is claimed. Choose MolmoBot-DROID for Franka, RBY1Multitask for the RBY1 humanoid platform."
-        ],
-        "usageNotesZh": [
-          "在声称 demo parity 前仍需 checkpoint 驱动的动作块验证。Franka 用 MolmoBot-DROID，RBY1 人形平台用 RBY1Multitask。"
-        ],
-        "highlights": [
-          "Vla",
-          "Vla.Action Prediction",
-          "Vla.Policy Rollout",
-          "2 runnable WorldFoundry variants",
-          "Unified env · Python 3.11 · CUDA 12.8",
-          "Public Hugging Face weights"
-        ],
-        "highlightsZh": [
-          "视觉-语言-动作（VLA）",
-          "VLA 动作预测",
-          "VLA 策略执行",
-          "2 个可运行的 WorldFoundry variant",
-          "统一环境 · Python 3.11 · CUDA 12.8",
-          "公开的 Hugging Face 权重"
-        ],
-        "modalities": {
-          "inputs": [],
-          "outputs": []
-        },
-        "useCases": [],
-        "useCasesZh": [],
-        "hardware": {
-          "minVramGb": null,
-          "recommended": null,
-          "notes": []
-        },
-        "benchmarks": [],
-        "limitations": [
-          "Import verification is in progress; demo parity is not yet claimed."
-        ],
-        "limitationsZh": [
-          "导入验证进行中；尚未声称 demo parity。"
-        ],
-        "paper": null,
-        "figures": []
-      },
-      "commands": {
-        "prepare": "bash scripts/inference/prepare_model_infer.sh molmobot-droid",
-        "install": "bash scripts/setup/model_env_install.sh --model molmobot-droid",
-        "inspect": "worldfoundry-eval zoo model-show --model-id molmobot --include-manifest --json",
-        "check": "worldfoundry-eval zoo model-download --model-id molmobot --check-local --json",
-        "run": "worldfoundry-eval run \\\n  molmobot-droid \\\n  --pipeline.task-profile vla.policy_rollout \\\n  --pipeline.image /path/to/input \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.state VALUE \\\n  --json"
-      },
-      "catalogPath": "worldfoundry/data/models/catalog/vla_va_wam/molmobot.yaml"
     },
     {
       "id": "openvla-oft",

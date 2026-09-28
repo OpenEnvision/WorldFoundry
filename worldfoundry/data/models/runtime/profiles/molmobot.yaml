@@ -39,12 +39,13 @@ artifact_kind: action_trace
 artifact_filename: molmobot_action_trace.json
 execution:
   backend_stage: in_tree_inference_only_checkpoint_runtime
-  runtime_status: in_tree_import_verification_in_progress
-  integration_status: in_tree_import_verification_in_progress
+  runtime_status: checkpoint_backed_offline_gpu_inference_verified
+  integration_status: integrated
   pipeline_binding: molmobot
 integration:
-  status: in_tree_import_verification_in_progress
+  status: integrated
 notes:
 - Official MolmoBot-DROID serves with launch_scripts/serve_molmo.py; MolmoBot-Pi0 demo uses PiJointPosPolicy.get_action.
-- WorldFoundry directly imports its flattened inference-only SynthManipMolmoInferenceWrapper; no external MolmoBot checkout is used at runtime. Pi0 remains dependency-gated.
+- WorldFoundry directly imports its flattened inference-only SynthManipMolmoInferenceWrapper; no external MolmoBot checkout is used at runtime. The Pi0 route uses pinned isolated OpenPI dependencies.
+- MolmoBot-DROID, MolmoBot-Img-DROID, and Pi0-DROID completed checkpoint-backed offline GPU action inference. No closed-loop success is claimed.
 - Minimal runtime excludes MolmoSpaces, real robot clients, training, W&B/SPoC paths, and benchmark assets.

@@ -249,6 +249,10 @@ class DIAMONDCsgoPipeline(DIAMONDPipeline):
 class DinoWMPipeline(WorldModelRuntimePipeline):
     """Pipeline implementation for DinoWM visual generation."""
     MODEL_ID = "dino-wm"
+    RUNTIME_GATED_OPTION_KEYS = (
+        "ckpt_base_path", "checkpoint_dir", "checkpoint_path", "model_name", "run_name",
+        "model_epoch", "config", "config_path", "seed", "n_evals", "goal_source", "goal_H",
+    )
 
 
 class GenieEnvisionerPipeline(WorldModelRuntimePipeline):
@@ -590,6 +594,10 @@ class Vid2WorldPipeline(WorldModelRuntimePipeline):
 class WildDet3DPipeline(WorldModelRuntimePipeline):
     """Pipeline implementation for WildDet3D visual generation."""
     MODEL_ID = "wilddet3d"
+    RUNTIME_GATED_OPTION_KEYS = (
+        "image_path", "input_image", "checkpoint_path", "lingbot_config_path",
+        "intrinsics_path", "score_threshold", "score_3d_threshold", "python_executable",
+    )
 
 
 class WildWorldPipeline(WorldModelRuntimePipeline):

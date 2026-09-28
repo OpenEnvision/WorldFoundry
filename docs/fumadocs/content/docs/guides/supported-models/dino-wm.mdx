@@ -1,50 +1,30 @@
 ---
 title: "DINO-WM"
-description: "DINO-WM from New York University (NYU): visual-feature-world-model and predictive-coding; Runner parity pending."
+description: "DINO-WM plans in DINOv2 feature space; checkpoint-backed wall_single inference is verified."
 modelId: "dino-wm"
 pageSource: authored
 ---
 
-DINO-WM builds world models on pre-trained DINOv2 visual features instead of pixels: it predicts future patch features and plans robot behavior by optimizing action sequences against a goal feature state — zero-shot planning without reconstruction. In this catalog the official planning/evaluation route is vendored in-tree, including the required env simulators.
+DINO-WM predicts future DINOv2 visual features conditioned on actions and plans toward a goal in feature space. WorldFoundry includes the official planning route and its wall-task simulator code.
 
 <ModelPaperFigures modelId="dino-wm" locale="en" />
 
-The recorded paper is [arXiv 2411.04983](https://arxiv.org/abs/2411.04983).
+Read [arXiv 2411.04983](https://arxiv.org/abs/2411.04983), the [project page](https://dino-wm.github.io/), and the [official repository](https://github.com/gaoyuezhou/dino_wm).
 
-Project page: [dino-wm.github.io](https://dino-wm.github.io/). Code: [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm).
+## Verified route
 
-Execution no longer needs an external checkout, but **full parity waits on the OSF checkpoint / task-asset layout**. Until then the run is gated.
+The public `wall_single` route loaded the released epoch-65 world-model checkpoint, the official wall trajectory dataset, and a DINOv2 ViT-S/14 encoder. Two GPU planning runs completed and each produced a fully decodable 26-frame MP4 with finite result metrics. The more distant goal started outside the task's success threshold and was not solved. These deliberately small search-budget runs verify execution, not general planning performance.
 
-<ModelCommandBuilder modelId="dino-wm" locale="en" />
+The `pusht` and `point_maze` checkpoints exist, but their task datasets and dedicated simulator dependencies have not been validated through this integration.
 
-## What it is for
+## Inputs and output
 
-Pick `dino-wm` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+For the verified wall route, provide a checkpoint root containing `outputs/wall_single/hydra.yaml` and `outputs/wall_single/checkpoints/model_latest.pth`, the DINOv2 encoder, and the complete official wall trajectories. Set `DATASET_DIR` to the parent directory containing `wall_single/`; the wall config reads trajectories from `${DATASET_DIR}/wall_single`. The public synthesis route accepts `ckpt_base_path`, `model_name="wall_single"`, and `config`; it writes `dino-wm.mp4` plus planning metrics. A text prompt or standalone image/video input is not the verified wall-planning contract.
 
-Per the upstream project, a ViT predictor rolls DINOv2 patch features forward conditioned on actions; planning is model-predictive control in feature space. The infer entrypoint loads runtime configs from data/models/runtime/configs/dino_wm/conf, and the vendored dino_wm/env simulators are intentionally kept in-tree for official planning runs. It is published by New York University (NYU).
+The MP4 visualizes the simulator and planning episode. DINO-WM predicts in feature space; it is not a pixel video generator. Check the resolved plan before inference, because a checkpoint alone does not provide the required trajectories.
 
-Catalog tasks include visual-feature-world-model, predictive-coding, robot-world-model, and wall-planning.
+## Validation boundary
 
-## Runtime contract
-
-Required `prompt`, `image`, and `video`; optional `actions` (robot_action, planning_action); artifacts `generated_world` and `dino-wm.mp4`.
-
-Recorded task profiles: `visual-feature-world-model`, `predictive-coding`, `robot-world-model`, and `wall-planning`. WorldFoundry binds `DinoWMPipeline`.
-
-Family status: **Runner parity pending**.
-
-Recorded `wall-planning` defaults: seed=0.
-
-Execution remains checkpoint/task-asset gated but no longer depends on an external repo checkout. Full runtime parity is blocked until the OSF checkpoint/task-asset layout is staged.
-
-## Running in WorldFoundry
-
-The catalog launch is `worldfoundry-eval run dino-wm --pipeline.task-profile wall-planning`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
-
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
-
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh dino-wm`.
-
-Status: **Runner parity pending**.
+The wall smoke test establishes checkpoint loading, the in-tree planner's GPU execution, and artifact decoding. It does not establish a task success rate, long-horizon planning quality, or parity for the other released tasks.
 
 <ModelRelatedRecipes modelId="dino-wm" locale="en" />

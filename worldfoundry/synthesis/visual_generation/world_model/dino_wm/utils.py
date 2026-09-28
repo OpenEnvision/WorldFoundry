@@ -72,7 +72,7 @@ def sample_tensors(tensors, n, indices=None):
 def cfg_to_dict(cfg):
     cfg_dict = OmegaConf.to_container(cfg)
     for key in cfg_dict:
-        if isinstance(cfg_dict[key], list):
+        if isinstance(cfg_dict[key], list) and all(isinstance(item, str) for item in cfg_dict[key]):
             cfg_dict[key] = ",".join(cfg_dict[key])
     return cfg_dict
 

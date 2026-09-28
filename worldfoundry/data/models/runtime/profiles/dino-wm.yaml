@@ -7,18 +7,12 @@ groups:
 - robotics
 source_repos:
 - url: https://github.com/gaoyuezhou/dino_wm
-input_schema:
-  prompt: true
-  image: true
-  video: true
-  actions:
-  - robot_action
-  - planning_action
+input_schema: {}
 artifact_kind: generated_world
 artifact_filename: dino-wm.mp4
 execution:
   backend_stage: in_tree_runtime_manifest
-  runtime_status: in_tree_runtime_manifest_command_preflight_ready
+  runtime_status: checkpoint_backed_wall_gpu_inference_verified
   integration_status: integrated
   pipeline_binding: dino-wm
 integration:
@@ -27,3 +21,6 @@ notes:
 - DINO-WM source is vendored in-tree under synthesis/visual_generation/world_model/dino_wm.
 - The official planning/eval route is exposed through an infer-only WorldFoundry wrapper
   and runtime configs under data/models/runtime/configs/dino_wm/conf.
+- The wall_single checkpoint, official wall trajectories, and DINOv2 encoder completed GPU planning inference and produced
+  decodable simulator videos. Prompt, standalone image/video, and direct action inputs are not this route's contract.
+- Pusht and point_maze remain untested with their own task assets; no general planning-quality conclusion is claimed.

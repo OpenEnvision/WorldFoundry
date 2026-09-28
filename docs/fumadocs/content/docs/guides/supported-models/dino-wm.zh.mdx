@@ -1,50 +1,30 @@
 ---
 title: "DINO-WM"
-description: "DINO-WM（New York University (NYU)）：predictive-coding、机器人世界模型；Runner 一致性待确认。"
+description: "DINO-WM 在 DINOv2 特征空间中规划；wall_single 权重驱动的推理已验证。"
 modelId: "dino-wm"
 pageSource: authored
 ---
 
-DINO-WM 在预训练 DINOv2 视觉特征（而非像素）上构建世界模型：预测未来 patch 特征，并通过针对目标特征状态优化动作序列来规划机器人行为——无需重建即可零样本规划。本 catalog 中官方规划/评估路径已内置树内，包括必需的 env 仿真器。
+DINO-WM 在动作条件下预测未来的 DINOv2 视觉特征，并在特征空间中规划到达目标。WorldFoundry 包含官方规划路径及 wall 任务仿真器代码。
 
 <ModelPaperFigures modelId="dino-wm" locale="zh" />
 
-记录论文为[arXiv 2411.04983](https://arxiv.org/abs/2411.04983)。
+参见[论文 arXiv 2411.04983](https://arxiv.org/abs/2411.04983)、[项目主页](https://dino-wm.github.io/)和[官方仓库](https://github.com/gaoyuezhou/dino_wm)。
 
-项目页：[dino-wm.github.io](https://dino-wm.github.io/)。代码：[gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm)。
+## 已验证路径
 
-<ModelCommandBuilder modelId="dino-wm" locale="zh" />
+公开 `wall_single` 路径加载了发布的 epoch-65 世界模型权重、官方 wall 轨迹数据集和 DINOv2 ViT-S/14 编码器。两次 GPU 规划运行均完成，分别生成了可完整解码的 26 帧 MP4 和有限的结果指标。较远的目标起点在任务成功阈值之外，最终没有完成任务。这两次运行有意使用很小的搜索预算，只验证执行链路，不代表一般规划性能。
 
-## 用来做什么
+`pusht` 和 `point_maze` 的权重已存在，但它们的任务数据集与专用仿真依赖尚未通过此集成验证。
 
-需要动作条件世界步进时选 `dino-wm`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+## 输入与输出
 
-按上游项目，ViT 预测器在动作条件下向前滚动 DINOv2 patch 特征；规划是特征空间中的模型预测控制。推理入口从 data/models/runtime/configs/dino_wm/conf 加载运行时配置，内置的 dino_wm/env 仿真器为官方规划运行有意保留在树内。该模型由纽约大学（NYU）发布。
+已验证的 wall 路径需要包含 `outputs/wall_single/hydra.yaml` 与 `outputs/wall_single/checkpoints/model_latest.pth` 的权重目录、DINOv2 编码器及完整官方 wall 轨迹。将 `DATASET_DIR` 指向含有 `wall_single/` 的父目录；wall 配置从 `${DATASET_DIR}/wall_single` 读取轨迹。公开 synthesis 路径接收 `ckpt_base_path`、`model_name="wall_single"` 和 `config`，输出 `dino-wm.mp4` 与规划指标。文本 prompt 或独立的图像/视频输入不是已验证 wall 规划的运行契约。
 
-catalog 记录的任务包括 visual-feature-world-model、predictive-coding、机器人世界模型、wall-planning。
+MP4 展示仿真与规划过程。DINO-WM 在特征空间中预测，不是像素视频生成器。运行前应先检查解析后的计划：仅有模型权重还不足以提供所需轨迹。
 
-基于 DINO 的世界模型动力学，不是像素视频生成器。
+## 验证边界
 
-## 运行时契约
-
-必填 `prompt`、`image`、`video`；可选 `actions` (robot_action, planning_action)；产物 `generated_world`、`dino-wm.mp4`。
-
-记录的任务 profile：`visual-feature-world-model`、`predictive-coding`、`robot-world-model`、`wall-planning`。绑定的 pipeline 类是 `DinoWMPipeline`。
-
-系列状态：**Runner 一致性待确认**。
-
-`wall-planning` 记录默认值：seed=0。
-
-执行仍受 checkpoint/任务资产限制，但不再依赖外部仓库检出。 完整运行时一致性在 OSF checkpoint/任务资产布局就位前保持 blocked。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run dino-wm --pipeline.task-profile wall-planning`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
-
-本卡片未记录公开 checkpoint id；按使用说明就位权重。就位权重用 `bash scripts/inference/prepare_model_infer.sh dino-wm`。
-
-状态：**Runner 一致性待确认**。
+wall 简短测试证实了权重加载、仓内规划器的 GPU 执行和产物解码；它不能证明任务成功率、长时规划质量，也不代表其他发布任务已经达到一致性。
 
 <ModelRelatedRecipes modelId="dino-wm" locale="zh" />

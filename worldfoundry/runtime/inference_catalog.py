@@ -97,6 +97,12 @@ _TEST_CASES_ROOT = Path(__file__).resolve().parents[1] / "data" / "test_cases"
 _RUNTIME_CONFIGS_ROOT = Path(__file__).resolve().parents[1] / "data" / "models" / "runtime" / "configs"
 _PROJECT_ROOT = project_root(__file__)
 _WORKSPACE_ROOT = _PROJECT_ROOT.parent
+DINO_WM_CHECKPOINT_BASE = str(
+    Path(
+        os.environ.get("WORLDFOUNDRY_DINO_WM_CKPT_BASE")
+        or _first_existing_path(*checkpoint_root_candidates("dino_wm"))
+    ).expanduser().resolve()
+)
 GENERIC_IMAGE_FIXTURE = str(_TEST_CASES_ROOT / "studio_demo" / "00" / "image.jpg")
 GENERIC_3D_FIXTURE = str(_TEST_CASES_ROOT / "vggt" / "examples" / "kitchen" / "images")
 GENERIC_GEOMETRY_FIXTURE = str(_TEST_CASES_ROOT / "images" / "000.png")
@@ -4246,23 +4252,26 @@ DINO_WM_INFERENCE_SPEC = ModelInferenceSpec(
         InferenceVariantSpec(
             variant_id="wall-official",
             label="Wall Planning",
-            status="requires_official_checkpoint",
+            status="local_required",
             checkpoints=(
                 InferenceCheckpointRef(
                     role="ckpt_base_path",
-                    uri=str(_WORKSPACE_ROOT / "ckpt" / "dino_wm"),
-                    status="missing_locally",
+                    uri=DINO_WM_CHECKPOINT_BASE,
+                    status="local_required",
                 ),
             ),
             load_kwargs={
                 "model_id": "dino-wm",
                 "config": str(_RUNTIME_CONFIGS_ROOT / "dino_wm" / "conf" / "plan_wall.yaml"),
-                "ckpt_base_path": str(_WORKSPACE_ROOT / "ckpt" / "dino_wm"),
-                "model_name": "wall",
+                "ckpt_base_path": DINO_WM_CHECKPOINT_BASE,
+                "model_name": "wall_single",
                 "model_epoch": "latest",
             },
             aliases=("default", "wall", "official-demo"),
-            notes=("Matches the official `python plan.py --config-name plan_wall.yaml model_name=wall` flow.",),
+            notes=(
+                "The released wall checkpoint lives at outputs/wall_single/checkpoints/model_latest.pth under ckpt_base_path.",
+                "The wall_single integration passed real GPU inference with official trajectories; provide a local checkpoint and DATASET_DIR for execution.",
+            ),
         ),
     ),
     tasks=(
@@ -4285,20 +4294,21 @@ DINO_WM_INFERENCE_SPEC = ModelInferenceSpec(
                     kind="path",
                     target="load_kwargs",
                     required=True,
-                    default=str(_WORKSPACE_ROOT / "ckpt" / "dino_wm"),
+                    default=DINO_WM_CHECKPOINT_BASE,
                 ),
                 _field(
                     "model_name",
                     "Model Name",
                     target="load_kwargs",
                     required=True,
-                    default="wall",
-                    choices=("wall", "pusht", "point_maze"),
+                    default="wall_single",
+                    choices=("wall_single", "pusht", "point_maze"),
                 ),
                 _field("model_epoch", "Model Epoch", target="load_kwargs", default="latest"),
-                _field("seed", "Seed", kind="integer", target="load_kwargs", default=0),
+                _field("seed", "Seed", kind="integer", target="load_kwargs", default=99),
                 _field("n_evals", "Eval Count", kind="integer", target="load_kwargs", default=1),
-                _field("goal_source", "Goal Source", target="load_kwargs", default="random_state"),
+                _field("goal_source", "Goal Source", target="load_kwargs", default="dset"),
+                _field("goal_H", "Goal Horizon", kind="integer", target="load_kwargs", default=1),
                 _field("plan_only", "Plan Only", kind="boolean", target="call_kwargs", default=True),
                 _field("timeout_seconds", "Timeout Seconds", kind="integer", target="call_kwargs", default=21600),
             ),
@@ -4310,7 +4320,8 @@ DINO_WM_INFERENCE_SPEC = ModelInferenceSpec(
         ),
     ),
     notes=(
-        "Local execution is blocked until the official OSF checkpoints and task assets are placed under ckpt/dino_wm.",
+        "Stage the official checkpoint under ckpt_base_path/outputs/wall_single and set DATASET_DIR to the extracted official wall trajectories.",
+        "Set WORLDFOUNDRY_DINO_WM_CKPT_BASE before importing the catalog to select a nonstandard checkpoint root; a published smoke run used a smaller planner budget than plan_wall.yaml defaults.",
     ),
 )
 

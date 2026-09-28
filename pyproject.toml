@@ -146,6 +146,9 @@ molmoact2 = [
     "transformers>=4.57,<4.58",
     "uvicorn[standard]>=0.35",
 ]
+molmobot_pi0 = [
+    "molmobot-pi0 @ git+https://github.com/allenai/MolmoBot.git@33c0ca77bf6062a23d60ffd4a6859334c4a46d30#subdirectory=MolmoBot-Pi0",
+]
 metrics = [
     "h5py",
     "matplotlib",

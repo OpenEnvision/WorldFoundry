@@ -42,6 +42,26 @@ ALL_MODEL_KEYS = [
     "action_encoder",
 ]
 
+DATASET_MODULE_PREFIX = (
+    "worldfoundry.synthesis.visual_generation.world_model.dino_wm.datasets."
+)
+
+
+def _use_vendored_dataset_modules(model_cfg):
+    """Resolve dataset targets from official checkpoint configs in our package.
+
+    Released hydra.yaml files refer to the upstream top-level ``datasets``
+    package, which conflicts with Hugging Face's package in installed runtimes.
+    """
+    for target_path in ("env.dataset._target_", "env.dataset.transform._target_"):
+        target = OmegaConf.select(model_cfg, target_path)
+        if isinstance(target, str) and target.startswith("datasets."):
+            OmegaConf.update(
+                model_cfg,
+                target_path,
+                DATASET_MODULE_PREFIX + target.removeprefix("datasets."),
+            )
+
 def planning_main_in_dir(working_dir, cfg_dict):
     os.chdir(working_dir)
     return planning_main(cfg_dict=cfg_dict)
@@ -457,6 +477,8 @@ def planning_main(cfg_dict):
     with open(os.path.join(model_path, "hydra.yaml"), "r") as f:
         model_cfg = OmegaConf.load(f)
 
+    _use_vendored_dataset_modules(model_cfg)
+
     seed(cfg_dict["seed"])
     _, dset = hydra.utils.call(
         model_cfg.env.dataset,
@@ -471,6 +493,11 @@ def planning_main(cfg_dict):
         Path(model_path) / "checkpoints" / f"model_{cfg_dict['model_epoch']}.pth"
     )
     model = load_model(model_ckpt, model_cfg, num_action_repeat, device=device)
+
+    if model_cfg.env.name == "point_maze":
+        from env import register_point_maze
+
+        register_point_maze()
 
     # use dummy vector env for wall and deformable envs
     if model_cfg.env.name == "wall" or model_cfg.env.name == "deformable_env":

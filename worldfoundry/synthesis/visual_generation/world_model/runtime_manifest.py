@@ -425,12 +425,13 @@ WORLD_MODEL_RUNTIME_SPECS: Mapping[str, WorldModelRuntimeSpec] = {
     "wilddet3d": WorldModelRuntimeSpec(
         model_id="wilddet3d",
         display_name="WildDet3D",
-        source_dir_names=("WildDet3D",),
+        runtime_module="worldfoundry.synthesis.visual_generation.world_model.wilddet3d.worldfoundry_runtime",
+        runtime_root_attr=None,
+        runtime_root_func="runtime_root",
         official_repo_url="https://github.com/allenai/WildDet3D",
-        entrypoint_relative="wilddet3d/inference.py",
-        blocked_reason="WildDet3D official inference route is registered; execution requires allenai/WildDet3D assets and detector configuration.",
-        required_assets=("allenai/WildDet3D checkpoint/assets",),
-        input_schema={"prompt": True, "image": True, "video": True, "actions": ["detection_query"]},
+        blocked_reason="",
+        required_assets=("allenai/WildDet3D checkpoint", "robbyant/lingbot-depth-postrain-dc-vitl14 model.pt", "official source checkout and submodules", "RGB image"),
+        input_schema={"prompt": True, "image": True, "video": False, "actions": ["detection_query"]},
     ),
     "wildworld": WorldModelRuntimeSpec(
         model_id="wildworld",

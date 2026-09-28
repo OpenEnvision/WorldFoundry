@@ -1,50 +1,28 @@
 ---
 title: "MolmoBot"
-description: "MolmoBot（Allen Institute for AI (AI2)）：视觉-语言-动作（VLA）、VLA 动作预测；计划中; 2 个 variant。"
+description: "MolmoBot DROID 与 Pi0-DROID 策略已通过权重驱动的离线 GPU 动作推理。"
 modelId: "molmobot"
 pageSource: authored
 ---
 
-MolmoBot 是 AI2 围绕 Molmo VLM 的机器人策略家族，Apache-2.0 checkpoint 覆盖 Franka DROID、图像条件 DROID、RBY1 多任务与基于 Pi0 的 DROID 变体。WorldFoundry 记录 OLMo/MolmoBot-Pi0 动作推理契约，并调用扁平化树内推理封装。
+MolmoBot 是 AI2 的机器人策略家族。WorldFoundry 通过仓内推理 Pipeline 提供基于 OLMo 的动作块路径，以及独立的 Pi0-DROID 关节位置路径。
 
 <ModelPaperFigures modelId="molmobot" locale="zh" />
 
-记录论文为[arXiv 2603.16861](https://arxiv.org/abs/2603.16861)。
+参见[论文 arXiv 2603.16861](https://arxiv.org/abs/2603.16861)、[项目主页](https://allenai.github.io/MolmoBot)和[官方仓库](https://github.com/allenai/MolmoBot)。
 
-项目页：[allenai.github.io/MolmoBot](https://allenai.github.io/MolmoBot)。代码：[allenai/MolmoBot](https://github.com/allenai/MolmoBot)。
+## 已验证变体
 
-<ModelCommandBuilder modelId="molmobot" locale="zh" />
+发布的 `MolmoBot-DROID` 和 `MolmoBot-Img-DROID` 权重已在含双相机与机器人状态的真实 DROID 观测上完成离线 GPU 动作推理。发布的 `MolmoBot-Pi0-DROID` 权重则在同一观测上分别通过未修改的官方 `PiJointPosPolicy` 和公开的 `MolmoBotPipeline` 前向。Pi0 适配器准备的双相机张量、7 维手臂状态、2 维夹爪状态和任务提示与官方策略一致；两条路径均输出有限的 7 维手臂与 1 维夹爪动作。采样具有随机性，不能要求两个动作数值逐项相同。
 
-## 用来做什么
-
-需要 catalog 上的 VLA 策略时选 `molmobot-droid`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
-
-仓库记录两个推理契约：基于 OLMo 的 MolmoBot 路径与 MolmoBot-Pi0 路径。解析器、运行时导入与 compileall 检查无需外部 checkout 即通过；更多内部细节仓库未记录。该模型由艾伦人工智能研究所（AI2）发布。
-
-catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行、机器人策略。别名包括 `molmob0t`、`molmobot-droid`、`molmobot-pi0`。同系列还有 `molmobot-pi0-droid`。
-
-MolmoBot VLA rollout。不是 MolmoAct2。
+基于 OLMo 的 DROID 权重采用 Apache-2.0；Pi0-DROID 权重标注为 [Gemma 许可](https://huggingface.co/allenai/MolmoBot-Pi0-DROID)。`MolmoBot-RBY1Multitask` 已入目录，但尚未在这里验证。
 
 ## 运行时契约
 
-必填 `image`、`prompt`、`state`；可选 `model_id` (molmobot)、`camera_keys` (exo_camera_1, wrist_camera)、`state_keys` (qpos.arm, qpos.gripper)、`policy_family`、`action_representation`；产物 `action_trace`、`molmobot_action_trace.json`。
+输入任务提示、`exo_camera_1` 与 `wrist_camera` 图像，以及对应的机器人状态。Pi0-DROID 已验证的状态包含 7 个手臂关节位置和 2 个夹爪值；输出动作包含手臂 `(7,)` 与夹爪 `(1,)`。使用发布的 `allenai/MolmoBot-Pi0-DROID` 权重，并通过 `MolmoBotPipeline.from_pretrained(..., variant="pi0_droid")` 选择 Pi0 路径。它需要固定版本的独立 OpenPI 依赖及 PaliGemma tokenizer；仓内公开适配器不会加载 MolmoSpaces 仿真器。
 
-记录的任务 profile：`vla`、`vla.action_prediction`、`vla.policy_rollout`、`robot_policy`。绑定的 pipeline 类是 `MolmoBotPipeline`。
+## 验证边界
 
-起步 variant 是 `molmobot-droid`。catalog 登记了 2 个 variant（上方卡片）：`molmobot-droid`（`vla.policy_rollout`）：计划中、`molmobot-pi0-droid`（`vla.policy_rollout`）：计划中。系列状态：**计划中**。
-
-在声称 demo parity 前仍需 checkpoint 驱动的动作块验证。 Franka 用 MolmoBot-DROID，RBY1 人形平台用 RBY1Multitask。
-
-导入验证进行中；尚未声称 demo parity。
-
-## 在 WorldFoundry 中运行
-
-catalog 启动命令是 `worldfoundry-eval run molmobot-droid --pipeline.task-profile vla.policy_rollout`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
-
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.3.1）。
-
-记录的权重仓库包括 `allenai/MolmoBot-DROID`、`allenai/MolmoBot-Pi0-DROID`、`allenai/MolmoBot-Img-DROID` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh molmobot-droid`。
-
-记录 license 为 apache-2.0；状态：**计划中**。
+这些是对权重加载、观测预处理和有限动作输出的离线检查。对仿真训练的 Pi0 策略而言，真实 DROID 观测属于训练分布外。尚未测量闭环机器人执行、任务成功率或动作语义质量。
 
 <ModelRelatedRecipes modelId="molmobot" locale="zh" />

@@ -9,11 +9,11 @@ checkpoint:
   repo_id: allenai/MolmoBot-DROID
 id: molmobot
 integration:
-  status: in_tree_import_verification_in_progress
+  status: integrated
   notes:
-  - WorldFoundry records MolmoBot OLMo/MolmoBot-Pi0 action inference contracts with an independent synthesis entrypoint.
-  - The current runtime directly calls the flattened in-tree SynthManip MolmoBot inference wrapper under worldfoundry/synthesis/action_generation/molmobot.
-  - Resolver, runtime import, and compileall checks pass without an external github_repos checkout; checkpoint-backed action chunk validation remains required before demo parity is claimed.
+  - WorldFoundry runs OLMo-based MolmoBot and Pi0-based DROID policies through in-tree inference-only pipelines.
+  - The released MolmoBot-DROID and MolmoBot-Img-DROID checkpoints completed offline GPU action inference; the Pi0-DROID checkpoint also completed official and public Pipeline GPU inference.
+  - The Pi0 route uses a pinned isolated OpenPI environment, without importing the MolmoSpaces simulator at runtime.
 license: apache-2.0
 name: MolmoBot
 official_sources:
@@ -35,6 +35,7 @@ official_sources:
   - repo_id: allenai/MolmoBot-Pi0-DROID
     role: pi0_droid_checkpoint
     status: confirmed_from_readme
+    license: gemma
 output_artifacts:
 - action_trace
 pipeline_binding: molmobot
@@ -47,38 +48,43 @@ tasks:
 - robot_policy
 variants:
 - id: molmobot-droid
-  integration_status: in_tree_checkpoint_validation_pending
+  integration_status: integrated
   task: vla.policy_rollout
   checkpoint_refs:
   - repo_id: allenai/MolmoBot-DROID
     license: apache-2.0
   notes:
   - Official command serves MolmoBot-DROID with launch_scripts/serve_molmo.py --hf-repo allenai/MolmoBot-DROID.
+  - Checkpoint-backed offline action inference passed on a real DROID observation; no robot task success was measured.
 - id: molmobot-pi0-droid
-  integration_status: entrypoint_profiled_runtime_port_pending
+  integration_status: integrated
   task: vla.policy_rollout
   checkpoint_refs:
   - repo_id: allenai/MolmoBot-Pi0-DROID
-    license: apache-2.0
+    license: gemma
   notes:
   - Official demo uses PiJointPosPolicy with qpos arm/gripper, exo_camera_1, wrist_camera, and task prompt.
+  - Official PiJointPosPolicy and public MolmoBotPipeline both returned finite arm and gripper actions from the same released checkpoint and real DROID observation.
 runner_parity:
-  status: in_tree_inference_ready_checkpoint_pending
+  status: verified_inference_only
   notes:
-  - MolmoSpaces simulator, real robot clients, training code, W&B/SPoC paths, and benchmark assets are excluded.
+  - Public Pi0 input preparation matched the official policy for both cameras, arm and gripper state, and prompt.
+  - Evidence covers offline action inference only; MolmoSpaces simulation, real robot execution, training, and benchmarks were not run.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
 docs:
   publisher: Allen Institute for AI (AI2)
   publisher_kind: lab
   publisher_zh: 艾伦人工智能研究所（AI2）
-  overview: MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, RBY1 multitask, and a Pi0-based DROID variant. WorldFoundry records the OLMo/MolmoBot-Pi0 action inference contracts and calls a flattened in-tree inference wrapper.
-  overview_zh: MolmoBot 是 AI2 围绕 Molmo VLM 的机器人策略家族，Apache-2.0 checkpoint 覆盖 Franka DROID、图像条件 DROID、RBY1 多任务与基于 Pi0 的 DROID 变体。WorldFoundry 记录 OLMo/MolmoBot-Pi0 动作推理契约，并调用扁平化树内推理封装。
-  architecture: 'Two inference contracts are recorded: an OLMo-based MolmoBot path and a MolmoBot-Pi0 path. Resolver, runtime import, and compileall checks pass without an external checkout; further internals are not recorded in this repository.'
-  architecture_zh: 仓库记录两个推理契约：基于 OLMo 的 MolmoBot 路径与 MolmoBot-Pi0 路径。解析器、运行时导入与 compileall 检查无需外部 checkout 即通过；更多内部细节仓库未记录。
-  usage_notes: Checkpoint-backed action-chunk validation remains required before demo parity is claimed. Choose MolmoBot-DROID for Franka, RBY1Multitask for the RBY1 humanoid platform.
-  usage_notes_zh: 在声称 demo parity 前仍需 checkpoint 驱动的动作块验证。Franka 用 MolmoBot-DROID，RBY1 人形平台用 RBY1Multitask。
+  overview: MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, and RBY1 multitask; the Pi0-based DROID checkpoint is Gemma-licensed. WorldFoundry records both action inference contracts.
+  overview_zh: MolmoBot 是 AI2 围绕 Molmo VLM 的机器人策略家族。Franka DROID、图像条件 DROID 和 RBY1 多任务 checkpoint 采用 Apache-2.0；基于 Pi0 的 DROID checkpoint 标注为 Gemma 许可。WorldFoundry 记录两条动作推理路径。
+  architecture: The in-tree OLMo-based path returns robot-specific action chunks; the separate Pi0-DROID path loads the released OpenPI checkpoint and decodes joint-position arm/gripper actions. Both paths have checkpoint-backed offline GPU evidence.
+  architecture_zh: 仓内基于 OLMo 的路径输出机器人专用动作块；独立的 Pi0-DROID 路径加载发布的 OpenPI 权重并解码关节位置手臂/夹爪动作。两条路径都有权重驱动的离线 GPU 推理证据。
+  usage_notes: MolmoBot-DROID, MolmoBot-Img-DROID, and MolmoBot-Pi0-DROID passed offline inference on a real DROID observation. Pi0 requires its pinned OpenPI dependencies and PaliGemma tokenizer. RBY1Multitask has not been validated here.
+  usage_notes_zh: MolmoBot-DROID、MolmoBot-Img-DROID 和 MolmoBot-Pi0-DROID 已在真实 DROID 观测上通过离线推理。Pi0 需要固定版本的 OpenPI 依赖与 PaliGemma tokenizer；RBY1Multitask 尚未在这里验证。
   limitations:
-  - Import verification is in progress; demo parity is not yet claimed.
+  - No closed-loop robot task success or semantic action quality has been measured.
+  - The Pi0 probe used an out-of-distribution real observation for a simulation-trained policy.
   limitations_zh:
-  - 导入验证进行中；尚未声称 demo parity。
+  - 尚未测量闭环机器人任务成功率或动作语义质量。
+  - Pi0 测试对仿真训练的策略使用了分布外的真实观测。
