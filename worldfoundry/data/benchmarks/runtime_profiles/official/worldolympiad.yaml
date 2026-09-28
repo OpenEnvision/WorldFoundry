@@ -57,8 +57,6 @@ required_paths:
   path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/batch_test/evaluate_pipelines.py
 - id: runtime_scorer
   path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/scripts/score_video_physical_3d.py
-- id: runtime_provenance
-  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/WORLDFOUNDRY_PROVENANCE.md
 - id: fixture
   path: worldfoundry/data/benchmarks/assets/worldolympiad
 - id: pip_requirements

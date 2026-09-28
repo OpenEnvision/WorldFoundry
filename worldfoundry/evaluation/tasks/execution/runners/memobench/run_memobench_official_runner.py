@@ -174,18 +174,23 @@ def _scorecard(
     }
     official_runtime_executed = official_runtime is not None
     normalization_ok = bool(available_rows)
+    component_verified = official_runtime_executed and normalization_ok
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         # ``--run-official`` executes only MemoBench Step 1.  The official
         # benchmark also requires ORS, VQA, and leaderboard aggregation, so a
         # successful Step-1 run must not be reported as full-benchmark proof.
         "official_benchmark_verified": False,
-        "integration_evidence": normalization_ok,
+        "integration_evidence": component_verified,
         "leaderboard_valid": False,
         "normalizer_only": not official_runtime_executed,
         "normalization_ok": normalization_ok,
         "run": {
-            "status": "succeeded" if normalization_ok else "failed",
+            "status": (
+                "official_component_verified" if component_verified
+                else "official_results_imported" if normalization_ok
+                else "failed"
+            ),
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_memobench_official_runner",
             "returncode": 0 if normalization_ok else 1,

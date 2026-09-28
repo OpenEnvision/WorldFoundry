@@ -45,8 +45,6 @@ required_paths:
   path: worldfoundry/evaluation/tasks/execution/runners/mind/runtime/mind
 - id: runtime_entrypoint
   path: worldfoundry/evaluation/tasks/execution/runners/mind/runtime/mind/src/process.py
-- id: runtime_provenance
-  path: worldfoundry/evaluation/tasks/execution/runners/mind/runtime/WORLDFOUNDRY_PROVENANCE.md
 - id: fixture
   path: worldfoundry/data/benchmarks/assets/mind/fixtures/mind_result_fixture.json
 - id: pip_requirements

@@ -24,13 +24,9 @@ official_sources:
     role: vendored_runtime_source
   local_runtime:
     path: worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench
-  docs:
-    path: worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench/docs
 benchmark_assets:
   prompt_suite:
     status: official_dataset_required
-  bundled_runtime_docs:
-    status: vendored
 evaluation_surface:
   purpose: Visual-memory benchmark for world generation under the Visible / Disappeared / Reappear protocol.
   claimed_clips: 360
