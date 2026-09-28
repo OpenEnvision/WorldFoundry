@@ -18,6 +18,7 @@
 /scripts/model_zoo/run_mochi1_preview_official_demo.sh
 /scripts/run_worldscore_eval_local.sh
 /scripts/setup/materialize_workspace_demo_assets.py
+/scripts/studio/fetch_vendor_assets.py
 /scripts/workspace/run_video_model_gang.py
 /scripts/workspace/run_video_model_matrix.py
 /scripts/workspace/validate_generated_videos.py
