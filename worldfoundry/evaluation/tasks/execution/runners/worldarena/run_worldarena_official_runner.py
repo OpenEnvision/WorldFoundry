@@ -336,6 +336,10 @@ def _official_component_score(payload: Any) -> tuple[float, int] | None:
 
 
 def _official_component_metrics(results_path: Path) -> dict[str, dict[str, Any]]:
+    # The video-quality runtime writes JSON; the catalog also accepts CSV/TSV
+    # summary imports, which have no upstream component payload to inspect.
+    if results_path.suffix.lower() != ".json":
+        return {}
     payload = json.loads(results_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         return {}

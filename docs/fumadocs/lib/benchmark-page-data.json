@@ -8019,67 +8019,49 @@
       },
       "metrics": [
         {
-          "id": "physics_knowledge",
-          "name": "Physics Knowledge",
-          "description": "T2VWorldBench physics world-knowledge score.",
-          "descriptionZh": "T2VWorldBench physics（物理）世界知识得分。",
+          "id": "quality",
+          "name": "Quality",
+          "description": "Minimum visual quality score (0–5) in the official CSV.",
+          "descriptionZh": "官方 CSV 中的最低视觉质量分（0–5）。",
           "higherIsBetter": true,
           "primary": false,
-          "leaderboardKey": "physics"
+          "leaderboardKey": "min_quality_score"
         },
         {
-          "id": "nature_knowledge",
-          "name": "Nature Knowledge",
-          "description": "T2VWorldBench nature world-knowledge score.",
-          "descriptionZh": "T2VWorldBench nature（自然）世界知识得分。",
+          "id": "realism",
+          "name": "Realism",
+          "description": "Minimum realism score (0–5) in the official CSV.",
+          "descriptionZh": "官方 CSV 中的最低真实感分（0–5）。",
           "higherIsBetter": true,
           "primary": false,
-          "leaderboardKey": "nature"
+          "leaderboardKey": "min_realism_score"
         },
         {
-          "id": "activity_knowledge",
-          "name": "Activity Knowledge",
-          "description": "T2VWorldBench activity world-knowledge score.",
-          "descriptionZh": "T2VWorldBench activity（活动）世界知识得分。",
+          "id": "relevance",
+          "name": "Relevance",
+          "description": "Minimum prompt relevance score (0–5) in the official CSV.",
+          "descriptionZh": "官方 CSV 中的最低提示词相关性分（0–5）。",
           "higherIsBetter": true,
           "primary": false,
-          "leaderboardKey": "activity"
+          "leaderboardKey": "min_relevance_score"
         },
         {
-          "id": "culture_knowledge",
-          "name": "Culture Knowledge",
-          "description": "T2VWorldBench culture world-knowledge score.",
-          "descriptionZh": "T2VWorldBench culture（文化）世界知识得分。",
+          "id": "consistency",
+          "name": "Consistency",
+          "description": "Minimum temporal consistency score (0–5) in the official CSV.",
+          "descriptionZh": "官方 CSV 中的最低时序一致性分（0–5）。",
           "higherIsBetter": true,
           "primary": false,
-          "leaderboardKey": "culture"
+          "leaderboardKey": "min_consistency_score"
         },
         {
-          "id": "causality_knowledge",
-          "name": "Causality Knowledge",
-          "description": "T2VWorldBench causality world-knowledge score.",
-          "descriptionZh": "T2VWorldBench causality（因果）世界知识得分。",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "causality"
-        },
-        {
-          "id": "object_knowledge",
-          "name": "Object Knowledge",
-          "description": "T2VWorldBench object world-knowledge score.",
-          "descriptionZh": "T2VWorldBench object（物体）世界知识得分。",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "object"
-        },
-        {
-          "id": "world_knowledge_average",
-          "name": "World Knowledge Average",
-          "description": "Mean over available world-knowledge categories.",
-          "descriptionZh": "可用世界知识类别的均值。",
+          "id": "final",
+          "name": "Final",
+          "description": "Minimum total score (0–20) in the official CSV.",
+          "descriptionZh": "官方 CSV 中的最低总分（0–20）。",
           "higherIsBetter": true,
           "primary": true,
-          "leaderboardKey": "world_knowledge_average"
+          "leaderboardKey": "final_min_score"
         }
       ],
       "leaderboard": {

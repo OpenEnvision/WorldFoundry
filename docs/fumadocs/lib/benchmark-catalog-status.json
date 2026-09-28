@@ -1384,7 +1384,7 @@
     "leaderboardValid": false,
     "logoKey": "sjsu",
     "metrics": [
-      "world_knowledge_average"
+      "final"
     ],
     "name": "T2VWorldBench",
     "requiresApi": false,

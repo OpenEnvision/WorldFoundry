@@ -61,7 +61,7 @@ validation_command:
 - --mode
 - official-validation
 - --official-results-path
-- <official_results.json>
+- <model_video_assessment_scores.csv>
 - --generated-artifact-dir
 - <generated_videos>
 - --output-dir

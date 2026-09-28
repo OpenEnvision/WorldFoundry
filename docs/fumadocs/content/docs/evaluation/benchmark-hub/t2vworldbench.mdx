@@ -5,7 +5,7 @@ description: "WACV 2026 world-knowledge T2V bench: 1,200 prompts over six catego
 
 T2VWorldBench (San Jose State, with UC Berkeley, UW-Madison, UW, and GUET; WACV 2026) asks whether text-to-video models can use **world knowledge** for factual generation. Official size: **6 categories, 60 subcategories, 1,200 prompts** — physics, nature, activity, culture, causality, object knowledge. Scoring mixes human evaluation and VLM judging. The paper's 10-system study found most models fail at knowledge-correct video.
 
-`world_knowledge_average` is the mean over available category scores.
+The released `eval.py` writes `quality`, `realism`, `relevance`, and `consistency` scores on 0–5 scales plus a `final` score on a 0–20 scale. The six knowledge categories describe the prompt suite; the released CSV does not contain separate category scores.
 
 Paper: [T2VWorldBench](https://arxiv.org/abs/2507.18107). Code: [magiclinux/world_knowledge](https://github.com/magiclinux/world_knowledge). Prompt CSV is vendored; full metadata / sample videos are Drive-hosted.
 
@@ -19,7 +19,7 @@ WorldFoundry **vendors runtime source and normalizes official result files**. Fu
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id t2vworldbench \
   --mode official-validation \
-  --official-results-path <official_results.json> \
+  --official-results-path <model_video_assessment_scores.csv> \
   --generated-artifact-dir <generated_videos> \
   --output-dir tmp/t2vworldbench/official-validation \
   --json
@@ -29,6 +29,6 @@ Default import: `WORLDFOUNDRY_T2VWORLDBENCH_RESULTS_PATH`. Optional root: `WORLD
 
 In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/t2vworldbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/runtime/t2vworldbench`.
 
-Outputs include `scorecard.json` (primary `world_knowledge_average`) and `raw_metric_table.jsonl`.
+Outputs include `scorecard.json` (primary `final`) and `raw_metric_table.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -23,11 +23,12 @@ Import an official classify or regress export:
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id larybench \
   --mode official-validation \
-  --official-results-path <classification_summary.json_or_best_result.json> \
-  --stage <classify_or_regress> \
+  --official-results-path /path/to/classification_summary.json \
   --output-dir tmp/larybench/official-validation \
   --json
 ```
+
+For regression, pass the official `best_result.json` instead; the runner infers the stage from the filename.
 
 Full extract → classify → regress needs staged shards. Default import path when you omit `--official-results-path` is `WORLDFOUNDRY_LARYBENCH_RESULTS_PATH`.
 

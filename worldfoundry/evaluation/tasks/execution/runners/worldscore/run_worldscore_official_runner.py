@@ -808,14 +808,18 @@ def normalize_worldscore_results(
     available_count = sum(1 for row in metric_rows if row["available"])
     contract_blockers = [] if contract_validation is None else contract_validation.get("blockers", [])
     bounded_run = run_scope.endswith("_bounded")
-    run_status = "official_verified" if returncode == 0 and available_count else "failed"
+    normalizer_only = command is None
+    normalization_ok = returncode == 0 and available_count > 0
+    official_verified = not normalizer_only and normalization_ok
+    run_status = (
+        "official_verified" if official_verified
+        else "official_results_imported" if normalization_ok
+        else "failed"
+    )
     if contract_blockers and available_count == 0:
         run_status = "blocked"
     elif returncode == 0 and available_count == 0 and contract_validation and contract_validation.get("valid"):
         run_status = "contract_validated"
-    normalization_ok = returncode == 0 and available_count > 0
-    normalizer_only = command is None
-    official_verified = command is not None and normalization_ok
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
@@ -1215,7 +1219,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     result = {
-        "ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
+        "ok": scorecard["normalization_ok"],
+        "full_official_ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
         "benchmark_id": args.benchmark_id,
         "output_dir": str(args.output_dir),
         "scorecard": scorecard["artifacts"]["scorecard"],

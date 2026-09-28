@@ -1,8 +1,2 @@
-metric_id,score
-physics_knowledge,0.75
-nature_knowledge,0.75
-activity_knowledge,0.75
-culture_knowledge,0.75
-causality_knowledge,0.75
-object_knowledge,0.75
-world_knowledge_average,0.75
+grid_image_name,min_quality_score,min_realism_score,min_relevance_score,min_consistency_score,final_min_score
+sample.png,4,3,5,2,14

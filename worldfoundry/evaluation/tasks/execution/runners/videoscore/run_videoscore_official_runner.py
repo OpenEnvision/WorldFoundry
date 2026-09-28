@@ -458,13 +458,22 @@ def normalize_videoscore_results(
     # Determine various status flags for the scorecard.
     normalization_ok = returncode == 0 and available_count > 0
     normalizer_only = command is None
-    official_verified = command is not None and normalization_ok
+    # eval_videoscore.py produces per-video aspect scores. The official
+    # VideoScore-Bench SPCC/pairwise protocols are separate evaluation steps.
+    component_verified = command is not None and normalization_ok
 
     # Assemble the final scorecard dictionary.
+    run_status = (
+        "official_component_verified"
+        if component_verified
+        else "official_results_imported"
+        if normalizer_only and normalization_ok
+        else "failed"
+    )
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_verified" if returncode == 0 and available_count else "failed",
+            "status": run_status,
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_videoscore_official_runner",
             "command": command,
@@ -512,7 +521,7 @@ def normalize_videoscore_results(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "official_videoscore",
+            "kind": "official_videoscore_component" if component_verified else "videoscore_results_imported",
             "upstream_results": str(upstream_results_path),
             "dataset_root": None if dataset_root is None else str(dataset_root.resolve()),
             "frames_dir": None if frames_dir is None else str(frames_dir.resolve()),
@@ -533,10 +542,13 @@ def normalize_videoscore_results(
         "validation": {
             "normalizer_only": normalizer_only,
             "official_runtime_executed": command is not None,
+            "official_component_verified": component_verified,
+            "benchmark_protocol_executed": False,
             "official_results_imported": normalizer_only and normalization_ok,
         },
-        "official_benchmark_verified": official_verified,
-        "integration_evidence": official_verified,
+        "official_component_verified": component_verified,
+        "official_benchmark_verified": False,
+        "integration_evidence": component_verified,
         "normalization_ok": normalization_ok,
         "official_results_imported": normalizer_only and normalization_ok,
     }
@@ -1107,7 +1119,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Extract key results from the generated scorecard for summary output.
     result = {
-        "ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
+        "ok": scorecard["normalization_ok"],
         "benchmark_id": args.benchmark_id,
         "output_dir": str(args.output_dir),
         "scorecard": scorecard["artifacts"]["scorecard"],

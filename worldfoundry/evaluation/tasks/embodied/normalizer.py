@@ -153,17 +153,23 @@ def _result_txt_row(path: Path) -> dict[str, Any] | None:
 
     parts = path.parts
     task_name = path.parent.name
+    sample_id = path.parent.name
     policy_name = None
     task_config = None
     ckpt_setting = None
     if "eval_result" in parts:
         index = len(parts) - 1 - list(reversed(parts)).index("eval_result")
         tail = parts[index + 1 :]
+        # Upstream timestamps are only unique within a task/policy run.  Two
+        # tasks can finish in the same second, so retain their relative result
+        # path when assigning sample identities.
+        if len(tail) > 1:
+            sample_id = "/".join(tail[:-1])
         if len(tail) >= 5:
             task_name, policy_name, task_config, ckpt_setting = tail[:4]
 
     row: dict[str, Any] = {
-        "sample_id": path.parent.name,
+        "sample_id": sample_id,
         "task_id": task_name,
         "task": task_name,
         "success_rate": values[-1],

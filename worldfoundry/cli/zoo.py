@@ -1251,7 +1251,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
         "--mode",
         choices=_BENCHMARK_RUN_MODE_CHOICES,
         default="official-run",
-        help="Benchmark runner mode. Use official-run for integrated evaluators, official-validation for result import, or normalizer for scorecard normalization.",
+        help="Benchmark runner mode. Contract emits a non-official contract scorecard; official-run executes integrated evaluators, official-validation imports results, and normalizer writes a scorecard.",
     )
     zoo_benchmark_run_parser.add_argument("--output-dir", type=Path, required=True)
     zoo_benchmark_run_parser.add_argument("--generated-artifact-dir", type=Path)

@@ -466,7 +466,11 @@ def normalize_worldmodelbench_results(
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_verified" if returncode == 0 and available_count and shape_ok else "failed",
+            "status": (
+                "official_verified" if official_verified
+                else "official_results_imported" if normalization_ok
+                else "failed"
+            ),
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_worldmodelbench_official_runner",
             "command": command,

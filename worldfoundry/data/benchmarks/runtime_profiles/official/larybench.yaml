@@ -61,8 +61,6 @@ validation_command:
 - official-validation
 - --official-results-path
 - <classification_summary.json_or_best_result.json>
-- --stage
-- <classify_or_regress>
 - --output-dir
 - <out>
 - --json

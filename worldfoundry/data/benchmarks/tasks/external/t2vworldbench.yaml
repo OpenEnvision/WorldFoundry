@@ -8,19 +8,15 @@ tags:
 splits:
 - standard
 metrics:
-  physics_knowledge:
+  quality:
     aggregation: mean
-  nature_knowledge:
+  realism:
     aggregation: mean
-  activity_knowledge:
+  relevance:
     aggregation: mean
-  culture_knowledge:
+  consistency:
     aggregation: mean
-  causality_knowledge:
-    aggregation: mean
-  object_knowledge:
-    aggregation: mean
-  world_knowledge_average:
+  final:
     aggregation: mean
     primary: true
 metadata:
@@ -102,7 +98,7 @@ metadata:
     - --mode
     - official-validation
     - --official-results-path
-    - <official_results.json>
+    - <model_video_assessment_scores.csv>
     - --generated-artifact-dir
     - <generated_videos>
     - --output-dir
@@ -111,7 +107,7 @@ metadata:
     runtime:
       results_path_env: WORLDFOUNDRY_T2VWORLDBENCH_RESULTS_PATH
     official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id t2vworldbench --mode 
-      official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
+      official-validation --official-results-path <model_video_assessment_scores.csv> --generated-artifact-dir <generated_videos>
       --output-dir <out> --json
   validation_command:
   - worldfoundry-eval
@@ -122,7 +118,7 @@ metadata:
   - --mode
   - official-validation
   - --official-results-path
-  - <official_results.json>
+  - <model_video_assessment_scores.csv>
   - --generated-artifact-dir
   - <generated_videos>
   - --output-dir
@@ -144,13 +140,11 @@ tasks:
     output_keys:
     - generated_video
     metric_ids:
-    - physics_knowledge
-    - nature_knowledge
-    - activity_knowledge
-    - culture_knowledge
-    - causality_knowledge
-    - object_knowledge
-    - world_knowledge_average
+    - quality
+    - realism
+    - relevance
+    - consistency
+    - final
     metric_groups:
     - t2vworldbench_world_knowledge
     tags:
@@ -178,12 +172,10 @@ tasks:
     evaluation_protocol:
     - name: external_official_runner
       metric_ids:
-      - physics_knowledge
-      - nature_knowledge
-      - activity_knowledge
-      - culture_knowledge
-      - causality_knowledge
-      - object_knowledge
-      - world_knowledge_average
+      - quality
+      - realism
+      - relevance
+      - consistency
+      - final
       runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VWorldBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/run_t2vworldbench_official_runner.py

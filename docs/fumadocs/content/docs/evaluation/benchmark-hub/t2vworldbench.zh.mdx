@@ -5,7 +5,7 @@ description: "WACV 2026 的世界知识 T2V 评测：6 类 1,200 条 prompt。Wo
 
 T2VWorldBench（圣何塞州立大学，联合 UC Berkeley、UW-Madison、UW 与桂林电子科大；WACV 2026）问的是文本生成视频模型能否用 **世界知识** 做事实生成。官方规模：**6 大类、60 子类、1,200 条 prompt** — 物理、自然、活动、文化、因果、物体知识。打分混合人工与 VLM。论文对 10 个前沿系统的评估发现，多数模型无法生成真正知识正确的视频。
 
-`world_knowledge_average` 是已有类别分的均值。
+公开的 `eval.py` 产出 `quality`、`realism`、`relevance`、`consistency` 四项 0–5 分，以及 `final` 0–20 分。六大知识类别描述的是 prompt 集；公开 CSV 没有单独的类别分。
 
 论文：[T2VWorldBench](https://arxiv.org/abs/2507.18107)。代码：[magiclinux/world_knowledge](https://github.com/magiclinux/world_knowledge)。Prompt CSV 已内置；完整元数据 / 样例视频在 Drive。
 
@@ -19,7 +19,7 @@ WorldFoundry **内置 runtime 源码并归一化官方结果文件**。完整官
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id t2vworldbench \
   --mode official-validation \
-  --official-results-path <official_results.json> \
+  --official-results-path <model_video_assessment_scores.csv> \
   --generated-artifact-dir <generated_videos> \
   --output-dir tmp/t2vworldbench/official-validation \
   --json
@@ -29,6 +29,6 @@ worldfoundry-eval zoo benchmark-run \
 
 仓内指针：`worldfoundry/data/benchmarks/tasks/external/t2vworldbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/runtime/t2vworldbench`。
 
-产物包括 `scorecard.json`（主键 `world_knowledge_average`）与 `raw_metric_table.jsonl`。
+产物包括 `scorecard.json`（主键 `final`）与 `raw_metric_table.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

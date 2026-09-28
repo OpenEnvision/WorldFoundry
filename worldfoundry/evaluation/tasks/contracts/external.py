@@ -716,18 +716,16 @@ T2VWorldBenchContract = ExternalBenchmarkContract(
     input_keys=("world_knowledge_prompt_manifest", "generated_video_dir", "vlm_judge_results_path"),
     output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
     metric_ids=(
-        "physics_knowledge",
-        "nature_knowledge",
-        "activity_knowledge",
-        "culture_knowledge",
-        "causality_knowledge",
-        "object_knowledge",
-        "world_knowledge_average",
+        "quality",
+        "realism",
+        "relevance",
+        "consistency",
+        "final",
     ),
     requires_upstream_runtime=True,
     notes=(
-        "Contract records the paper-described 6-category world-knowledge T2V evaluation surface only.",
-        "No public official code/data/runtime was confirmed, so this remains blocked until release evidence exists.",
+        "The official CSV reports quality, realism, relevance, consistency, and final scores on 5/5/5/5/20 scales.",
+        "Full official execution still requires generated videos, staged metadata, and the upstream VLM runtime.",
     ),
 )
 

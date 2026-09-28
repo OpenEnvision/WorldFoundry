@@ -23,11 +23,12 @@ WorldFoundry **仓内内置各阶段驱动**（`cli.py`、`extract.py`、`classi
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id larybench \
   --mode official-validation \
-  --official-results-path <classification_summary.json_or_best_result.json> \
-  --stage <classify_or_regress> \
+  --official-results-path /path/to/classification_summary.json \
   --output-dir tmp/larybench/official-validation \
   --json
 ```
+
+回归任务改传官方 `best_result.json`；运行器根据文件名判断阶段。
 
 完整的 抽取 → 分类 → 回归 需要先就位数据分片。省略 `--official-results-path` 时，默认读 `WORLDFOUNDRY_LARYBENCH_RESULTS_PATH`。
 
