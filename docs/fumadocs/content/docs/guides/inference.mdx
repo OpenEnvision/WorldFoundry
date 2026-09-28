@@ -324,13 +324,14 @@ print(result["artifact_path"])
 `hunyuanvideo-t2v`, `hunyuanvideo-i2v`, `hunyuanvideo-1.5-t2v`, and
 `hunyuanvideo-1.5-i2v` reuse the framework loader, scheduler, offload policy,
 standard denoising runner, and media writer. The old upstream CLI runtime is not
-a backend. To run the generated artifacts through the integrated benchmark
-suite, use the model catalog ID directly:
+a backend. To run generated artifacts through an integrated benchmark, use the
+public CLI with the model catalog ID and a benchmark ID:
 
 ```bash
-python scripts/benchmark_zoo/run_video_model_benchmark_suite.py \
+worldfoundry run --benchmark vbench \
   --model hunyuanvideo-1.5-t2v \
-  --prompt "A cinematic snowy street at night." \
+  --generated-artifact-dir /path/to/generated-videos \
+  --mode official-validation \
   --output-dir tmp/bench/hunyuanvideo-1.5-t2v
 ```
 

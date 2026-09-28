@@ -1,6 +1,5 @@
 {
   "date": "2026-09-18",
-  "reproduction_script": "scripts/benchmark_model_attention.py",
   "environment_notes": [
     "The user-authorized GrabGPU/gg process was stopped before these measurements; all four GPUs were observed idle before the rerun.",
     "Each case ran on one H100 in a fresh process, with 10 warmups and 50 measured rounds.",
@@ -23,7 +22,6 @@
     ]
   },
   "source_sha256": {
-    "scripts/benchmark_model_attention.py": "2be134672636721a35797497366afcf4a33302fea0a0972caf5c4a45d59b8abd",
     "tests/core/attention/test_model_storage_optimizations.py": "f7f1b6348374b4e0917e5838bcdbed5231fd72539688cc1bc5b0beb3e81c4771",
     "worldfoundry/synthesis/action_generation/h_rdt/modeling.py": "2223c6953f4358a3450afa3f2176f9396e92dffdd7cb96a0b5fd6ca2e01160f5",
     "worldfoundry/synthesis/visual_generation/longcat_video/longcat_video_runtime/longcat_video/modules/attention.py": "d65243312e23338edb8b9f40b9eb44f74fb6bc77d9360682331e41c59a6131e2",

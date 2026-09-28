@@ -294,16 +294,7 @@ H.264 输出和打包 offload 分别标记 `worldfoundry.postprocess`、
 分组 query 与零步长 K/V view。按 batch/head 指定的 mask 仍走显式 head 扩展。
 部分形状和布局仍可能触发 reshape 拷贝；原有 native GQA 选择保持不变。
 
-每个 case 使用独立进程比较：
-
-```bash
-python -m scripts.benchmark_runtime_buffers --case offload-legacy --output artifacts/offload-legacy.json
-python -m scripts.benchmark_runtime_buffers --case offload-packed --output artifacts/offload-packed.json
-python -m scripts.benchmark_runtime_buffers --case gqa-copy --output artifacts/gqa-copy.json
-python -m scripts.benchmark_runtime_buffers --case gqa-view --output artifacts/gqa-view.json
-```
-
-这些是排除 warmup 的合成组件测试，记录 CUDA-event 耗时和峰值 allocated 显存，
+以下本地测量使用排除 warmup 的合成组件测试，记录 CUDA-event 耗时和峰值 allocated 显存，
 不代表完整模型 FPS。设计参考 FlashDreams
 [#637](https://github.com/NVIDIA/flashdreams/pull/637)、
 [#632](https://github.com/NVIDIA/flashdreams/pull/632) 和
@@ -346,20 +337,10 @@ transformer.enable_kv_cache(use_arena=True)
 训练/autograd、NAViT、序列分片、历史权重放大和 `torch.compile` 保留原有路径。
 不同会话、不同层各自持有 arena，读写须在同一个 CUDA stream 上顺序执行。
 
-复现组件对比，每个命令运行于独立进程：
-
-```bash
-python -m scripts.benchmark_kv_arena --case cat --output artifacts/kv-cat.json
-python -m scripts.benchmark_kv_arena --case arena --output artifacts/kv-arena.json
-python -m scripts.benchmark_kv_arena --case evoke-cat --output artifacts/evoke-cat.json
-python -m scripts.benchmark_kv_arena --case evoke-arena --output artifacts/evoke-arena.json
-```
-
-默认使用 batch 1、16 heads、head dim 64、4096 history token、256 current token，
+组件对比使用 batch 1、16 heads、head dim 64、4096 history token、256 current token，
 独立 KV 用例另有 1024 memory token；Evoke 用例没有 memory 段。
 真实 Evoke attention 用例包含投影、归一化、RoPE、缓存和输出投影，使用随机权重。
-`--phase cache-build` 可测首步重建；`--dtype bfloat16 --heads 40 --head-dim 128`
-可切换到 Evoke 默认的 head 配置。
+另有测量覆盖首步重建及 Evoke 默认的 40 heads、head dim 128 配置。
 
 2026-09-18，H100 80GB、PyTorch 2.5.1+cu121、FP16、10 轮 warmup、50 轮测量：
 
@@ -399,11 +380,6 @@ Evoke 剩余的 `cat` 用于 attention 输出组装。首步仍需生成历史 K
 这组测量中耗时减少约 11.4%，但常驻显存增加 100 MiB，临时峰值减少 85 MiB，
 最终峰值增加 15 MiB。因此保留为可选的吞吐优化，不能据单层结果默认视为省显存优化。
 共享 GPU 上的耗时仍需在实际模型和部署负载下复测。
-
-```bash
-python -m scripts.benchmark_kv_arena --case evoke-cat --dtype bfloat16 --heads 40 --head-dim 128 --layers 40 --output artifacts/kv-stack40-cat.json
-python -m scripts.benchmark_kv_arena --case evoke-arena --dtype bfloat16 --heads 40 --head-dim 128 --layers 40 --output artifacts/kv-stack40-arena.json
-```
 
 验证通过 47 项 arena 相关测试，包括 FP16/BF16 多块多步逐元素一致性、40 × 128 的真实 attention、
 RoPE 更新、空历史、块长变化、会话隔离、训练回退、缓存清理和 arena 原语的 CUDA graph replay。
@@ -457,18 +433,8 @@ export WORLDFOUNDRY_LONGCAT_KV_OPTIMIZATION=1
 或 `enable_kv_optimization=False/True`；显式参数优先于环境变量。
 Evoke KV arena 与 packed offload 继续保持各自的默认关闭策略。
 
-复现组件对照时，脚本的 `--mode baseline/optimized` 显式关闭/开启对应优化，覆盖环境变量设置：
-
-```bash
-python -m scripts.benchmark_model_attention --model h-rdt-cross --mode baseline --output artifacts/hrdt-before.json
-python -m scripts.benchmark_model_attention --model h-rdt-cross --mode optimized --output artifacts/hrdt-after.json
-python -m scripts.benchmark_model_attention --model h-rdt-cross --mode baseline --mask padding --output artifacts/hrdt-mask-before.json
-python -m scripts.benchmark_model_attention --model h-rdt-cross --mode optimized --mask padding --output artifacts/hrdt-mask-after.json
-python -m scripts.benchmark_model_attention --model longcat --mode baseline --batch 2 --output artifacts/longcat-before.json
-python -m scripts.benchmark_model_attention --model longcat --mode optimized --batch 2 --output artifacts/longcat-after.json
-```
-
-H-RDT 默认用 efficient SDPA、16 Q heads / 4 KV heads；LongCat 用 16 heads，
+历史组件对照显式关闭或开启对应优化，覆盖环境变量设置。H-RDT 使用 efficient SDPA、
+16 Q heads / 4 KV heads；LongCat 用 16 heads，
 该环境 FA3 不可用，实际走 SDPA fallback。两者均为 head dim 64、256 query token、
 4096 condition/history token、BF16、随机权重；10 轮 warmup 后测 50 轮，每组独立进程。
 LongCat 的基准网格为 `(1, 1, 256)`，用于控制 token 数；不是视频分辨率或整模型 FPS 测试。

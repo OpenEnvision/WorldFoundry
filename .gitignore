@@ -3,6 +3,8 @@
 /tmp/
 
 # Local maintenance and validation scripts are not part of the public release.
+/scripts/benchmark*.py
+/scripts/benchmark_zoo/
 /scripts/embodied/mirror_docker_images.py
 /scripts/embodied/resolve_official_image_digests.py
 /scripts/embodied/run_dlc_embodied_eval.sh

@@ -486,16 +486,11 @@ export WORLDFOUNDRY_REALTIME_PERF_WARMUP_CHUNKS=1
 }
 ```
 
-```bash
-python scripts/benchmark_zoo/check_realtime_regression.py \
-  --manifest realtime-regression.json \
-  --trace outputs/realtime-timing.jsonl \
-  --output outputs/realtime-regression-result.json
-```
-
-任一阈值失败，或某个必需 stage 在任一测量 chunk 中缺失时，命令都会以状态码
-`1` 退出。输出 JSON 会列出每个实际值、比较符和阈值，也可通过 Python API
-转换为仓内统一的 `PerformanceManifest`。
+Python 调用方可使用 `worldfoundry.runtime.realtime_regression` 中的
+`RealtimeRegressionManifest.read_json()` 加载此文件，使用
+`read_realtime_trace()` 读取 trace，再将两者传给
+`evaluate_realtime_manifest()`。结果包含每个实际值、比较符和阈值，
+也可转换为统一的 `PerformanceManifest`。
 
 远程机器上使用时，需要暴露 `7870` 和实际启动的 viewer 端口。例如：
 

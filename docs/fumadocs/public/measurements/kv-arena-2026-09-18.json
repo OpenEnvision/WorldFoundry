@@ -1,7 +1,6 @@
 {
   "date": "2026-09-18",
   "upstream_reference": "https://github.com/NVIDIA/flashdreams/pull/635",
-  "reproduction_script": "scripts/benchmark_kv_arena.py",
   "environment_notes": [
     "Each case ran in a fresh process; 10 warmups and 50 measured rounds.",
     "PYTHONNOUSERSITE=1, OMP_NUM_THREADS=1, MKL_NUM_THREADS=1.",

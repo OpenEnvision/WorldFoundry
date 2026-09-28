@@ -307,12 +307,13 @@ print(result["artifact_path"])
 `hunyuanvideo-t2v`、`hunyuanvideo-i2v`、`hunyuanvideo-1.5-t2v` 与
 `hunyuanvideo-1.5-i2v` 复用框架 loader、scheduler、offload policy、standard
 denoising runner 与 media writer；旧上游 CLI runtime 不再是 backend。生成后可
-直接用 catalog model ID 进入统一 benchmark suite：
+通过公开 CLI、catalog model ID 和 benchmark ID 运行生成的视频：
 
 ```bash
-python scripts/benchmark_zoo/run_video_model_benchmark_suite.py \
+worldfoundry run --benchmark vbench \
   --model hunyuanvideo-1.5-t2v \
-  --prompt "电影感的雪夜街道。" \
+  --generated-artifact-dir /path/to/generated-videos \
+  --mode official-validation \
   --output-dir tmp/bench/hunyuanvideo-1.5-t2v
 ```
 

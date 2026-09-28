@@ -26,7 +26,6 @@ RUFF_SOURCES ?= \
 	worldfoundry/evaluation/tasks/execution/orchestration \
 	worldfoundry/mcp \
 	worldfoundry/runtime \
-	scripts/benchmark_zoo \
 	scripts/model_zoo
 
 help:

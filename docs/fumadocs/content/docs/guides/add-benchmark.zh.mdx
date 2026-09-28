@@ -5,7 +5,7 @@ description: 如何把一个 benchmark 接到 WorldFoundry：catalog、task 契�
 
 把 benchmark 加进 WorldFoundry，不是「把论文名字写进 YAML 再标 integrated」。Catalog 记录身份、出处，以及协议到底测什么；external task manifest 声明样本如何变成 `GenerationRequest`；runner 或 normalizer 写出系统其余部分能审查的 scorecard；readiness report 才是 support matrix 会哈希的对象。这几层互相替代不了，单独任何一层也不等于 leaderboard 声明。
 
-当前公开 surface 是 Benchmark Zoo：catalog 在 `worldfoundry/data/benchmarks/catalog/`，task 在 `worldfoundry/data/benchmarks/tasks/external/`，辅助脚本在 `scripts/benchmark_zoo`，执行代码在 `worldfoundry/evaluation/tasks`。追踪带有官方源码、数据集或 prompt suite、runner 和 runtime stages 的外部/社区 benchmark，走这条路。每个 benchmark 的页面在 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)；与协议无关的可复用 scorer 在 [指标](/zh/docs/evaluation/metrics)；具身 simulator 的资产和 Docker 步骤在 [Embodied 官方运行准备](/zh/docs/evaluation/embodied-official-runtime)。同一条 artifact 边界的模型侧见 [添加模型](/zh/docs/guides/add-model)。
+当前公开 surface 是 Benchmark Zoo：catalog 在 `worldfoundry/data/benchmarks/catalog/`，task 在 `worldfoundry/data/benchmarks/tasks/external/`，执行代码在 `worldfoundry/evaluation/tasks`。追踪带有官方源码、数据集或 prompt suite、runner 和 runtime stages 的外部/社区 benchmark，走这条路。每个 benchmark 的页面在 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)；与协议无关的可复用 scorer 在 [指标](/zh/docs/evaluation/metrics)；具身 simulator 的资产和 Docker 步骤在 [Embodied 官方运行准备](/zh/docs/evaluation/embodied-official-runtime)。同一条 artifact 边界的模型侧见 [添加模型](/zh/docs/guides/add-model)。
 
 ## 第一份 PR 要窄
 

@@ -508,17 +508,11 @@ export WORLDFOUNDRY_REALTIME_PERF_WARMUP_CHUNKS=1
 }
 ```
 
-```bash
-python scripts/benchmark_zoo/check_realtime_regression.py \
-  --manifest realtime-regression.json \
-  --trace outputs/realtime-timing.jsonl \
-  --output outputs/realtime-regression-result.json
-```
-
-The command exits with status `1` when any limit fails or a required stage is
-missing from any measured chunk. Its JSON output includes every actual value,
-comparator, and limit, and can also be converted to the shared
-`PerformanceManifest` API by Python tooling.
+Python callers can load this file with `RealtimeRegressionManifest.read_json()`,
+read the trace with `read_realtime_trace()`, and pass both to
+`evaluate_realtime_manifest()` in `worldfoundry.runtime.realtime_regression`.
+The result includes each actual value, comparator, and limit, and can be
+converted to the shared `PerformanceManifest` API.
 
 For remote workstations, expose the Workspace port and the viewer ports you use.
 For example:

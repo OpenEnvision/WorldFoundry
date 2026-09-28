@@ -298,17 +298,9 @@ K/V views for equal-batch 4D tensors and shared masks when explicitly selecting
 head-specific masks retain explicit head expansion. Shape and layout can still
 require a reshape copy. Existing native GQA selection remains unchanged.
 
-Run each component probe in a fresh process:
-
-```bash
-python -m scripts.benchmark_runtime_buffers --case offload-legacy --output artifacts/offload-legacy.json
-python -m scripts.benchmark_runtime_buffers --case offload-packed --output artifacts/offload-packed.json
-python -m scripts.benchmark_runtime_buffers --case gqa-copy --output artifacts/gqa-copy.json
-python -m scripts.benchmark_runtime_buffers --case gqa-view --output artifacts/gqa-view.json
-```
-
-These are synthetic component probes with warmup excluded, CUDA-event timings,
-and peak allocated memory; they are not end-to-end model FPS. The design was
+The local measurements below used synthetic component probes with warmup
+excluded, CUDA-event timings, and peak allocated memory. They are not
+end-to-end model FPS. The design was
 informed by FlashDreams [#637](https://github.com/NVIDIA/flashdreams/pull/637),
 [#632](https://github.com/NVIDIA/flashdreams/pull/632), and
 [#634](https://github.com/NVIDIA/flashdreams/pull/634).
@@ -356,21 +348,12 @@ Autograd, NAViT, sequence sharding, history amplification, and `torch.compile`
 retain their existing paths. Each session/layer owns a separate arena, consumed
 and updated sequentially on one CUDA stream.
 
-Run each comparison in a fresh process:
-
-```bash
-python -m scripts.benchmark_kv_arena --case cat --output artifacts/kv-cat.json
-python -m scripts.benchmark_kv_arena --case arena --output artifacts/kv-arena.json
-python -m scripts.benchmark_kv_arena --case evoke-cat --output artifacts/evoke-cat.json
-python -m scripts.benchmark_kv_arena --case evoke-arena --output artifacts/evoke-arena.json
-```
-
-Defaults are batch 1, 16 heads, head dimension 64, 4096 history tokens, and 256
-current tokens. Primitive cases add 1024 memory tokens; Evoke has no memory segment.
+The comparison used batch 1, 16 heads, head dimension 64, 4096 history tokens,
+and 256 current tokens. Primitive cases add 1024 memory tokens; Evoke has no
+memory segment.
 The real Evoke attention module includes projections, normalization, RoPE, cache
-handling, and output projection with random weights. Use `--phase cache-build`
-to measure first-step rebuilds, and `--dtype bfloat16 --heads 40 --head-dim 128`
-for Evoke's default head configuration.
+handling, and output projection with random weights. Separate measurements covered
+first-step rebuilds and Evoke's default 40-head, 128-dimension configuration.
 
 On 2026-09-18, H100 80GB, PyTorch 2.5.1+cu121, FP16, 10 warmups and 50 rounds:
 
@@ -415,11 +398,6 @@ by 100 MiB while transient peak fell by 85 MiB, increasing total peak by 15 MiB.
 The arena therefore remains an optional throughput optimization; single-layer
 results do not justify enabling it as a general memory-saving optimization.
 Shared-GPU timings still require verification with the actual model and deployment load.
-
-```bash
-python -m scripts.benchmark_kv_arena --case evoke-cat --dtype bfloat16 --heads 40 --head-dim 128 --layers 40 --output artifacts/kv-stack40-cat.json
-python -m scripts.benchmark_kv_arena --case evoke-arena --dtype bfloat16 --heads 40 --head-dim 128 --layers 40 --output artifacts/kv-stack40-arena.json
-```
 
 All 47 arena tests passed, including exact FP16/BF16 multiblock and multistep parity,
 real 40 × 128 attention, RoPE replacement, empty history, chunk resizing, session
@@ -481,20 +459,10 @@ RoPE paths. Direct attention-module construction also accepts
 respectively; explicit arguments override the environment. Evoke KV arena and
 packed offload retain their separate disabled defaults.
 
-For component comparisons, `--mode baseline/optimized` explicitly disables/enables
-the corresponding optimization, overriding environment settings:
-
-```bash
-python -m scripts.benchmark_model_attention --model h-rdt-cross --mode baseline --output artifacts/hrdt-before.json
-python -m scripts.benchmark_model_attention --model h-rdt-cross --mode optimized --output artifacts/hrdt-after.json
-python -m scripts.benchmark_model_attention --model h-rdt-cross --mode baseline --mask padding --output artifacts/hrdt-mask-before.json
-python -m scripts.benchmark_model_attention --model h-rdt-cross --mode optimized --mask padding --output artifacts/hrdt-mask-after.json
-python -m scripts.benchmark_model_attention --model longcat --mode baseline --batch 2 --output artifacts/longcat-before.json
-python -m scripts.benchmark_model_attention --model longcat --mode optimized --batch 2 --output artifacts/longcat-after.json
-```
-
-Defaults use efficient SDPA with 16 Q / 4 KV heads for H-RDT, and 16 heads with
-the FA3-unavailable SDPA fallback for LongCat. Both use head dimension 64, 256
+The historical component comparisons explicitly disabled or enabled each
+optimization, overriding environment settings. They used efficient SDPA with
+16 Q / 4 KV heads for H-RDT, and 16 heads with the FA3-unavailable SDPA fallback
+for LongCat. Both use head dimension 64, 256
 query tokens, 4096 condition/history tokens, BF16 and random weights, with 10
 warmups and 50 measured rounds in fresh processes. LongCat's benchmark grid
 `(1, 1, 256)` controls the token count; it is not a video-resolution or full-model FPS test.
@@ -514,7 +482,8 @@ Persistent allocated memory is unchanged in all three pairs. LongCat reduces
 concatenation remains. Timings are observations from one local component comparison,
 not a full-model speedup estimate.
 [Raw measurements and per-round samples](/measurements/model-attention-2026-09-18.json)
-include all six fresh-process results, actual attention kernels, source hashes and validation commands.
+include all six fresh-process results, actual attention kernels, remaining
+source hashes, and validation commands.
 
 After adding opt-in switches, all 107 targeted tests passed, covering disabled
 defaults, explicit overrides, environment precedence, independent model switches,
