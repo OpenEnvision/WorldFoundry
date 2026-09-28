@@ -1,6 +1,6 @@
 {
   "modelsTotal": 220,
-  "benchmarksTotal": 75,
+  "benchmarksTotal": 74,
   "infrastructure": [
     {
       "name": "FastVideo",
@@ -210,7 +210,7 @@
       "id": "world_models",
       "label": "World models",
       "labelZh": "世界模型",
-      "count": 93,
+      "count": 94,
       "entries": [
         {
           "name": "ABot-World-0-5B-LF",
@@ -525,6 +525,10 @@
           "url": "https://github.com/WEIRDLabUW/unified-world-model"
         },
         {
+          "name": "UniWorld-View",
+          "url": "https://github.com/PKU-YuanGroup/UniWorld-View"
+        },
+        {
           "name": "VerseCrafter",
           "url": "https://github.com/TencentARC/VerseCrafter"
         },
@@ -734,7 +738,7 @@
       "id": "vla_va_wam",
       "label": "Embodied",
       "labelZh": "具身智能",
-      "count": 49,
+      "count": 48,
       "entries": [
         {
           "name": "A1",
@@ -877,10 +881,6 @@
           "url": "https://github.com/thu-ml/RoboticsDiffusionTransformer"
         },
         {
-          "name": "Real-Time Chunking",
-          "url": "https://github.com/Physical-Intelligence/real-time-chunking-kinetix"
-        },
-        {
           "name": "RISE",
           "url": "https://github.com/OpenDriveLab/RISE"
         },
@@ -947,7 +947,7 @@
       "id": "video",
       "label": "Video & world benchmarks",
       "labelZh": "视频与世界模型评测",
-      "count": 53,
+      "count": 52,
       "entries": [
         {
           "name": "4DWorldBench",
@@ -1178,11 +1178,6 @@
           "name": "WorldArena",
           "url": "https://github.com/tsinghua-fib-lab/WorldArena",
           "repo": "tsinghua-fib-lab/WorldArena"
-        },
-        {
-          "name": "WorldArena (WorldAtlas Arena)",
-          "url": "https://github.com/OpenEnvision/WorldArena",
-          "repo": "OpenEnvision/WorldArena"
         },
         {
           "name": "WorldBench",

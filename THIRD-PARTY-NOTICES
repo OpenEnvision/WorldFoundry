@@ -242,18 +242,6 @@ PAWBench
   complete upstream Apache-2.0 license is retained beside the vendored
   package; benchmark data, generated rollouts, and credentials are omitted.
 
-OpenEnvision WorldArena (WorldAtlas Arena)
-  Copyright (c) 2026 OpenEnvision
-  License: MIT
-  Source: https://github.com/OpenEnvision/WorldArena
-  Revision: 1ffc3a9564215471b9c39f602a66843e0183dcd1
-
-  The benchmark evaluator package and benchmark configuration are vendored
-  under
-  ``worldfoundry/evaluation/tasks/execution/runners/worldatlas_arena/runtime``.
-  The complete upstream MIT license is retained beside the vendored package.
-
-
 Runtime-provisioned Studio browser assets
 -----------------------------------------
 

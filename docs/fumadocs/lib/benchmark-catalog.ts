@@ -1,5 +1,4 @@
 import catalogStatus from '@/lib/benchmark-catalog-status.json';
-import { isBenchmarkHiddenFromDocs } from '@/lib/benchmark-docs-visibility';
 import type { Locale } from '@/lib/i18n';
 
 export type BenchmarkBadgeKind = 'integrated' | 'normalizer' | 'planned' | 'blocked';
@@ -27,7 +26,6 @@ const catalog = catalogStatus as Record<string, BenchmarkCatalogEntry>;
 export type BenchmarkCatalogItem = BenchmarkCatalogEntry & { id: string };
 
 export const benchmarkCatalogEntries: BenchmarkCatalogItem[] = Object.entries(catalog)
-  .filter(([id]) => !isBenchmarkHiddenFromDocs(id))
   .map(([id, entry]) => ({ id, ...entry }));
 
 export function getBenchmarkCatalogEntry(benchmarkId: string): BenchmarkCatalogEntry | undefined {

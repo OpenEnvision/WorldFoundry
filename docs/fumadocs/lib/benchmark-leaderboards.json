@@ -1924,11 +1924,6 @@
       "liveLabelZh": "Hugging Face Space（WorldArena）",
       "liveEmbedUrl": "https://huggingface.co/spaces/WorldArena/WorldArena/embed"
     },
-    "worldatlas-arena": {
-      "kind": "empty",
-      "emptyReason": "WorldArena / WorldAtlas is a multi-axis arena. There is no official combined scalar ranking we can ingest (the related WorldArena Hugging Face board is listed under worldarena).",
-      "emptyReasonZh": "WorldArena / WorldAtlas 是多轴 arena。没有可收录的官方合并标量排名（相关 Hugging Face 榜列在 worldarena）。"
-    },
     "worldbench": {
       "kind": "paper",
       "paperTitle": "WorldBench: Benchmarking Physical Understanding of World Models by Isolating Physics Concepts",

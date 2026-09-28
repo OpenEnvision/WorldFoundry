@@ -1756,40 +1756,6 @@
     "summaryZh": "闭环仿真 rollout，或归一化官方 rollout 结果",
     "verificationStatus": "in_tree_video_quality_runtime"
   },
-  "worldatlas-arena": {
-    "aliases": [
-      "WorldAtlas Arena"
-    ],
-    "badges": [
-      "integrated"
-    ],
-    "category": "World Models",
-    "categoryZh": "世界模型",
-    "domains": [
-      "world-model",
-      "long-horizon-memory",
-      "3d-4d-consistency",
-      "physics",
-      "real-time-interaction"
-    ],
-    "integrationStatus": "integrated",
-    "leaderboardValid": false,
-    "logoKey": "openenvision",
-    "metrics": [
-      "long_sequence",
-      "action_control",
-      "consistency_3d_4d",
-      "physics",
-      "quality",
-      "real_time"
-    ],
-    "name": "WorldArena (WorldAtlas Arena)",
-    "requiresApi": false,
-    "runtimeKind": "in_tree_official_runtime",
-    "summary": "Preserves the official six-axis vector for generated world-model rollouts",
-    "summaryZh": "保留生成式世界模型 rollout 的官方六轴向量评测",
-    "verificationStatus": "in_tree_runtime_cpu_contract_verified"
-  },
   "worldbench": {
     "aliases": [],
     "badges": [

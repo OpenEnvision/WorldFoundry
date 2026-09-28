@@ -534,8 +534,6 @@ def _run_specialized_result_normalizer(
         command.extend(["--score-dir", str(score_dir), "--task", "all", "--no-gpt"])
     if benchmark_id in pass_generated_artifact_dir_benchmarks() and generated_artifact_dir is not None:
         command.extend(["--generated-artifact-dir", str(generated_artifact_dir)])
-    if benchmark_id == "worldatlas-arena" and kwargs.get("dataset_manifest"):
-        command.extend(["--manifest", str(kwargs["dataset_manifest"])])
     if benchmark_id == "pawbench":
         dataset_root = kwargs.get("dataset_root") or kwargs.get("benchmark_data_root")
         if dataset_root:

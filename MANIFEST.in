@@ -28,7 +28,6 @@ recursive-include worldfoundry/evaluation/tasks/execution/runners/vmbench/runtim
 recursive-include worldfoundry/evaluation/tasks/execution/runners/wbench/runtime/wbench *.yaml *.yml
 recursive-include worldfoundry/evaluation/tasks/execution/runners/world_in_world/runtime/official *.py *.sh *.txt *.md *.yaml *.yml *.json
 recursive-include worldfoundry/evaluation/tasks/execution/runners/worldarena/runtime/video_quality *.yaml *.yml
-recursive-include worldfoundry/evaluation/tasks/execution/runners/worldatlas_arena/runtime *.py *.yaml *.yml *.md LICENSE UPSTREAM.md
 recursive-include worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime *.py *.json *.txt *.md LICENSE
 recursive-include worldfoundry/base_models/perception_core/video_text/fetv_blip *.py *.json *.yaml *.yml *.txt
 recursive-include worldfoundry/base_models/perception_core/video_quality/fetv_stylegan_v *.py *.cpp *.cu *.h *.json *.yaml *.yml *.txt

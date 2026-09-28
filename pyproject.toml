@@ -604,7 +604,6 @@ include-package-data = true
     "wbench/runtime/wbench/src/*.yaml",
     "world_in_world/runtime/official/**/*",
     "worldarena/runtime/video_quality/*.yaml",
-    "worldatlas_arena/runtime/**/*",
     "wrbench/runtime/**/*",
 ]
 "worldfoundry.base_models" = [

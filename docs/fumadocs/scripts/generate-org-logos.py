@@ -1490,7 +1490,6 @@ BENCHMARK_ORGS: dict[str, str] = {
     "vlabench": "fudan",
     "vmbench": "amap",
     "wbench": "meituan",
-    "worldatlas-arena": "openenvision",
     "worldbench": "ucla",
     "world-in-world": "jhu",
     "worldarena": "tsinghua",

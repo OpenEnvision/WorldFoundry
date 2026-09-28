@@ -85,7 +85,7 @@ No file in this directory is a personal GitHub avatar.
 | `nyu.svg` | New York University | https://commons.wikimedia.org/wiki/File:New_York_University_Seal.svg | Public domain | model:dino-wm, model:solaris |
 | `omniforcing.png` | OmniForcing | GitHub organization brand avatar (github.com/OmniForcing) | Organization brand mark | model:omniforcing |
 | `openai.svg` | OpenAI | Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #412991 | CC0-1.0 | model:sora2 |
-| `openenvision.svg` | OpenEnvision | WorldFoundry / OpenEnvision site mark (docs/fumadocs/public/logo.svg) | Project brand mark | benchmark:worldatlas-arena |
+| `openenvision.svg` | OpenEnvision | WorldFoundry / OpenEnvision site mark (docs/fumadocs/public/logo.svg) | Project brand mark | - |
 | `openhelix.png` | OpenHelix | GitHub organization brand avatar (github.com/OpenHelix-Team) | Organization brand mark | model:spatial-forcing |
 | `oppo.svg` | OPPO Research Institute | Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #2D683D | CC0-1.0 | benchmark:videoverse |
 | `oxford.svg` | University of Oxford | https://commons.wikimedia.org/wiki/File:Oxford-University-Circlet.svg | Public domain | benchmark:kinetix, benchmark:likephys, model:splatt3r, model:vmem |

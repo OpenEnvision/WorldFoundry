@@ -1,7 +1,7 @@
 {
   "modelsTotal": 266,
   "modelsListed": 256,
-  "benchmarksTotal": 75,
+  "benchmarksTotal": 74,
   "modelFamilies": [
     {
       "id": "video",
@@ -498,7 +498,7 @@
         {
           "id": "adaworld",
           "name": "AdaWorld",
-          "status": "blocked",
+          "status": "runtime_ported",
           "aliases": [
             "adaworld"
           ]
@@ -1866,7 +1866,7 @@
         {
           "id": "molmobot",
           "name": "MolmoBot",
-          "status": "in_tree_import_verification_in_progress",
+          "status": "integrated",
           "aliases": [
             "molmobot"
           ]
@@ -2150,7 +2150,7 @@
     {
       "id": "video",
       "label": "Video & world",
-      "count": 53,
+      "count": 52,
       "entries": [
         {
           "id": "4dworldbench",
@@ -2472,13 +2472,6 @@
           "name": "WorldArena",
           "aliases": [
             "worldarena"
-          ]
-        },
-        {
-          "id": "worldatlas-arena",
-          "name": "WorldArena (WorldAtlas Arena)",
-          "aliases": [
-            "worldatlas-arena"
           ]
         },
         {

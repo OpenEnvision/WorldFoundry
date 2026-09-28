@@ -1210,27 +1210,6 @@ WorldArenaContract = ExternalBenchmarkContract(
     ),
 )
 
-WorldAtlasArenaContract = ExternalBenchmarkContract(
-    benchmark_id="worldatlas-arena",
-    display_name="WorldArena (WorldAtlas Arena)",
-    input_keys=("benchmark_manifest", "generated_video_dir", "official_results_path"),
-    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
-    metric_ids=(
-        "long_sequence",
-        "action_control",
-        "consistency_3d_4d",
-        "physics",
-        "quality",
-        "real_time",
-    ),
-    requires_upstream_runtime=True,
-    notes=(
-        "The OpenEnvision evaluator and benchmark configuration are vendored in-tree.",
-        "WorldFoundry preserves the upstream six-axis score vector and does not synthesize a global scalar.",
-        "Full execution requires caller-provided benchmark media, manifests, predictions, and metric assets.",
-    ),
-)
-
 WorldInWorldContract = ExternalBenchmarkContract(
     benchmark_id="world-in-world",
     display_name="World-in-World",
@@ -1811,7 +1790,6 @@ _BUILTIN_CONTRACT_ITEMS = (
     VMBenchContract,
     WBenchContract,
     WorldArenaContract,
-    WorldAtlasArenaContract,
     WorldBenchContract,
     WorldInWorldContract,
     WorldModelBenchContract,

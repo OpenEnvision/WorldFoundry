@@ -7961,8 +7961,8 @@
         }
       ],
       "data": {
-        "summary": "Tsinghua FIB Lab embodied world-model bench. Distinct from OpenEnvision WorldAtlas Arena (worldatlas-arena). Primary ewm_score.",
-        "summaryZh": "清华 FIB Lab 具身世界模型评测。与 OpenEnvision WorldAtlas Arena（worldatlas-arena）不同。主键 ewm_score。",
+        "summary": "Tsinghua FIB Lab embodied world-model bench. Primary ewm_score.",
+        "summaryZh": "清华 FIB Lab 具身世界模型评测。主键 ewm_score。",
         "sizeLabel": "Perceptual + functional tracks",
         "sizeLabelZh": "感知 + 功能赛道",
         "notes": [
@@ -8074,134 +8074,6 @@
           "leaderboardKey": "ewm_score"
         }
       ]
-    },
-    "worldatlas-arena": {
-      "projectPage": "https://github.com/OpenEnvision/WorldArena",
-      "dimensions": [
-        {
-          "id": "long_sequence",
-          "name": "Long sequence",
-          "nameZh": "长序列",
-          "kind": "axis",
-          "description": "Long-horizon persistence and closed-loop memory.",
-          "descriptionZh": "长程持续与闭环记忆。"
-        },
-        {
-          "id": "action_control",
-          "name": "Action control",
-          "nameZh": "动作控制",
-          "kind": "axis",
-          "description": "Prompt, camera, motion, keystroke control.",
-          "descriptionZh": "Prompt、相机、运动、按键控制。"
-        },
-        {
-          "id": "consistency_3d_4d",
-          "name": "3D/4D consistency",
-          "nameZh": "3D/4D 一致性",
-          "kind": "axis",
-          "description": "Geometry, depth, flow, reconstruction.",
-          "descriptionZh": "几何、深度、光流、重建。"
-        },
-        {
-          "id": "physics",
-          "name": "Physics",
-          "nameZh": "物理",
-          "kind": "axis",
-          "description": "Physical plausibility and motion dynamics.",
-          "descriptionZh": "物理合理性与运动动力学。"
-        },
-        {
-          "id": "quality",
-          "name": "Quality",
-          "nameZh": "质量",
-          "kind": "axis",
-          "description": "Perceptual quality, fidelity, temporal artifacts.",
-          "descriptionZh": "感知质量、保真、时间伪影。"
-        },
-        {
-          "id": "real_time",
-          "name": "Real time",
-          "nameZh": "实时",
-          "kind": "axis",
-          "description": "Throughput, latency, physical-time behavior.",
-          "descriptionZh": "吞吐、延迟、物理时间行为。"
-        }
-      ],
-      "data": {
-        "summary": "OpenEnvision six-axis generated-world bench. No official combined scalar. Distinct from Tsinghua worldarena.",
-        "summaryZh": "OpenEnvision 六轴生成世界评测。没有官方合并标量。与清华 worldarena 不同。",
-        "sizeLabel": "Six-axis vector (no combined scalar)",
-        "sizeLabelZh": "六轴向量（无合并标量）",
-        "count": 6,
-        "unit": "axes",
-        "license": "",
-        "notes": [
-          "Existing summaries normalize on CPU. Full-suite metric execution is not verified. Do not invent a combined official average."
-        ],
-        "notesZh": [
-          "已有摘要可在 CPU 上归一化。全套指标执行未验证。不要自造官方合并平均分。"
-        ],
-        "notApplicable": false
-      },
-      "metrics": [
-        {
-          "id": "long_sequence",
-          "name": "Long Sequence / Memory",
-          "description": "Mean of official long-horizon persistence and closed-loop memory metrics available for each suite.",
-          "descriptionZh": "长时程保持与闭环记忆。",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "long_sequence"
-        },
-        {
-          "id": "action_control",
-          "name": "Action Control",
-          "description": "Mean of official prompt, camera, motion, and keystroke-control metrics available for each suite.",
-          "descriptionZh": "Prompt、相机、运动和键盘控制。",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "action_control"
-        },
-        {
-          "id": "consistency_3d_4d",
-          "name": "3D/4D Consistency",
-          "description": "Mean of official geometry, depth, flow, and reconstruction consistency metrics available for each suite.",
-          "descriptionZh": "几何、深度、光流和重建一致性。",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "consistency_3d_4d"
-        },
-        {
-          "id": "physics",
-          "name": "Physics",
-          "description": "Mean of official physical plausibility and motion-dynamics metrics available for each suite.",
-          "descriptionZh": "物理合理性与运动动力学。",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "physics"
-        },
-        {
-          "id": "quality",
-          "name": "Quality",
-          "description": "Mean of official perceptual quality, fidelity, and temporal artifact metrics available for each suite.",
-          "descriptionZh": "感知质量、保真度和时序 artifact。",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "quality"
-        },
-        {
-          "id": "real_time",
-          "name": "Real Time",
-          "description": "Mean of official throughput, response-latency, and physical-time metrics available for each suite.",
-          "descriptionZh": "吞吐、响应延迟和物理时间行为。",
-          "higherIsBetter": true,
-          "primary": false,
-          "leaderboardKey": "real_time"
-        }
-      ],
-      "leaderboard": {
-        "officialUrl": "https://github.com/OpenEnvision/WorldArena"
-      }
     },
     "worldbench": {
       "dimensions": [
