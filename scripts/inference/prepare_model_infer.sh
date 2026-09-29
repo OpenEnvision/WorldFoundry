@@ -1542,7 +1542,7 @@ Suggested inference command:
     --device cuda
 
 For Matrix-Game-style navigation demos:
-  bash scripts/inference/run_nav_video_gen.sh ${INFER_MODEL_ID} --output-dir ${OUTPUT_DIR}
+  bash scripts/inference/run_infer.sh --category navigation-video --model ${INFER_MODEL_ID} --output-dir ${OUTPUT_DIR}
 EOF
 fi
 

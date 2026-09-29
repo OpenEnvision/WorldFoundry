@@ -68,7 +68,7 @@ docs-dev-local:
 	npm --prefix docs/fumadocs run dev:local
 
 docs-build-fast:
-	bash scripts/docs/build-fast.sh
+	npm --prefix docs/fumadocs run build:fast
 
 cli-entrypoint-check:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli --help >/dev/null

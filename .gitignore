@@ -3,6 +3,8 @@
 /tmp/
 
 # Local maintenance and validation scripts are not part of the public release.
+/scripts/docs/build-fast.sh
+/scripts/download_hfd_models.sh
 /scripts/benchmark*.py
 /scripts/benchmark_zoo/
 /scripts/embodied/mirror_docker_images.py
@@ -11,13 +13,18 @@
 /scripts/embodied/submit_dlc_embodied_eval.sh
 /scripts/inference/__init__.py
 /scripts/inference/prepare_leworldmodel_smoke_dataset.py
+/scripts/inference/run_nav_video_gen.sh
+/scripts/inference/validate_video_artifacts.py
 /scripts/model_zoo/matrix_game2_demo_common.py
 /scripts/model_zoo/matrix_game_parity_worker.py
 /scripts/model_zoo/run_matrix_game2_official_demo.py
 /scripts/model_zoo/run_matrix_game2_worldfoundry_runner_demo.py
 /scripts/model_zoo/run_mochi1_preview_official_demo.sh
+/scripts/model_zoo/materialize_base_model_assets.py
 /scripts/run_worldscore_eval_local.sh
 /scripts/setup/materialize_workspace_demo_assets.py
+/scripts/setup/conda_profile_install.sh
+/scripts/setup/setup.sh
 /scripts/studio/fetch_vendor_assets.py
 /scripts/workspace/run_video_model_gang.py
 /scripts/workspace/run_video_model_matrix.py

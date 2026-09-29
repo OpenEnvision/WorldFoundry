@@ -180,7 +180,7 @@ Prepare assets, then launch a small demo. A common starter is `matrix-game-2` (p
 bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
 worldfoundry-eval zoo model-download --model-id matrix-game-2 --check-local --json
 
-bash scripts/inference/run_nav_video_gen.sh matrix-game-2 \
+bash scripts/inference/run_infer.sh --category navigation-video --model matrix-game-2 \
   --output-dir tmp/matrix_game2_first_run
 ```
 
@@ -199,10 +199,10 @@ bash scripts/setup/link_hf_checkpoints.sh \
 Prefer the TUI or the documented inference helpers once assets are staged:
 
 ```bash
-bash scripts/inference/run_nav_video_gen.sh matrix-game-2
+bash scripts/inference/run_infer.sh --category navigation-video --model matrix-game-2
 
 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" \
-  bash scripts/inference/run_nav_video_gen.sh matrix-game-2
+  bash scripts/inference/run_infer.sh --category navigation-video --model matrix-game-2
 
 bash scripts/inference/run_infer.sh --category video --model <model-id>
 bash scripts/inference/run_infer.sh --category three_d_four_d --model <model-id>
