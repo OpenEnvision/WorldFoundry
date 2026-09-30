@@ -172,7 +172,7 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
     Run docs build when MDX, route generation, search, i18n, layout, or generated metadata changes.
   </Step>
   <Step>
-    Run `make lint` before release so generated outputs, checkpoint files, videos, notebooks, demo media, and downloaded data stay out of tracked source.
+    Run `make lint` for source and catalog checks, then `make packaging-check` before release to catch private files and local artifacts in tracked source or distribution artifacts.
   </Step>
   <Step>
     Refresh matrix or suite reports before promoting integration status.

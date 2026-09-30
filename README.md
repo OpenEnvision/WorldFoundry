@@ -429,6 +429,7 @@ conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 
 PYTHONPATH=. python -m compileall -q worldfoundry scripts
 make lint
+make packaging-check
 make docs-check
 bash scripts/docs/build.sh --skip-bootstrap
 

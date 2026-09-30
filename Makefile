@@ -74,7 +74,7 @@ cli-entrypoint-check:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli zoo models --json >/dev/null
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli zoo benchmarks --json >/dev/null
 
-lint: ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check packaging-check
+lint: ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check
 
 ruff-check:
 	$(PYTHON) -m ruff check $(RUFF_SOURCES)

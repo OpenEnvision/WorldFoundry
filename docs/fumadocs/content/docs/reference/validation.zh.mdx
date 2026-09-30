@@ -171,7 +171,7 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
     当 MDX、route generation、search、i18n、layout 或 generated metadata 改变时，运行 docs build。
   </Step>
   <Step>
-    发布前运行 `make lint`，确保生成输出、checkpoint、视频、notebook、demo media 和下载数据不会进入 tracked source。
+    先运行 `make lint` 检查源码与目录，再于发布前运行 `make packaging-check`，检查 tracked source 或发行物是否混入私有文件和本地产物。
   </Step>
   <Step>
     提升 integration status 前刷新 matrix 或 suite reports。
