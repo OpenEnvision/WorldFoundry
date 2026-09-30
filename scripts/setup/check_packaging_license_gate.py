@@ -263,7 +263,12 @@ def main(argv: list[str] | None = None) -> int:
         if source_leaks:
             failures += 1
             _print_items("FAIL: private files tracked in public source:", source_leaks, limit=50)
-    private_sources = [path for path in PRIVATE_SOURCE_PATHS if (REPO_ROOT / path).exists()]
+        private_sources = [
+            path for path in PRIVATE_SOURCE_PATHS
+            if any(name == path or name.startswith(path + "/") for name in tracked)
+        ]
+    else:
+        private_sources = [path for path in PRIVATE_SOURCE_PATHS if (REPO_ROOT / path).exists()]
     if private_sources:
         failures += 1
         _print_items("FAIL: private training sources present in public checkout:", private_sources)

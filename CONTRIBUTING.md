@@ -34,7 +34,7 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
 
 ### Add Or Update A Benchmark
 
-- Update `data/benchmarks/catalog/` and task YAML under `data/benchmarks/tasks/external/` when applicable.
+- Update `worldfoundry/data/benchmarks/catalog/` and task YAML under `worldfoundry/data/benchmarks/tasks/external/` when applicable.
 - Declare dataset refs, auth, unsafe/gated data, official repo, simulator, metrics, and blockers.
 - Add a contract adapter or normalizer before claiming `contract_ready`.
 - Add official runtime evidence before claiming leaderboard validity.

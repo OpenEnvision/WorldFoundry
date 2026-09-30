@@ -162,6 +162,10 @@ def extra_evaluation_doc_issues(candidates: Iterable[str] | None = None) -> list
     for relative in paths:
         if not relative.startswith("worldfoundry/evaluation/"):
             continue
+        # Catalog manifests link to this source-attribution record. It is
+        # provenance metadata for vendored code, not a reader-facing guide.
+        if Path(relative).name == "WORLDFOUNDRY_PROVENANCE.md":
+            continue
         if relative.lower().endswith((".md", ".mdx")):
             issues.append(f"{relative}: evaluation docs belong in fumadocs, not evaluation/")
     return issues

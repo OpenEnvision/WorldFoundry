@@ -1,7 +1,8 @@
 ---
 title: "UniWorld-View"
 description: "UniWorld-View generates camera-controlled novel views from a single image or a casually captured monocular video."
-pageSource: generated
+modelId: "uniworld-view"
+pageSource: authored
 ---
 
 **Publisher:** PKU Yuan Group · University
@@ -31,10 +32,15 @@ Official UniView transformer on Wan2.1-VACE-14B with geometry estimation and ren
 
 Use a pinned official checkout with STream3R under extern, a separate upstream environment and the official local weights. The upstream CLI uses BLIP2 captions rather than a user text prompt.
 
+Pin the official checkout to `660212c48bff7c91a2ea5c7d5f3785af581100e2`, initialize `extern/STream3R`, and run its `checkpoints/download_hf.sh --stream3r` script. The route needs the **Diffusers-format** Wan2.1-VACE-14B base; the native `.pth` release is not interchangeable. Use the upstream Python 3.10 / Torch 2.4.0 CUDA 12.4 environment with its declared dependencies. Set `UNIWORLD_VIEW_REPO` and `UNIWORLD_VIEW_PYTHON` when the checkout or Python executable is outside the default WorldFoundry cache and conda paths.
+
+The Python adapter is `UniWorldViewPipeline.from_pretrained(device="cuda:0")`. Pass `images` for single-image outpainting or `video` with `mode="dynamic_view"` for monocular video; the latter needs at least 13 generated frames because the second stage consumes 10 reference frames. The default `hybrid` renderer requires PyTorch3D; `render_method="warp"` selects the BiSplat route. Use `plan_only=True` to inspect the subprocess command without loading weights.
+
 ## Readiness and limitations
 
 - The upstream authors recommend at least 60 GB of GPU memory.
 - Validation covers specific official samples and settings; quantitative camera-angle accuracy and other scenes remain unmeasured.
 - With aspect-ratio preservation enabled, actual output dimensions can differ from the requested height and width.
+- At the pinned upstream revision, dynamic-view inference does not initialize STream3R, and its single-view path ignores the requested FPS and seed. The WorldFoundry entry point applies narrow fixes for these three upstream issues before running the official inference script. Repeated runs with the same seed were checked frame by frame.
 
 <ModelRelatedRecipes modelId="uniworld-view" locale="en" />

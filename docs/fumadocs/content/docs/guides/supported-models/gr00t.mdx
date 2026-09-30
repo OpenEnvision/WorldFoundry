@@ -41,6 +41,12 @@ The catalog default launch still prints `gr00t-n1-2b` with the same task profile
 
 License on the recorded cards is the **NVIDIA Open Model License**. Review the terms before commercial use.
 
+## Original N1 and GR1 checkpoint route
+
+The original `nvidia/GR00T-N1-2B` checkpoint uses `model_type=gr00t_n1`, a single `model.safetensors`, and `experiment_cfg/metadata.json`. This route requires a separate Isaac-GR00T checkout at N1 release commit `755876a9afdb41ca6eb6383b36f4a0adb085c73f` and its legacy Python environment (Transformers 4.45.2 / Tokenizers 0.20.3). Provide `n1_source_dir` and `n1_python` to `GR00TPipeline.from_pretrained`, or set `WORLDFOUNDRY_GR00T_N1_SOURCE` and `WORLDFOUNDRY_GR00T_N1_PYTHON`. `plan_only` can inspect the checkpoint without that runtime.
+
+The GR1 variant selects this N1 path when its staged checkpoint is used. For its default `gr1_arms_only` data configuration, supply an `ego_view` RGB image, an instruction, and `left_arm`, `right_arm`, `left_hand`, `right_hand` arrays in `gr00t_observation["state"]`. Named multi-camera configurations require every configured camera. A limited local GPU probe produced finite offline actions with an out-of-domain image and metadata-mean state; it does not establish GR1 task success or simulator parity.
+
 ## Minimal eval
 
 `gr00t-n1.7-libero` is the recorded CUDA `predict`. Import official LIBERO results with `worldfoundry-eval zoo benchmark-run --benchmark-id libero --mode official-validation` and read `success_rate`. Simulator rollout is tracked separately; suite import is normalizer-only.

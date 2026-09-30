@@ -252,7 +252,7 @@ Core dependencies in the `distribution_metrics` extra include `torch`, `torchvis
 
 Keep heavy imports lazy: importing `worldfoundry.evaluation.tasks.metrics` should not require every checkpoint to be present until a specific `compute_*` function is called.
 
-After installing the metric dependencies, run `make metric-check` for CPU comparisons with the native backends and crop-source regressions. The LPIPS check downloads SqueezeNet weights to a temporary directory that is removed after the run.
+When changing a metric, compare representative inputs and scores with the upstream implementation, then record the backend version and results alongside the change. The private metric regression suite is not included in the public repository.
 
 ## Checkpoints and environment variables
 

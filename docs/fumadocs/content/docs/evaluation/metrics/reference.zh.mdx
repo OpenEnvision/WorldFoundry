@@ -245,7 +245,7 @@ pip install -e ".[distribution_metrics]"
 
 重依赖保持 lazy import：导入 `worldfoundry.evaluation.tasks.metrics` 不应要求所有 checkpoint 已就绪，直到具体 `compute_*` 被调用。
 
-安装指标依赖后，可运行 `make metric-check`，在 CPU 上对照原生后端并检查裁剪图片来源。LPIPS 检查会下载 SqueezeNet 权重到临时目录，并在测试结束后删除。
+修改指标时，请用有代表性的输入与上游实现比对分数，并记录后端版本和结果。私有指标回归测试未包含在公开仓库中。
 
 ## Checkpoint 与环境变量
 

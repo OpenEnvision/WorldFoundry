@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.evaluation.api import GenerationRequest
+from worldfoundry.evaluation.tasks.catalog.benchmark_id import normalize_benchmark_id
 from worldfoundry.evaluation.tasks.catalog.registry import TaskRegistryEntry, load_task_registry_from_paths
 from worldfoundry.evaluation.tasks.datasets import (
     load_dataset_manifest,
@@ -21,7 +22,6 @@ from worldfoundry.evaluation.tasks.datasets import (
     resolve_dataset_samples_path,
     validate_dataset_manifest,
 )
-from worldfoundry.evaluation.tasks.catalog.benchmark_id import normalize_benchmark_id
 from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import target_benchmark_metrics
 from worldfoundry.evaluation.tasks.metrics.registry import validate_metric_ids
 from worldfoundry.evaluation.utils import jsonable, read_json_or_jsonl, write_json

@@ -40,7 +40,6 @@ help:
 		'  make docs-build-fast   Build docs without the CI validation gates.' \
 		'  make cli-entrypoint-check Validate documented CLI entrypoints.' \
 		'  make lint              Run lightweight source and catalog checks.' \
-		'  make metric-check      Compare image metrics with native CPU backends (metric dependencies required).' \
 		'  make preflight         Run the public runtime preflight.' \
 		'  make check-cuda-constraints  Verify CUDA-tier torch constraint stubs.' \
 		'  make packaging-check   Audit package discovery and license-gated wheel content.'
@@ -75,7 +74,7 @@ cli-entrypoint-check:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli zoo models --json >/dev/null
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli zoo benchmarks --json >/dev/null
 
-lint: ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check evaluation-check attention-check
+lint: ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check packaging-check
 
 ruff-check:
 	$(PYTHON) -m ruff check $(RUFF_SOURCES)
@@ -99,20 +98,7 @@ runtime-registry-check:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -c 'from worldfoundry.evaluation.models.runtime.validate import validate_runtime_registry; errors = [issue for issue in validate_runtime_registry() if issue.severity == "error"]; assert not errors, "\\n".join(f"[{issue.code}] {issue.message}" for issue in errors)'
 
 workspace-registry-check:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) tests/evaluation/catalog/test_video_workspace_registry.py
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) tests/evaluation/catalog/test_execution_registries.py
-
-.PHONY: evaluation-check
-evaluation-check:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -B -m unittest discover -s tests/evaluation/execution -p 'test_*.py'
-
-.PHONY: metric-check
-metric-check:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -B -m unittest discover -s tests/evaluation/metrics -p 'test_*.py'
-
-.PHONY: attention-check
-attention-check:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -B -m unittest discover -s tests/core/attention -p 'test_*.py'
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -c 'from worldfoundry.evaluation.tasks.catalog.integrity import catalog_runner_table_issues, video_catalog_dispatch_issues; from worldfoundry.evaluation.tasks.catalog.workspace_registry import validate_workspace_registry; issues = [*validate_workspace_registry(), *video_catalog_dispatch_issues(), *catalog_runner_table_issues()]; assert not issues, "\n".join(issues); print("workspace registry OK")'
 
 check-cuda-constraints:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/setup/check_cuda_torch_constraints.py
