@@ -37,7 +37,7 @@ integration:
   notes:
   - WorldFoundry registers a source-bound runtime manifest that drives the official rollout entrypoint
     (reactor-team/open-dreamer inference.py) as a subprocess.
-  - The adapter under synthesis/visual_generation/world_model/open_dreamer is WorldFoundry-authored glue
+  - The adapter under synthesis/visual_generation/open_dreamer is WorldFoundry-authored glue
     only; it resolves the staged checkout, gates on staging requirements, and builds the official command.
   - WorldFoundry interaction tokens are rendered into Minecraft/VPT action JSONL so the shared world-model
     call surface (interactions=[...]) drives the Dreamer 4 action space.

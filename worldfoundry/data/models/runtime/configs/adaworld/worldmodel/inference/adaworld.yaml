@@ -85,7 +85,7 @@ model:
           target: vwm.modules.encoders.modules.VideoPredictionEmbedderWithLAMEncoder
           params:
             lam_config:
-              target: worldfoundry.synthesis.visual_generation.world_model.adaworld.lam.model.LAM
+              target: worldfoundry.synthesis.visual_generation.adaworld.lam.model.LAM
               params:
                 image_channels: 3
                 lam_model_dim: 1024

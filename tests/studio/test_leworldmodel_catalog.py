@@ -4,7 +4,7 @@ from argparse import Namespace
 
 from worldfoundry.runtime.inference_catalog import get_model_inference_spec
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.synthesis.visual_generation.world_model.le_wm import worldfoundry_runtime as runtime
+from worldfoundry.synthesis.visual_generation.le_wm import worldfoundry_runtime as runtime
 
 
 def test_leworldmodel_catalog_prefers_local_smoke_dataset(tmp_path, monkeypatch) -> None:
@@ -84,7 +84,7 @@ def test_leworldmodel_runtime_resolves_portable_dataset_path(tmp_path, monkeypat
 
 
 def test_leworldmodel_eval_config_composes_with_dynamic_cache_dir(tmp_path, monkeypatch) -> None:
-    from worldfoundry.synthesis.visual_generation.world_model.le_wm.infer import _load_config
+    from worldfoundry.synthesis.visual_generation.le_wm.infer import _load_config
 
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "checkpoints"))
     args = Namespace(

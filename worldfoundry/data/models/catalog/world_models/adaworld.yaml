@@ -36,8 +36,8 @@ docs:
   overview: AdaWorld extracts latent actions from video to condition an adaptable world model. The public pipeline now runs
     its released checkpoint on a supplied source video; a short GPU probe verified the inference path.
   overview_zh: AdaWorld 从视频中提取潜在动作来驱动可适配世界模型。公开 pipeline 现可使用发布权重和用户提供的源视频推理；短时 GPU 测试已验证推理链路。
-  architecture: Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/world_model/adaworld; public checkpoints exist upstream.
-  architecture_zh: 按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。官方源码已内置于 synthesis/visual_generation/world_model/adaworld；上游存在公开 checkpoint。
+  architecture: Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/adaworld; public checkpoints exist upstream.
+  architecture_zh: 按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。官方源码已内置于 synthesis/visual_generation/adaworld；上游存在公开 checkpoint。
   usage_notes: Supply the released adaworld.safetensors checkpoint and a readable source video. The main checkpoint includes
     the active CLIP and LAM encoder weights; a separate lam.ckpt is not needed for this inference path.
   usage_notes_zh: 提供发布的 adaworld.safetensors 权重和可读取的源视频。主权重已包含推理所需的 CLIP 与 LAM 编码器参数，此推理路径不需要单独的 lam.ckpt。

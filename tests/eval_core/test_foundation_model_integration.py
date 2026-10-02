@@ -999,7 +999,7 @@ def test_dust3r_mast3r_inference_helpers_still_import_after_pruning():
 
 def test_base_model_pure_demo_and_ui_app_dirs_are_pruned():
     base_models_root = REPO_ROOT / "worldfoundry/base_models"
-    world_model_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/world_model"
+    world_model_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation"
     removed_paths = [
         base_models_root / "diffusion_model/diffsynth/apps",
         base_models_root / "diffusion_model/image/sana/apps",
@@ -1108,7 +1108,7 @@ def test_perception_and_3d_base_models_do_not_package_training_data_helpers():
 
 def test_world_model_runtime_configs_live_under_data_models():
     base_models_root = REPO_ROOT / "worldfoundry/base_models"
-    world_model_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/world_model"
+    world_model_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation"
     data_config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs"
 
     assert not (base_models_root / "diffusion_model/world_model").exists()
@@ -1213,7 +1213,7 @@ def test_world_model_runtime_configs_live_under_data_models():
         assert "target: utils_data." not in config_text
         assert "worldfoundry.base_models.diffusion_model.video.lvdm.variants.vid2world.eval_inputs" in config_text
         assert (
-            "worldfoundry.synthesis.visual_generation.world_model.vid2world.vid2world_runtime.main.utils_data"
+            "worldfoundry.synthesis.visual_generation.vid2world.vid2world_runtime.main.utils_data"
             in config_text
         )
     assert {
@@ -3182,7 +3182,7 @@ def test_videocrafter_lvdm_foundation_code_lives_under_base_models():
 def test_vid2world_lvdm_variant_lives_under_canonical_lvdm_tree():
     variant_root = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm/variants/vid2world"
     old_nested_lvdm = variant_root / "lvdm"
-    runtime_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/world_model/vid2world"
+    runtime_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/vid2world"
     config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/vid2world"
 
     assert not old_nested_lvdm.exists()

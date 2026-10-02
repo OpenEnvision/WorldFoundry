@@ -57,7 +57,7 @@ LVDM no longer owns a second runtime tree. Its checkpoint-shaped implementation 
 - `schedulers/lvdm`: DDIM variants, diffusion schedules, and the Vid2World KV cache;
 - `core/model_loading/factory.py` and `core/nn`: generic config construction, distributions, EMA, checkpoint, and classic convolution helpers.
 
-Vid2World dataset adapters belong to its synthesis package under `synthesis/visual_generation/world_model/vid2world/eval_inputs`. Runtime configs must use these role-based fully-qualified paths; the old `base_models/diffusion_model/video/lvdm` package is deleted.
+Vid2World dataset adapters belong to its synthesis package under `synthesis/visual_generation/vid2world/eval_inputs`. Runtime configs must use these role-based fully-qualified paths; the old `base_models/diffusion_model/video/lvdm` package is deleted.
 
 ### LVDM fork status
 

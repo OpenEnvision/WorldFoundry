@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 
 from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import EgoWMPipeline
-from worldfoundry.synthesis.visual_generation.world_model import runtime_manifest
-from worldfoundry.synthesis.visual_generation.world_model.egowm import infer
-from worldfoundry.synthesis.visual_generation.world_model.egowm import worldfoundry_runtime as runtime
+from worldfoundry.synthesis.visual_generation import runtime_manifest
+from worldfoundry.synthesis.visual_generation.egowm import infer
+from worldfoundry.synthesis.visual_generation.egowm import worldfoundry_runtime as runtime
 
 
 def _stage_runtime(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -40,7 +40,7 @@ def _stage_runtime(tmp_path: Path) -> tuple[Path, Path, Path]:
 def test_runtime_spec_uses_dynamic_egowm_adapter() -> None:
     spec = runtime_manifest.runtime_spec("egowm")
 
-    assert spec.runtime_module == "worldfoundry.synthesis.visual_generation.world_model.egowm.worldfoundry_runtime"
+    assert spec.runtime_module == "worldfoundry.synthesis.visual_generation.egowm.worldfoundry_runtime"
     assert spec.runtime_root_func == "runtime_root"
     assert spec.blocked_reason == ""
 

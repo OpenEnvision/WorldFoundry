@@ -22,7 +22,7 @@ checkpoints:
 integration:
   status: runtime_ported
   notes:
-  - WorldFoundry exposes the official offline inference client in-tree under synthesis/visual_generation/world_model/starwm/offline_infer.
+  - WorldFoundry exposes the official offline inference client in-tree under synthesis/visual_generation/starwm/offline_infer.
   - Jobs use StarWM's OpenAI-compatible endpoint parameters plus the official prompt fixture format.
 runner_parity:
   status: pending

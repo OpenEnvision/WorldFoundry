@@ -16,7 +16,7 @@ official_sources:
 integration:
   status: integrated
   notes:
-  - WorldFoundry vendors the official DINO-WM planning/evaluation route in-tree under synthesis/visual_generation/world_model/dino_wm.
+  - WorldFoundry vendors the official DINO-WM planning/evaluation route in-tree under synthesis/visual_generation/dino_wm.
   - The WorldFoundry infer entrypoint loads runtime configs from worldfoundry/data/models/runtime/configs/dino_wm/conf.
   - The vendored `dino_wm/env/` simulators are required for official planning runs and are intentionally kept in-tree.
   - The wall_single route completed checkpoint-backed inference with official wall trajectories; other task routes still require their own assets and validation.

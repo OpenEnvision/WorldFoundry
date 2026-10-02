@@ -5,9 +5,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from worldfoundry.synthesis.visual_generation.world_model import runtime_manifest
-from worldfoundry.synthesis.visual_generation.world_model.shotstream import infer
-from worldfoundry.synthesis.visual_generation.world_model.shotstream import worldfoundry_runtime as runtime
+from worldfoundry.synthesis.visual_generation import runtime_manifest
+from worldfoundry.synthesis.visual_generation.shotstream import infer
+from worldfoundry.synthesis.visual_generation.shotstream import worldfoundry_runtime as runtime
 
 
 def _stage_runtime(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -35,7 +35,7 @@ def test_runtime_spec_uses_dynamic_adapter() -> None:
     spec = runtime_manifest.runtime_spec("shotstream")
 
     assert spec.runtime_module == (
-        "worldfoundry.synthesis.visual_generation.world_model.shotstream.worldfoundry_runtime"
+        "worldfoundry.synthesis.visual_generation.shotstream.worldfoundry_runtime"
     )
     assert spec.runtime_root_func == "runtime_root"
     assert spec.blocked_reason == ""

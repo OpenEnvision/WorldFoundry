@@ -57,7 +57,7 @@ LVDM 不再拥有第二套 runtime tree，其 checkpoint-shaped 实现按 role �
 - `schedulers/lvdm`：DDIM variant、diffusion schedule 与 Vid2World KV cache；
 - `core/model_loading/factory.py` 与 `core/nn`：通用 config 构造、distributions、EMA、checkpoint 与经典卷积 helper。
 
-Vid2World dataset adapter 属于其 synthesis 包 `synthesis/visual_generation/world_model/vid2world/eval_inputs`。Runtime config 必须使用这些 role-based 全限定路径；旧 `base_models/diffusion_model/video/lvdm` package 已删除。
+Vid2World dataset adapter 属于其 synthesis 包 `synthesis/visual_generation/vid2world/eval_inputs`。Runtime config 必须使用这些 role-based 全限定路径；旧 `base_models/diffusion_model/video/lvdm` package 已删除。
 
 ### LVDM fork 状态
 

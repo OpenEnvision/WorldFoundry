@@ -112,13 +112,13 @@ model:
         ff_mult: 4
         video_length: 16
 data:
-  target: worldfoundry.synthesis.visual_generation.world_model.vid2world.main.utils_data.DataModuleFromConfig
+  target: worldfoundry.synthesis.visual_generation.vid2world.main.utils_data.DataModuleFromConfig
   params:
     batch_size: 2
     num_workers: 12
     wrap: false
     validation:
-      target: worldfoundry.synthesis.visual_generation.world_model.vid2world.eval_inputs.valorant.CSGOVIDStyleDataset
+      target: worldfoundry.synthesis.visual_generation.vid2world.eval_inputs.valorant.CSGOVIDStyleDataset
       params:
         data_dir: assets/long_rollout/delta_force
         video_length: 10

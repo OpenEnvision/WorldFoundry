@@ -30,16 +30,16 @@ goal_H: 5
 n_plot_samples: 10
 debug_dset_init: false
 objective:
-  _target_: worldfoundry.synthesis.visual_generation.world_model.dino_wm.inference_planning.objectives.create_objective_fn
+  _target_: worldfoundry.synthesis.visual_generation.dino_wm.inference_planning.objectives.create_objective_fn
   alpha: 1
   base: 2
   mode: last
 planner:
-  _target_: worldfoundry.synthesis.visual_generation.world_model.dino_wm.inference_planning.mpc.MPCPlanner
+  _target_: worldfoundry.synthesis.visual_generation.dino_wm.inference_planning.mpc.MPCPlanner
   max_iter: null
   n_taken_actions: 5
   sub_planner:
-    target: worldfoundry.synthesis.visual_generation.world_model.dino_wm.inference_planning.cem.CEMPlanner
+    target: worldfoundry.synthesis.visual_generation.dino_wm.inference_planning.cem.CEMPlanner
     horizon: 5
     topk: 30
     num_samples: 300

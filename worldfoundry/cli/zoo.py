@@ -159,7 +159,7 @@ def _world_model_runtime_plan(entry) -> dict[str, Any] | None:
     """Probe local readiness for the runtime-manifest routes with known asset gates."""
     if entry.model_id not in _WORLD_MODEL_RUNTIME_READINESS_IDS:
         return None
-    from worldfoundry.synthesis.visual_generation.world_model.runtime_manifest import WorldModelRuntimeSynthesis
+    from worldfoundry.synthesis.visual_generation.runtime_manifest import WorldModelRuntimeSynthesis
 
     try:
         return WorldModelRuntimeSynthesis.from_pretrained(model_id=entry.model_id, device="cpu").plan()

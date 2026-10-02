@@ -8,12 +8,12 @@ import torch
 from PIL import Image
 
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.synthesis.visual_generation.world_model.open_oasis.utils import (
+from worldfoundry.synthesis.visual_generation.open_oasis.utils import (
     load_actions,
     load_prompt,
     write_video_compat,
 )
-from worldfoundry.synthesis.visual_generation.world_model.open_oasis.worldfoundry_runtime import (
+from worldfoundry.synthesis.visual_generation.open_oasis.worldfoundry_runtime import (
     build_command as build_oasis_command,
 )
 

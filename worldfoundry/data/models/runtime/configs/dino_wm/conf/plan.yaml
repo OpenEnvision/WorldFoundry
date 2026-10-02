@@ -31,7 +31,7 @@ goal_H: 5
 n_plot_samples: 10
 debug_dset_init: false
 objective:
-  _target_: worldfoundry.synthesis.visual_generation.world_model.dino_wm.inference_planning.objectives.create_objective_fn
+  _target_: worldfoundry.synthesis.visual_generation.dino_wm.inference_planning.objectives.create_objective_fn
   alpha: 1
   base: 2
   mode: last

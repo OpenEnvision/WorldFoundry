@@ -976,7 +976,7 @@ worldfoundry/studio/assets/vendor/
 !worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/generation/world_models/lingbot_actions/s-3_right-10_left-20_right-10/poses.npy
 !worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/generation/world_models/lingbot_actions/s-3_right-20_left-20/intrinsics.npy
 !worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/generation/world_models/lingbot_actions/s-3_right-20_left-20/poses.npy
-!worldfoundry/synthesis/visual_generation/world_model/vid2world/csgo_utils/csgo_validation_start_indices.npy
+!worldfoundry/synthesis/visual_generation/vid2world/csgo_utils/csgo_validation_start_indices.npy
 
 !worldfoundry/core/checkpoint/
 !worldfoundry/core/checkpoint/*.py

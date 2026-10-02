@@ -99,7 +99,7 @@ aiohttp>=3.10,<4
 aiortc>=1.9,<2
 av>=12
 
-# Infer-only world-model runtimes integrated under worldfoundry.synthesis.visual_generation.world_model.
+# Infer-only world-model runtimes integrated under worldfoundry.synthesis.visual_generation.
 # DIAMOND follows its official Atari play demo; DINO-WM keeps the official gym planning route;
 # LeWorldModel uses the official stable-worldmodel eval stack. HDF5 format and
 # PushT env packages are pinned explicitly; keep broad stable-worldmodel[env]

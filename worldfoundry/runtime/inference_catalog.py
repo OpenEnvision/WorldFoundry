@@ -220,7 +220,7 @@ def _asset_gated_world_runtime_model_ids() -> frozenset[str]:
     }:
         return frozenset(ids)
     try:
-        from worldfoundry.synthesis.visual_generation.world_model.runtime_manifest import WORLD_MODEL_RUNTIME_SPECS
+        from worldfoundry.synthesis.visual_generation.runtime_manifest import WORLD_MODEL_RUNTIME_SPECS
     except Exception:
         return frozenset(ids)
     for model_id, spec in WORLD_MODEL_RUNTIME_SPECS.items():

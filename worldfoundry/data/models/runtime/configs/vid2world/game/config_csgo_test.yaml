@@ -112,13 +112,13 @@ model:
         ff_mult: 4
         video_length: 16
 data:
-  target: worldfoundry.synthesis.visual_generation.world_model.vid2world.main.utils_data.DataModuleFromConfig
+  target: worldfoundry.synthesis.visual_generation.vid2world.main.utils_data.DataModuleFromConfig
   params:
     batch_size: 8
     num_workers: 12
     wrap: false
     validation:
-      target: worldfoundry.synthesis.visual_generation.world_model.vid2world.eval_inputs.csgovid.CSGOVID
+      target: worldfoundry.synthesis.visual_generation.vid2world.eval_inputs.csgovid.CSGOVID
       params:
         data_dir: '|<your_data_dir>|'
         video_length: 16

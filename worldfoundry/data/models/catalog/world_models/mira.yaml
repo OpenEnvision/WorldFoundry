@@ -28,7 +28,7 @@ variants:
 integration:
   status: integrated
   notes:
-  - Inference-only upstream source is vendored under synthesis/visual_generation/world_model/mira_wm.
+  - Inference-only upstream source is vendored under synthesis/visual_generation/mira_wm.
   - Workspace accepts a local MIRA checkpoint and Rocket Science dataset split; no training entrypoint is integrated.
 runner_parity:
   status: implemented_checkpoint_pending

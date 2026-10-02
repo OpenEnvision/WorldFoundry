@@ -27,5 +27,5 @@ execution:
 integration:
   status: runtime_ported
 notes:
-- StarWM source is vendored in-tree under synthesis/visual_generation/world_model/starwm.
+- StarWM source is vendored in-tree under synthesis/visual_generation/starwm.
 - The pipeline resolves the offline inference client; execution needs a running OpenAI-compatible StarWM endpoint and a served_model_id/api_model_id.

@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.synthesis.visual_generation.world_model import runtime_manifest
-from worldfoundry.synthesis.visual_generation.world_model.open_dreamer import vpt_actions
-from worldfoundry.synthesis.visual_generation.world_model.open_dreamer import (
+from worldfoundry.synthesis.visual_generation import runtime_manifest
+from worldfoundry.synthesis.visual_generation.open_dreamer import vpt_actions
+from worldfoundry.synthesis.visual_generation.open_dreamer import (
     worldfoundry_runtime as open_dreamer_runtime,
 )
 

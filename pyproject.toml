@@ -504,6 +504,7 @@ testpaths = [
     "tests/studio/test_job_store_shutdown.py",
     "tests/eval_core/test_packaging_license_gate.py",
     "tests/eval_core/test_native_license_sdist.py",
+    "tests/synthesis/test_visual_generation_layout.py",
     "tests/test_worldfoundry_studio_pipeline_cache.py",
     "tests/test_worldfoundry_studio_resident_workers.py",
 ]

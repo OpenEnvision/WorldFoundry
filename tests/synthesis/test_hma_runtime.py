@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 
 from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import HMAPipeline
-from worldfoundry.synthesis.visual_generation.world_model import runtime_manifest
-from worldfoundry.synthesis.visual_generation.world_model.hma import infer
-from worldfoundry.synthesis.visual_generation.world_model.hma import worldfoundry_runtime as runtime
+from worldfoundry.synthesis.visual_generation import runtime_manifest
+from worldfoundry.synthesis.visual_generation.hma import infer
+from worldfoundry.synthesis.visual_generation.hma import worldfoundry_runtime as runtime
 
 
 def _stage_runtime(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -34,7 +34,7 @@ def _stage_runtime(tmp_path: Path) -> tuple[Path, Path, Path]:
 def test_runtime_spec_uses_dynamic_hma_adapter() -> None:
     spec = runtime_manifest.runtime_spec("hma")
 
-    assert spec.runtime_module == "worldfoundry.synthesis.visual_generation.world_model.hma.worldfoundry_runtime"
+    assert spec.runtime_module == "worldfoundry.synthesis.visual_generation.hma.worldfoundry_runtime"
     assert spec.runtime_root_func == "runtime_root"
     assert spec.blocked_reason == ""
 

@@ -33287,7 +33287,7 @@
           "worldfoundry"
         ],
         "notes": [
-          "DINO-WM source is vendored in-tree under synthesis/visual_generation/world_model/dino_wm.",
+          "DINO-WM source is vendored in-tree under synthesis/visual_generation/dino_wm.",
           "The official planning/eval route is exposed through an infer-only WorldFoundry wrapper and runtime configs under data/models/runtime/configs/dino_wm/conf.",
           "The wall_single checkpoint, official wall trajectories, and DINOv2 encoder completed GPU planning inference and produced decodable simulator videos. Prompt, standalone image/video, and direct action inputs are not this route's contract.",
           "Pusht and point_maze remain untested with their own task assets; no general planning-quality conclusion is claimed.",
@@ -33460,14 +33460,14 @@
         }
       ],
       "notes": [
-        "WorldFoundry vendors the official DINO-WM planning/evaluation route in-tree under synthesis/visual_generation/world_model/dino_wm.",
+        "WorldFoundry vendors the official DINO-WM planning/evaluation route in-tree under synthesis/visual_generation/dino_wm.",
         "The WorldFoundry infer entrypoint loads runtime configs from worldfoundry/data/models/runtime/configs/dino_wm/conf.",
         "The vendored `dino_wm/env/` simulators are required for official planning runs and are intentionally kept in-tree.",
         "The wall_single route completed checkpoint-backed inference with official wall trajectories; other task routes still require their own assets and validation.",
         "The public wall_single route loaded the released epoch-65 checkpoint, official wall trajectories, and DINOv2 encoder; GPU inference completed and produced two fully decodable 26-frame MP4 artifacts with finite result metrics.",
         "These small-budget wall runs verify execution only. One target was already within the task's success threshold, while a nontrivial target was not solved; neither establishes planning quality.",
         "The released pusht and point_maze checkpoints have not been validated with their task datasets and simulators.",
-        "DINO-WM source is vendored in-tree under synthesis/visual_generation/world_model/dino_wm.",
+        "DINO-WM source is vendored in-tree under synthesis/visual_generation/dino_wm.",
         "The official planning/eval route is exposed through an infer-only WorldFoundry wrapper and runtime configs under data/models/runtime/configs/dino_wm/conf.",
         "The wall_single checkpoint, official wall trajectories, and DINOv2 encoder completed GPU planning inference and produced decodable simulator videos. Prompt, standalone image/video, and direct action inputs are not this route's contract.",
         "Pusht and point_maze remain untested with their own task assets; no general planning-quality conclusion is claimed."
@@ -51422,7 +51422,7 @@
         }
       ],
       "notes": [
-        "Inference-only upstream source is vendored under synthesis/visual_generation/world_model/mira_wm.",
+        "Inference-only upstream source is vendored under synthesis/visual_generation/mira_wm.",
         "Workspace accepts a local MIRA checkpoint and Rocket Science dataset split; no training entrypoint is integrated.",
         "Workspace discovery, argument routing, and command generation are covered without loading model weights.",
         "Full artifact parity remains pending until an official-compatible checkpoint and Rocket Science split are staged.",
@@ -73491,10 +73491,10 @@
           "AdaWorld 从视频中提取潜在动作来驱动可适配世界模型。公开 pipeline 现可使用发布权重和用户提供的源视频推理；短时 GPU 测试已验证推理链路。"
         ],
         "architecture": [
-          "Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/world_model/adaworld; public checkpoints exist upstream."
+          "Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/adaworld; public checkpoints exist upstream."
         ],
         "architectureZh": [
-          "按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。官方源码已内置于 synthesis/visual_generation/world_model/adaworld；上游存在公开 checkpoint。"
+          "按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。官方源码已内置于 synthesis/visual_generation/adaworld；上游存在公开 checkpoint。"
         ],
         "usageNotes": [
           "Supply the released adaworld.safetensors checkpoint and a readable source video. The main checkpoint includes the active CLIP and LAM encoder weights; a separate lam.ckpt is not needed for this inference path."
@@ -84792,7 +84792,7 @@
           "worldfoundry"
         ],
         "notes": [
-          "LeWorldModel source is vendored in-tree under synthesis/visual_generation/world_model/le_wm.",
+          "LeWorldModel source is vendored in-tree under synthesis/visual_generation/le_wm.",
           "The pipeline resolves the official eval entrypoint through an infer-only wrapper; execution needs stable-worldmodel packages and task datasets, with policy weights only when policy is not random.",
           "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
           "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
@@ -85005,11 +85005,11 @@
         }
       ],
       "notes": [
-        "WorldFoundry exposes an infer-only wrapper for the official LeWorldModel eval route under synthesis/visual_generation/world_model/le_wm.",
+        "WorldFoundry exposes an infer-only wrapper for the official LeWorldModel eval route under synthesis/visual_generation/le_wm.",
         "Runtime eval configs live under data/models/runtime/configs/le_wm/config/eval; train configs are not required for inference.",
         "The route matches the official eval.py config flow and reports missing stable-worldmodel packages, task datasets, or non-random policy checkpoints before execution.",
         "Official PushT evaluation parity remains pending; per-run validation evidence is tracked outside the model catalog.",
-        "LeWorldModel source is vendored in-tree under synthesis/visual_generation/world_model/le_wm.",
+        "LeWorldModel source is vendored in-tree under synthesis/visual_generation/le_wm.",
         "The pipeline resolves the official eval entrypoint through an infer-only wrapper; execution needs stable-worldmodel packages and task datasets, with policy weights only when policy is not random."
       ],
       "docs": {
@@ -87458,7 +87458,7 @@
           "worldfoundry"
         ],
         "notes": [
-          "MineWorld source is vendored in-tree under synthesis/visual_generation/world_model/mineworld.",
+          "MineWorld source is vendored in-tree under synthesis/visual_generation/mineworld.",
           "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
           "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
           "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
@@ -87654,7 +87654,7 @@
       "notes": [
         "WorldFoundry registers an in-tree runtime manifest pipeline for the vendored MineWorld source.",
         "The pipeline resolves the official inference entrypoint and returns blocked runtime diagnostics until checkpoints and validation data are staged.",
-        "MineWorld source is vendored in-tree under synthesis/visual_generation/world_model/mineworld."
+        "MineWorld source is vendored in-tree under synthesis/visual_generation/mineworld."
       ],
       "docs": {
         "curated": true,
@@ -89097,7 +89097,7 @@
           "worldfoundry"
         ],
         "notes": [
-          "NWM source is vendored in-tree under synthesis/visual_generation/world_model/nwm.",
+          "NWM source is vendored in-tree under synthesis/visual_generation/nwm.",
           "The pipeline resolves the official isolated inference entrypoint; execution remains checkpoint, environment, and dataset gated.",
           "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
           "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
@@ -89305,7 +89305,7 @@
         "Initial candidate for non-driving navigation video evaluation.",
         "A model-specific WorldFoundry pipeline is registered against the independent in-tree NWM source package; real upstream inference remains checkpoint/environment gated.",
         "The pipeline resolves the official NWM inference entrypoint and returns blocked runtime diagnostics until checkpoints and datasets are staged.",
-        "NWM source is vendored in-tree under synthesis/visual_generation/world_model/nwm.",
+        "NWM source is vendored in-tree under synthesis/visual_generation/nwm.",
         "The pipeline resolves the official isolated inference entrypoint; execution remains checkpoint, environment, and dataset gated."
       ],
       "docs": {
@@ -89464,7 +89464,7 @@
           "worldfoundry"
         ],
         "notes": [
-          "Open-Oasis source is vendored in-tree under synthesis/visual_generation/world_model/open_oasis.",
+          "Open-Oasis source is vendored in-tree under synthesis/visual_generation/open_oasis.",
           "The pipeline resolves the official generate entrypoint; GPU inference was validated with the staged Etched checkpoint and official sample image. Other installations still need checkpoints, runtime dependencies, and action tensors.",
           "Official Open-Oasis maps cameraX from MineRL camera[0] and cameraY from camera[1]; MineRL orders these as pitch then yaw. Thus cameraX controls vertical pitch despite its X label.",
           "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
@@ -89674,7 +89674,7 @@
         "The model-specific pipeline completed checkpoint-backed GPU inference with the official sample image and camera action contrast. Local execution requires the released checkpoint, runtime dependencies, a prompt image or video, and action tensors.",
         "The pipeline resolves the official Open-Oasis generate entrypoint and completed a 49-frame GPU sample with released weights.",
         "A positive/zero/negative cameraX contrast verified vertical viewpoint response; independent upstream pixel parity and gameplay physics were not measured. Missing local assets still return blocked runtime diagnostics.",
-        "Open-Oasis source is vendored in-tree under synthesis/visual_generation/world_model/open_oasis.",
+        "Open-Oasis source is vendored in-tree under synthesis/visual_generation/open_oasis.",
         "The pipeline resolves the official generate entrypoint; GPU inference was validated with the staged Etched checkpoint and official sample image. Other installations still need checkpoints, runtime dependencies, and action tensors.",
         "Official Open-Oasis maps cameraX from MineRL camera[0] and cameraY from camera[1]; MineRL orders these as pitch then yaw. Thus cameraX controls vertical pitch despite its X label."
       ],
@@ -90525,7 +90525,7 @@
       ],
       "notes": [
         "WorldFoundry registers a source-bound runtime manifest that drives the official rollout entrypoint (reactor-team/open-dreamer inference.py) as a subprocess.",
-        "The adapter under synthesis/visual_generation/world_model/open_dreamer is WorldFoundry-authored glue only; it resolves the staged checkout, gates on staging requirements, and builds the official command.",
+        "The adapter under synthesis/visual_generation/open_dreamer is WorldFoundry-authored glue only; it resolves the staged checkout, gates on staging requirements, and builds the official command.",
         "WorldFoundry interaction tokens are rendered into Minecraft/VPT action JSONL so the shared world-model call surface (interactions=[...]) drives the Dreamer 4 action space.",
         "The pipeline resolves the official inference entrypoint and returns blocked runtime diagnostics until the checkout, JAX environment, checkpoint, and a 368x640 Minecraft/VPT context clip are staged.",
         "Open Dreamer source is never vendored; upstream publishes an all-rights-reserved notice. WorldFoundry binds the checkout at ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/open-dreamer-inference, or at $WORLDFOUNDRY_OPEN_DREAMER_SOURCE when that variable is set.",
@@ -96400,7 +96400,7 @@
           "worldfoundry"
         ],
         "notes": [
-          "StarWM source is vendored in-tree under synthesis/visual_generation/world_model/starwm.",
+          "StarWM source is vendored in-tree under synthesis/visual_generation/starwm.",
           "The pipeline resolves the offline inference client; execution needs a running OpenAI-compatible StarWM endpoint and a served_model_id/api_model_id.",
           "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
           "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
@@ -96576,11 +96576,11 @@
         }
       ],
       "notes": [
-        "WorldFoundry exposes the official offline inference client in-tree under synthesis/visual_generation/world_model/starwm/offline_infer.",
+        "WorldFoundry exposes the official offline inference client in-tree under synthesis/visual_generation/starwm/offline_infer.",
         "Jobs use StarWM's OpenAI-compatible endpoint parameters plus the official prompt fixture format.",
         "The route builds the official run_inference_client.py command and validates input_file, mode, and served_model_id/api_model_id before execution.",
         "Actual generation still requires a running OpenAI-compatible StarWM endpoint; per-run validation evidence is tracked outside the model catalog.",
-        "StarWM source is vendored in-tree under synthesis/visual_generation/world_model/starwm.",
+        "StarWM source is vendored in-tree under synthesis/visual_generation/starwm.",
         "The pipeline resolves the offline inference client; execution needs a running OpenAI-compatible StarWM endpoint and a served_model_id/api_model_id."
       ],
       "docs": {

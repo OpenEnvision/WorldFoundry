@@ -501,7 +501,7 @@ def test_profile_backed_longcat_runner_fails_without_execute(
 
 
 def test_leworldmodel_uses_json_sidecar_for_workspace_video_output() -> None:
-    from worldfoundry.synthesis.visual_generation.world_model.le_wm.worldfoundry_runtime import build_command
+    from worldfoundry.synthesis.visual_generation.le_wm.worldfoundry_runtime import build_command
 
     command = build_command(
         {
@@ -519,7 +519,7 @@ def test_leworldmodel_uses_json_sidecar_for_workspace_video_output() -> None:
 
 
 def test_world_model_runtime_prefers_expected_video_artifact(tmp_path: Path) -> None:
-    from worldfoundry.synthesis.visual_generation.world_model.runtime_manifest import WorldModelRuntimeSynthesis
+    from worldfoundry.synthesis.visual_generation.runtime_manifest import WorldModelRuntimeSynthesis
 
     target = tmp_path / "leworldmodel.mp4"
     result_json = tmp_path / "leworldmodel.result.json"

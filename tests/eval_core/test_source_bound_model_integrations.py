@@ -82,7 +82,7 @@ def test_source_bound_models_use_in_tree_pipeline_or_plan_routes() -> None:
 
 
 def test_world_model_manifest_uses_explicit_source_root_not_legacy_github_checkout(tmp_path, monkeypatch) -> None:
-    from worldfoundry.synthesis.visual_generation.world_model.runtime_manifest import (
+    from worldfoundry.synthesis.visual_generation.runtime_manifest import (
         resolve_runtime_manifest,
         runtime_spec,
     )
@@ -103,7 +103,7 @@ def test_world_model_manifest_uses_explicit_source_root_not_legacy_github_checko
     assert root == (tmp_path / "model_sources" / "egowm").resolve()
     assert entrypoint is not None
     assert entrypoint.name == "infer.py"
-    assert "worldfoundry/synthesis/visual_generation/world_model/egowm" in entrypoint.as_posix()
+    assert "worldfoundry/synthesis/visual_generation/egowm" in entrypoint.as_posix()
 
 
 def test_mosaicmem_memory_store_is_integrated_without_fake_pipeline() -> None:

@@ -13,7 +13,7 @@ recursive-include worldfoundry/evaluation/tasks/execution/runners/larybench *.md
 recursive-include worldfoundry/synthesis/visual_generation/moverse/moverse_runtime *
 recursive-include worldfoundry/synthesis/visual_generation/uni3c/uni3c_runtime *
 recursive-include worldfoundry/synthesis/visual_generation/evoke/evoke_runtime *
-recursive-include worldfoundry/synthesis/visual_generation/world_model/mira_wm *.py *.md *.txt
+recursive-include worldfoundry/synthesis/visual_generation/mira_wm *.py *.md *.txt
 recursive-include worldfoundry/synthesis/visual_generation/rcm/rcm_runtime *.py *.md
 recursive-include worldfoundry/evaluation/tasks/execution/runners/physics_iq/official *.py
 recursive-include worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench/MTScore/configs *.json
@@ -635,7 +635,7 @@ include worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stev
 include worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/generation/world_models/lingbot_actions/s-3_right-10_left-20_right-10/poses.npy
 include worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/generation/world_models/lingbot_actions/s-3_right-20_left-20/intrinsics.npy
 include worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/generation/world_models/lingbot_actions/s-3_right-20_left-20/poses.npy
-include worldfoundry/synthesis/visual_generation/world_model/vid2world/csgo_utils/csgo_validation_start_indices.npy
+include worldfoundry/synthesis/visual_generation/vid2world/csgo_utils/csgo_validation_start_indices.npy
 
 recursive-include worldfoundry/base_models/diffusion_model/models/networks/hunyuan_video/gamecraft PROVENANCE.md
 recursive-include worldfoundry/synthesis/visual_generation/hunyuan_world/gamecraft_inference PROVENANCE.md

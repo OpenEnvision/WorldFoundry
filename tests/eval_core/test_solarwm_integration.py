@@ -45,7 +45,7 @@ def test_solarwm_catalog_profile_and_inference_route_are_registered() -> None:
 
 
 def test_solarwm_runtime_spec_resolves_in_tree_launcher(monkeypatch, tmp_path: Path) -> None:
-    from worldfoundry.synthesis.visual_generation.world_model.runtime_manifest import (
+    from worldfoundry.synthesis.visual_generation.runtime_manifest import (
         resolve_runtime_manifest,
         runtime_spec,
     )
@@ -59,7 +59,7 @@ def test_solarwm_runtime_spec_resolves_in_tree_launcher(monkeypatch, tmp_path: P
 
     assert runtime_root == source.resolve()
     assert entrypoint is not None and entrypoint.name == "infer.py"
-    assert "worldfoundry/synthesis/visual_generation/world_model/solarwm" in entrypoint.as_posix()
+    assert "worldfoundry/synthesis/visual_generation/solarwm" in entrypoint.as_posix()
     assert blocked_reason == ""
 
 
@@ -87,7 +87,7 @@ artifact.write_bytes(b"fake-solarwm-mp4")
 
 
 def test_solarwm_compatibility_launcher_normalizes_official_artifact(tmp_path: Path) -> None:
-    from worldfoundry.synthesis.visual_generation.world_model.solarwm.infer import run
+    from worldfoundry.synthesis.visual_generation.solarwm.infer import run
 
     source = tmp_path / "SolarWM"
     config = _fake_solarwm_source(source)
@@ -109,7 +109,7 @@ def test_solarwm_compatibility_launcher_normalizes_official_artifact(tmp_path: P
 
 
 def test_solarwm_command_uses_explicit_inference_only_overrides(tmp_path: Path) -> None:
-    from worldfoundry.synthesis.visual_generation.world_model.solarwm.infer import build_official_command
+    from worldfoundry.synthesis.visual_generation.solarwm.infer import build_official_command
 
     args = argparse.Namespace(
         config=tmp_path / "infer.yaml",
@@ -132,7 +132,7 @@ def test_solarwm_command_uses_explicit_inference_only_overrides(tmp_path: Path) 
 
 
 def test_solarwm_binding_rejects_multi_sample_and_absolute_index(tmp_path: Path) -> None:
-    from worldfoundry.synthesis.visual_generation.world_model.solarwm.infer import build_official_command
+    from worldfoundry.synthesis.visual_generation.solarwm.infer import build_official_command
 
     args = argparse.Namespace(
         config=tmp_path / "infer.yaml",

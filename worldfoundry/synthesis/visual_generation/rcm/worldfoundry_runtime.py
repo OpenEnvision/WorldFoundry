@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.core.io.paths import checkpoint_root_path
-from worldfoundry.synthesis.visual_generation.world_model.runtime_manifest import command_settings
+from worldfoundry.synthesis.visual_generation.runtime_manifest import command_settings
 
 RUNTIME_DIR = Path(__file__).resolve().parent
 INFERENCE_ENTRYPOINT = RUNTIME_DIR / "rcm_runtime" / "inference" / "wan2pt1_t2v_causal_infer.py"

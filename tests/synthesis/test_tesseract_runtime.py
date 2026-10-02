@@ -8,7 +8,7 @@ import numpy as np
 from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import TesserActPipeline
 from worldfoundry.synthesis.action_generation.tesseract import infer
 from worldfoundry.synthesis.action_generation.tesseract import worldfoundry_runtime as runtime
-from worldfoundry.synthesis.visual_generation.world_model import runtime_manifest
+from worldfoundry.synthesis.visual_generation import runtime_manifest
 
 
 def _write_fixture(path: Path) -> None:

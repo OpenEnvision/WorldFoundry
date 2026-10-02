@@ -18,7 +18,7 @@ execution:
 integration:
   status: integrated
 notes:
-- DINO-WM source is vendored in-tree under synthesis/visual_generation/world_model/dino_wm.
+- DINO-WM source is vendored in-tree under synthesis/visual_generation/dino_wm.
 - The official planning/eval route is exposed through an infer-only WorldFoundry wrapper
   and runtime configs under data/models/runtime/configs/dino_wm/conf.
 - The wall_single checkpoint, official wall trajectories, and DINOv2 encoder completed GPU planning inference and produced

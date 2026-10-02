@@ -22,7 +22,7 @@ checkpoints:
 integration:
   status: runtime_ported
   notes:
-  - WorldFoundry exposes an infer-only wrapper for the official LeWorldModel eval route under synthesis/visual_generation/world_model/le_wm.
+  - WorldFoundry exposes an infer-only wrapper for the official LeWorldModel eval route under synthesis/visual_generation/le_wm.
   - Runtime eval configs live under data/models/runtime/configs/le_wm/config/eval; train configs are not required for inference.
 runner_parity:
   status: pending

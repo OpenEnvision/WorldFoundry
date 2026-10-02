@@ -8,7 +8,7 @@ import torch
 
 from worldfoundry.core.attention.sparse.block_pattern import AttnMaskSpec, BlockPattern, build_mask_fn
 from worldfoundry.synthesis.visual_generation.rcm import worldfoundry_runtime as rcm_runtime
-from worldfoundry.synthesis.visual_generation.world_model import runtime_manifest
+from worldfoundry.synthesis.visual_generation import runtime_manifest
 
 
 def _dense(mask_fn, q_len: int, kv_len: int) -> torch.Tensor:

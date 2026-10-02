@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from ...core.io.paths import checkpoint_root_candidates
 from ...operators.world_model_runtime_operator import WorldModelRuntimeOperator
 from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
-from ...synthesis.visual_generation.world_model.runtime_manifest import WorldModelRuntimeSynthesis
+from ...synthesis.visual_generation.runtime_manifest import WorldModelRuntimeSynthesis
 from ..pipeline_utils import PipelineABC
 
 

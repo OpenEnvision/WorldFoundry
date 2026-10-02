@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from worldfoundry.synthesis.visual_generation.world_model.open_oasis.utils import (
+from worldfoundry.synthesis.visual_generation.open_oasis.utils import (
     _fit_actions_to_frames,
 )
 

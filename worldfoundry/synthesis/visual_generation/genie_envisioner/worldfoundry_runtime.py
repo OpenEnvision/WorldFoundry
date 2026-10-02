@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 
 from worldfoundry.core.io.paths import checkpoint_root_path, project_root
 from worldfoundry.runtime.assets import expand_worldfoundry_path
-from worldfoundry.synthesis.visual_generation.world_model.runtime_manifest import command_settings
+from worldfoundry.synthesis.visual_generation.runtime_manifest import command_settings
 
 
 PACKAGE_DIR = Path(__file__).resolve().parent
