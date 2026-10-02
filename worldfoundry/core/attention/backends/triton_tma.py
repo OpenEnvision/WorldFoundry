@@ -32,6 +32,24 @@ import triton
 import triton.language as tl
 from torch import Tensor
 
+from worldfoundry.core.attention.backends.probe import _triton_tma_version_supported
+
+
+def _require_triton_tma_version() -> None:
+    installed = getattr(triton, "__version__", None)
+    if not _triton_tma_version_supported(installed) or not (
+        hasattr(triton, "set_allocator") and hasattr(tl, "make_tensor_descriptor")
+    ):
+        raise RuntimeError(
+            "triton_tma requires Triton >=3.5.0 with tensor descriptors and a context-local allocator; "
+            f"found {installed or 'unknown version'}"
+        )
+
+
+# Reject unsupported runtimes before constructing/decorating any JIT kernels.
+# Older set_allocator implementations mutate a process-global allocator.
+_require_triton_tma_version()
+
 
 def _descriptor_layout_supported(x: Tensor) -> bool:
     """Return whether ``x`` satisfies TMA tensor-descriptor layout rules.
@@ -70,6 +88,8 @@ def is_triton_tma_supported(
     Returns:
         Whether Q/K/V satisfy the TMA kernel contract.
     """
+    if not _triton_tma_version_supported(getattr(triton, "__version__", None)):
+        return False
     if query.ndim != 4 or key.ndim != 4 or value.ndim != 4:
         return False
     if not query.is_cuda or not key.is_cuda or not value.is_cuda:
@@ -406,6 +426,7 @@ def triton_tma_sdpa(
         RuntimeError: The placement, dtype, head geometry, device capability,
             or descriptor layout is unsupported.
     """
+    _require_triton_tma_version()
     if query.ndim != 4 or key.ndim != 4 or value.ndim != 4:
         raise ValueError("query, key, and value must have shape [B, L, H, D]")
     batch_size, query_length, num_heads, head_dim = query.shape

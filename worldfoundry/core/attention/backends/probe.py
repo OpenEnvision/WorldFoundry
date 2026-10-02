@@ -30,12 +30,24 @@ import logging
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from importlib import metadata
 from importlib.machinery import PathFinder
 from typing import Mapping
 
 import torch
+from packaging.version import InvalidVersion, Version
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=16)
+def _triton_tma_version_supported(installed: str | None) -> bool:
+    """Require the public descriptor API and context-local allocator of Triton 3.5."""
+
+    try:
+        return installed is not None and Version(installed) >= Version("3.5.0")
+    except InvalidVersion:
+        return False
 
 # ──────────────────────────────────────────────────────────────────────────
 # Capability record — installed vs usable are separate bits on purpose
@@ -221,7 +233,7 @@ def normalize_attention_backend(value: str | None) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Probes — find_spec only; results are cached per (capability, HIP, accel)
+# Probes — package specs/metadata; cached per (capability, HIP, accel)
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -279,12 +291,26 @@ def _probe_attention_backends_cached(
             name="cudnn_fp8", package="cudnn", available=False, usable=False,
             reason="cuDNN FP8 SDPA requires cuda-bindings",
         )
+    triton_tma = _package_capability(
+        name="triton_tma", package="triton", usable_if=nvidia_cuda and capability[0] >= 9,
+        unavailable_reason="Triton is not installed", unusable_reason="TMA attention requires NVIDIA Hopper or newer",
+    )
+    if triton_tma.available:
+        try:
+            installed_triton = metadata.version("triton")
+        except metadata.PackageNotFoundError:
+            installed_triton = None
+        if not _triton_tma_version_supported(installed_triton):
+            triton_tma = AttentionKernelCapability(
+                name="triton_tma", package="triton", available=True, usable=False,
+                reason=(
+                    "TMA attention requires Triton >=3.5.0 with tensor descriptors and a context-local allocator; "
+                    f"found {installed_triton or 'unknown version'}"
+                ),
+            )
     return {
         "cudnn_fp8": cudnn_fp8,
-        "triton_tma": _package_capability(
-            name="triton_tma", package="triton", usable_if=nvidia_cuda and capability[0] >= 9,
-            unavailable_reason="Triton is not installed", unusable_reason="TMA attention requires NVIDIA Hopper or newer",
-        ),
+        "triton_tma": triton_tma,
         "flash_attention_4": _package_capability(
             name="flash_attention_4",
             package="flash_attn.cute",
