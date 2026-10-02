@@ -511,6 +511,12 @@ def _invoke_attention_provider(
         q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, "b n s d", dims)
         output = native_cudnn_fp8_sdpa(q, k, v, scale=scale)
         return rearrange_out(output, out_pattern, "b n s d", dims)
+    if selected == "triton_tma":
+        from worldfoundry.core.attention.backends.triton_tma import triton_tma_sdpa
+
+        q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, "b s n d", dims)
+        output = triton_tma_sdpa(q, k, v, scale=scale)
+        return rearrange_out(output, out_pattern, "b s n d", dims)
     if selected == "flash_attention_4":
         return flash_attention_4(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
     if selected == "flash_attention_3":
@@ -623,9 +629,9 @@ def attention_forward(
     # Validate before compatibility/mask short-circuiting. An explicit sparse
     # request must never look successful merely because it silently took SDPA.
     require_generic_attention_backend(preferred)
-    if preferred == "cudnn_fp8":
+    if preferred in {"cudnn_fp8", "triton_tma"}:
         if compatibility_mode or attn_mask is not None:
-            raise ValueError("Explicit cudnn_fp8 does not support attention masks or compatibility-mode fallback")
+            raise ValueError(f"Explicit {preferred} does not support attention masks or compatibility-mode fallback")
         return _invoke_uncompiled_attention_provider_audited(
             preferred, q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale,
         )

@@ -575,8 +575,8 @@ NVIDIA FlashDreams
   Source: https://github.com/NVIDIA/flashdreams
 
   The streaming post-processing contract, realtime presentation buffer, and
-  RTX Video Super Resolution adapter, and native cuDNN FP8 attention include
-  adaptations from FlashDreams (attention reference commit
+  RTX Video Super Resolution adapter, native cuDNN FP8 attention, and dense
+  Triton TMA attention include adaptations from FlashDreams (attention reference commit
   91c906b69992f63fb19907a25cd805fb783d314a).
   Adapted source files retain the NVIDIA copyright and Apache-2.0 SPDX
   identifiers; design-derived integrations identify their source in docstrings.
