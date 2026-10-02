@@ -209,8 +209,7 @@ class LatestFrameBuffer:
 class ChunkPresentationBuffer:
     """Present complete generated chunks through a two-frame sender mailbox.
 
-    The active/pending chunk split follows NVIDIA FlashDreams' presentation
-    manager design. The event-loop clock lives here so transports only request
+    Active and pending chunks share an event-loop clock so transports request
     real frames; they do not add another pacing loop or repeat a held frame.
     """
 

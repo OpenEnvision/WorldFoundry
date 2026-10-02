@@ -52,6 +52,45 @@ def load_definitions(matrix: Path, dependencies: Path) -> tuple[dict, dict]:
     for name, used in policy["cases"].items():
         if not isinstance(used, list) or not used or any(component not in components for component in used):
             raise ValueError(f"Unknown or missing component for {name}")
+    for rule in [*policy.get("cpu_only_components", []), *policy.get("relocation_contracts", [])]:
+        if not isinstance(rule, dict) or not isinstance(rule.get("reason"), str) or not rule["reason"].strip():
+            raise ValueError("CPU-only and relocation declarations need an explicit reason")
+        contracts = rule.get("required_cpu_contracts")
+        if not isinstance(contracts, list) or not contracts:
+            raise ValueError("CPU-only and relocation declarations need concrete CPU contracts")
+        for contract in contracts:
+            relative_path(contract)
+            if not contract.startswith("tests/") or not contract.endswith(".py"):
+                raise ValueError("CPU contracts must name exact Python test files")
+    for rule in policy.get("cpu_only_components", []):
+        paths = rule.get("paths")
+        if not isinstance(paths, list) or not paths:
+            raise ValueError("CPU-only components need exact paths")
+        for path in paths:
+            relative_path(path)
+            if any(character in path for character in "*?["):
+                raise ValueError("CPU-only declarations cannot use wildcard paths")
+    for rule in policy.get("relocation_contracts", []):
+        for key in ("from_root", "to_root"):
+            relative_path(rule[key])
+        if rule["from_root"] == rule["to_root"]:
+            raise ValueError("Relocation roots must differ")
+        for package in rule.get("packages", []):
+            if not isinstance(package, str) or not re.fullmatch(r"[a-zA-Z_]\w*", package):
+                raise ValueError("Relocations must list exact package names")
+        for path in [*rule.get("files", []), *rule.get("rewrite_only_paths", [])]:
+            relative_path(path)
+            if any(character in path for character in "*?["):
+                raise ValueError("Relocation file declarations cannot use wildcards")
+        for rewrite in rule.get("relative_import_rewrites", []):
+            if (not isinstance(rewrite, list) or len(rewrite) != 2
+                    or not all(isinstance(value, str) and value.startswith("from .") for value in rewrite)):
+                raise ValueError("Extra relocation rewrites must name exact relative imports")
+        for removed in rule.get("deleted_metadata", []):
+            relative_path(removed["path"])
+            if (not re.fullmatch(r"[0-9a-f]{64}", removed.get("sha256", ""))
+                    or not isinstance(removed.get("reason"), str) or not removed["reason"].strip()):
+                raise ValueError("Removed metadata needs its exact content digest and reason")
     return cases, policy
 
 
@@ -155,12 +194,124 @@ def matches(path: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
 
 
+def relocation_proofs(
+    source_root: Path, policy: dict, changes: list[str], *, base: str | None, head: str,
+    history_root: Path | None = None,
+) -> list[dict]:
+    """Prove declared moves from immutable blobs, never from rename similarity.
+
+    Both paths, modes and contents must agree with the inspected source. An
+    implementation edit cannot pass merely because Git reports a rename.
+    """
+    if base is None or not policy.get("relocation_contracts"):
+        return []
+    history = history_root or source_root
+    commits = [revision(history, ref + "^{commit}") for ref in (base, head)]
+    if not all(commits):
+        raise ValueError("Relocation proof requires pinned Git base and head commits")
+
+    def tree(commit):
+        raw = subprocess.check_output(["git", "-C", str(history), "ls-tree", "-r", "-z", commit])
+        entries = {}
+        for entry in raw.split(b"\0"):
+            if entry:
+                metadata, path = entry.split(b"\t", 1)
+                mode, kind, blob = metadata.decode().split()
+                if kind == "blob":
+                    entries[path.decode()] = (mode, blob)
+        return entries
+
+    before_tree, after_tree = [tree(commit) for commit in commits]
+    blob_cache = {}
+
+    def content(entry):
+        blob = entry[1]
+        if blob not in blob_cache:
+            blob_cache[blob] = subprocess.check_output(["git", "-C", str(history), "cat-file", "blob", blob])
+        return blob_cache[blob]
+
+    def inspect(path, data):
+        target = source_root / path
+        return (target.is_file() and not target.is_symlink()
+                and target.resolve().is_relative_to(source_root.resolve()) and target.read_bytes() == data)
+
+    proofs, changed = [], set(changes)
+    for rule in policy["relocation_contracts"]:
+        old_root, new_root = rule["from_root"] + "/", rule["to_root"] + "/"
+        old_namespace = rule["from_root"].replace("/", ".") + "."
+        new_namespace = rule["to_root"].replace("/", ".") + "."
+
+        def comparison(before, after):
+            if before == after:
+                return "identical_bytes"
+            try:
+                rewritten = before.decode().replace(old_namespace, new_namespace)
+            except UnicodeError:
+                return None
+            for old, new in rule.get("relative_import_rewrites", []):
+                rewritten = rewritten.replace(old, new)
+            return "declared_namespace_rewrite" if rewritten.encode() == after else None
+
+        def record(old, new, before, after, kind, reason=None):
+            proofs.append({
+                "old_path": old, "new_path": new, "kind": kind,
+                "old_sha256": hashlib.sha256(before).hexdigest(),
+                "new_sha256": hashlib.sha256(after).hexdigest() if after is not None else None,
+                "base_revision": commits[0], "head_revision": commits[1],
+                "reason": reason or rule["reason"],
+                "required_cpu_contracts": rule["required_cpu_contracts"],
+            })
+
+        for old in sorted(changed):
+            if not old.startswith(old_root):
+                continue
+            relative = old.removeprefix(old_root)
+            if (relative.split("/", 1)[0] not in rule.get("packages", [])
+                    and relative not in rule.get("files", [])):
+                continue
+            new = new_root + relative
+            if (new not in changed or old not in before_tree or old in after_tree
+                    or new in before_tree or new not in after_tree or (source_root / old).exists()
+                    or before_tree[old][0] != after_tree[new][0]
+                    or before_tree[old][0] not in {"100644", "100755"}):
+                continue
+            before, after = content(before_tree[old]), content(after_tree[new])
+            kind = comparison(before, after)
+            if kind and inspect(new, after):
+                record(old, new, before, after, kind)
+        for path in rule.get("rewrite_only_paths", []):
+            if path not in changed or path not in before_tree or path not in after_tree:
+                continue
+            before, after = content(before_tree[path]), content(after_tree[path])
+            if (before_tree[path][0] == after_tree[path][0]
+                    and before_tree[path][0] in {"100644", "100755"}
+                    and comparison(before, after) == "declared_namespace_rewrite" and inspect(path, after)):
+                record(path, path, before, after, "declared_namespace_rewrite")
+        for removed in rule.get("deleted_metadata", []):
+            path = removed["path"]
+            if (path in changed and path in before_tree and path not in after_tree
+                    and not (source_root / path).exists() and before_tree[path][0] == "100644"):
+                before = content(before_tree[path])
+                if hashlib.sha256(before).hexdigest() == removed["sha256"]:
+                    record(path, None, before, None, "removed_metadata", removed["reason"])
+    return proofs
+
+
 def select_cases(
-    matrix: Path, dependencies: Path, source_root: Path, changes: list[str], *, evidence: Path | None = None
+    matrix: Path, dependencies: Path, source_root: Path, changes: list[str], *, evidence: Path | None = None,
+    base: str | None = None, head: str = "HEAD", history_root: Path | None = None,
 ) -> dict:
     cases, policy = load_definitions(matrix, dependencies)
     changes = sorted({relative_path(path) for path in changes})
+    for rule in [*policy.get("cpu_only_components", []), *policy.get("relocation_contracts", [])]:
+        for contract in rule["required_cpu_contracts"]:
+            test = source_root / contract
+            if (not test.is_file() or test.is_symlink()
+                    or not test.resolve().is_relative_to(source_root.resolve())):
+                raise ValueError(f"Declared CPU contract has no inspected implementation: {contract}")
     graph = ImportGraph(source_root)
+    proofs = relocation_proofs(source_root, policy, changes, base=base, head=head, history_root=history_root)
+    proven_paths = {path for proof in proofs for path in (proof["old_path"], proof["new_path"]) if path}
     reasons = {name: [] for name in cases}
     graph_errors = {}
     closures, traces = {}, {}
@@ -175,7 +326,7 @@ def select_cases(
             manifest = json.loads((evidence / name / "manifest.json").read_text())
             if manifest.get("status") == "passed" and manifest.get("case", {}).get("id") == name:
                 traces[name] = {relative_path(path) for path in manifest.get("source_hashes", {})}
-    ignored, uncovered = [], []
+    ignored, uncovered, cpu_only = [], [], []
     for path in changes:
         matched = False
         if matches(path, policy["shared_paths"]) or path == matrix.relative_to(source_root).as_posix():
@@ -196,7 +347,13 @@ def select_cases(
                     reasons[name].append({"path": path, "kind": "+".join(kinds), "components": used})
                     matched = True
         if not matched:
-            if matches(path, policy["ignored_paths"]):
+            declared_cpu = [rule for rule in policy.get("cpu_only_components", []) if path in rule["paths"]]
+            if path in proven_paths:
+                continue
+            if declared_cpu:
+                cpu_only.extend({"path": path, "reason": rule["reason"],
+                                 "required_cpu_contracts": rule["required_cpu_contracts"]} for rule in declared_cpu)
+            elif matches(path, policy["ignored_paths"]):
                 ignored.append(path)
             else:
                 uncovered.append(path)
@@ -219,6 +376,11 @@ def select_cases(
         "selected_cases": selected,
         "reasons": {name: reasons[name] for name in selected},
         "ignored_paths": ignored,
+        "proven_relocations": proofs,
+        "cpu_only_changes": cpu_only,
+        "required_cpu_contracts": sorted({
+            contract for item in [*proofs, *cpu_only] for contract in item["required_cpu_contracts"]
+        }),
         "uncovered_paths": uncovered,
         "graph_errors": graph_errors,
         "required_checks": ["public-cpu", "inference-tensors", *(["real-weight-replays"] if selected else [])],
@@ -255,6 +417,8 @@ def main() -> int:
             args.source_root.resolve(),
             changes,
             evidence=args.evidence,
+            base=args.base,
+            head=args.head,
         )
         if args.base:
             report.update(

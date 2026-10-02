@@ -430,7 +430,10 @@ def interruption_cleanup():
             signal.signal(sig, handler)
 
 
-def validate_plan(selection: dict, matrix: Path, dependencies: Path, source: Path, tree: str) -> list[str]:
+def validate_plan(
+    selection: dict, matrix: Path, dependencies: Path, source: Path, tree: str,
+    *, history_root: Path | None = None,
+) -> list[str]:
     if selection.get("status") not in {"planned", "no_inference_changes"}:
         raise ValueError("Uncovered or failed impact plan cannot authorize replays")
     if (
@@ -450,7 +453,20 @@ def validate_plan(selection: dict, matrix: Path, dependencies: Path, source: Pat
         raise ValueError("Impact plan status contradicts its selected cases")
     if not isinstance(selection.get("changed_paths"), list):
         raise ValueError("Impact plan must declare its changed_paths")
-    minimum = impact.select_cases(matrix, dependencies, source, selection["changed_paths"])
+    base, head = selection.get("base_revision"), selection.get("head_revision", "HEAD")
+    if base is not None:
+        history = history_root or source
+        if (head != selection.get("source_revision")
+                or impact.revision(history, head + "^{tree}") != tree
+                or selection["changed_paths"] != impact.changed_paths(history, base, head)):
+            raise ValueError("Impact plan commit diff does not match the source snapshot")
+    minimum = impact.select_cases(
+        matrix, dependencies, source, selection["changed_paths"],
+        base=base, head=head, history_root=history_root,
+    )
+    for key in ("proven_relocations", "cpu_only_changes", "required_cpu_contracts"):
+        if selection.get(key, []) != minimum[key]:
+            raise ValueError(f"Impact plan changes the required CPU proof: {key}")
     if minimum["status"] == "uncovered" or not set(minimum["selected_cases"]).issubset(selected):
         raise ValueError("Impact plan omits required cases or has uncovered changes")
     return selected
@@ -516,7 +532,10 @@ def run_suite(
                 if case_ids is not None:
                     raise ValueError("Do not combine a saved plan with explicit case ids")
                 selection = json.loads(plan.read_text())
-                selected = validate_plan(selection, matrix, dependencies, source, report["source_tree"])
+                selected = validate_plan(
+                    selection, matrix, dependencies, source, report["source_tree"],
+                    history_root=Path(profile["source_root"]),
+                )
                 write_json(root / "impact-plan.json", selection)
             if not selected:
                 if plan is None:

@@ -8,32 +8,22 @@ It also includes a compatibility layer for PyTorch, allowing the module to be im
 and used even in environments where PyTorch is not installed.
 """
 from abc import ABC
+from functools import wraps
 
-try:
-    import torch
-except ModuleNotFoundError:
-    # If PyTorch is not installed, define a compatibility class to provide a no-op 'no_grad' context.
-    # This allows the 'predict' method to use '@torch.no_grad()' decorator without crashing
-    # in environments where torch is not a hard dependency.
-    class _TorchCompat:
-        """
-        A compatibility class that mimics parts of the PyTorch API when PyTorch is not installed.
-        Specifically, it provides a no-operation `no_grad` decorator.
-        """
-        @staticmethod
-        def no_grad():
-            """
-            A no-operation decorator that mimics PyTorch's `torch.no_grad()` context manager.
-            It simply returns the decorated function without any modification, ensuring
-            code relying on `@torch.no_grad()` can run without PyTorch.
-            """
-            def decorator(func):
-                return func
 
-            return decorator
+def _lazy_no_grad(func):
+    """Retain Torch's decorator semantics without loading Torch for discovery."""
+    @wraps(func)
+    def predict_without_grad(*args, **kwargs):
+        try:
+            import torch
+        except ModuleNotFoundError as exc:
+            if exc.name != "torch":
+                raise
+            return func(*args, **kwargs)
+        return torch.no_grad()(func)(*args, **kwargs)
 
-    torch = _TorchCompat()
-
+    return predict_without_grad
 
 class BaseSynthesis(ABC):
     """
@@ -89,12 +79,12 @@ class BaseSynthesis(ABC):
         """
         raise NotImplementedError(f"{type(self).__name__}.api_init() must be implemented by subclasses.")
 
-    @torch.no_grad()
+    @_lazy_no_grad
     def predict(self):
         """
         Performs the synthesis prediction using the configured backend.
 
-        This method is decorated with `@torch.no_grad()` to indicate that
+        This method is decorated with `@_lazy_no_grad` to indicate that
         gradient calculations are not required during prediction, which can save
         memory and improve performance for PyTorch-based implementations.
         Subclasses must implement the actual prediction logic.

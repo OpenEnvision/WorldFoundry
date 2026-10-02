@@ -489,6 +489,7 @@ testpaths = [
     "tests/runtime/test_device_pool.py",
     "tests/runtime/test_geometry_regression.py",
     "tests/runtime/test_geometry_regression_impact.py",
+    "tests/runtime/test_geometry_regression_relocations.py",
     "tests/runtime/test_geometry_regression_suite.py",
     "tests/runtime/test_geometry_regression_schedule.py",
     "tests/runtime/test_video_regression.py",
@@ -505,6 +506,7 @@ testpaths = [
     "tests/eval_core/test_packaging_license_gate.py",
     "tests/eval_core/test_native_license_sdist.py",
     "tests/synthesis/test_visual_generation_layout.py",
+    "tests/synthesis/test_base_synthesis_lazy_import.py",
     "tests/test_worldfoundry_studio_pipeline_cache.py",
     "tests/test_worldfoundry_studio_resident_workers.py",
 ]

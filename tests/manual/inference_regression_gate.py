@@ -84,7 +84,10 @@ def verify_checkout_plan(plan: dict, root: Path, matrix: Path, dependencies: Pat
     for key, path in (("matrix_sha256", matrix), ("dependencies_sha256", dependencies)):
         if plan.get(key) != impact.digest(path):
             raise ValueError(f"Affected plan definitions have changed: {key}")
-    minimum = impact.select_cases(matrix, dependencies, root, plan["changed_paths"])
+    minimum = impact.select_cases(matrix, dependencies, root, plan["changed_paths"], base=base, head=head)
+    for key in ("proven_relocations", "cpu_only_changes", "required_cpu_contracts"):
+        if plan.get(key, []) != minimum[key]:
+            raise ValueError(f"Affected plan changes the required CPU proof: {key}")
     selected = plan.get("selected_cases")
     if (not isinstance(selected, list) or minimum["status"] == "uncovered"
             or not set(minimum["selected_cases"]).issubset(selected)):

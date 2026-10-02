@@ -13,6 +13,7 @@ CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
 VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
 STREAMING_CPU_CONTRACTS = \
+	tests/synthesis/test_base_synthesis_lazy_grad.py \
 	tests/base_models/test_flashdreams_sana_wm_streaming.py \
 	tests/base_models/test_flashdreams_fastvideo_causal_wan.py \
 	tests/base_models/diffusion_model/test_causal_attention_padding.py \
