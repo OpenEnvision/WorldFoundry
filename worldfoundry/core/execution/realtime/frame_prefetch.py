@@ -125,6 +125,42 @@ class LazyCudaFrame:
         self._host: np.ndarray | None = None
         self._prefetch: CudaHostPrefetch | None = None
 
+    @property
+    def shape(self) -> tuple[int, ...]:
+        """Expose frame geometry without materializing host pixels."""
+        if self._host is not None:
+            return self._host.shape
+        return tuple(self.to_cuda_tensor().shape)
+
+    @property
+    def ndim(self) -> int:
+        """Report frame rank without transferring CUDA pixels to the host."""
+        return len(self.shape)
+
+    @property
+    def dtype(self) -> np.dtype:
+        """Report the byte-frame dtype used by the presentation contract."""
+        if self._host is not None:
+            return self._host.dtype
+        return np.dtype(str(self.to_cuda_tensor().dtype).removeprefix("torch."))
+
+    def snapshot_cuda(self) -> "LazyCudaFrame":
+        """Own device pixels before the decoder can reuse its output storage."""
+        import torch
+
+        source = self.to_cuda_tensor()
+        if not source.is_cuda or source.dtype != torch.uint8 or source.ndim != 3 or source.shape[-1] != 3:
+            raise ValueError("CUDA transport requires an HWC uint8 RGB frame")
+        with torch.cuda.device(source.device), torch.inference_mode():
+            stream = torch.cuda.current_stream(source.device)
+            if self._source_event is not None:
+                stream.wait_event(self._source_event)
+            owned = source.detach().clone().unsqueeze(0)
+            source.record_stream(stream)
+            ready = torch.cuda.Event()
+            ready.record(stream)
+        return LazyCudaFrame(owned, 0, source_event=ready)
+
     def prefetch_to_numpy(self) -> None:
         """Kick a side-stream copy if the frame is still on CUDA and uncached."""
         if self._host is not None or self._prefetch is not None or self._frames_hwc_uint8 is None:

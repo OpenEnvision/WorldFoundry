@@ -8,6 +8,7 @@ import threading
 import time
 import types
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import pytest
@@ -52,6 +53,11 @@ from worldfoundry.studio.visualization.backends.world_realtime import (
 from worldfoundry.studio.visualization.backends.world_realtime_client import (
     WORLD_REALTIME_CLIENT_JS,
 )
+
+
+async def _wait_for_condition(condition: Callable[[], bool]) -> None:
+    while not condition():
+        await asyncio.sleep(0)
 
 
 def test_websocket_fallback_encodes_decodable_stable_frames() -> None:
@@ -290,7 +296,7 @@ def test_close_active_is_bounded_when_workers_and_runtime_ignore_cancellation(
         assert peers.draining is False
         assert peers._drain_done.is_set()
 
-        lingering = list(peers._background_tasks)
+        lingering = list(peers._shutdown_tasks)
         runtime.release.set()
         await asyncio.wait_for(
             asyncio.gather(worker, *lingering, return_exceptions=True),
@@ -299,8 +305,8 @@ def test_close_active_is_bounded_when_workers_and_runtime_ignore_cancellation(
 
     asyncio.run(exercise())
 
-    assert "Realtime peer worker task(s) did not stop within" in caplog.text
-    assert "Realtime session runtime reset did not finish within" in caplog.text
+    assert "shutdown deadline expired while waiting for WebRTC workers" in caplog.text
+    assert "shutdown deadline expired while waiting for session runtime reset" in caplog.text
 
 
 def test_close_active_normal_teardown_is_idempotent() -> None:
@@ -391,7 +397,7 @@ def test_socket_generation_cancel_does_not_wait_forever_for_inference(
 
         assert worker.cancelled()
         assert runtime.cancelled.is_set()
-        lingering = list(peers._background_tasks)
+        lingering = list(peers._shutdown_tasks)
         assert lingering
         runtime.release.set()
         await asyncio.wait_for(
@@ -401,7 +407,8 @@ def test_socket_generation_cancel_does_not_wait_forever_for_inference(
 
     asyncio.run(exercise())
 
-    assert "Realtime segment inference task(s) did not stop within" in caplog.text
+    # The model task remains owned until it acknowledges cancellation or
+    # finishes; canceling the presentation worker does not wait for it.
 
 
 def test_runtime_reset_and_close_have_independent_deadlines(
@@ -462,7 +469,7 @@ def test_runtime_reset_and_close_have_independent_deadlines(
         monkeypatch.setattr(close_runtime, "reset", cancellation_resistant_reset)
         await asyncio.wait_for(close_runtime.close(), timeout=0.25)
         assert reset_started.is_set()
-        assert reset_cancelled.is_set()
+        await asyncio.wait_for(reset_cancelled.wait(), timeout=0.1)
         lingering = list(close_runtime._shutdown_tasks)
         assert lingering
         release.set()
@@ -473,7 +480,7 @@ def test_runtime_reset_and_close_have_independent_deadlines(
 
     asyncio.run(exercise_close())
 
-    assert "Realtime runtime close reset did not finish within" in caplog.text
+    assert "shutdown deadline expired while waiting for runtime reset" in caplog.text
 
 
 def test_datachannel_events_ack_and_idle_step_are_ordered() -> None:
@@ -891,9 +898,7 @@ def test_prompt_scheduled_initial_segment_and_acknowledged_step_are_distinct() -
         )
         worker = asyncio.create_task(peers._generation_worker(active))
         try:
-            async with asyncio.timeout(1):
-                while len(runtime.calls) < 2:
-                    await asyncio.sleep(0)
+            await asyncio.wait_for(_wait_for_condition(lambda: len(runtime.calls) >= 2), timeout=1)
             assert runtime.calls == [([], None), ([], None)]
             assert active.pending_steps == 0
             chunks = [message for message in channel.messages if message["type"] == "chunk_done"]
@@ -955,9 +960,10 @@ def test_socket_prompt_scheduled_initial_segment_does_not_consume_step() -> None
         )
         worker = asyncio.create_task(peers._socket_generation_worker(active))
         try:
-            async with asyncio.timeout(2):
-                while sum(message["type"] == "chunk_done" for message in socket.messages) < 2:
-                    await asyncio.sleep(0)
+            await asyncio.wait_for(
+                _wait_for_condition(lambda: sum(message["type"] == "chunk_done" for message in socket.messages) >= 2),
+                timeout=2,
+            )
             assert runtime.calls == [([], None), ([], None)]
             chunks = [message for message in socket.messages if message["type"] == "chunk_done"]
             assert len(chunks) == 2
@@ -990,9 +996,7 @@ def test_non_object_control_json_is_ignored_without_killing_sessions() -> None:
         try:
             rtc.input_messages.put_nowait("[]")
             rtc.input_messages.put_nowait(json.dumps({"type": "action", "action": {"event": "keydown", "key": "w"}}))
-            async with asyncio.timeout(1):
-                while not rtc.input_messages.empty():
-                    await asyncio.sleep(0)
+            await asyncio.wait_for(_wait_for_condition(rtc.input_messages.empty), timeout=1)
             await asyncio.sleep(0)
             assert worker.done() is False
             assert rtc.resampler.effective_keys == frozenset({"w"})
@@ -1077,9 +1081,7 @@ def test_rtc_generation_resizes_off_loop_before_frame_buffer(monkeypatch) -> Non
                 active,
                 json.dumps({"type": "action", "action": {"event": "step"}}),
             )
-            async with asyncio.timeout(1):
-                while not resize_started.is_set():
-                    await asyncio.sleep(0)
+            await asyncio.wait_for(_wait_for_condition(resize_started.is_set), timeout=1)
             await peers._handle_message(
                 active,
                 json.dumps(
@@ -1091,9 +1093,10 @@ def test_rtc_generation_resizes_off_loop_before_frame_buffer(monkeypatch) -> Non
                 ),
             )
             release_first_resize.set()
-            async with asyncio.timeout(1):
-                while not any(message["type"] == "chunk_done" for message in channel.messages):
-                    await asyncio.sleep(0)
+            await asyncio.wait_for(
+                _wait_for_condition(lambda: any(message["type"] == "chunk_done" for message in channel.messages)),
+                timeout=1,
+            )
             frame = await active.frames.get()
             assert frame.shape == (90, 160, 3)
             assert int(frame[45, 80].min()) == 255
@@ -1219,9 +1222,7 @@ def test_socket_resolution_ack_preserves_old_chunk_and_reencodes_inflight_chunk(
                 active,
                 json.dumps({"type": "action", "action": {"event": "step"}}),
             )
-            async with asyncio.timeout(1):
-                while not encode_started.is_set():
-                    await asyncio.sleep(0)
+            await asyncio.wait_for(_wait_for_condition(encode_started.is_set), timeout=1)
             await peers._handle_socket_message(
                 active,
                 json.dumps(
@@ -1234,9 +1235,10 @@ def test_socket_resolution_ack_preserves_old_chunk_and_reencodes_inflight_chunk(
             )
             assert active.frame_packets.qsize() == 1
             release_first_encode.set()
-            async with asyncio.timeout(2):
-                while not any(message["type"] == "chunk_done" for message in socket.messages):
-                    await asyncio.sleep(0)
+            await asyncio.wait_for(
+                _wait_for_condition(lambda: any(message["type"] == "chunk_done" for message in socket.messages)),
+                timeout=2,
+            )
 
             assert encoded_resolutions == [(640, 360), (320, 240)]
             assert active.frame_packets.get_nowait() == b"announced-old-chunk"
@@ -1302,9 +1304,10 @@ def test_prompt_segment_socket_backpressures_instead_of_dropping_counted_frames(
         consumer = asyncio.create_task(slow_consumer())
         worker = asyncio.create_task(peers._socket_generation_worker(active))
         try:
-            async with asyncio.timeout(2):
-                while not any(message["type"] == "chunk_done" for message in socket.messages):
-                    await asyncio.sleep(0)
+            await asyncio.wait_for(
+                _wait_for_condition(lambda: any(message["type"] == "chunk_done" for message in socket.messages)),
+                timeout=2,
+            )
             await consumer
             chunk = next(message for message in socket.messages if message["type"] == "chunk_done")
             assert received == [b"\x01", b"\x02", b"\x03"]

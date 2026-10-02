@@ -577,6 +577,16 @@ async def _run_by_shutdown_deadline(
     warn_on_timeout: bool = True,
 ) -> bool:
     task = asyncio.create_task(awaitable, name=f"world-realtime-shutdown-{label}")
+    if deadline <= asyncio.get_running_loop().time():
+        # Issuing cleanup still matters when an earlier worker spent the
+        # budget. Give the coroutine its first cooperative slice before
+        # canceling/retaining it; otherwise close/reset never starts.
+        try:
+            await asyncio.sleep(0)
+        except BaseException:
+            task.cancel()
+            _retain_shutdown_task(task, retained)
+            raise
     return await _finish_tasks_by_deadline(
         (task,),
         deadline=deadline,
@@ -918,6 +928,7 @@ class ResidentWorldRuntime:
         self._first_stream_step = True
         self._seed_image: Image.Image | None = None
         self.last_generation_metrics: dict[str, Any] = {}
+        self.preserve_cuda_frames = False
         self._postprocess = postprocess or VideoPostprocessStream(
             chain=VideoPostprocessChain((IdentityVideoPostProcessor(),)),
             fps=self.fps,
@@ -969,6 +980,16 @@ class ResidentWorldRuntime:
             metadata=metadata,
         )
         return frame_list_from_chunks(chunks)
+
+    @property
+    def _cuda_transport_enabled(self) -> bool:
+        # Custom processors keep their existing CPU input contract. The exact
+        # identity chain preserves lazy frame objects and validates geometry.
+        return (
+            self.preserve_cuda_frames
+            and type(self._postprocess) is VideoPostprocessStream
+            and all(type(processor) is IdentityVideoPostProcessor for processor in self._postprocess.chain.processors)
+        )
 
     async def _run(
         self,
@@ -1333,7 +1354,9 @@ class ResidentWorldRuntime:
         self._base_request = request
         self.last_generation_metrics = dict(result.get("realtime_metrics") or {}) if isinstance(result, Mapping) else {}
         copy_started = time.perf_counter()
-        frames = await self._run(realtime_frames_from_result, result)
+        frames = await self._run(
+            realtime_frames_from_result, result, preserve_cuda=self._cuda_transport_enabled,
+        )
         copy_ms = (time.perf_counter() - copy_started) * 1000.0
         postprocess_started = time.perf_counter()
         frames = await self._run(
@@ -1355,24 +1378,53 @@ class ResidentWorldRuntime:
         return frames, generation_ms
 
     async def reset(self) -> None:
-        await self._run(self._postprocess.reset)
-        if self._base_request is not None:
-            try:
-                await self._run(
-                    self.manager.run_realtime,
-                    entry=self.entry,
-                    request=self._base_request,
-                    action="reset",
-                )
-            except Exception:
-                logger.warning(
-                    "Realtime runtime reset action failed; continuing session teardown.",
-                    exc_info=True,
-                )
+        request = self._base_request
         self._configured = False
         self._base_request = None
         self._seed_image = None
         self._first_stream_step = True
+        self.preserve_cuda_frames = False
+        # Submit the whole cleanup transaction before yielding. The stable
+        # worker then completes postprocess/model cleanup before later model
+        # work, even when the caller's shutdown budget expires.
+        loop = asyncio.get_running_loop()
+        future = loop.run_in_executor(self._executor, self._reset_components, request)
+
+        async def complete_reset() -> None:
+            await asyncio.shield(future)
+
+        task = asyncio.create_task(complete_reset(), name="world-realtime-reset-components")
+        try:
+            done, _ = await asyncio.wait({task}, timeout=_realtime_shutdown_timeout_s())
+        except BaseException:
+            _retain_shutdown_task(task, self._shutdown_tasks)
+            raise
+        if task in done:
+            task.result()
+        else:
+            _retain_shutdown_task(task, self._shutdown_tasks)
+            logger.warning(
+                "Realtime postprocess reset did not finish within the shutdown budget; "
+                "accepted cleanup continues on the resident worker."
+            )
+
+    def _reset_components(self, request: PreparedInputs | None) -> None:
+        try:
+            self._postprocess.reset()
+        finally:
+            # Preserve a postprocess failure while still resetting the model.
+            if request is not None:
+                try:
+                    self.manager.run_realtime(
+                        entry=self.entry,
+                        request=request,
+                        action="reset",
+                    )
+                except Exception:
+                    logger.warning(
+                        "Realtime runtime reset action failed; continuing session teardown.",
+                        exc_info=True,
+                    )
 
     async def close(self, *, deadline: float | None = None) -> None:
         if self._closed:
@@ -1394,10 +1446,10 @@ class ResidentWorldRuntime:
                 label="runtime reset",
             )
         finally:
-            # Running Python/CUDA callables cannot be killed safely. Do not
-            # join them here; reject queued work and let running work finish
-            # cooperatively after the async shutdown handler returns.
-            self._executor.shutdown(wait=False, cancel_futures=True)
+            # Reject new submissions without joining running Python/CUDA
+            # work. Already accepted cleanup must drain even when it is
+            # queued behind an inference call that cannot be canceled.
+            self._executor.shutdown(wait=False, cancel_futures=False)
 
     @property
     def ready(self) -> bool:
@@ -1420,6 +1472,7 @@ class _ActivePeer:
     frames: LatestFrameBuffer | ChunkPresentationBuffer
     resampler: RealtimeControlResampler
     presentation_mode: RealtimePresentationMode = RealtimePresentationMode.HOLD_LAST
+    video_track: Any | None = None
     generation_task: asyncio.Task[Any] | None = None
     liveness_task: asyncio.Task[Any] | None = None
     input_task: asyncio.Task[Any] | None = None
@@ -2019,6 +2072,12 @@ class RealtimePeerManager:
                     cancel_now=True,
                 )
                 active.frames.close()
+                close_track = getattr(active.video_track, "close", None)
+                if callable(close_track):
+                    await _run_by_shutdown_deadline(
+                        close_track(), deadline=deadline, retained=self._shutdown_tasks,
+                        label="NVENC track close",
+                    )
                 await _run_by_shutdown_deadline(
                     active.peer.close(),
                     deadline=deadline,
@@ -2174,7 +2233,9 @@ class RealtimePeerManager:
                 frames=frames,
                 fps=self.fps,
                 presentation_mode=presentation_mode,
+                gpu_id=_realtime_nvenc_device(getattr(getattr(self.runtime, "launch_config", None), "device", None)),
             )
+            self.runtime.preserve_cuda_frames = bool(getattr(track, "preserves_cuda_frames", False))
             pc.addTrack(track)
             loop = asyncio.get_running_loop()
             active = _ActivePeer(
@@ -2186,6 +2247,7 @@ class RealtimePeerManager:
                     start_time=loop.time(),
                 ),
                 presentation_mode=presentation_mode,
+                video_track=track,
                 last_client_message_at=loop.time(),
                 prompt_scheduled="prompt_update" in self.runtime.realtime_spec.controls,
                 initial_segment_pending=("prompt_update" in self.runtime.realtime_spec.controls),
@@ -2242,6 +2304,7 @@ class RealtimePeerManager:
 
             try:
                 await pc.setRemoteDescription(RTCSessionDescription(sdp=str(offer["sdp"]), type=str(offer["type"])))
+                _configure_nvenc_h264(pc, track)
                 answer = await pc.createAnswer()
                 await pc.setLocalDescription(answer)
                 await _wait_for_ice_gathering(pc)
@@ -2258,6 +2321,9 @@ class RealtimePeerManager:
                 active.closed = True
                 self._active = None
                 active.frames.close()
+                close_track = getattr(track, "close", None)
+                if callable(close_track):
+                    await close_track()
                 await pc.close()
                 await self.runtime.reset()
                 raise
@@ -2300,6 +2366,7 @@ class RealtimePeerManager:
         async with self._lock:
             if self.active:
                 raise RuntimeError("A realtime world session is already active.")
+            self.runtime.preserve_cuda_frames = False
             await self.runtime.configure(
                 prompt=base_prompt,
                 image_path=str(session.get("init_image_path") or ""),
@@ -3033,12 +3100,44 @@ class RealtimePeerManager:
         channel.send(json.dumps(dict(payload), ensure_ascii=False, separators=(",", ":")))
 
 
+def _configure_nvenc_h264(peer: Any, track: Any) -> None:
+    """Negotiate the codec carried by pre-encoded NVENC packets."""
+    if not getattr(track, "preserves_cuda_frames", False):
+        return
+    from aiortc import RTCRtpSender
+
+    codecs = [codec for codec in RTCRtpSender.getCapabilities("video").codecs if codec.mimeType.lower() == "video/h264"]
+    if not codecs:
+        raise RuntimeError("NVENC transport requires aiortc H.264 RTP support")
+    for transceiver in peer.getTransceivers():
+        if transceiver.sender.track is track:
+            transceiver.setCodecPreferences(codecs)
+            return
+    raise RuntimeError("NVENC video track has no RTP transceiver")
+
+
+def _realtime_nvenc_device(launch_device: str | None) -> int:
+    match = re.fullmatch(r"\s*cuda(?::(\d+))?\s*", str(launch_device or "cuda"), flags=re.IGNORECASE)
+    return int(match.group(1) or 0) if match else 0
+
+
 def _build_video_track(
     *,
     frames: LatestFrameBuffer | ChunkPresentationBuffer,
     fps: int,
     presentation_mode: RealtimePresentationMode | str = RealtimePresentationMode.HOLD_LAST,
+    gpu_id: int = 0,
 ) -> Any:
+    if _env_bool("WORLDFOUNDRY_REALTIME_NVENC", False):
+        from worldfoundry.studio.serving.realtime.nvenc import build_nvenc_track, nvenc_h264_supported
+
+        supported, reason = nvenc_h264_supported(gpu_id=gpu_id)
+        if supported:
+            return build_nvenc_track(
+                frames=frames, fps=fps, gpu_id=gpu_id,
+                presentation_mode=RealtimePresentationMode.from_value(presentation_mode).value,
+            )
+        logger.warning("NVENC realtime transport unavailable; using software video encoder: %s", reason)
     from aiortc import MediaStreamTrack
     from aiortc.mediastreams import MediaStreamError
     from av import VideoFrame

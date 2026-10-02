@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from worldfoundry.core.execution.realtime.frame_prefetch import prefetch_to_numpy
+from worldfoundry.core.execution.realtime.frame_prefetch import LazyCudaFrame, prefetch_to_numpy
 from worldfoundry.studio.inference.execution import _normalize_frame_list, _to_uint8_rgb
 
 MIN_OUTPUT_WIDTH = 160
@@ -128,6 +128,7 @@ class LatestFrameBuffer:
         self.dropped_frames = 0
         self.last_enqueue_ms = 0.0
         self.closed = False
+        self.preserve_cuda_frames = False
 
     def qsize(self) -> int:
         return self._queue.qsize()
@@ -152,7 +153,7 @@ class LatestFrameBuffer:
         deadline = started + self.backpressure_s
         accepted = 0
         for frame in frames:
-            rgb = np.ascontiguousarray(frame)
+            rgb = frame if self.preserve_cuda_frames and isinstance(frame, LazyCudaFrame) else np.ascontiguousarray(frame)
             if self.policy is FrameQueuePolicy.ORDERED_QUALITY:
                 if not await self._put_ordered(rgb):
                     break
@@ -249,6 +250,7 @@ class ChunkPresentationBuffer:
         self.presented_frames = 0
         self.last_enqueue_ms = 0.0
         self.closed = False
+        self.preserve_cuda_frames = False
 
     def _bind_loop(self) -> asyncio.AbstractEventLoop:
         loop = asyncio.get_running_loop()
@@ -268,7 +270,10 @@ class ChunkPresentationBuffer:
             return 0
         loop = self._bind_loop()
         started = loop.time()
-        prepared = [np.ascontiguousarray(frame) for frame in frames]
+        prepared = [
+            frame if self.preserve_cuda_frames and isinstance(frame, LazyCudaFrame) else np.ascontiguousarray(frame)
+            for frame in frames
+        ]
         if not prepared:
             self.last_enqueue_ms = (loop.time() - started) * 1000.0
             return 0
@@ -402,7 +407,36 @@ class ChunkPresentationBuffer:
         self._mailbox.put_nowait(None)
 
 
-def realtime_frames_from_result(result: Any) -> list[np.ndarray]:
+def _cuda_transport_frames(candidate: Any) -> list[LazyCudaFrame] | None:
+    """Snapshot supported byte frames on device, retaining producer ordering."""
+    if isinstance(candidate, (list, tuple)) and candidate and all(isinstance(frame, LazyCudaFrame) for frame in candidate):
+        try:
+            device_sources = [frame.to_cuda_tensor() for frame in candidate]
+        except RuntimeError:
+            return None
+        if all(source.is_cuda and str(source.dtype) == "torch.uint8" and source.ndim == 3 and source.shape[-1] == 3 for source in device_sources):
+            return [frame.snapshot_cuda() for frame in candidate]
+        return None
+    try:
+        import torch
+    except ImportError:
+        return None
+
+    if not torch.is_tensor(candidate) or not candidate.is_cuda or candidate.dtype != torch.uint8:
+        return None
+    if candidate.ndim == 3 and candidate.shape[-1] == 3:
+        candidate = candidate.unsqueeze(0)
+    if candidate.ndim != 4 or candidate.shape[-1] != 3:
+        return None
+    with torch.cuda.device(candidate.device), torch.inference_mode():
+        owned = candidate.detach().clone(memory_format=torch.contiguous_format)
+        candidate.record_stream(torch.cuda.current_stream(candidate.device))
+        ready = torch.cuda.Event()
+        ready.record(torch.cuda.current_stream(candidate.device))
+    return [LazyCudaFrame(owned, index, source_event=ready) for index in range(owned.shape[0])]
+
+
+def realtime_frames_from_result(result: Any, *, preserve_cuda: bool = False) -> list[Any]:
     """Extract in-memory RGB frames without invoking artifact exporters."""
 
     if isinstance(result, Iterator):
@@ -422,6 +456,10 @@ def realtime_frames_from_result(result: Any) -> list[np.ndarray]:
         candidates.append(result)
 
     for candidate in candidates:
+        if preserve_cuda:
+            device_frames = _cuda_transport_frames(candidate)
+            if device_frames:
+                return device_frames
         if isinstance(candidate, Image.Image):
             return [_to_uint8_rgb(candidate)]
         if isinstance(candidate, (list, tuple)):
