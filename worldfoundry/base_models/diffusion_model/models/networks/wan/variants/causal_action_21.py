@@ -24,6 +24,8 @@ import torch
 import math
 import torch.distributed as dist
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_conditioning_21 import ActionModule
+from worldfoundry.base_models.diffusion_model.optimizations.qkv_fusion import project_fused_qkv
+from .causal_cache import read_kv_cache_positions, commit_kv_cache_positions
 
 # wan 1.3B model has a weird channel / head configurations and require max-autotune to work with flexattention
 # see https://github.com/pytorch/pytorch/issues/133254
@@ -74,6 +76,10 @@ def causal_rope_apply(x, grid_sizes, freqs, start_frame=0):
 
 class CausalWanSelfAttention(nn.Module):
     """Causal self-attention with optional KV cache and frame-offset RoPE."""
+
+    # Load-time fusion changes projection storage only. This forward retains
+    # ownership of frame-offset RoPE, padding, and every causal cache mutation.
+    supports_fused_qkv = True
 
     def __init__(self,
                  dim,
@@ -136,9 +142,13 @@ class CausalWanSelfAttention(nn.Module):
         # query, key, value function
         def qkv_fn(x):
             """Project and reshape QKV to ``[B, L, H, D]``."""
-            q = self.norm_q(self.q(x)).view(b, s, n, d)
-            k = self.norm_k(self.k(x)).view(b, s, n, d)
-            v = self.v(x).view(b, s, n, d)
+            if getattr(self, "_qkv_fused", False):
+                q, k, v = project_fused_qkv(self.qkv, x)
+            else:
+                q, k, v = self.q(x), self.k(x), self.v(x)
+            q = self.norm_q(q).view(b, s, n, d)
+            k = self.norm_k(k).view(b, s, n, d)
+            v = v.view(b, s, n, d)
             return q, k, v
 
         q, k, v = qkv_fn(x) # B, F, HW, C
@@ -187,25 +197,25 @@ class CausalWanSelfAttention(nn.Module):
            
             kv_cache_size = kv_cache["k"].shape[1]
             num_new_tokens = roped_query.shape[1]
+            cached_global_end, cached_local_end = read_kv_cache_positions(kv_cache)
             
-            if (current_end > kv_cache["global_end_index"].item()) and (
-                    num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size):
+            if (current_end > cached_global_end) and (
+                    num_new_tokens + cached_local_end > kv_cache_size):
                     
-                num_evicted_tokens = num_new_tokens + kv_cache["local_end_index"].item() - kv_cache_size
-                num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens
+                num_evicted_tokens = num_new_tokens + cached_local_end - kv_cache_size
+                num_rolled_tokens = cached_local_end - num_evicted_tokens - sink_tokens
                 kv_cache["k"][:, sink_tokens:sink_tokens + num_rolled_tokens] = \
                     kv_cache["k"][:, sink_tokens + num_evicted_tokens:sink_tokens + num_evicted_tokens + num_rolled_tokens].clone()
                 kv_cache["v"][:, sink_tokens:sink_tokens + num_rolled_tokens] = \
                     kv_cache["v"][:, sink_tokens + num_evicted_tokens:sink_tokens + num_evicted_tokens + num_rolled_tokens].clone()
                 # Insert the new keys/values at the end
-                local_end_index = kv_cache["local_end_index"].item() + current_end - \
-                    kv_cache["global_end_index"].item() - num_evicted_tokens
+                local_end_index = cached_local_end + current_end - cached_global_end - num_evicted_tokens
                 local_start_index = local_end_index - num_new_tokens
                 kv_cache["k"][:, local_start_index:local_end_index] = roped_key
                 kv_cache["v"][:, local_start_index:local_end_index] = v
             else:
                 # Assign new keys/values directly up to current_end
-                local_end_index = kv_cache["local_end_index"].item() + current_end - kv_cache["global_end_index"].item()
+                local_end_index = cached_local_end + current_end - cached_global_end
                 local_start_index = local_end_index - num_new_tokens
                 
                 kv_cache["k"][:, local_start_index:local_end_index] = roped_key
@@ -215,8 +225,7 @@ class CausalWanSelfAttention(nn.Module):
                 kv_cache["k"][:, max(0, local_end_index - self.max_attention_size):local_end_index],
                 kv_cache["v"][:, max(0, local_end_index - self.max_attention_size):local_end_index]
             )
-            kv_cache["global_end_index"].fill_(current_end)
-            kv_cache["local_end_index"].fill_(local_end_index)
+            commit_kv_cache_positions(kv_cache, current_end, local_end_index)
 
         # output
         x = x.flatten(2)

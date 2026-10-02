@@ -253,9 +253,12 @@ def _is_fusible_self_attention(module: nn.Module) -> bool:
             return False
     # Cross-attention exposes the same names but its forward is driven by a
     # processor over a separate context; only fuse the freqs-based self-attn.
-    if not hasattr(module, "norm_q") or not hasattr(module, "norm_k") or not hasattr(module, "attn"):
+    if not hasattr(module, "norm_q") or not hasattr(module, "norm_k"):
         return False
-    if type(module).__name__ != "SelfAttention":
+    native_projection_dispatch = getattr(module, "supports_fused_qkv", False) is True
+    if not native_projection_dispatch and (
+        type(module).__name__ != "SelfAttention" or not hasattr(module, "attn")
+    ):
         return False
     dim = q.in_features
     for layer in (q, k, v):
@@ -296,7 +299,7 @@ def _fused_self_attention_forward(
 def _fuse_one(module: nn.Module, state: QKVFusionState) -> None:
     get_processor = getattr(module, "get_processor", None)
     processor = get_processor() if callable(get_processor) else None
-    preserve_processor_dispatch = (
+    preserve_projection_dispatch = getattr(module, "supports_fused_qkv", False) is True or (
         processor is not None
         and type(processor).__name__ != "SelfAttentionProcessor"
         and getattr(processor, "supports_fused_qkv", False) is True
@@ -328,7 +331,7 @@ def _fuse_one(module: nn.Module, state: QKVFusionState) -> None:
     # Drop the originals so their weights are freed and no stale path remains.
     del module.q, module.k, module.v
     module._qkv_fused = True
-    if not preserve_processor_dispatch:
+    if not preserve_projection_dispatch:
         module.forward = types.MethodType(_fused_self_attention_forward, module)
 
 

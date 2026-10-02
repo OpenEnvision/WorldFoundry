@@ -114,7 +114,7 @@ class _FakeRuntime:
 def test_vae_zero_cache_template_import_is_allocation_free(monkeypatch: pytest.MonkeyPatch) -> None:
     constant = importlib.import_module(
         "worldfoundry.synthesis.visual_generation.matrix_game."
-        "matrix_game_2_runtime.utils.vae_runtime.constant"
+        "matrix_game_2_runtime.pipeline.causal_inference"
     )
     allocations: list[tuple[Any, ...]] = []
 
@@ -125,13 +125,12 @@ def test_vae_zero_cache_template_import_is_allocation_free(monkeypatch: pytest.M
     monkeypatch.setattr(torch, "zeros", record_zeros)
     constant = importlib.reload(constant)
 
-    assert len(constant.VAE_CACHE_SHAPES) == 32
-    assert len(constant.ZERO_VAE_CACHE) == 32
+    assert constant.VAE_CACHE_SLOTS == 32
     assert allocations == []
-    assert vars(constant.ZERO_VAE_CACHE) == {}
+    assert not hasattr(constant, "ZERO_VAE_CACHE")
     assert not any(
         isinstance(value, torch.Tensor)
-        for value in vars(constant.ZERO_VAE_CACHE).values()
+        for value in vars(constant).values()
     )
 
 

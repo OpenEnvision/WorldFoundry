@@ -434,7 +434,7 @@ class CausalInferencePipeline(torch.nn.Module):
             session.conditional_dict = updated_condition
 
         model_start = model_end = decode_end = None
-        if noise.is_cuda:
+        if profile and noise.is_cuda:
             timing_stream = torch.cuda.current_stream(session.device)
             model_start = torch.cuda.Event(enable_timing=True)
             model_end = torch.cuda.Event(enable_timing=True)
@@ -495,7 +495,7 @@ class CausalInferencePipeline(torch.nn.Module):
         )
 
         if model_end is not None:
-            model_end.record(torch.cuda.current_stream(session.device))
+            model_end.record(timing_stream)
 
         session.current_start_frame += self.num_frame_per_block
         decoded_input = denoised_pred.transpose(1, 2)
@@ -505,8 +505,11 @@ class CausalInferencePipeline(torch.nn.Module):
 
         model_ms = decode_ms = None
         if decode_end is not None:
-            decode_end.record(torch.cuda.current_stream(session.device))
-            torch.cuda.synchronize(device=session.device)
+            decode_end.record(timing_stream)
+            # All block work runs on the caller's current stream. Profiling
+            # waits only for that stream's final event; normal generation
+            # preserves asynchronous tensor-return semantics without a barrier.
+            decode_end.synchronize()
             assert model_start is not None and model_end is not None
             model_ms = model_start.elapsed_time(model_end)
             decode_ms = model_end.elapsed_time(decode_end)
@@ -592,7 +595,9 @@ class CausalInferencePipeline(torch.nn.Module):
                 "k": torch.zeros([batch_size, kv_cache_size, 12, 128], dtype=dtype, device=device),
                 "v": torch.zeros([batch_size, kv_cache_size, 12, 128], dtype=dtype, device=device),
                 "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "local_end_index": torch.tensor([0], dtype=torch.long, device=device)
+                "local_end_index": torch.tensor([0], dtype=torch.long, device=device),
+                "_host_global_end_index": 0,
+                "_host_local_end_index": 0,
             })
 
         self.kv_cache1 = kv_cache1  # always store the clean cache
@@ -612,13 +617,17 @@ class CausalInferencePipeline(torch.nn.Module):
                 "k": torch.zeros([batch_size, kv_cache_size, 16, 64], dtype=dtype, device=device),
                 "v": torch.zeros([batch_size, kv_cache_size, 16, 64], dtype=dtype, device=device),
                 "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "local_end_index": torch.tensor([0], dtype=torch.long, device=device)
+                "local_end_index": torch.tensor([0], dtype=torch.long, device=device),
+                "_host_global_end_index": 0,
+                "_host_local_end_index": 0,
             })
             kv_cache_mouse.append({
                 "k": torch.zeros([batch_size * self.frame_seq_length, kv_cache_size, 16, 64], dtype=dtype, device=device),
                 "v": torch.zeros([batch_size * self.frame_seq_length, kv_cache_size, 16, 64], dtype=dtype, device=device),
                 "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "local_end_index": torch.tensor([0], dtype=torch.long, device=device)
+                "local_end_index": torch.tensor([0], dtype=torch.long, device=device),
+                "_host_global_end_index": 0,
+                "_host_local_end_index": 0,
             })
         self.kv_cache_keyboard = kv_cache_keyboard  # always store the clean cache
         self.kv_cache_mouse = kv_cache_mouse  # always store the clean cache
