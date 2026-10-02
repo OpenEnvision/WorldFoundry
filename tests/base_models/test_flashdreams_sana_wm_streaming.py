@@ -566,15 +566,18 @@ def test_sana_refiner_factories_use_local_diffusers_directories(
             calls["tokenizer"] = (str(path), dict(kwargs))
             return _Tokenizer()
 
-    import diffusers
-    import transformers
-
-    monkeypatch.setattr(diffusers, "LTX2VideoTransformer3DModel", _Loader, raising=False)
+    # The factories' import boundary is exercised with fake loaders; optional
+    # model packages are not prerequisites for this CPU checkpoint contract.
+    diffusers = ModuleType("diffusers")
+    diffusers.LTX2VideoTransformer3DModel = _Loader
+    monkeypatch.setitem(sys.modules, "diffusers", diffusers)
     ltx2_module = ModuleType("diffusers.pipelines.ltx2")
     ltx2_module.LTX2TextConnectors = _Connectors
     monkeypatch.setitem(sys.modules, "diffusers.pipelines.ltx2", ltx2_module)
-    monkeypatch.setattr(transformers, "AutoTokenizer", _Tokenizer)
-    monkeypatch.setattr(transformers, "Gemma3ForConditionalGeneration", _TextEncoder)
+    transformers = ModuleType("transformers")
+    transformers.AutoTokenizer = _Tokenizer
+    transformers.Gemma3ForConditionalGeneration = _TextEncoder
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
 
     checkpoint = CheckpointSpec(source=tmp_path)
     policy = RuntimePolicy(

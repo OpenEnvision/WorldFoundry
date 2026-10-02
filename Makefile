@@ -11,7 +11,21 @@ PREFLIGHT_OUTPUT ?= tmp/preflight
 CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
 VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
-INFER_TENSOR_CONTRACTS = tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py $(VIDEO_TENSOR_CONTRACTS)
+FLASHDREAMS_CPU_CONTRACTS = tests/base_models/test_flashdreams_sana_wm_streaming.py tests/base_models/test_flashdreams_fastvideo_causal_wan.py tests/base_models/diffusion_model/test_causal_attention_padding.py tests/runtime/test_inference_benchmark_correctness.py
+INFER_TENSOR_CONTRACTS = tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py $(VIDEO_TENSOR_CONTRACTS) $(FLASHDREAMS_CPU_CONTRACTS)
+# Select numerical CUDA nodes explicitly: older CUDA tests do not all carry the gpu marker.
+INFER_CUDA_CONTRACTS = \
+	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_host_pixels_wait_for_producer_and_preserve_frame_order \
+	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_prefetch_failure_uses_the_correct_blocking_fallback \
+	tests/core/execution/test_cuda_frame_transfer.py::test_failed_cuda_callback_drains_queued_work_before_reuse \
+	tests/core/execution/test_inference_graph_cuda.py \
+	tests/core/test_diffusion_mutating_kernel.py::test_bf16_mutating_kernel_preserves_alias_version_and_eager_bits \
+	tests/core/attention/test_kv_arena.py::test_cuda_long_sequence_attention_and_stream_ownership \
+	tests/core/attention/test_kv_arena.py::test_cuda_graph_replay_reads_updated_current_segment \
+	tests/core/attention/test_gqa_storage.py::test_efficient_cuda_gqa_matches_math \
+	tests/runtime/test_inference_benchmark_correctness.py::test_denoise_benchmark_checks_every_step_before_timing \
+	tests/runtime/test_inference_benchmark_correctness.py::test_full_stack_actual_fp8_cache_or_graph_execution
+INFER_CUDA_REPORT ?= tmp/inference-cuda-contracts.xml
 GEOMETRY_MATRIX ?= tests/manual/geometry_regression_cases.json
 GEOMETRY_REFERENCE ?=
 GEOMETRY_CANDIDATE ?=
@@ -56,7 +70,7 @@ help:
 		'  make test-infer-tensors  Test small checkpoint, geometry and execution tensors with CPU Torch and safetensors.' \
 		'  make test-infer-video-tensors  Check real small video operators, sampler math and resident request isolation with CPU Torch and einops.' \
 		'  make test-infer-contracts  Test checkpoint, geometry, serializer and execution contracts in a model environment.' \
-		'  make test-infer-cuda-contracts  Test real CUDA transfers and failed callbacks; requires an available GPU.' \
+		'  make test-infer-cuda-contracts  Run real CUDA graph, cache, attention, kernel and transfer checks; rejects empty/skipped suites and requires CUDA Torch and Triton.' \
 		'  make test-geometry     Audit real 3D replays against accepted references; requires GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE.' \
 		'  make plan-geometry     Select affected short 3D cases from GEOMETRY_BASE to HEAD without GPU/weights.' \
 		'  make replay-geometry   Replay selected or all cases using a private GEOMETRY_PROFILE; optional GEOMETRY_REPLAY_PLAN.' \
@@ -113,10 +127,13 @@ verify-inference:
 test-infer-contracts:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(INFER_TENSOR_CONTRACTS) tests/pipelines/test_geometry_result_exports.py $(TEST_ARGS)
 
-# An unavailable GPU must fail this gate instead of reporting a skipped suite as success.
+# Run manually in a prepared CUDA/Triton environment; hosted CI has no GPU runner.
+# An unavailable GPU, empty selection or skipped contract must fail this gate.
 test-infer-cuda-contracts:
-	$(PYTHON) -c 'import torch; assert torch.cuda.is_available(), "CUDA contract tests require an available GPU"'
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m gpu tests/core/execution/test_cuda_frame_transfer.py $(TEST_ARGS)
+	$(PYTHON) -c 'import sys, torch; torch.cuda.is_available() or sys.exit("CUDA contract tests require an available GPU")'
+	mkdir -p "$(dir $(INFER_CUDA_REPORT))"
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(INFER_CUDA_REPORT)" $(INFER_CUDA_CONTRACTS) $(TEST_ARGS)
+	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); cases or sys.exit("CUDA gate executed no tests"); rejected = [case.get("name", "unknown") for case in cases if any(case.find(tag) is not None for tag in ("skipped", "failure", "error"))]; rejected and sys.exit("CUDA gate requires every selected test to pass: " + ", ".join(rejected)); print(f"CUDA gate: {len(cases)} tests passed without skips")' "$(INFER_CUDA_REPORT)"
 
 test-geometry:
 	@test -n "$(GEOMETRY_REFERENCE)" -a -n "$(GEOMETRY_CANDIDATE)" || { printf '%s\n' 'Set GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE to completed real-checkpoint run directories.' >&2; exit 2; }
