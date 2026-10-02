@@ -49,6 +49,7 @@ _INT8_MIN_GEMM_WORK = 1.0e11
 # ──────────────────────────────────────────────────────────────────────────
 
 
+@torch.compiler.assume_constant_result
 def _fp8_min_gemm_work() -> float:
     """Return the process-local FP8 work gate, reading the environment once."""
 
@@ -66,6 +67,7 @@ def _fp8_min_gemm_work() -> float:
     return value
 
 
+@torch.compiler.assume_constant_result
 def _int8_min_gemm_work() -> float:
     """Return the calibrated dynamic-W8A8 work gate for this process."""
 

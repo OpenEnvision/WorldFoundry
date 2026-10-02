@@ -126,3 +126,21 @@ def test_fused_ffn_empty_input_and_invalid_activation(monkeypatch):
     assert codes.shape == value.shape and scales.shape == (0, 1)
     with pytest.raises(ValueError, match="activation"):
         quantize_rowwise_fp8_triton(value, activation="other")
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_fused_ffn_inductor_preserves_real_fp8_math(monkeypatch):
+    if torch.cuda.get_device_capability()[0] < 9:
+        pytest.skip("FP8 requires SM90+")
+    from worldfoundry.core.acceleration.quantization.linear import _fp8_min_gemm_work
+
+    monkeypatch.setenv("WORLDFOUNDRY_FP8_MIN_GEMM_FLOP", "0")
+    monkeypatch.setattr(_fp8_min_gemm_work, "_cached", None, raising=False)
+    model = _model("cuda", torch.bfloat16)
+    _quantize(model, True)
+    compiled = torch.compile(model["ffn"], backend="inductor", fullgraph=True)
+    with torch.no_grad():
+        for index in range(2):
+            value = torch.randn(2, 32, 64, device="cuda", dtype=torch.bfloat16) + index
+            torch.testing.assert_close(compiled(value), model["ffn"](value), rtol=0.06, atol=0.004)
