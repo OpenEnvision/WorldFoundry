@@ -11,7 +11,7 @@ Entries are based only on files present in this repository.
 - modifications: Build configuration and CUDA kernels adapted for WorldFoundry integration and compatibility with the depth-modified `diff-gaussian-rasterization` fork.
 - evidence: Source headers identify Inria GRAPHDECO copyright.
 - purpose: CUDA extension for average nearest-neighbor distance over 3D points.
-- license_summary: see `thirdparty/THIRD_PARTY_LICENSES.md`.
+- license_summary: see root `THIRD-PARTY-NOTICES`.
 
 ## `diff-gaussian-rasterization` (modified fork — depth and opt-in auxiliary outputs)
 
@@ -29,18 +29,18 @@ Entries are based only on files present in this repository.
 - nested_third_party:
   - `third_party/stbi_image_write.h`: single-header image writer from stb.
   - `third_party/glm`: listed in `.gitmodules` as `https://github.com/g-truc/glm.git`; GLM source files are present in the current tree.
-- license_summary: see `thirdparty/THIRD_PARTY_LICENSES.md`.
+- license_summary: see root `THIRD-PARTY-NOTICES`.
 
 ## `gsplat`
 
 - upstream_url: `https://github.com/nerfstudio-project/gsplat.git`
 - local_path: `thirdparty/gsplat`
 - source_commit: `b5392febf6047655c18db17693636cd21bbe58c0`
-- evidence: shallow clone HEAD recorded in `.worldfoundry_upstream_commit`; upstream `LICENSE` is retained locally.
+- evidence: shallow clone HEAD recorded in `.worldfoundry_upstream_commit`; license terms are recorded in root `THIRD-PARTY-NOTICES`.
 - purpose: CUDA accelerated Gaussian splatting rasterization with Python bindings.
 - nested_third_party:
   - `gsplat/cuda/csrc/third_party/glm`: listed in upstream `.gitmodules` as `https://github.com/g-truc/glm.git`.
-- license_summary: see `thirdparty/THIRD_PARTY_LICENSES.md`.
+- license_summary: see root `THIRD-PARTY-NOTICES`.
 
 ## `SageAttention` (distribution quarantined)
 

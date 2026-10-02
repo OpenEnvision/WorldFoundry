@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
 import re
 import subprocess
 import sys
@@ -28,6 +29,65 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 MANIFEST_PATH = REPO_ROOT / "MANIFEST.in"
 LICENSE_GATE_MARKER = "License-gated upstream runtimes"
+NOTICE_NAME = "THIRD-PARTY-NOTICES"
+NATIVE_LICENSE_LINK = "thirdparty/fastvideo-kernel/LICENSE"
+LICENSE_TEXT_BEGIN = b"----- BEGIN RETAINED LICENSE TEXT -----\n"
+LICENSE_TEXT_END = b"\n----- END RETAINED LICENSE TEXT -----\n"
+
+
+def license_bundle_errors(data: bytes) -> list[str]:
+    """Verify the verbatim text boundaries and hashes carried by the bundle."""
+    errors: list[str] = []
+    pattern = rb"(?m)^SHA256: ([0-9a-f]{64})\nBytes: ([0-9]+)\n" + re.escape(LICENSE_TEXT_BEGIN)
+    records = list(re.finditer(pattern, data))
+    if not records or len(records) != data.count(LICENSE_TEXT_BEGIN) or len(records) != data.count(LICENSE_TEXT_END):
+        errors.append("missing or malformed retained license-text records")
+    if b"Original-File: LICENSE\n" not in data:
+        errors.append("missing WorldFoundry Apache-2.0 license record")
+    for index, record in enumerate(records, start=1):
+        start = record.end()
+        end = start + int(record.group(2))
+        if data[end:end + len(LICENSE_TEXT_END)] != LICENSE_TEXT_END:
+            errors.append(f"retained license text {index} has an invalid byte boundary")
+        if hashlib.sha256(data[start:end]).hexdigest().encode() != record.group(1):
+            errors.append(f"retained license text {index} has changed")
+    return errors
+
+
+def misplaced_license_files(paths: Sequence[str], *, repo_root: Path = REPO_ROOT) -> list[str]:
+    """Reject separate tracked license texts, allowing the native build link."""
+    misplaced = []
+    for name in paths:
+        path = repo_root / name
+        if not (path.is_file() or path.is_symlink()) or not re.match(
+            r"(?:LICEN[CS]E|COPYING|LEGAL|NOTICE)(?:[._-]|$)|THIRD.PARTY.LICENSES|CHECKPOINTS_NOTICE",
+            path.name, re.IGNORECASE,
+        ):
+            continue
+        if name == NATIVE_LICENSE_LINK and path.is_symlink() and path.resolve() == (repo_root / NOTICE_NAME).resolve():
+            continue
+        misplaced.append(name)
+    return sorted(misplaced)
+
+
+def audit_license_bundle(artifact_path: Path, expected: bytes) -> list[str]:
+    """Require the complete central license text in both distribution formats."""
+    if artifact_path.suffix == ".whl":
+        with zipfile.ZipFile(artifact_path) as archive:
+            entries = {name: archive.read(name) for name in archive.namelist()
+                       if name.endswith("/" + NOTICE_NAME)}
+        entries = {name: data for name, data in entries.items()
+                   if name.endswith(".dist-info/licenses/" + NOTICE_NAME)}
+    else:
+        with tarfile.open(artifact_path, "r:gz") as archive:
+            entries = {member.name.partition("/")[2]: archive.extractfile(member).read()
+                       for member in archive.getmembers()
+                       if member.isfile() and member.name.partition("/")[2] == NOTICE_NAME}
+    if len(entries) != 1:
+        return [f"{artifact_path.name}: missing or ambiguous central license bundle"]
+    if next(iter(entries.values())) != expected:
+        return [f"{artifact_path.name}: central license bundle differs from source"]
+    return []
 
 # These boundaries deliberately remain configured after the private source has
 # been removed, so a later sync cannot silently add it back to an artifact.
@@ -296,11 +356,24 @@ def main(argv: list[str] | None = None) -> int:
     exclude_package_data = pyproject["tool"]["setuptools"].get("exclude-package-data", {})
 
     failures = 0
+    notice_path = REPO_ROOT / NOTICE_NAME
+    notice = notice_path.read_bytes() if notice_path.is_file() else b""
+    notice_errors = license_bundle_errors(notice)
+    if notice_errors:
+        failures += 1
+        _print_items("FAIL: incomplete or altered central license bundle:", notice_errors)
+    if pyproject["project"].get("license-files") != [NOTICE_NAME]:
+        failures += 1
+        print("FAIL: project.license-files must name only THIRD-PARTY-NOTICES")
     is_git_checkout = (REPO_ROOT / ".git").exists()
     # Git's index bounds this check: ignored local checkouts and build outputs are
     # permitted, but must never become part of a public commit.
     if is_git_checkout:
         tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=REPO_ROOT).decode().split("\0")
+        misplaced = misplaced_license_files([name for name in tracked if name])
+        if misplaced:
+            failures += 1
+            _print_items("FAIL: separate license texts must be consolidated:", misplaced)
         source_leaks = [name for name in tracked if name and (REPO_ROOT / name).is_file() and private_file(name)]
         if source_leaks:
             failures += 1
@@ -372,6 +445,10 @@ def main(argv: list[str] | None = None) -> int:
     for artifact_path in (args.wheel, args.sdist):
         if artifact_path is None:
             continue
+        bundle_errors = audit_license_bundle(artifact_path, notice)
+        if bundle_errors:
+            failures += 1
+            _print_items("FAIL: distribution omitted or changed license terms:", bundle_errors)
         missing = missing_core_sources(artifact_path)
         if missing:
             failures += 1

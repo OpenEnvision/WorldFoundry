@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import io
+import re
 import tarfile
 import zipfile
 from pathlib import Path
@@ -9,14 +11,17 @@ import pytest
 
 from scripts.setup.check_packaging_license_gate import (
     REQUIRED_WHEEL_PACKAGES,
+    audit_license_bundle,
     audit_sdist,
     audit_wheel,
     dead_exclude_patterns,
     discover_packages,
     leaked_packages,
+    license_bundle_errors,
     license_gated_paths,
     load_find_config,
     main,
+    misplaced_license_files,
     missing_core_sources,
     missing_required_wheel_packages,
     package_data_exclusion_gaps,
@@ -188,3 +193,91 @@ def test_source_artifact_accepts_tests_and_rejects_private_code(tmp_path: Path) 
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
     assert audit_sdist(sdist, ["worldfoundry/wrapper/gated"]) == sorted(entries[3:])
+
+
+@pytest.mark.parametrize("damage", ["changed_terms", "truncated_text", "missing_records"])
+def test_license_bundle_rejects_lost_or_modified_terms(damage: str) -> None:
+    notice = (REPO_ROOT / "THIRD-PARTY-NOTICES").read_bytes()
+    start = notice.index(b"----- BEGIN RETAINED LICENSE TEXT -----\n")
+    if damage == "changed_terms":
+        notice = notice[:start] + notice[start:].replace(b"Grant of Copyright License", b"Grant of Copyright Licenxe", 1)
+    elif damage == "truncated_text":
+        notice = notice[:start + 100]
+    else:
+        notice = notice.replace(b"----- BEGIN RETAINED LICENSE TEXT -----\n", b"", 1)
+    assert license_bundle_errors(notice)
+
+
+@pytest.mark.parametrize("format_name", ["wheel", "sdist"])
+@pytest.mark.parametrize("contents", [None, b"Incomplete license", b"Complete source notice"])
+def test_distribution_requires_exact_central_license_bundle(
+    tmp_path: Path, format_name: str, contents: bytes | None,
+) -> None:
+    expected = b"Complete source notice"
+    suffix = ".whl" if format_name == "wheel" else ".tar.gz"
+    artifact = tmp_path / ("worldfoundry" + suffix)
+    if format_name == "wheel":
+        with zipfile.ZipFile(artifact, "w") as archive:
+            if contents is not None:
+                archive.writestr("worldfoundry-0.0.0.dist-info/licenses/THIRD-PARTY-NOTICES", contents)
+    else:
+        with tarfile.open(artifact, "w:gz") as archive:
+            if contents is not None:
+                member = tarfile.TarInfo("worldfoundry-0.0.0/THIRD-PARTY-NOTICES")
+                member.size = len(contents)
+                archive.addfile(member, io.BytesIO(contents))
+    assert bool(audit_license_bundle(artifact, expected)) == (contents != expected)
+
+
+def test_native_build_license_is_a_link_to_the_single_bundle(tmp_path: Path) -> None:
+    (tmp_path / "THIRD-PARTY-NOTICES").write_bytes(b"Full notice")
+    native = tmp_path / "thirdparty/fastvideo-kernel/LICENSE"
+    native.parent.mkdir(parents=True)
+    native.symlink_to("../../THIRD-PARTY-NOTICES")
+    misplaced = "worldfoundry/component/COPYING.MPL2"
+    other = tmp_path / misplaced
+    other.parent.mkdir(parents=True)
+    other.write_bytes(b"Separate license")
+    assert misplaced_license_files([str(native.relative_to(tmp_path)), misplaced], repo_root=tmp_path) == [misplaced]
+    native.unlink()
+    native.symlink_to("missing-license")
+    assert misplaced_license_files([str(native.relative_to(tmp_path))], repo_root=tmp_path) == [
+        "thirdparty/fastvideo-kernel/LICENSE"
+    ]
+
+
+# Original texts audited at 36ab841d, before consolidation. These independent
+# digests catch removal or alteration even if a bundle record is rewritten.
+@pytest.mark.parametrize("original_path, expected_sha256", [
+    ('LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'),
+    ('thirdparty/THIRD_PARTY_LICENSES.md', 'a492fa1695bbfa37d9ad334154be36555a063f1dfd1408eb9fd4fa2ab0b20e32'),
+    ('thirdparty/fastvideo-kernel/LICENSE', '5c7f173199fd7fb3cc83d86d24f3541e8ae0cb8c16e912ca519ed6a1435bd8f3'),
+    ('worldfoundry/base_models/diffusion_model/models/networks/hunyuan_video/gamecraft/LICENSE', '4d6124d3c683dcc0c9e5ec10bb6c85e66ed42983a2988e457256efbfda060104'),
+    ('worldfoundry/base_models/diffusion_model/models/networks/hunyuan_video/h15/LICENSE-HUNYUAN', '343d271e1c78188d5ed982c1ec8b237e982f4a92dcb65573a6c425fcab5037e9'),
+    ('worldfoundry/base_models/diffusion_model/models/networks/hunyuan_video/h15/LICENSE-MINWM', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'),
+    ('worldfoundry/base_models/three_dimensions/depth/unidepth/LICENSE', 'db2e35513dbadcdc67f5819a3bfee2777786538dd3531620cd5fbd4b6ed6e538'),
+    ('worldfoundry/base_models/three_dimensions/general_3d/mapanything/CHECKPOINTS_NOTICE.md', 'fdcf5948059d6524414d71edf53f1454a3fe007f9369fc48b1db1241797b2c13'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/LICENSE', 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/LICENSE', 'bf7bf417f7ecc32b5cc0b479cd39e627dde499ff4d47ed8796aee44556cbd5b6'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/eigen/COPYING.APACHE', '03379001a7b12a2ec997a25554247d985270b353c10d5bafee9ac8d6519820b7'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/eigen/COPYING.BSD', '51928dce36213c5333ba3172e847d735d4c6e9b7ff2722a326c49067155b82eb'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/eigen/COPYING.GPL', '8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/eigen/COPYING.LGPL', 'dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/eigen/COPYING.MINPACK', 'c87b7f8ee88f6195e91743820c00354833583aef091b72e2d4a49c8e28e798a0'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/eigen/COPYING.MPL2', 'fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/eigen/COPYING.README', 'c83230b770f17ef1386ea1fd3681271dd98aa93646bdbfb5bff3a1b7050fff9d'),
+    ('worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/lietorch/LICENSE', '4261dca112b565843598e0db554ff90e578701fca983262bd4f5a7ce67d81f89'),
+    ('worldfoundry/synthesis/visual_generation/hunyuan_world/gamecraft_inference/LICENSE', '4d6124d3c683dcc0c9e5ec10bb6c85e66ed42983a2988e457256efbfda060104'),
+    ('worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/inference_inputs/LICENSE-InSpatio', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'),
+    ('worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime/LICENSE', '9c6a5e20e18f634012e402cf0c801c9620075ca65ca96dbb16f46433a81beca9'),
+    ('worldfoundry/synthesis/visual_generation/world_model/dino_wm/LICENSE.upstream', '31ee2e6efe0d638e9685d06f6267ae69c9456bbaf1fea7b3c716dee6b79c7ab5'),
+])
+def test_consolidation_preserves_original_license_bytes(
+    original_path: str, expected_sha256: str,
+) -> None:
+    notice = (REPO_ROOT / "THIRD-PARTY-NOTICES").read_bytes()
+    tail = notice.split(b"Original-File: " + original_path.encode() + b"\n", 1)[1]
+    record = re.search(rb"SHA256: [0-9a-f]{64}\nBytes: ([0-9]+)\n----- BEGIN RETAINED LICENSE TEXT -----\n", tail)
+    assert record is not None
+    original = tail[record.end():record.end() + int(record.group(1))]
+    assert hashlib.sha256(original).hexdigest() == expected_sha256

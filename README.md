@@ -1,7 +1,7 @@
 # WorldFoundry
 
 [![Python](https://img.shields.io/badge/python-3.10%20--%203.13-blue)](pyproject.toml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](THIRD-PARTY-NOTICES)
 [![CLI](https://img.shields.io/badge/CLI-worldfoundry--eval-purple)](https://openenvision.github.io/WorldFoundry/docs/reference/cli)
 [![Docs](https://img.shields.io/badge/docs-Fumadocs-orange)](https://openenvision.github.io/WorldFoundry/docs)
 
@@ -478,7 +478,7 @@ If you use WorldFoundry or its benchmark/model integrations in research, cite th
 
 ## License
 
-WorldFoundry-authored code is licensed under the [Apache License 2.0](LICENSE), except where a file or component carries a different license notice. Vendored and adapted upstream components remain subject to their original licenses.
+WorldFoundry-authored code is licensed under the [Apache License 2.0](THIRD-PARTY-NOTICES), except where a file or component carries a different license notice. Vendored and adapted upstream components remain subject to their original licenses.
 
 ## Acknowledgment
 

@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "WorldFoundry: unified world-model repository and WorldFoundry benchmark framework."
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE", "THIRD-PARTY-NOTICES"]
+license-files = ["THIRD-PARTY-NOTICES"]
 requires-python = ">=3.10,<3.14"
 authors = [
     { name = "OpenEnvision" },
@@ -503,6 +503,7 @@ testpaths = [
     "tests/studio/test_execution_pipeline_cleanup.py",
     "tests/studio/test_job_store_shutdown.py",
     "tests/eval_core/test_packaging_license_gate.py",
+    "tests/eval_core/test_native_license_sdist.py",
     "tests/test_worldfoundry_studio_pipeline_cache.py",
     "tests/test_worldfoundry_studio_resident_workers.py",
 ]
@@ -647,23 +648,17 @@ include-package-data = true
     "perception_core/video_quality/fetv_stylegan_v/**/*",
     "diffusion_model/models/networks/cosmos3/README.md",
     "three_dimensions/general_3d/vipe/csrc/**/*",
-    "three_dimensions/general_3d/vipe/THIRD_PARTY_LICENSES.md",
 ]
 "worldfoundry.base_models.three_dimensions.slam" = [
     "mega_sam_runtime/camera_tracking.py",
-    "mega_sam_runtime/LICENSE",
     "mega_sam_runtime/base/setup.py",
-    "mega_sam_runtime/base/LICENSE",
     "mega_sam_runtime/base/droid_slam/**/*.py",
     "mega_sam_runtime/base/src/*",
     "mega_sam_runtime/base/thirdparty/eigen/Eigen/**/*",
-    "mega_sam_runtime/base/thirdparty/eigen/COPYING.*",
-    "mega_sam_runtime/base/thirdparty/lietorch/LICENSE",
     "mega_sam_runtime/base/thirdparty/lietorch/lietorch/*.py",
     "mega_sam_runtime/base/thirdparty/lietorch/lietorch/include/*",
     "mega_sam_runtime/base/thirdparty/lietorch/lietorch/src/*",
 ]
-"worldfoundry.base_models.three_dimensions.depth.unidepth" = ["LICENSE"]
 "worldfoundry.studio" = [
     "assets/**/*",
     "ui/*.html",

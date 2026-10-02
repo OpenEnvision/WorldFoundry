@@ -9,7 +9,7 @@ recursive-include worldfoundry/data/benchmarks/tasks *.yaml
 recursive-include worldfoundry/data/benchmarks/runtime_profiles *.yaml
 recursive-include worldfoundry/data/benchmarks/assets *.json *.jsonl *.csv *.txt *.md *.png
 recursive-include worldfoundry/data/benchmarks/assets/larybench *.yaml
-recursive-include worldfoundry/evaluation/tasks/execution/runners/larybench *.md LICENSE.*
+recursive-include worldfoundry/evaluation/tasks/execution/runners/larybench *.md
 recursive-include worldfoundry/synthesis/visual_generation/moverse/moverse_runtime *
 recursive-include worldfoundry/synthesis/visual_generation/uni3c/uni3c_runtime *
 recursive-include worldfoundry/synthesis/visual_generation/evoke/evoke_runtime *
@@ -21,18 +21,17 @@ include worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/runtime/o
 recursive-include worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench *.yaml *.yml
 recursive-include worldfoundry/evaluation/tasks/execution/runners/fetv/runtime/fetv_eval *.py *.cpp *.cu *.h *.txt *.yaml *.yml *.json
 recursive-include worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer/inference/configs *.yaml *.yml
-recursive-include worldfoundry/evaluation/tasks/execution/runners/pawbench/runtime *.py *.yaml *.yml *.md *.txt *.cff LICENSE
+recursive-include worldfoundry/evaluation/tasks/execution/runners/pawbench/runtime *.py *.yaml *.yml *.md *.txt *.cff
 recursive-include worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench/dot/configs *.json
 recursive-include worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime/vbench2_beta_long/configs *.yaml *.yml
 recursive-include worldfoundry/evaluation/tasks/execution/runners/vmbench/runtime/official *.py *.sh *.txt *.md *.yaml *.yml *.json
 recursive-include worldfoundry/evaluation/tasks/execution/runners/wbench/runtime/wbench *.yaml *.yml
 recursive-include worldfoundry/evaluation/tasks/execution/runners/world_in_world/runtime/official *.py *.sh *.txt *.md *.yaml *.yml *.json
 recursive-include worldfoundry/evaluation/tasks/execution/runners/worldarena/runtime/video_quality *.yaml *.yml
-recursive-include worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime *.py *.json *.txt *.md LICENSE
+recursive-include worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime *.py *.json *.txt *.md
 recursive-include worldfoundry/base_models/perception_core/video_text/fetv_blip *.py *.json *.yaml *.yml *.txt
 recursive-include worldfoundry/base_models/perception_core/video_quality/fetv_stylegan_v *.py *.cpp *.cu *.h *.json *.yaml *.yml *.txt
 recursive-include worldfoundry/base_models/three_dimensions/general_3d/vipe/csrc *.cpp *.cu *.h *.cuh
-include worldfoundry/base_models/three_dimensions/general_3d/vipe/THIRD_PARTY_LICENSES.md
 recursive-include worldfoundry/studio/ui *.html
 recursive-include worldfoundry/data/models/catalog *.yaml
 recursive-include worldfoundry/data/models/runtime *.yaml
@@ -120,6 +119,8 @@ global-exclude test_*.py *_test.py test_*.cpp *_test.cpp
 # Publish first-party test sources and fixtures in sdists, after the upstream
 # QA exclusions above. Wheels continue to contain only worldfoundry packages.
 recursive-include tests *.py *.md *.sh *.yaml *.yml *.json *.jsonl
+# First-party packaging helper exercised by the published license tests.
+include thirdparty/fastvideo-kernel/build_backend.py
 include .github/workflows/ci.yml
 include Makefile scripts/setup/check_packaging_license_gate.py
 global-exclude */__pycache__/* */.pytest_cache/* */.mypy_cache/* */.ruff_cache/*
@@ -636,13 +637,13 @@ include worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stev
 include worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/generation/world_models/lingbot_actions/s-3_right-20_left-20/poses.npy
 include worldfoundry/synthesis/visual_generation/world_model/vid2world/csgo_utils/csgo_validation_start_indices.npy
 
-recursive-include worldfoundry/base_models/diffusion_model/models/networks/hunyuan_video/gamecraft LICENSE PROVENANCE.md
-recursive-include worldfoundry/synthesis/visual_generation/hunyuan_world/gamecraft_inference LICENSE PROVENANCE.md
-recursive-include worldfoundry/base_models/diffusion_model/models/networks/hunyuan_video/h15 LICENSE-HUNYUAN LICENSE-MINWM ACTION_CAMERA_PROVENANCE.md
+recursive-include worldfoundry/base_models/diffusion_model/models/networks/hunyuan_video/gamecraft PROVENANCE.md
+recursive-include worldfoundry/synthesis/visual_generation/hunyuan_world/gamecraft_inference PROVENANCE.md
+recursive-include worldfoundry/base_models/diffusion_model/models/networks/hunyuan_video/h15 ACTION_CAMERA_PROVENANCE.md
 
 # InSpatio uses these inference-only entry points as subprocess resources.
 recursive-include worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime *.py *.sh
-recursive-include worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/inference_inputs LICENSE-InSpatio PROVENANCE.md
+recursive-include worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/inference_inputs PROVENANCE.md
 
 # Explicit Warp-as-History inference resources; Pi3 remains external.
 include worldfoundry/synthesis/visual_generation/warp_as_history/warp_as_history_runtime/helios/__init__.py
@@ -656,15 +657,11 @@ include worldfoundry/synthesis/visual_generation/warp_as_history/warp_as_history
 include worldfoundry/synthesis/visual_generation/warp_as_history/warp_as_history_runtime/warp_as_history/infer.py
 include worldfoundry/synthesis/visual_generation/warp_as_history/warp_as_history_runtime/warp_as_history/pipeline.py
 
-recursive-include worldfoundry/base_models/three_dimensions/depth/unidepth *.py LICENSE
+recursive-include worldfoundry/base_models/three_dimensions/depth/unidepth *.py
 include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/camera_tracking.py
-include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/LICENSE
-include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/LICENSE
 include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/setup.py
 recursive-include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/droid_slam *.py
 recursive-include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/src *.cpp *.cu
-include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/lietorch/LICENSE
-include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/eigen/COPYING.*
 include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/lietorch/lietorch/*.py
 recursive-include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/lietorch/lietorch/include *.h *.hpp
 recursive-include worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base/thirdparty/lietorch/lietorch/src *.cpp *.cu

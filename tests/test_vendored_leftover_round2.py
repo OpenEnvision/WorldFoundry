@@ -38,8 +38,8 @@ LICENSE_GATED_EXCLUDES = (
     "worldfoundry.base_models.three_dimensions.general_3d.mast3r.*",
     "worldfoundry.base_models.three_dimensions.point_clouds.gaussian_splatting",
     "worldfoundry.base_models.three_dimensions.point_clouds.gaussian_splatting.*",
-    "worldfoundry.synthesis.visual_generation.hunyuan_world",
-    "worldfoundry.synthesis.visual_generation.hunyuan_world.*",
+    "worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_game_craft",
+    "worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_game_craft.*",
 )
 
 
@@ -74,14 +74,14 @@ def test_ghost_package_data_paths_are_gone() -> None:
 def test_live_package_data_assets_remain_and_exist() -> None:
     data = _package_data()
     base_models = data["worldfoundry.base_models"]
-    assert "three_dimensions/general_3d/vipe/THIRD_PARTY_LICENSES.md" in base_models
+    assert _load_pyproject()["project"]["license-files"] == ["THIRD-PARTY-NOTICES"]
     assert "three_dimensions/general_3d/vipe/csrc/**/*" in base_models
     assert "perception_core/video_text/fetv_blip/**/*" in base_models
     assert "moverse_runtime/**/*" in data["worldfoundry.synthesis.visual_generation.moverse"]
     assert "tui_app.tcss" in data["worldfoundry.cli"]
 
     root = REPO_ROOT / "worldfoundry"
-    assert (root / "base_models/three_dimensions/general_3d/vipe/THIRD_PARTY_LICENSES.md").is_file()
+    assert (REPO_ROOT / "THIRD-PARTY-NOTICES").is_file()
     assert (root / "cli/tui_app.tcss").is_file()
     assert (root / "synthesis/visual_generation/moverse/moverse_runtime").is_dir()
     assert any((root / "base_models/three_dimensions/general_3d/vipe/csrc").rglob("*.cu"))
@@ -105,7 +105,7 @@ def test_ghost_manifest_paths_are_gone() -> None:
 def test_live_manifest_license_gated_prunes_remain() -> None:
     manifest = _manifest_text()
     for live in (
-        "include worldfoundry/base_models/three_dimensions/general_3d/vipe/THIRD_PARTY_LICENSES.md",
+        "include THIRD-PARTY-NOTICES",
         "recursive-include worldfoundry/synthesis/visual_generation/moverse/moverse_runtime",
         "prune worldfoundry/base_models/three_dimensions/general_3d/dust3r",
         "prune worldfoundry/base_models/three_dimensions/general_3d/monst3r",
