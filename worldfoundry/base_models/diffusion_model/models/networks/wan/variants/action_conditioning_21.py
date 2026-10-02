@@ -354,7 +354,7 @@ class ActionModule(nn.Module):
                         key=padded_k.transpose(2, 1),
                         value=padded_v.transpose(2, 1),
                         block_mask=block_mask_mouse
-                    )[:, :, :-padded_length].transpose(2, 1)
+                    )[:, :, :q.shape[1]].transpose(2, 1)
                 else:
                     current_start = start_frame
                     current_end = current_start + q.shape[1]
@@ -475,7 +475,7 @@ class ActionModule(nn.Module):
                             key=padded_k.transpose(2, 1),
                             value=padded_v.transpose(2, 1),
                             block_mask=block_mask_keyboard
-                        )[:, :, :-padded_length].transpose(2, 1)
+                        )[:, :, :q.shape[1]].transpose(2, 1)
                     else:
                         current_start = start_frame
                         current_end = current_start + k.shape[1]
@@ -547,7 +547,7 @@ class ActionModule(nn.Module):
                             key=padded_k.transpose(2, 1),
                             value=padded_v.transpose(2, 1),
                             block_mask=block_mask_keyboard
-                        )[:, :, :-padded_length].transpose(2, 1)
+                        )[:, :, :q.shape[1]].transpose(2, 1)
                     else:
                         current_start = start_frame
                         current_end = current_start + k.shape[1]

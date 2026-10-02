@@ -6,6 +6,8 @@ GPU capture/replay parity is covered by the H100 microbenchmark scripts.
 
 from __future__ import annotations
 
+from collections import namedtuple
+
 import torch
 
 from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
@@ -86,3 +88,33 @@ def test_request_window_counters_do_not_reuse_previous_execution() -> None:
     current = runner.report()
     assert current["eager"] == 1
     assert current["lifetime"]["eager"] == 2
+
+
+def test_materialize_clones_nested_outputs_and_preserves_container_types() -> None:
+    result_type = namedtuple("Result", ("prediction", "label"))
+    first = torch.tensor([1.0, 2.0])
+    second = torch.tensor([3.0, 4.0])
+    outputs = {"nested": ([first], {"result": result_type(second, "prediction")}), "metadata": 3}
+    runner = InferenceCUDAGraphRunner(lambda: outputs)
+
+    retained = runner._materialize(outputs)
+    first.add_(10)
+    second.add_(20)
+
+    assert isinstance(retained, dict)
+    assert isinstance(retained["nested"], tuple)
+    assert isinstance(retained["nested"][0], list)
+    assert isinstance(retained["nested"][1]["result"], result_type)
+    assert retained["nested"][1]["result"].label == "prediction"
+    assert retained["metadata"] == 3
+    torch.testing.assert_close(retained["nested"][0][0], torch.tensor([1.0, 2.0]), rtol=0, atol=0)
+    torch.testing.assert_close(retained["nested"][1]["result"].prediction, torch.tensor([3.0, 4.0]), rtol=0, atol=0)
+    assert retained["nested"][0][0].data_ptr() != first.data_ptr()
+    assert retained["nested"][1]["result"].prediction.data_ptr() != second.data_ptr()
+
+
+def test_materialize_exposes_static_outputs_only_when_requested() -> None:
+    outputs = {"nested": [torch.ones(2)]}
+    runner = InferenceCUDAGraphRunner(lambda: outputs, clone_outputs=False)
+
+    assert runner._materialize(outputs) is outputs

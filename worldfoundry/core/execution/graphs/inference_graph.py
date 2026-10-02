@@ -39,6 +39,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import torch
+from torch.utils._pytree import tree_map
 
 from worldfoundry.core.execution.graphs.cuda_graph import _tensor_tree_signature, graph_pool_handle
 
@@ -314,14 +315,7 @@ class InferenceCUDAGraphRunner:
         """Clone tensor leaves so callers cannot alias static Graph output storage."""
         if not self._clone_outputs:
             return outputs
-        if isinstance(outputs, torch.Tensor):
-            return outputs.clone()
-        if isinstance(outputs, (list, tuple)):
-            cloned = [o.clone() if isinstance(o, torch.Tensor) else o for o in outputs]
-            return type(outputs)(cloned)
-        if isinstance(outputs, dict):
-            return {k: (v.clone() if isinstance(v, torch.Tensor) else v) for k, v in outputs.items()}
-        return outputs
+        return tree_map(lambda value: value.clone() if isinstance(value, torch.Tensor) else value, outputs)
 
     def report(self) -> dict[str, Any]:
         """Return request-window counters plus separate lifetime diagnostics."""

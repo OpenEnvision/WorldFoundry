@@ -172,7 +172,7 @@ class CausalWanSelfAttention(nn.Module):
                 key=padded_roped_key.transpose(2, 1),
                 value=padded_v.transpose(2, 1),
                 block_mask=block_mask
-            )[:, :, :-padded_length].transpose(2, 1)
+            )[:, :, :q.shape[1]].transpose(2, 1)
         else:
             assert grid_sizes.ndim == 1
             frame_seqlen = math.prod(grid_sizes[1:]).item()
