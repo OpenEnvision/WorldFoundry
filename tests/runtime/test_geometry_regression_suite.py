@@ -271,6 +271,59 @@ def test_repeated_interrupts_cannot_interrupt_cleanup():
     assert signal.getsignal(signal.SIGTERM) == before
 
 
+@pytest.mark.parametrize("stop_signal", ["TERM", "INT"])
+def test_restored_holder_can_stop_after_interrupted_cleanup(tmp_path, stop_signal):
+    script = tmp_path / "holder.sh"
+    pid_file = tmp_path / "holder.pid"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "$1" in\n'
+        '  --status) test -f "$HOLDER_TEST_PID" && kill -0 "$(cat "$HOLDER_TEST_PID")"; exit $?;;\n'
+        '  --stop) kill -"$HOLDER_TEST_SIGNAL" "$(cat "$HOLDER_TEST_PID")"\n'
+        '    for _ in $(seq 1 80); do test -f "$HOLDER_TEST_PID" || exit 0; sleep 0.025; done; exit 1;;\n'
+        "esac\n"
+        "trap 'rm -f \"$HOLDER_TEST_PID\"; exit 0' TERM INT\n"
+        'echo "$$" > "$HOLDER_TEST_PID"\n'
+        'echo "holder ready"\n'
+        "while true; do sleep 0.025; done\n"
+    )
+    holder = suite.GpuHolder(
+        {
+            "script": str(script),
+            "start_args": ["start"],
+            "env": {"HOLDER_TEST_PID": str(pid_file), "HOLDER_TEST_SIGNAL": stop_signal},
+            "ready_patterns": ["holder ready"],
+        },
+        tmp_path / "holder.log",
+    )
+    holder.entered = True
+    before = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+    pid = None
+    try:
+        try:
+            for sig in before:
+                signal.signal(sig, signal.SIG_IGN)
+            holder.restore()
+            assert all(signal.getsignal(sig) == signal.SIG_IGN for sig in before)
+        finally:
+            for sig, handler in before.items():
+                signal.signal(sig, handler)
+            if pid_file.exists():
+                pid = int(pid_file.read_text())
+        holder.stop()
+        assert not holder.running()
+    finally:
+        if pid is not None:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            try:
+                os.waitpid(pid, 0)
+            except ChildProcessError:
+                pass
+
+
 def test_real_failed_preflight_has_log_and_never_stops_holder(replay_host, monkeypatch):
     events, _ = no_gpu(monkeypatch)
     monkeypatch.undo()

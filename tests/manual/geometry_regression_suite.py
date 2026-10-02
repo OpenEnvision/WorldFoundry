@@ -382,10 +382,20 @@ class GpuHolder:
     def restore(self):
         if not self.config or not self.entered or self.running():
             return
+        # Interrupted cleanup deliberately ignores repeated signals in the
+        # supervisor. Bash cannot trap signals ignored when it starts, so reset
+        # only the child's handlers before exec without changing the supervisor
+        # or using preexec_fn in a potentially multithreaded process.
+        launch = (
+            "import os, signal, sys\n"
+            "for sig in (signal.SIGTERM, signal.SIGINT):\n"
+            "    signal.signal(sig, signal.SIG_DFL)\n"
+            "os.execvp('bash', ['bash', *sys.argv[1:]])\n"
+        )
         with self.log.open("a") as stream:
             offset = stream.tell()
             process = subprocess.Popen(
-                ["bash", self.config["script"], *self.config["start_args"]],
+                [sys.executable, "-c", launch, self.config["script"], *self.config["start_args"]],
                 env={**os.environ, **self.config.get("env", {})},
                 cwd=Path(self.config["script"]).parent,
                 stdout=stream,
