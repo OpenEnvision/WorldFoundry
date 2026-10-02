@@ -13,7 +13,7 @@ from einops import rearrange
 from torch import nn
 
 from worldfoundry.core.attention import packed_sequence_attention
-from worldfoundry.core.attention.dispatch import torch_sdpa
+from worldfoundry.core.attention.backends.dispatch import torch_sdpa
 from worldfoundry.core.nn import RMSNorm, scale_shift
 
 from ..model import DiTBlock, WanModel

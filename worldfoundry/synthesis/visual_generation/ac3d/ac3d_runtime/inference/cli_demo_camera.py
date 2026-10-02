@@ -21,7 +21,7 @@ from transformers import T5EncoderModel, T5Tokenizer
 
 from inference.datasets.controlnet_datasets_camera import RealEstate10KPoseControlnetDataset
 from inference.utils import stack_images_horizontally
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 
 @torch.no_grad()

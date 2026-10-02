@@ -11,7 +11,7 @@ from einops import rearrange
 import torch.nn.functional as F
 # import pytorch_lightning as pl
 from worldfoundry.base_models.diffusion_model.models.autoencoders.lvdm.blocks import Encoder, Decoder
-from worldfoundry.core.nn.distributions import DiagonalGaussianDistribution
+from worldfoundry.core.nn.latent.distributions import DiagonalGaussianDistribution
 from worldfoundry.core.model_loading.factory import instantiate_from_config
 
 

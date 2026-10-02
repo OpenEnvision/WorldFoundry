@@ -32,7 +32,7 @@ from torch.distributed.tensor import distribute_tensor
 from torch.nn.modules.module import _IncompatibleKeys
 
 try:
-    from worldfoundry.core.distributed.megatron_compat import parallel_state
+    from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
 except ModuleNotFoundError:
 
     class _ParallelStateFallback:
@@ -67,17 +67,17 @@ from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowU
 from worldfoundry.core.configuration.lazy_config import LazyDict
 from worldfoundry.core.configuration.lazy_config import instantiate as lazy_instantiate
 from worldfoundry.core.distributed import broadcast_dtensor_model_states
-from worldfoundry.core.distributed.context_parallel import (
+from worldfoundry.core.distributed.model_parallel.context import (
     broadcast,
     broadcast_split_tensor,
     cat_outputs_cp,
 )
-from worldfoundry.core.distributed.fsdp_runtime import hsdp_device_mesh
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.sharding.fsdp_runtime import hsdp_device_mesh
+from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.core.model_loading import InferenceModel, load_state_dict, non_strict_load_model
 from worldfoundry.core.observability.time import CudaSyncTimer as sync_timer
 from worldfoundry.core.utils import count_parameters as count_params
-from worldfoundry.core.utils import inference_runtime as misc
+from worldfoundry.core.execution import inference_runtime as misc
 
 IS_PREPROCESSED_KEY = "is_preprocessed"
 NUM_EMBEDDING_PADDING_TOKENS = 512

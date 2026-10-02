@@ -80,7 +80,7 @@ class GO1Runtime:
     def _resolve_snapshot(self) -> Path:
         if self._snapshot is not None:
             return self._snapshot
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._existing_path(self.config.checkpoint_location)
         location = str(direct) if direct is not None else self.config.checkpoint_location

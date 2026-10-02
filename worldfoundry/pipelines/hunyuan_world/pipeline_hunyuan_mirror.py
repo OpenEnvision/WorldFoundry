@@ -244,7 +244,7 @@ class HunyuanMirrorPipeline(PipelineABC):
             logger.info("Computing sky masks...")
             import onnxruntime
 
-            from worldfoundry.core.io.artifacts import (
+            from worldfoundry.core.media.artifacts import (
                 download_file_from_url,
                 segment_sky,
             )

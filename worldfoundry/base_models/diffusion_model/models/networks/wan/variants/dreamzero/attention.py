@@ -39,7 +39,7 @@ except ModuleNotFoundError:
 
 import warnings
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
-from worldfoundry.core.attention.varlen import flash_attention as _worldfoundry_varlen_attention
+from worldfoundry.core.attention.sequence.varlen import flash_attention as _worldfoundry_varlen_attention
 
 
 def _gpu_supports_flash_attention():

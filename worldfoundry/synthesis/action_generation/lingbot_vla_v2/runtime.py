@@ -74,12 +74,12 @@ class _LingBotV2Runtime:
         from transformers import AutoConfig, AutoProcessor
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.checkpoint import load_safetensors_into_model_streaming
+        from worldfoundry.core.model_loading.checkpoints import load_safetensors_into_model_streaming
         from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.core.execution.inference import compile_module_if_enabled, install_worldfoundry_inference_infra
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
         from worldfoundry.core.io.paths import resolve_local_hf_model_path
-        from worldfoundry.core.utils.torch_utils import freeze_params, set_random_seed
+        from worldfoundry.core.utils.tensors.torch import freeze_params, set_random_seed
 
         from .preprocessing.features import FeatureTransform
         from .modeling.configuration import LingbotVLAV2Config
@@ -266,7 +266,7 @@ class _LingBotV2Runtime:
     @staticmethod
     def _pad_and_stack(values: Sequence[Any]) -> Any:
         import torch
-        from worldfoundry.core.utils.batch_ops import stack_or_pad_tensors
+        from worldfoundry.core.utils.tensors.batch import stack_or_pad_tensors
 
         if not isinstance(values[0], torch.Tensor):
             return list(values)

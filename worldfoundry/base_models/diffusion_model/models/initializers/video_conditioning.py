@@ -18,7 +18,7 @@ import numpy as np
 import torch
 import torch.nn.functional as functional
 
-from worldfoundry.core.io.video import coerce_video_frames
+from worldfoundry.core.media.codecs.video import coerce_video_frames
 from worldfoundry.core.utils import load_pil_image
 
 from ...contracts import DiffusionRequest

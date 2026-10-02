@@ -668,7 +668,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         )
         if callable(reset_offload_window):
             reset_offload_window()
-        from worldfoundry.core.acceleration.quantization import (
+        from worldfoundry.core.acceleration.quantization.linear import (
             reset_quantization_runtime_window,
         )
 
@@ -1387,7 +1387,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
 
             sequence_parallel = sequence_parallel_report(sequence_parallel_state)
 
-        from worldfoundry.core.acceleration.quantization import (
+        from worldfoundry.core.acceleration.quantization.linear import (
             quantization_runtime_report,
         )
 

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import torch
 
-from worldfoundry.core.attention.backends import normalize_attention_backend
+from worldfoundry.core.attention.backends.probe import normalize_attention_backend
 from worldfoundry.core.model_loading.policy import AttentionBackend
 
 
 def test_attention_forward_normalizes_request_scoped_backend(monkeypatch) -> None:
-    from worldfoundry.core.attention import dispatch
+    from worldfoundry.core.attention.backends import dispatch
 
     selected: list[str] = []
 
@@ -37,7 +37,7 @@ def test_flash_attention_4_public_aliases_are_explicit() -> None:
 
 
 def test_attention_forward_routes_explicit_flash_attention_4(monkeypatch) -> None:
-    from worldfoundry.core.attention import dispatch
+    from worldfoundry.core.attention.backends import dispatch
 
     selected: list[str] = []
     sentinel = torch.ones(1, 4, 2, 8, dtype=torch.bfloat16)

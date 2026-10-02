@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from worldfoundry.core.observability.logging_setup import configure_logging, get_logger
-from worldfoundry.core.io.serialization import iter_jsonl
+from worldfoundry.core.io.formats.serialization import iter_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.io import scalar_number, write_json
 
 SUPPORTED_SUFFIXES = {".json", ".jsonl", ".csv", ".tsv"}

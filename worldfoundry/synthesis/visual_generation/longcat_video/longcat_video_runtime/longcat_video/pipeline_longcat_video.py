@@ -15,7 +15,7 @@ from transformers import AutoTokenizer, UMT5EncoderModel
 from .scheduling_flow_match_euler import FlowMatchEulerDiscreteScheduler
 from .modules.autoencoder_kl_wan import AutoencoderKLWan
 from .modules.longcat_video_dit import LongCatVideoTransformer3DModel
-from worldfoundry.core.distributed import context_parallel_util
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 from .utils.bukcet_config import get_bucket_config
 
 import ftfy

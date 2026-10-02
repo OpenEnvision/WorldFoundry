@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from worldfoundry.core.distributed import generic_collectives
+from worldfoundry.core.distributed.collectives import generic as generic_collectives
 
 
 _INDICATOR_VARS = (
@@ -105,7 +105,7 @@ def test_master_port_alone_is_not_a_distributed_indicator(clean_dist_env):
 
 
 def test_model_parallel_world_sizes_default_to_one(monkeypatch):
-    from worldfoundry.core.distributed import model_parallel_groups
+    from worldfoundry.core.distributed.model_parallel import groups as model_parallel_groups
 
     monkeypatch.setattr(torch.distributed, "is_available", lambda: True)
     monkeypatch.setattr(torch.distributed, "is_initialized", lambda: False)
@@ -114,7 +114,7 @@ def test_model_parallel_world_sizes_default_to_one(monkeypatch):
 
 
 def test_destroy_model_parallel_releases_unique_owned_subgroups(monkeypatch):
-    from worldfoundry.core.distributed import model_parallel_groups
+    from worldfoundry.core.distributed.model_parallel import groups as model_parallel_groups
 
     group_a = object()
     group_b = object()

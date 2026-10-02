@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 from .utils import load_video, load_dimension_info
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_rank,
     distribute_list_to_rank,
     gather_list_of_dict,

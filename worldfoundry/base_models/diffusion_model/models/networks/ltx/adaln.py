@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 
 import torch
 
-from worldfoundry.core.nn.timestep import (
+from worldfoundry.core.nn.diffusion.timestep import (
     PixArtAlphaCombinedTimestepSizeEmbeddings,
 )
 

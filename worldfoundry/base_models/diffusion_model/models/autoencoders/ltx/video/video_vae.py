@@ -60,7 +60,7 @@ from worldfoundry.base_models.diffusion_model.models.representations.ltx.types i
     SpatioTemporalScaleFactors,
     VideoLatentShape,
 )
-from worldfoundry.core.nn.timestep import (
+from worldfoundry.core.nn.diffusion.timestep import (
     PixArtAlphaCombinedTimestepSizeEmbeddings,
 )
 

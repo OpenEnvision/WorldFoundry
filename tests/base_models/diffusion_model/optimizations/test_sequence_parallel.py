@@ -122,7 +122,7 @@ def test_processor_fuses_qkv_exchange_and_preserves_selected_backend(
     import torch.distributed as dist
 
     import worldfoundry.core.attention as attention_dispatch
-    from worldfoundry.core.distributed import sequence_parallel_runtime
+    from worldfoundry.core.distributed.sequence_parallel import runtime as sequence_parallel_runtime
 
     module = SelfAttention(dim=32, num_heads=4).eval()
     module.attn.set_attention_backend("flash_attention_2")
@@ -179,7 +179,7 @@ def test_processor_composes_fused_rope_with_rank_sequence_offset(
 
     import worldfoundry.core.attention as attention_dispatch
     import worldfoundry.core.kernels as kernels
-    from worldfoundry.core.distributed import sequence_parallel_runtime
+    from worldfoundry.core.distributed.sequence_parallel import runtime as sequence_parallel_runtime
     from worldfoundry.core.kernels.registry import _publish_dispatch_receipt
 
     module = SelfAttention(dim=32, num_heads=4).eval()
@@ -283,7 +283,7 @@ def test_processor_composes_fused_rope_with_rank_sequence_offset(
 
 
 def test_collective_counter_snapshot_is_copied_and_reset() -> None:
-    from worldfoundry.core.distributed import sequence_parallel_runtime
+    from worldfoundry.core.distributed.sequence_parallel import runtime as sequence_parallel_runtime
 
     sequence_parallel_runtime.reset_sequence_parallel_collective_counters()
     snapshot = sequence_parallel_runtime.get_sequence_parallel_collective_counters()

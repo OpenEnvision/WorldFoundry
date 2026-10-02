@@ -12,7 +12,7 @@ import torch
 
 from worldfoundry.synthesis.visual_generation.dualcamctrl.runtime import DualCamCtrlRuntime
 from worldfoundry.base_models.diffusion_model.runners.staged import StagedDiffusionPipeline
-from worldfoundry.core.io.video import coerce_video_frames
+from worldfoundry.core.media.codecs.video import coerce_video_frames
 
 
 def test_dualcamctrl_resolves_shared_wan_files_from_checkpoint_root(tmp_path, monkeypatch):

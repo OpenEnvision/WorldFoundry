@@ -31,7 +31,7 @@ tokens do not change a t2v graph.
 import torch
 import torch.nn as nn
 
-from worldfoundry.core.nn.layers import to_2tuple
+from worldfoundry.core.nn.blocks.layers import to_2tuple
 
 
 class ByT5Mapper(nn.Module):

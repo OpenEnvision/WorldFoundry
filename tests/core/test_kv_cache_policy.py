@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from worldfoundry.core.attention.kv_cache_policy import (
+from worldfoundry.core.attention.cache.kv_cache_policy import (
     POLICY_REGISTRY,
     BankedSinkPolicy,
     BlockRelativeRoPEPolicy,
@@ -12,8 +12,8 @@ from worldfoundry.core.attention.kv_cache_policy import (
     SlidingWindowPolicy,
     build_policy,
 )
-from worldfoundry.core.attention.kv_quantization import KVQuantConfig
-from worldfoundry.core.attention.kvcache import BlockKVCache, CompactingKVCache
+from worldfoundry.core.attention.cache.kv_quantization import KVQuantConfig
+from worldfoundry.core.attention.cache.kvcache import BlockKVCache, CompactingKVCache
 
 FRAME_TOKENS = 4
 FRAMES_PER_CHUNK = 3

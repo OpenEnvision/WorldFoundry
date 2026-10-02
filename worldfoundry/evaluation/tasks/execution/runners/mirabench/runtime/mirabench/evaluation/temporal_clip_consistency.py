@@ -7,12 +7,12 @@ from pathlib import Path
 import torch
 from PIL import Image
 
-from worldfoundry.core.io.video import list_numbered_frame_paths
-from worldfoundry.core.utils.inference_runtime import (
+from worldfoundry.core.media.codecs.video import list_numbered_frame_paths
+from worldfoundry.core.execution.inference_runtime import (
     adaptive_batched_inference,
     resolve_inference_batch_size,
 )
-from worldfoundry.core.utils.torch_utils import temporal_feature_consistency
+from worldfoundry.core.utils.tensors.torch import temporal_feature_consistency
 
 
 def _load_frame(path: Path, preprocess):

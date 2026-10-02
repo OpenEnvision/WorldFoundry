@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-import worldfoundry.core.distributed.sequence_ops as sequence_ops
+import worldfoundry.core.distributed.sequence_parallel.ops as sequence_ops
 
 
 def test_all_to_all_many_returns_inputs_without_distributed_runtime(monkeypatch) -> None:

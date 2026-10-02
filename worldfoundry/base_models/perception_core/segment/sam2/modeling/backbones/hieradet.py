@@ -21,7 +21,7 @@ from worldfoundry.base_models.perception_core.segment.sam2.modeling.backbones.ut
     window_unpartition,
 )
 
-from worldfoundry.core.nn.layers import DropPath, SamHeadMLP
+from worldfoundry.core.nn.blocks.layers import DropPath, SamHeadMLP
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 

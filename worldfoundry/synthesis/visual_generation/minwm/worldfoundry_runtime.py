@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
-from worldfoundry.core.distributed.multiprocess_launch import find_free_port
+from worldfoundry.core.distributed.runtime.multiprocess_launch import find_free_port
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
 

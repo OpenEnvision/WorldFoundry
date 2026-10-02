@@ -13,11 +13,11 @@ from torch.utils.data import DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
-from worldfoundry.core.io.video import write_video_torchvision
+from worldfoundry.core.media.codecs.video import write_video_torchvision
 from worldfoundry.core.vram import DynamicSwapInstaller, get_cuda_free_memory_gb, gpu
 from pipeline import CausalInferencePipeline
 from pipeline.causal_inference import denoise_block
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 from utils.render_warper import convert_mask_video
 
 

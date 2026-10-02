@@ -3,7 +3,7 @@ from tqdm import tqdm
 import cv2
 from vbench.utils import load_dimension_info
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

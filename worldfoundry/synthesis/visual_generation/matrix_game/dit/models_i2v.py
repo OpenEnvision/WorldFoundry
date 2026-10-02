@@ -25,7 +25,7 @@ from worldfoundry.core.attention import (
     get_cu_seqlens,
     get_nd_rotary_pos_embed,
 )
-from worldfoundry.core.attention.hybrid import attention, parallel_attention
+from worldfoundry.core.attention.backends.hybrid import attention, parallel_attention
 
 from .embed_layers import PatchEmbed, TextProjection, TimestepEmbedder
 from .layernorm import FusedLayerNorm

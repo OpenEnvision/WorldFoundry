@@ -12,7 +12,7 @@ import torch
 from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
 from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
 from worldfoundry.base_models.diffusion_model.optimizations import RuntimePolicy, parse_offload_policy, parse_torch_dtype
-from worldfoundry.core.io.video import save_image_or_video_tensor
+from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
 from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
 

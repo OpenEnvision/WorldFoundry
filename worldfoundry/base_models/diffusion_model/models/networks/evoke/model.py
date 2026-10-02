@@ -44,7 +44,7 @@ from diffusers.utils import apply_lora_scale, deprecate, logging
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 
 from .kernels import attn_varlen_func, create_navit_attention_masks
-from worldfoundry.core.attention.kv_arena import KVSegmentArena
+from worldfoundry.core.attention.cache.kv_arena import KVSegmentArena
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

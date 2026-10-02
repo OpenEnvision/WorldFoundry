@@ -3,7 +3,7 @@
 The upstream cache grows without bound: every committed chunk stays resident, so
 a long rollout is limited by cache memory rather than by the model. This subclass
 routes each committed chunk through a
-:class:`~worldfoundry.core.attention.kv_cache_policy.KVCachePolicy`, which decides
+:class:`~worldfoundry.core.attention.cache.kv_cache_policy.KVCachePolicy`, which decides
 what survives, without touching the sampler or the attention kernels.
 
 **The invariant that makes this safe.** The upstream runtime addresses the cache
@@ -31,7 +31,7 @@ from typing import Optional, Tuple
 
 import torch
 
-from worldfoundry.core.attention.kv_cache_policy import (
+from worldfoundry.core.attention.cache.kv_cache_policy import (
     CachedBlock,
     CacheDecision,
     CacheState,

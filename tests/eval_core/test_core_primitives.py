@@ -5,6 +5,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from scripts.model_zoo.foundation_inventory import (
+    ast_duplicate_groups,
+    build_foundation_layer_inventory,
+    file_duplicate_groups,
+    iter_foundation_layer_files,
+)
 from worldfoundry.core import (
     DuplicateRegistryKeyError,
     PatchGridSpec,
@@ -14,29 +20,6 @@ from worldfoundry.core import (
     attention_backend_report,
     normalize_attention_backend,
     resolve_attention_backend,
-)
-from worldfoundry.core.nn import (
-    TransformerShapeSpec,
-    apply_rotary_embedding,
-    attention_head_dim,
-    attention_backend_info,
-    causal_attention_mask,
-    layer_scale,
-    merge_attention_heads,
-    mlp_hidden_size,
-    patchify_image,
-    rms_norm,
-    rotary_frequencies,
-    scaled_dot_product_attention,
-    split_attention_heads,
-    transformer_shape_spec,
-    unpatchify_image,
-)
-from worldfoundry.core.nn.inventory import (
-    ast_duplicate_groups,
-    build_foundation_layer_inventory,
-    file_duplicate_groups,
-    iter_foundation_layer_files,
 )
 from worldfoundry.core.io import (
     MediaKind,
@@ -61,6 +44,23 @@ from worldfoundry.core.io import (
     resolve_worldfoundry_path,
     suffix_for_uri,
     worldfoundry_path_tokens,
+)
+from worldfoundry.core.nn import (
+    TransformerShapeSpec,
+    apply_rotary_embedding,
+    attention_backend_info,
+    attention_head_dim,
+    causal_attention_mask,
+    layer_scale,
+    merge_attention_heads,
+    mlp_hidden_size,
+    patchify_image,
+    rms_norm,
+    rotary_frequencies,
+    scaled_dot_product_attention,
+    split_attention_heads,
+    transformer_shape_spec,
+    unpatchify_image,
 )
 
 
@@ -180,21 +180,11 @@ def test_core_artifact_visualization_helpers_are_canonical() -> None:
         visualize_tensor_bcthw,
         visualize_wasd_and_rotation_ui,
     )
-    from worldfoundry.studio.visualization.plugins.perception.human_pose import (
-        draw_aapose_by_meta as studio_draw_aapose_by_meta,
-    )
-
     depth = np.array([[0.0, 1.0], [2.0, np.nan]], dtype=np.float32)
     depth_uint8 = depth_to_uint8(depth)
     assert depth_uint8 is not None
     assert depth_uint8.dtype == np.uint8
     assert len(depths_to_pil_images(depth, mode="grayscale")) == 1
-    from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.animate.preprocess.pose_visualization import (
-        draw_aapose_by_meta,
-    )
-
-    assert studio_draw_aapose_by_meta is draw_aapose_by_meta
-
     image = render_point_cloud(
         points=np.array([[0.0, 0.0, 1.0]], dtype=np.float32),
         colors=np.array([[1.0, 0.0, 0.0]], dtype=np.float32),
@@ -204,7 +194,7 @@ def test_core_artifact_visualization_helpers_are_canonical() -> None:
         splat_radius=1,
     )
     assert image.size == (8, 8)
-    assert render_point_cloud.__module__ == "worldfoundry.core.io.artifacts"
+    assert render_point_cloud.__module__ == "worldfoundry.core.media.artifacts"
 
     key_data, mouse_data = parse_game_control_config(
         (
@@ -233,13 +223,13 @@ def test_core_artifact_visualization_helpers_are_canonical() -> None:
     colored_normal = colorize_normal_map(np.zeros((2, 2, 3), dtype=np.float32))
     assert colored_depth.shape == (2, 2, 3)
     assert colored_normal.shape == (2, 2, 3)
-    assert process_game_control_video.__module__ == "worldfoundry.core.io.artifacts"
-    assert save_openloop_action_comparison.__module__ == "worldfoundry.core.io.artifacts"
-    assert visualize_tensor_bcthw.__module__ == "worldfoundry.core.io.artifacts"
+    assert process_game_control_video.__module__ == "worldfoundry.core.media.artifacts"
+    assert save_openloop_action_comparison.__module__ == "worldfoundry.core.media.artifacts"
+    assert visualize_tensor_bcthw.__module__ == "worldfoundry.core.media.artifacts"
 
 
 def test_disk_preflight_helpers_use_worldfoundry_env(tmp_path: Path, monkeypatch) -> None:
-    from worldfoundry.core.io.disk import (
+    from worldfoundry.core.io.filesystem.disk import (
         CACHE_MIN_FREE_ENV,
         bytes_from_gib,
         cache_min_free_bytes,
@@ -259,8 +249,8 @@ def test_disk_preflight_helpers_use_worldfoundry_env(tmp_path: Path, monkeypatch
 
 
 def test_download_to_cache_publishes_validated_file(tmp_path: Path, monkeypatch) -> None:
-    from worldfoundry.core.io.disk import CACHE_MIN_FREE_ENV
-    from worldfoundry.core.io.download import download_to_cache
+    from worldfoundry.core.io.assets.download import download_to_cache
+    from worldfoundry.core.io.filesystem.disk import CACHE_MIN_FREE_ENV
 
     source = tmp_path / "source.txt"
     source.write_text("worldfoundry", encoding="utf-8")
@@ -277,7 +267,7 @@ def test_download_to_cache_publishes_validated_file(tmp_path: Path, monkeypatch)
 
 
 def test_s3_uri_validator_is_available_without_credentials() -> None:
-    from worldfoundry.core.io.s3_filesystem import S3FileSystem
+    from worldfoundry.core.io.filesystem.s3_filesystem import S3FileSystem
 
     assert S3FileSystem.validate_checkpoint_id("s3://bucket/path/checkpoint")
     assert not S3FileSystem.validate_checkpoint_id("/local/checkpoint")
@@ -285,7 +275,7 @@ def test_s3_uri_validator_is_available_without_credentials() -> None:
 
 def test_checkpoint_remap_and_lazy_facade() -> None:
     torch = pytest.importorskip("torch")
-    from worldfoundry.core.checkpoint import load_checkpoint, remap_checkpoint_keys
+    from worldfoundry.core.model_loading.checkpoints import load_checkpoint, remap_checkpoint_keys
 
     state = {
         "blocks.0.attn.to_q.weight": torch.tensor([1.0]),
@@ -351,7 +341,14 @@ def test_uri_storage_and_serialization_helpers_round_trip_common_formats(tmp_pat
 def test_core_json_and_text_writers_create_parent_dirs_and_normalize_payloads(tmp_path: Path) -> None:
     from dataclasses import dataclass
 
-    from worldfoundry.core.io import append_jsonl, read_json_object, read_jsonl_objects, write_json, write_jsonl, write_text_file
+    from worldfoundry.core.io import (
+        append_jsonl,
+        read_json_object,
+        read_jsonl_objects,
+        write_json,
+        write_jsonl,
+        write_text_file,
+    )
 
     @dataclass
     class Payload:

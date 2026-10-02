@@ -135,7 +135,7 @@ def _resize(value: Any, width: int, height: int) -> Any:
     import numpy as np
     from PIL import Image
 
-    from worldfoundry.core.utils.image_utils import load_pil_image
+    from worldfoundry.core.media.processing.image_utils import load_pil_image
 
     image = load_pil_image(value, first_sequence_item=False)
     return np.asarray(image.resize((width, height), resample=Image.Resampling.BILINEAR), dtype=np.uint8)

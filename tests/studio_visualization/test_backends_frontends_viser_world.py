@@ -661,7 +661,7 @@ class TestWorkspaceVisualizerParams:
     def test_depth_to_world_points_uses_camera_to_world_pose(self):
         import numpy as np
 
-        from worldfoundry.studio.visualization.core.geometry import depth_to_world_points
+        from worldfoundry.core.geometry.transforms import depth_to_world_points
 
         intrinsics = np.array([[2.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 1.0]])
         pose = np.eye(4)

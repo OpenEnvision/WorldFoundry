@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from safetensors.torch import load_file
 
-from worldfoundry.core.io.file_utils import file_sha256 as sha256_file
+from worldfoundry.core.io.filesystem.file_utils import file_sha256 as sha256_file
 
 from .config import RepEncoderConfig
 

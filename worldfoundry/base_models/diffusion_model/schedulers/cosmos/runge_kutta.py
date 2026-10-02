@@ -29,7 +29,7 @@ from typing import Callable, Tuple
 
 import torch
 
-from worldfoundry.core.utils.batch_ops import batch_mul
+from worldfoundry.core.utils.tensors.batch import batch_mul
 
 
 def phi1(t: torch.Tensor) -> torch.Tensor:

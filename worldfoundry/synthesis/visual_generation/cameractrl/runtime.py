@@ -360,7 +360,7 @@ class CameraCtrlRuntime:
         target.parent.mkdir(parents=True, exist_ok=True)
 
         # Save the generated video frames as a grid
-        from worldfoundry.core.io.video import save_videos_grid
+        from worldfoundry.core.media.codecs.video import save_videos_grid
 
         save_videos_grid(sample, str(target), fps=fps or int(kwargs.get("fps", 8)))
 

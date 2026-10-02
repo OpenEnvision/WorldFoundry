@@ -16,8 +16,8 @@ import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere as set_seed
-from worldfoundry.core.execution.realtime import RealtimeSpec
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 from worldfoundry.operators.matrix_game_2_operator import encode_actions
 
 

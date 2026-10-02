@@ -205,7 +205,7 @@ class TestCosmosConfig:
 
 class TestLoggingSetup:
     def test_parse_bytes_bare_unit_returns_default(self):
-        from worldfoundry.core.logging_setup import _parse_bytes
+        from worldfoundry.core.observability.logging_setup import _parse_bytes
 
         assert _parse_bytes("mb", 999) == 999
         assert _parse_bytes("10 mb", 0) == 10 * 1024**2
@@ -213,7 +213,7 @@ class TestLoggingSetup:
         assert _parse_bytes(2048, 0) == 2048
 
     def test_concurrent_configure_is_serialized(self):
-        from worldfoundry.core import logging_setup
+        from worldfoundry.core.observability import logging_setup
 
         errors: list[BaseException] = []
 
@@ -303,7 +303,7 @@ class TestShardedZstd:
         import torch
         from safetensors.torch import save_file
 
-        from worldfoundry.core.checkpoint.sharded_safetensors import _load_shard
+        from worldfoundry.core.model_loading.checkpoints.sharded_safetensors import _load_shard
 
         shard = tmp_path / "model.safetensors"
         save_file({"w": torch.arange(6, dtype=torch.float32)}, shard)
@@ -315,7 +315,7 @@ class TestShardedZstd:
         assert torch.equal(loaded["w"], torch.arange(6, dtype=torch.float32))
 
     def test_missing_zstd_binary_raises_actionable_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        from worldfoundry.core.checkpoint import sharded_safetensors
+        from worldfoundry.core.model_loading.checkpoints import sharded_safetensors
 
         (tmp_path / "model.safetensors.zst").write_bytes(b"anything")
 
@@ -329,7 +329,7 @@ class TestShardedZstd:
 
 class TestMergeVideoAudio:
     def test_missing_inputs_raise(self, tmp_path: Path):
-        from worldfoundry.core.io.video_data import merge_video_audio
+        from worldfoundry.core.io.inputs.video_data import merge_video_audio
 
         audio = tmp_path / "a.aac"
         audio.write_bytes(b"x")
@@ -338,7 +338,7 @@ class TestMergeVideoAudio:
 
     @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg unavailable")
     def test_ffmpeg_failure_propagates_and_cleans_temp(self, tmp_path: Path):
-        from worldfoundry.core.io.video_data import merge_video_audio
+        from worldfoundry.core.io.inputs.video_data import merge_video_audio
 
         video = tmp_path / "v.mp4"
         audio = tmp_path / "a.aac"
@@ -352,7 +352,7 @@ class TestMergeVideoAudio:
 
 class TestEasyIOExists:
     def test_missing_path_is_false_and_present_path_is_true(self, tmp_path: Path):
-        from worldfoundry.core.io.easy_io import easy_io
+        from worldfoundry.core.io.assets.easy_io import easy_io
 
         assert easy_io.exists(str(tmp_path / "nope" / "missing.bin")) is False
         target = tmp_path / "real.bin"
@@ -360,7 +360,7 @@ class TestEasyIOExists:
         assert easy_io.exists(str(target)) is True
 
     def test_unexpected_backend_errors_propagate_unless_suppressed(self, monkeypatch: pytest.MonkeyPatch):
-        from worldfoundry.core.io import easy_io as easy_io_module
+        from worldfoundry.core.io.assets import easy_io as easy_io_module
 
         def fail_resolution(path):
             raise RuntimeError(f"backend unavailable for {path}")
@@ -373,7 +373,7 @@ class TestEasyIOExists:
 
 class TestSafeSerialization:
     def test_pickle_and_gzip_pickle_require_explicit_opt_in(self, tmp_path: Path):
-        from worldfoundry.core.io.serialization import dump_serialized, load_serialized
+        from worldfoundry.core.io.formats.serialization import dump_serialized, load_serialized
 
         for suffix in ("pkl", "gz"):
             path = tmp_path / f"payload.{suffix}"
@@ -383,7 +383,7 @@ class TestSafeSerialization:
             assert load_serialized(path, allow_pickle=True) == {"safe-source": True}
 
     def test_legacy_load_pickle_also_requires_opt_in(self, tmp_path: Path):
-        from worldfoundry.core.io.file_utils import dump_pickle, load_pickle
+        from worldfoundry.core.io.filesystem.file_utils import dump_pickle, load_pickle
 
         path = tmp_path / "legacy.pkl"
         dump_pickle({"trusted": 1}, path)
@@ -394,14 +394,14 @@ class TestSafeSerialization:
     def test_generic_video_default_is_standard_24_fps(self):
         import inspect
 
-        from worldfoundry.core.io.serialization import _dump_video
+        from worldfoundry.core.io.formats.serialization import _dump_video
 
         assert inspect.signature(_dump_video).parameters["fps"].default == 24
 
 
 class TestParallelExecution:
     def test_results_and_error_propagation(self):
-        from worldfoundry.core.utils.parallel_execution import parallel_execution
+        from worldfoundry.core.execution.parallel_execution import parallel_execution
 
         assert parallel_execution([1, 2, 3], action=lambda x: x * 2, num_processes=2) == [2, 4, 6]
 
@@ -412,7 +412,7 @@ class TestParallelExecution:
             parallel_execution([1], action=boom, num_processes=2)
 
     def test_async_return_hands_over_live_pool(self):
-        from worldfoundry.core.utils.parallel_execution import parallel_execution
+        from worldfoundry.core.execution.parallel_execution import parallel_execution
 
         pending = parallel_execution(
             [1, 2],
@@ -425,7 +425,7 @@ class TestParallelExecution:
 
 class TestSeedAndCudaGraphCompatibility:
     def test_legacy_seed_helpers_forward_to_canonical(self, monkeypatch: pytest.MonkeyPatch):
-        from worldfoundry.core.utils import torch_utils
+        from worldfoundry.core.utils.tensors import torch as torch_utils
 
         seeds: list[int] = []
         monkeypatch.setattr(torch_utils, "set_seed_everywhere", lambda seed: seeds.append(seed) or seed)
@@ -434,7 +434,7 @@ class TestSeedAndCudaGraphCompatibility:
         assert seeds == [17, 23]
 
     def test_cuda_graph_prefers_public_pool_api_and_guards_pytree(self):
-        source = (REPO_ROOT / "worldfoundry/core/utils/cuda_graph.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "worldfoundry/core/execution/graphs/cuda_graph.py").read_text(encoding="utf-8")
         assert "from torch._C import _graph_pool_handle" not in source
         assert 'getattr(torch.cuda, "graph_pool_handle"' in source
         assert "if _torch_pytree is None" in source
@@ -453,9 +453,9 @@ class TestUtilsExports:
 
     def test_validator_all_fully_exported(self):
         import worldfoundry.core.utils as utils
-        from worldfoundry.core.utils import validator
+        from worldfoundry.core.configuration import validators as validator
 
-        exported = {name for name, module in utils._EXPORT_MODULES.items() if module.endswith(".validator")}
+        exported = {name for name, module in utils._EXPORT_MODULES.items() if module == validator.__name__}
         # Private names (e.g. the _UNSET sentinel) intentionally stay module-local.
         public = {name for name in validator.__all__ if not name.startswith("_")}
         assert public == exported

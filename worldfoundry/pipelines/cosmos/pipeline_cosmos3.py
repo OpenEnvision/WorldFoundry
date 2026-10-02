@@ -15,7 +15,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_offload_policy,
     parse_torch_dtype,
 )
-from worldfoundry.core.io.video import save_image_or_video_tensor
+from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
 from .cosmos3_runtime import resolve_cosmos3_runtime_options
 from ..pipeline_utils import PipelineABC

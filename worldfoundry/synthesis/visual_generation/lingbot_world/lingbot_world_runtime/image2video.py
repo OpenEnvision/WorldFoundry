@@ -14,9 +14,9 @@ import torchvision.transforms.functional as TF
 from tqdm import tqdm
 
 from worldfoundry.core import autocast_context
-from worldfoundry.core.distributed.block_fsdp import shard_model
-from worldfoundry.core.attention.causal_rope_sequence_parallel import sp_attn_forward, sp_dit_forward
-from worldfoundry.core.distributed.sequence_ops import get_world_size
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
+from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import sp_attn_forward, sp_dit_forward
+from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot.model import WanModel
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21_streaming import Wan2_1_VAE
@@ -37,7 +37,7 @@ from einops import rearrange
 from .utils.wasd_ijkl_to_c2ws import wasd_array_to_frame_keys
 from .utils.wasd_ijkl_to_c2ws import generate_and_save_trajectory
 from .utils.wasd_ijkl_to_c2ws import action_string_to_wasd_ijkl
-from worldfoundry.core.io.artifacts import visualize_wasd_and_rotation_ui
+from worldfoundry.core.media.artifacts import visualize_wasd_and_rotation_ui
 from .distributed import distributed_barrier
 
 

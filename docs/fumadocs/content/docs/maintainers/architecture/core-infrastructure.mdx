@@ -7,7 +7,7 @@ description: The worldfoundry/core shared layer — loading, attention, distribu
 
 `worldfoundry/core` is the shared inference infrastructure that every model family reuses and none of them owns. Checkpoint loading, state-dict remapping, attention backends, distributed collectives, VRAM placement and offload, kernels, configuration, media IO, memory contracts, and safety guardrails all live here once. A family package (`worldfoundry/base_models/*`, `worldfoundry/synthesis/*`, `worldfoundry/pipelines/*`) composes these primitives; it must not recreate them.
 
-This is the layer to read when you are about to copy a utility into a model directory. The rule is explicit: if a capability can serve more than one family, it belongs in `core` first. See [Native diffusion](/docs/maintainers/architecture/native-diffusion) for how diffusion consumes this layer, and [Model runtime](/docs/maintainers/architecture/model-runtime) for how pipelines and operators do.
+This is the layer to read when you are about to copy a utility into a model directory. The rule is explicit: if multiple families actually reuse a capability, it belongs in `core`; an adapter tied to a specific model belongs with that model. See [Native diffusion](/docs/maintainers/architecture/native-diffusion) for how diffusion consumes this layer, and [Model runtime](/docs/maintainers/architecture/model-runtime) for how pipelines and operators do.
 
 ## Subpackage responsibilities
 
@@ -16,139 +16,84 @@ This is the layer to read when you are about to copy a utility into a model dire
     <h3>Subpackage</h3>
     <ul>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>model_loading</code>
-          </div>
-        </div>
-        <p>Checkpoint materialization, state-dict loading, LoRA merge, inference network construction.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>load_state_dict_from_safetensors</code> <code>model_loading/file.py:110</code>; <code>instantiate_inference_network</code> <code>inference_model.py:23</code>; <code>GeneralLoRAoader</code> <code>lora.py:15</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>attention</code></div></div>
+        <p>Backends, rotary embeddings, sequence layouts, KV caches, sparse and parallel attention.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>backends/, rotary/, sequence/, cache/, sparse/, parallel/</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>checkpoint</code>
-          </div>
-        </div>
-        <p>State-dict assignment, remap, distributed checkpoint (DCP), safe loading.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"checkpoint/{assignment,remap,dcp,safe_loading,load}.py"}</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>distributed</code></div></div>
+        <p>Process setup, collectives, model-parallel groups, sequence-parallel runtime and parameter sharding.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>runtime/, collectives/, model_parallel/, sequence_parallel/, sharding/</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>vram</code>
-          </div>
-        </div>
-        <p>Disk-backed state maps, meta initialization, staged placement, layerwise CPU offload, memory accounting.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"vram/{disk_map,initialization,layers,layerwise_offload,memory}.py"}</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>model_loading</code></div></div>
+        <p>Model construction, loading policy and weight conversion; checkpoints is the single owner of safe state-dict loading and assignment.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>checkpoints/, factory.py, inference_model.py, lora.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>attention</code>
-          </div>
-        </div>
-        <p>Backend probing, dense SDPA, packed variable-length, sparse 3D, n-D/complex/projective RoPE, sequence-parallel composition. Package probes walk module search paths without initializing optional extensions or their parent packages.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>AttentionKernelCapability</code> <code>attention/backends.py:32</code>; <code>probe_attention_backends</code> <code>backends.py:144</code>; <code>complex_rope.py</code>, <code>causal_ulysses_attention.py</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>io</code></div></div>
+        <p>Asset materialization, filesystems, structured formats and inference input datasets.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>assets/, filesystem/, formats/, inputs/, paths.py, manifests.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>distributed</code>
-          </div>
-        </div>
-        <p>NCCL options, masked orthogonal rank groups, model-parallel init, context/block FSDP, device-mesh collectives.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>initialize_model_parallel</code> <code>distributed/model_parallel_groups.py:238</code>; <code>RankGenerator</code> <code>:194</code>; <code>block_fsdp.py</code>, <code>context_parallel.py</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>media</code></div></div>
+        <p>Image, audio and video codecs, frame processing, output types and artifact previews.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>codecs/, processing/, types.py, resolutions.py, artifacts.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>nn</code>
-          </div>
-        </div>
-        <p>Reusable transformer math: RMSNorm, shared MLPs, timestep/AdaLN/final-layer modulation, prefix gating, activation checkpointing, classic-diffusion blocks.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"nn/{activation_checkpointing,diffusion_schedulers,convolutional_mlp,...}.py"}</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>execution</code></div></div>
+        <p>Device and process lifecycle, inference policy, runtime caches, CUDA graph replay and realtime orchestration.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>graphs/, realtime/, inference.py, inference_runtime.py, process.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>kernels</code>
-          </div>
-        </div>
-        <p>Autotune cache, capability probing, diffusion kernels, MoE, quantized GEMM.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"kernels/{capabilities,autotune_cache,diffusion,moe,quantized_gemm}.py"}</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>configuration</code></div></div>
+        <p>Structured/Python config, Hydra adapters, overrides, lazy instantiation and validation.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>lazy_config/, hydra.py, hydra_utils.py, overrides.py, python.py, validators.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>memory</code>
-          </div>
-        </div>
-        <p>Multi-modal, streaming, and multi-turn memory contracts.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>BaseMemory</code> <code>memory/base.py:9</code>; <code>conditioning.py</code>, <code>media.py</code>, <code>mosaic.py</code>, <code>retrieval.py</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>nn</code></div></div>
+        <p>Reusable neural blocks, transformer math, diffusion primitives, latent codecs and activation checkpointing.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>blocks/, transformer/, diffusion/, latent/, checkpointing/</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>acceleration</code>
-          </div>
-        </div>
-        <p>FP8 tensorwise quantization, low-precision gating, acceleration-technology reporting, NVFP4, token pruning.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>Float8Linear</code> <code>acceleration/quantization.py:47</code>; <code>AccelerationTechnology</code> <code>technology.py:15</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>acceleration</code></div></div>
+        <p>Reusable cache, token pruning and opt-in low-precision linear operators.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>quantization/, cache.py, token_pruning.py, technology.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>configuration</code>
-          </div>
-        </div>
-        <p>Hydra integration, model config, flags, Cosmos-style config.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"configuration/{hydra,model_config,flags,cosmos_config}.py"}</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>kernels</code></div></div>
+        <p>Operator implementations and dispatch for diffusion, MoE and quantized GEMM, including optional Triton providers.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>capabilities.py, registry.py, diffusion.py, moe.py, quantized_gemm.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>io</code>
-          </div>
-        </div>
-        <p>Media and artifact IO: audio, video, depth-to-colormap, action tracks, cache, config utils.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"io/{artifacts,audio,action_tracks,cache}.py"}</code>; <code>save_depth_colormap</code> <code>io/artifacts.py:82</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>vram</code></div></div>
+        <p>Physical parameter placement, meta initialization, disk state, CPU offload and encoder lifetime.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>device_map.py, initialization.py, disk_map.py, layerwise_offload.py, encoder_lifecycle.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>safety</code>
-          </div>
-        </div>
-        <p>Video IO guardrails and safety filters.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"safety/{guardrails,video_io}.py"}</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>memory</code></div></div>
+        <p>Semantic/context memory contracts, retrieval, conditioning and persistence.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>base.py, conditioning.py, media.py, mosaic.py, retrieval.py, store.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>structures</code>
-          </div>
-        </div>
-        <p>Typed validators, shape slicing, tree utils, predicates.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>Validator</code> <code>structures/validator.py:10</code>; <code>ShapeSlice</code> <code>shape_utils.py:63</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>geometry</code></div></div>
+        <p>Camera transforms, pose conditioning, trajectories and RGBD warping.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>transforms.py, pose.py, trajectory.py, conditioning.py, warp.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>utils</code>
-          </div>
-        </div>
-        <p>Cross-cutting helpers: array/tensor, batch ops, CUDA graphs, feature extraction, functional utils.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>{"utils/{array_tensor_utils,batch_ops,cuda_graph,functional_utils}.py"}</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>observability</code></div></div>
+        <p>Logging, terminal formatting, timing, profiling and optional NVTX ranges.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>logging_setup.py, formatting.py, colors.py, time.py, torchprofile.py</code></p>
       </li>
       <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>visualization</code>
-          </div>
-        </div>
-        <p>Action overlays and shared visualization helpers.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>visualization/action_overlay.py</code></p>
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>safety</code></div></div>
+        <p>Safety filters and video input guardrails.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>guardrails.py, video_io.py</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>utils</code></div></div>
+        <p>General Python object/tree helpers and tensor/array utilities with no runtime or media ownership.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>python/, tensors/</code></p>
       </li>
     </ul>
   </section>
@@ -156,7 +101,7 @@ This is the layer to read when you are about to copy a utility into a model dire
 
 ## Dependency rule
 
-`core` may depend on PyTorch, `diffusers` model/operator primitives, and narrow third-party libraries. It must not import `worldfoundry.pipelines`, `worldfoundry.synthesis`, `worldfoundry.operators`, `worldfoundry.base_models` family packages, or `worldfoundry.evaluation`. The edge points *out of* family packages *into* `core`, never the reverse.
+`core` may depend on PyTorch, `diffusers` model/operator primitives, and narrow third-party libraries. It must not import `worldfoundry.pipelines`, `worldfoundry.synthesis`, `worldfoundry.operators`, `worldfoundry.base_models` family packages, or `worldfoundry.evaluation`, or `worldfoundry.studio`. The edge points *out of* family packages *into* `core`, never the reverse.
 
 This keeps family packages thin: a model directory contains checkpoint-compatible tensor math and contract adapters, not a second copy of an offload manager, a distributed bootstrap, a kernel registry, or a quantization system. When you find yourself adding one of those to a family package, move it to `core` first and import it from there.
 
@@ -167,12 +112,30 @@ This keeps family packages thin: a model directory contains checkpoint-compatibl
 ## Where it is consumed
 
 - **Diffusion** — `base_models/diffusion_model` loads checkpoints through `core/model_loading`, runs attention through `core/attention`, and offloads through `core/vram`. Its `optimizations/` re-exports core policy, not a parallel implementation.
-- **Hosted and native runtimes** — `synthesis/` stages inputs through `core/io` and writes artifacts through the same media helpers.
+- **Hosted and native runtimes** — `synthesis/` stages inputs through `core/io` and writes artifacts through `core/media`.
 - **Memory** — `core/memory/base.py` defines the contract; streaming and long-context state in `synthesis/*/memory` and action-policy trace state in `synthesis/action_generation/memory.py` implement it.
 - **Distributed execution** — `core/distributed` is the only place model-parallel groups are initialized; no family package boots its own NCCL group.
 
 ## What does not belong here
 
-Training entrypoints, datasets, dataloaders, losses, callbacks, augmentation-only modules, and experiment scripts do not belong in `core`, nor in `base_models`. `core` is inference infrastructure; if a module only matters during training, it should not be added here.
+Training entrypoints, training-only datasets and dataloaders, losses, callbacks, augmentation-only modules, and experiment scripts do not belong in `core`, nor in `base_models`. `core` is inference infrastructure; if a module only matters during training, it should not be added here.
 
 For the directory-level map of every package, see [Codebase map](/docs/maintainers/architecture/file-index). For how a model call flows through these primitives, see [Model runtime](/docs/maintainers/architecture/model-runtime) and [Runtime assembly](/docs/maintainers/architecture/runtime-assembly).
+
+
+## Ownership decisions
+
+- `checkpoint` is part of `model_loading/checkpoints`; weight loading, assignment and conversion have one owner.
+- Media codecs and the former `video` processing helpers share `media`; downloading and filesystem work stay in `io`.
+- CUDA graphs, prewarm, frame prefetch and overlap belong to `execution`; encoder placement/lifetime belongs to `vram`.
+- `memory` stays separate from `vram`: context/retrieval is a model input concern, while placement/offload manages physical memory.
+- Configuration helpers leave `io`, terminal formatting leaves `io`, and runtime scheduling leaves `utils`.
+- Wan sequence-parallel adapters and VGGT observation preprocessing live in their model families. Repository inventory audits live in `scripts/model_zoo`.
+
+Public lazy function/class facades remain stable. Internal module imports use the current owners; removed directories do not contain compatibility wrappers.
+
+## Regression gates
+
+`tests/core/test_core_module_boundaries.py` checks lazy targets and core imports without optional model dependencies. It also guards against dependencies from core into model/application packages. Runtime facade tests run in model environments.
+
+Real-checkpoint changes also require `make test-geometry`: use fixed inputs, checkpoints, environments and seeds, compare numerical outputs against an accepted reference, and verify the replay hashes still match the current source. Moving files must preserve computation as well as importability.

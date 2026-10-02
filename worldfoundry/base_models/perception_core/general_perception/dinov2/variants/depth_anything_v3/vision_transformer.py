@@ -20,8 +20,8 @@ from einops import rearrange
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import logger
 
 from .layers import Block, PositionGetter, RotaryPositionEmbedding2D
-from worldfoundry.core.nn.layers import Mlp, PatchEmbed, SwiGLUFFNFused
-from worldfoundry.core.nn.module_utils import named_apply
+from worldfoundry.core.nn.blocks.layers import Mlp, PatchEmbed, SwiGLUFFNFused
+from worldfoundry.core.nn.blocks.module_utils import named_apply
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.reference_view_selector import (
     RefViewStrategy,
     select_reference_view,

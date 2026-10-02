@@ -24,7 +24,7 @@ def _function_uses_eval(tree: ast.Module, name: str) -> bool:
 @pytest.fixture
 def isolated_class_registry():
     sys.modules.setdefault("tree", types.ModuleType("tree"))
-    from worldfoundry.core.io import config_utils as cu
+    from worldfoundry.core.configuration import hydra_utils as cu
 
     saved = cu._CLASS_REGISTRY.copy()
     try:
@@ -56,16 +56,16 @@ def test_xc11_register_class_rejects_alias_rebind(isolated_class_registry) -> No
 
 
 def test_xc11_make_registry_metaclass_removed() -> None:
-    tree = _parse("worldfoundry/core/utils/functional_utils.py")
+    tree = _parse("worldfoundry/core/utils/python/functional_utils.py")
     names = {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef))}
     assert "make_registry_metaclass" not in names
-    import worldfoundry.core.utils.functional_utils as fu
+    import worldfoundry.core.utils.python.functional_utils as fu
 
     assert not hasattr(fu, "make_registry_metaclass")
 
 
 def test_xc4_python_and_lazy_config_declare_trust_boundary() -> None:
-    python_cfg = (REPO_ROOT / "worldfoundry/core/io/python_config.py").read_text(encoding="utf-8")
+    python_cfg = (REPO_ROOT / "worldfoundry/core/configuration/python.py").read_text(encoding="utf-8")
     lazy_cfg = (REPO_ROOT / "worldfoundry/core/configuration/lazy_config/config.py").read_text(encoding="utf-8")
     lazy_init = (REPO_ROOT / "worldfoundry/core/configuration/lazy_config/__init__.py").read_text(encoding="utf-8")
     for text in (python_cfg, lazy_cfg, lazy_init):
@@ -76,20 +76,20 @@ def test_xc4_python_and_lazy_config_declare_trust_boundary() -> None:
 
 
 def test_xc4_fstring_supports_index_templates_without_eval() -> None:
-    from worldfoundry.core.io.print_utils import fstring
+    from worldfoundry.core.observability.formatting import fstring
 
     assert fstring("_v{i+1}", i=0) == "_v1"
     assert fstring("{i}", i=3) == "3"
     with pytest.raises((ValueError, NameError, SyntaxError)):
         fstring("{__import__('os').name}", i=0)
-    print_tree = _parse("worldfoundry/core/io/print_utils.py")
-    file_tree = _parse("worldfoundry/core/io/file_utils.py")
+    print_tree = _parse("worldfoundry/core/observability/formatting.py")
+    file_tree = _parse("worldfoundry/core/io/filesystem/file_utils.py")
     assert not _function_uses_eval(print_tree, "fstring")
     assert not _function_uses_eval(file_tree, "fstring")
 
 
 def test_xc4_next_available_file_name_uses_i_plus_one(tmp_path) -> None:
-    from worldfoundry.core.io.file_utils import next_available_file_name
+    from worldfoundry.core.io.filesystem.file_utils import next_available_file_name
 
     path = tmp_path / "out.txt"
     path.write_text("x", encoding="utf-8")
@@ -98,18 +98,18 @@ def test_xc4_next_available_file_name_uses_i_plus_one(tmp_path) -> None:
 
 
 def test_xc6_pickle_base64_helpers_removed() -> None:
-    import worldfoundry.core.utils.misc_utils as mu
+    import worldfoundry.core.utils.python.misc_utils as mu
 
     assert not hasattr(mu, "encode_base64")
     assert not hasattr(mu, "decode_base64")
-    tree = _parse("worldfoundry/core/utils/misc_utils.py")
+    tree = _parse("worldfoundry/core/utils/python/misc_utils.py")
     names = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
     assert "encode_base64" not in names
     assert "decode_base64" not in names
 
 
 def test_xc14_shard_download_uses_thread_pool() -> None:
-    tree = _parse("worldfoundry/core/checkpoint/load.py")
+    tree = _parse("worldfoundry/core/model_loading/checkpoints/load.py")
     imported: set[str] = set()
     called: set[str] = set()
     for node in ast.walk(tree):

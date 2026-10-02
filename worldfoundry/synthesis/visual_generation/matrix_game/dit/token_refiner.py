@@ -7,7 +7,7 @@ from einops import rearrange
 from worldfoundry.core.nn import activation_layer as get_activation_layer
 from worldfoundry.core.nn import apply_gate
 from worldfoundry.core.nn import normalization_layer as get_norm_layer
-from worldfoundry.core.attention.hybrid import attention
+from worldfoundry.core.attention.backends.hybrid import attention
 
 from .embed_layers import TextProjection, TimestepEmbedder
 from .mlp_layers import MLP

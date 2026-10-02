@@ -13,7 +13,7 @@ import torch
 from omegaconf import OmegaConf
 
 from worldfoundry.core.io import list_numbered_frame_paths
-from worldfoundry.core.utils.inference_runtime import (
+from worldfoundry.core.execution.inference_runtime import (
     is_accelerator_out_of_memory,
     resolve_inference_batch_size,
 )

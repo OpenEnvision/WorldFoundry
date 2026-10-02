@@ -36,7 +36,7 @@ from typing import List, Optional, Tuple, Union
 from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.kv_cache import AttentionOpWithKVCache, KVCacheConfig
 
 try:
-    from worldfoundry.core.distributed.megatron_compat import parallel_state
+    from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
 
     USE_MEGATRON = True
 except ImportError:
@@ -54,9 +54,9 @@ from torch.distributed._composable.fsdp import fully_shard
 from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
 from worldfoundry.core.attention import attention
-from worldfoundry.core.attention.native import NativeAttention
-from worldfoundry.core.distributed.context_parallel import split_inputs_cp
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.attention.backends.native import NativeAttention
+from worldfoundry.core.distributed.model_parallel.context import split_inputs_cp
+from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.core.kernels import layer_norm_scale_shift, qk_rmsnorm_rope, residual_gate_add
 from worldfoundry.runtime.compile_cache import CompilePolicy, compile_callable_cached
 from worldfoundry.base_models.diffusion_model.models.encoders.structured_conditioning import DataType

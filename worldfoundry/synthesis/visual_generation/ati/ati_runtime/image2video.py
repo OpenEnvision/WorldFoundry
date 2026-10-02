@@ -18,7 +18,7 @@ import torch.distributed as dist
 import torchvision.transforms.functional as TF
 from tqdm import tqdm
 
-from worldfoundry.core.distributed.block_fsdp import (
+from worldfoundry.core.distributed.sharding.block_fsdp import (
     shard_model,
 )
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.clip import (
@@ -128,7 +128,7 @@ class WanATI:
         if use_usp:
             from xfuser.core.distributed import get_sequence_parallel_world_size
 
-            from worldfoundry.core.attention.video_xdit_context_parallel import (
+            from worldfoundry.core.attention.parallel.video_xdit_context_parallel import (
                 usp_attn_forward,
                 usp_dit_forward,
             )

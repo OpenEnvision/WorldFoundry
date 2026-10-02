@@ -165,7 +165,7 @@ class AstronexWorldRuntime(OfficialInferenceRuntime):
         )
         command.extend(("--gpu", visible))
         if reference:
-            from worldfoundry.core.io.image import (
+            from worldfoundry.core.media.codecs.image import (
                 load_pil_image,
                 materialize_image_input,
             )

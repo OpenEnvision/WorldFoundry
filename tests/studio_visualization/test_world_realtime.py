@@ -13,9 +13,9 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from worldfoundry.core.acceleration.prewarm import PrewarmTimeoutError
-from worldfoundry.core.execution.realtime import RealtimeSpec
-from worldfoundry.core.video.postprocess import VideoSpec
+from worldfoundry.core.execution.realtime.prewarm import PrewarmTimeoutError
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.media.processing.postprocess import VideoSpec
 from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference.execution import (
     BaseRuntimeDriver,
@@ -78,7 +78,7 @@ def test_realtime_postprocess_defaults_to_identity(monkeypatch: pytest.MonkeyPat
 def test_realtime_postprocess_resolves_explicit_rtx_preset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import worldfoundry.core.video.rtx as rtx_module
+    import worldfoundry.core.media.processing.rtx as rtx_module
 
     monkeypatch.setenv("WORLDFOUNDRY_REALTIME_POSTPROCESS_PRESET", "rtx-super-resolution-ultra")
     monkeypatch.setenv("WORLDFOUNDRY_REALTIME_RTX_SCALE", "1.5")

@@ -12,7 +12,7 @@ from torch import Tensor, nn
 import math
 from typing import Tuple, Type
 
-from worldfoundry.core.nn.layers import SamMLPBlock
+from worldfoundry.core.nn.blocks.layers import SamMLPBlock
 
 
 class TwoWayTransformer(nn.Module):

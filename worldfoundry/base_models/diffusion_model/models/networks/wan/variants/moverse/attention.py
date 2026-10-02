@@ -2,7 +2,7 @@
 
 from ...reference_21 import WAN_CROSSATTENTION_CLASSES as _CROSS_ATTENTION_CLASSES
 from ...reference_21 import WanT2VCrossAttention as _WanT2VCrossAttention
-from worldfoundry.core.attention.varlen import flash_attention
+from worldfoundry.core.attention.sequence.varlen import flash_attention
 
 
 class WanT2VCrossAttention(_WanT2VCrossAttention):

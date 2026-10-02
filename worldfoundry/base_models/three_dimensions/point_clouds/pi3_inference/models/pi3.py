@@ -8,7 +8,7 @@ from huggingface_hub import PyTorchModelHubMixin
 from worldfoundry.base_models.perception_core.general_perception.dinov2.hub.backbones import (
     dinov2_vitl14_reg,
 )
-from worldfoundry.core.nn.layers import Mlp
+from worldfoundry.core.nn.blocks.layers import Mlp
 
 from ..utils.geometry import homogenize_points
 from .layers.attention import FlashAttentionRope

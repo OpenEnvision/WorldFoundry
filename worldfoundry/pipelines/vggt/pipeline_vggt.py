@@ -15,7 +15,7 @@ from worldfoundry.base_models.three_dimensions.point_clouds.vggt.runtime import 
     _opencv_world_to_opengl,
 )
 from worldfoundry.core.io import artifact_root_path, write_video
-from worldfoundry.core.io.artifacts import depths_to_pil_images
+from worldfoundry.core.media.artifacts import depths_to_pil_images
 
 from ...base_models.three_dimensions.point_clouds.ply_io import (
     write_point_cloud as storePly,

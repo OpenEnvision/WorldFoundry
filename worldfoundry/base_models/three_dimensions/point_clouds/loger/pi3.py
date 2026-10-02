@@ -6,7 +6,7 @@ from functools import partial
 from copy import deepcopy
 from typing import Optional, Union, List
 
-from worldfoundry.core.nn.layers import Mlp
+from worldfoundry.core.nn.blocks.layers import Mlp
 from .utils.geometry import homogenize_points, robust_scale_estimation
 from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.layers.pos_embed import RoPE2D, PositionGetter
 from .layers.block import BlockRope

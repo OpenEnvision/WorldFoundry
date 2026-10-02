@@ -15,7 +15,7 @@ import numpy as np
 
 from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import checkpoint_root_candidates
-from worldfoundry.core.io.video import materialize_video_input
+from worldfoundry.core.media.codecs.video import materialize_video_input
 
 DEFAULT_AC3D_REPO_ID = "snap-research/ac3d"
 DEFAULT_COGVIDEOX_2B_REPO = "THUDM/CogVideoX-2b"

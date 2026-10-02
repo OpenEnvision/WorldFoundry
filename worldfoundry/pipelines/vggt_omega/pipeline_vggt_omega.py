@@ -251,7 +251,7 @@ class VGGTOmegaPipeline(PipelineABC):
 
         images = []
         if kwargs.get("return_visualization", True) and "depth_map" in results:
-            from worldfoundry.core.io.artifacts import depths_to_pil_images
+            from worldfoundry.core.media.artifacts import depths_to_pil_images
 
             depth_maps = results["depth_map"]
             if depth_maps.ndim == 2:

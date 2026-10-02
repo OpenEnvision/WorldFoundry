@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from torchvision.transforms import v2
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 from worldfoundry.synthesis.visual_generation.kling.recammaster_runtime.model_manager import ModelManager
 from worldfoundry.synthesis.visual_generation.kling.recammaster_runtime.pipelines.wan_video_recammaster import (
     WanVideoReCamMasterPipeline,

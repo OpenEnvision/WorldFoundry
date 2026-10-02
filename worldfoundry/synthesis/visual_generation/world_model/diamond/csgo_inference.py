@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 import yaml
 
-from worldfoundry.core.io.video import save_video_h264
+from worldfoundry.core.media.codecs.video import save_video_h264
 from worldfoundry.synthesis.visual_generation.world_model.diamond.models.diffusion.csgo import (
     CsgoDenoiser, CsgoDenoiserConfig, CsgoSampler, CsgoSamplerConfig,
 )

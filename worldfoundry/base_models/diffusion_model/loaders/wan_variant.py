@@ -14,7 +14,7 @@ from typing import Mapping
 
 import torch
 
-from worldfoundry.core.model_loading.file import load_state_dict
+from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 
 
 def _model_config(

@@ -17,7 +17,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers.pipelines.stable_diffusion.convert_from_ckpt import convert_ldm_vae_checkpoint, \
     convert_ldm_clip_checkpoint
 
-from worldfoundry.core.io.video import save_videos_grid
+from worldfoundry.core.media.codecs.video import save_videos_grid
 from .models.unet import UNet3DConditionModelPoseCond
 from .models.pose_adaptor import CameraPoseEncoder
 from .pipelines.pipeline_animation import CameraCtrlPipeline

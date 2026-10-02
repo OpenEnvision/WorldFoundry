@@ -25,7 +25,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from worldfoundry.core.io.serialization import write_json, write_jsonl
+from worldfoundry.core.io.formats.serialization import write_json, write_jsonl
 from worldfoundry.core.observability.time import utc_now_iso
 from worldfoundry.evaluation.tasks.execution.framework.normalizers import apply_normalizer
 

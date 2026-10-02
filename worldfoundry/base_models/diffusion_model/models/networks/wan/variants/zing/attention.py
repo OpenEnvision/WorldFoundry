@@ -8,7 +8,7 @@ import inspect
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_22 import WanSelfAttention, rope_params
-from worldfoundry.core.attention.varlen import varlen_scaled_dot_product_attention
+from worldfoundry.core.attention.sequence.varlen import varlen_scaled_dot_product_attention
 
 
 class CompiledSegment:

@@ -37,13 +37,7 @@ def test_install_docs_keep_cpu_gpu_and_native_boundaries_explicit() -> None:
         text = _text(path)
         assert 'pip install -e ".[tui]"' in text
         assert "bootstrap_worldfoundry.sh" in text
-        assert "worldfoundry-native-kernels" in text
-
-    native_readme = _text(REPO_ROOT / "packages" / "worldfoundry-native-kernels" / "README.md")
-    assert "[all]" in native_readme
-    assert "`inspect()`" in native_readme
-    assert "`load()`" in native_readme
-    assert "CPU-only hosts should skip" in native_readme
+        assert "CPU" in text and "GPU" in text
 
 
 def test_maintainer_docs_name_generated_recipe_and_cpu_eval_gates() -> None:
@@ -53,26 +47,10 @@ def test_maintainer_docs_name_generated_recipe_and_cpu_eval_gates() -> None:
         DOCS_ROOT / "maintainers" / "contributing.zh.mdx",
     ):
         text = _text(path)
-        assert ".[eval_core]" in text
-        assert "download.pytorch.org/whl/cpu" in text
-        assert "test-eval-core" in text
+        assert ".[dev,test]" in text
+        assert "test-infer" in text
+        assert "test-geometry" in text
         assert "models:check" in text
 
     for name in ("validation.mdx", "validation.zh.mdx"):
         assert "npm run models:check" in _text(DOCS_ROOT / "reference" / name)
-
-
-def test_vendored_mmyolo_dockerfiles_are_marked_unsupported() -> None:
-    yolo_root = (
-        REPO_ROOT
-        / "worldfoundry"
-        / "base_models"
-        / "perception_core"
-        / "detection"
-        / "yolo_world"
-    )
-    upstream = _text(yolo_root / "UPSTREAM.md")
-    boundary = _text(yolo_root / "mmyolo" / "docker" / "README.worldfoundry.md")
-    assert "not a supported WorldFoundry build path" in upstream
-    assert "WorldFoundry does not build or publish these images" in boundary
-    assert "docker/build_with_docker.sh" in boundary

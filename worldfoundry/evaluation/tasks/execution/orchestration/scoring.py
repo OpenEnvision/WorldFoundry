@@ -6,7 +6,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.serialization import JsonlWriter, iter_jsonl
+from worldfoundry.core.io.formats.serialization import JsonlWriter, iter_jsonl
 from worldfoundry.evaluation.api import (
     AggregateResult,
     GenerationRequest,

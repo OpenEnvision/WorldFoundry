@@ -7,14 +7,14 @@ from tqdm import tqdm
 from vbench.utils import clip_transform, load_dimension_info, load_video
 
 from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     distribute_list_to_rank,
     gather_list_of_dict,
     get_rank,
     get_world_size,
 )
-from worldfoundry.core.utils.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
-from worldfoundry.core.utils.torch_utils import temporal_feature_consistency
+from worldfoundry.core.execution.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
+from worldfoundry.core.utils.tensors.torch import temporal_feature_consistency
 
 
 def background_consistency(clip_model, preprocess, video_list, device, read_frame):

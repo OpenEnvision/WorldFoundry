@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from worldfoundry.core.attention.kvcache import BlockKVCache
+from worldfoundry.core.attention.cache.kvcache import BlockKVCache
 
 
 class _NaiveKVCache:

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
-from worldfoundry.core.io.serialization import iter_jsonl
+from worldfoundry.core.io.formats.serialization import iter_jsonl
 from worldfoundry.evaluation.api import (
     ArtifactRef,
     GenerationRequest,

@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.video import save_image_or_video_tensor
+from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
 from ..pipeline_utils import PipelineABC
 

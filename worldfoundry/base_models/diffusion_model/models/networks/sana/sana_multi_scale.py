@@ -32,7 +32,7 @@ import os
 
 import torch
 import torch.nn as nn
-from worldfoundry.core.nn.layers import DropPath
+from worldfoundry.core.nn.blocks.layers import DropPath
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules import DWMlp, GLUMBConv, Mlp
 from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules_linear import (

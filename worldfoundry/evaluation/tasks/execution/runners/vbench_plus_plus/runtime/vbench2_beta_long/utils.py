@@ -17,7 +17,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from decord import VideoReader
-from worldfoundry.core.io.video import write_video_torchvision as write_video
+from worldfoundry.core.media.codecs.video import write_video_torchvision as write_video
 
 from collections import defaultdict
 from vbench.utils import CACHE_DIR, load_video, save_json, load_dimension_info, dino_transform, dino_transform_Image

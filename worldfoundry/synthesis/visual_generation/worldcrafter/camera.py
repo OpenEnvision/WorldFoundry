@@ -14,7 +14,7 @@ from functools import partial
 
 import numpy as np
 
-from worldfoundry.core.io.file_utils import file_sha256
+from worldfoundry.core.io.filesystem.file_utils import file_sha256
 
 
 CHUNK_FRAMES = 33

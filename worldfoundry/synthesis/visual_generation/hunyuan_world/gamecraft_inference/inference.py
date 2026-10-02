@@ -9,7 +9,7 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.hunyuan_video.
     HunyuanVideoCausal3DAutoencoder as AutoencoderKLCausal3D,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.gamecraft import load_model
-from worldfoundry.core.distributed.sequence_parallel_runtime import (
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
     nccl_info,
 )
 

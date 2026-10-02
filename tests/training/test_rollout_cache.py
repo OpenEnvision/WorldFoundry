@@ -5,7 +5,7 @@ import json
 import pytest
 import torch
 
-from worldfoundry.core.io.integrity import canonical_json
+from worldfoundry.core.io.filesystem.integrity import canonical_json
 from worldfoundry.training.data import (
     RolloutConditioningDataset,
     RolloutPromptDataset,

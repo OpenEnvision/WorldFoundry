@@ -15,7 +15,7 @@ from worldfoundry.core.attention import (
     get_nd_rotary_pos_embed,
     scaled_dot_product_attention,
 )
-from worldfoundry.core.attention.hybrid import parallel_attention
+from worldfoundry.core.attention.backends.hybrid import parallel_attention
 
 from .mlp_layers import MLP, MLPEmbedder
 

@@ -259,7 +259,7 @@ class DiffusionPolicyRuntime:
         import hydra
         import torch
         from omegaconf import OmegaConf
-        from worldfoundry.core.model_loading.file import load_torch_checkpoint
+        from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
         # Official workspace checkpoints use dill and can execute arbitrary code while
         # deserializing.  Runtime inference accepts only an offline-converted payload:

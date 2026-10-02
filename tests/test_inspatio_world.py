@@ -20,7 +20,7 @@ def test_inspatio_causal_writer_uses_shared_torchvision_pyav_fallback():
         "inspatio_world_runtime/inference_causal.py"
     ).read_text(encoding="utf-8")
 
-    assert "from worldfoundry.core.io.video import write_video_torchvision" in script
+    assert "from worldfoundry.core.media.codecs.video import write_video_torchvision" in script
     assert "write_video_torchvision(filename, video_array, fps=fps)" in script
 
 

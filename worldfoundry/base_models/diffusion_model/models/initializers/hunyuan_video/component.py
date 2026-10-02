@@ -36,7 +36,7 @@ def _normalized_image_tensor(
     dtype: torch.dtype,
 ) -> torch.Tensor:
     from worldfoundry.core import load_pil_image
-    from worldfoundry.core.utils.image_utils import resize_and_center_crop
+    from worldfoundry.core.media.processing.image_utils import resize_and_center_crop
 
     image = load_pil_image(value)
     array = resize_and_center_crop(np.asarray(image), target_width=width, target_height=height)

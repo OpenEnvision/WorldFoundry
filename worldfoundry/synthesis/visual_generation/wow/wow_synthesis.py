@@ -9,9 +9,9 @@ from typing import Any, Mapping
 import torch
 from PIL import Image
 
-from worldfoundry.core.io.media import VIDEO_EXTENSIONS
+from worldfoundry.core.media.types import VIDEO_EXTENSIONS
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
-from worldfoundry.core.io.resolutions import VIDEO_RES_SIZE_INFO
+from worldfoundry.core.media.resolutions import VIDEO_RES_SIZE_INFO
 
 from ...base_synthesis import BaseSynthesis
 
@@ -345,7 +345,7 @@ class WoWSynthesis(BaseSynthesis):
 
         artifact_path = ""
         if output_path is not None:
-            from worldfoundry.core.io.video import write_video
+            from worldfoundry.core.media.codecs.video import write_video
 
             artifact_path = str(output_path)
             write_video(output_video, artifact_path, fps=output_fps, quality=5)

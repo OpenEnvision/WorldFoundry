@@ -23,7 +23,7 @@ import torch
 import torch.distributed as dist
 from tqdm import tqdm
 
-import worldfoundry.core.distributed.model_parallel_groups as mpu
+import worldfoundry.core.distributed.model_parallel.groups as mpu
 from inference.common.timer import event_path_timer
 from worldfoundry.core import InferenceParams, print_rank_0
 from worldfoundry.core.distributed import pp_scheduler

@@ -41,12 +41,12 @@ from worldfoundry.base_models.diffusion_model.recipes.wan_configs.lingbot_world_
 from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
     FlowUniPCMultistepScheduler,
 )
-from worldfoundry.core.attention.causal_rope_sequence_parallel import (
+from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import (
     sp_attn_forward_causal_chunked,
     sp_dit_forward_causal_chunked,
 )
-from worldfoundry.core.distributed.block_fsdp import shard_model
-from worldfoundry.core.distributed.sequence_ops import get_world_size
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
+from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
 from worldfoundry.core.geometry.transforms import ray_condition
 from worldfoundry.operators.lingbot_world_operator import (
     compute_relative_poses,

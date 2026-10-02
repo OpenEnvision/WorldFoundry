@@ -2,7 +2,7 @@ import logging
 import os
 import torch.distributed as dist
 from datetime import datetime
-from worldfoundry.core.distributed.generic_collectives import is_local_master
+from worldfoundry.core.distributed.collectives.generic import is_local_master
 try:
     from mmcv.utils.logging import logger_initialized
 except ModuleNotFoundError:

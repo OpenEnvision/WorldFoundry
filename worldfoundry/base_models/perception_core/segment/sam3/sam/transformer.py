@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from worldfoundry.base_models.perception_core.segment.sam3.sam.rope import apply_rotary_enc, apply_rotary_enc_real, compute_axial_cis
 from torch import nn, Tensor
 
-from worldfoundry.core.nn.layers import SamMLPBlock
+from worldfoundry.core.nn.blocks.layers import SamMLPBlock
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 

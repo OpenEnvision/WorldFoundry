@@ -24,7 +24,7 @@ from worldfoundry.base_models.diffusion_model.optimizations.qkv_fusion import (
     fuse_qkv_projections,
 )
 from worldfoundry.core.attention import complex_rotary_frequencies_3d
-from worldfoundry.core.attention.complex_rope import apply_complex_rotary_embedding
+from worldfoundry.core.attention.rotary.complex_rope import apply_complex_rotary_embedding
 from worldfoundry.core.nn import RMSNorm
 
 

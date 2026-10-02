@@ -684,7 +684,7 @@ class BerniniRuntime:
                     "A WorldFoundry Bernini request uses one Ulysses group; "
                     "ulysses_size must equal the torchrun world size."
                 )
-            from worldfoundry.core.distributed.torch_process_group import init as init_process_group
+            from worldfoundry.core.distributed.runtime.torch_process_group import init as init_process_group
 
             init_process_group()
             self.device = f"cuda:{torch.cuda.current_device() if torch.cuda.is_available() else local_rank}"

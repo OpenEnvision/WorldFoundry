@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-BACKENDS = Path(__file__).resolve().parents[3] / "worldfoundry/core/attention/backends.py"
+BACKENDS = Path(__file__).resolve().parents[3] / "worldfoundry/core/attention/backends/probe.py"
 
 
 class AttentionProbeTests(unittest.TestCase):

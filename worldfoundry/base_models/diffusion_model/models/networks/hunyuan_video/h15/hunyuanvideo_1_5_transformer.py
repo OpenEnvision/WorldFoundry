@@ -31,10 +31,10 @@ from einops import rearrange
 
 from worldfoundry.core.attention import apply_nd_rotary_embedding as apply_rotary_emb
 from worldfoundry.core.attention import get_nd_rotary_pos_embed
-from worldfoundry.core.attention.backends import normalize_attention_backend, resolve_attention_backend
-from worldfoundry.core.attention.multimodal_sequence import parallel_attention
-from worldfoundry.core.distributed.sequence_mesh_state import get_parallel_state
-from worldfoundry.core.distributed.sequence_parallel_runtime import all_gather
+from worldfoundry.core.attention.backends.probe import normalize_attention_backend, resolve_attention_backend
+from worldfoundry.core.attention.sequence.multimodal_sequence import parallel_attention
+from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
+from worldfoundry.core.distributed.sequence_parallel.runtime import all_gather
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 from worldfoundry.core.nn import (
     ConcatenatedLinear as LinearWarpforSingle,

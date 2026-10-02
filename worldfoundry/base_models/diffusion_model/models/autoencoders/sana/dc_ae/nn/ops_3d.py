@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.core.checkpoint import submodule_state_dict
+from worldfoundry.core.model_loading.checkpoints import submodule_state_dict
 from worldfoundry.core.nn import get_same_padding, val2tuple
 from .act import build_act
 from .norm import TritonRMSNorm2d, build_norm

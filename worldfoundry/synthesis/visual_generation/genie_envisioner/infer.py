@@ -223,7 +223,7 @@ def run(args: argparse.Namespace) -> Path:
     from models.ltx_models.autoencoder_kl_ltx import AutoencoderKLLTXVideo
     from models.ltx_models.transformer_ltx_multiview import LTXVideoTransformer3DModel
     from models.pipeline.custom_pipeline import CustomPipeline
-    from worldfoundry.core.io.video import save_video_h264
+    from worldfoundry.core.media.codecs.video import save_video_h264
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is unavailable; Genie Envisioner inference cannot run")

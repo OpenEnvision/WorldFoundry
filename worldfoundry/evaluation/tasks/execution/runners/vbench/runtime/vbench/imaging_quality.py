@@ -4,13 +4,13 @@ from torchvision import transforms
 from tqdm import tqdm
 from vbench.utils import load_dimension_info, load_video
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     distribute_list_to_rank,
     gather_list_of_dict,
     get_rank,
     get_world_size,
 )
-from worldfoundry.core.utils.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
+from worldfoundry.core.execution.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
 
 
 def transform(images, preprocess_mode='shorter'):

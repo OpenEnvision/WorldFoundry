@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.core.nn.layers import LayerNorm2d
+from worldfoundry.core.nn.blocks.layers import LayerNorm2d
 
 
 class PatchEmbed(nn.Module):

@@ -18,7 +18,7 @@ from pipeline import (
     CausalInferencePipeline
 )
 from eval_inputs import TextDataset, TextImagePairDataset
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config_path", type=str, help="Path to the config file")

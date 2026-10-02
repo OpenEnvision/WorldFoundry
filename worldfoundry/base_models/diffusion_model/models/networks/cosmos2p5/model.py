@@ -26,7 +26,7 @@ import torch.nn.functional as functional
 from einops import rearrange, repeat
 
 from worldfoundry.core.attention import apply_rotary_embedding, scaled_dot_product_attention
-from worldfoundry.core.nn.timestep import Timesteps
+from worldfoundry.core.nn.diffusion.timestep import Timesteps
 
 
 class Cosmos25PatchEmbed(nn.Module):

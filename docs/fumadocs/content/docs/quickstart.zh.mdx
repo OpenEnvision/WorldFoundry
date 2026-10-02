@@ -39,7 +39,6 @@ description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推�
 
 - **操作系统：** 推荐 Linux，用于 GPU 推理和大多数 benchmark runner
 - **安装路径：** 轻量 CPU catalog/CLI/TUI 工作使用 `python -m pip install -e ".[tui]"`；CUDA conda runtime 使用 `bash scripts/setup/bootstrap_worldfoundry.sh`。这是文档用户的官方首次 clone 脚本；它已经会调用 `scripts/setup/unified_install.sh` 创建统一 GPU 环境，因此不要从 `unified_install.sh` 起步，除非你只是在刷新该环境。可选 extras 不会自动选择 CUDA PyTorch wheel index。
-- **可选 native kernels：** `packages/worldfoundry-native-kernels` 是独立且 ABI-sensitive 的 wheel。CPU-only 主机应跳过；GPU 主机必须在目标 PyTorch 环境内用 `--no-isolation` 构建。
 - **Python：** 3.10+；GPU 路径由 WorldFoundry 统一 conda 环境管理
 - **可选：** 支持 CUDA 的 GPU、用于 gated checkpoint 的 Hugging Face token
 

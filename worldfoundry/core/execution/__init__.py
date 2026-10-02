@@ -1,4 +1,5 @@
-"""Inference execution: runtime bootstrap, devices, subprocesses, resident sessions, and process-local caches.
+"""Inference execution: bootstrap, devices, subprocesses, batching and concurrency.
 
-Import concrete submodules explicitly; this package does not load optional runtimes.
+Graph capture/replay lives in graphs; interactive contracts, prewarm, frame
+prefetch and overlap live in realtime. Import concrete modules explicitly.
 """

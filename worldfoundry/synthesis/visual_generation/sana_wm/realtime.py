@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import torch
 
-from worldfoundry.core.execution.realtime import RealtimeSpec
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 
 DEFAULT_REALTIME_WINDOW_FRAMES = 81
 DEFAULT_SAMPLING_STEPS = 60

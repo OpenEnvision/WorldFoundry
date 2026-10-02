@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
-from worldfoundry.core.attention.hybrid import attention
+from worldfoundry.core.attention.backends.hybrid import attention
 from worldfoundry.core.nn import ConditioningProjection as TextProjection
 from worldfoundry.core.nn import SinusoidalTimestepEmbedder as TimestepEmbedder
 from worldfoundry.core.nn import TransformerMLP as MLP

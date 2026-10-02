@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from einops import rearrange
-from worldfoundry.core.distributed import context_parallel_util
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 from worldfoundry.core import autocast_context
 
 from .checkpoint import auto_grad_checkpoint

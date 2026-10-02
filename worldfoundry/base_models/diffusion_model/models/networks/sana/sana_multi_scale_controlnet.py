@@ -39,7 +39,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities 
     is_triton_module_available,
     is_xformers_available,
 )
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 _triton_modules_available = False
 if is_triton_module_available():

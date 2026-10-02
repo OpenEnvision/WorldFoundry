@@ -21,9 +21,9 @@ from pathlib import Path
 import pytest
 import torch
 
-from worldfoundry.core.checkpoint import load as checkpoint_load
-from worldfoundry.core.io import cache as io_cache
-from worldfoundry.core.io.serialization import write_json
+from worldfoundry.core.model_loading.checkpoints import load as checkpoint_load
+from worldfoundry.core.io.assets import cache as io_cache
+from worldfoundry.core.io.formats.serialization import write_json
 
 
 def _tiny_state_dict() -> dict[str, torch.Tensor]:

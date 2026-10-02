@@ -7,15 +7,15 @@ from easydict import EasyDict as edict
 from PIL import Image
 from tqdm import tqdm
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     distribute_list_to_rank,
     gather_list_of_dict,
     get_rank,
     get_world_size,
 )
 from worldfoundry.core.execution.device import get_current_torch_device
-from worldfoundry.core.utils.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
-from worldfoundry.core.utils.torch_utils import temporal_feature_consistency
+from worldfoundry.core.execution.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
+from worldfoundry.core.utils.tensors.torch import temporal_feature_consistency
 
 from .dynamic_degree import DynamicDegree
 from .utils import dino_transform, dino_transform_Image, load_dimension_info, load_video

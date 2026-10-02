@@ -27,7 +27,7 @@ from typing import Optional
 import torch
 from torch import nn
 
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 
 try:
     import natten

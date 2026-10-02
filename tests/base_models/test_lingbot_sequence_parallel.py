@@ -3,7 +3,7 @@ import torch
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot.model import (
     sinusoidal_embedding_1d as model_timestep_embedding,
 )
-from worldfoundry.core.attention.causal_rope_sequence_parallel import (
+from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import (
     sinusoidal_embedding_1d as sequence_parallel_timestep_embedding,
 )
 

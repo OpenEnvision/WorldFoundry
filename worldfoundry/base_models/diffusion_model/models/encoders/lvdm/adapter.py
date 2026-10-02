@@ -13,7 +13,7 @@ Compatibility wrapper only — T2V-Turbo uses
 
 import torch.nn as nn
 
-from worldfoundry.core.nn.classic_diffusion import avg_pool_nd, conv_nd
+from worldfoundry.core.nn.diffusion.convolution import avg_pool_nd, conv_nd
 
 
 class Downsample(nn.Module):

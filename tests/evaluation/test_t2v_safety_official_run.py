@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from worldfoundry.core.io.serialization import write_jsonl
+from worldfoundry.core.io.formats.serialization import write_jsonl
 from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
 from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,

@@ -141,7 +141,7 @@ def test_dynamicrafter_fp16_profile_materializes_fp32_master_parameters(
 ) -> None:
     import worldfoundry.base_models.diffusion_model.models.networks.lvdm.latent_diffusion as lvdm_module
     import worldfoundry.core.model_loading.factory as factory_module
-    import worldfoundry.core.model_loading.file as file_module
+    import worldfoundry.core.model_loading.checkpoints.file as file_module
 
     recipe = TrainingRecipe.from_file(Path("configs/training/dynamicrafter_512_i2v.yaml"))
     monkeypatch.setattr(lvdm_module, "DiffusionWrapper", lambda *_args, **_kwargs: _LoaderDenoiser())

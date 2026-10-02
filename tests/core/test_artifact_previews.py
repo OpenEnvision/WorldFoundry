@@ -13,7 +13,7 @@ class TestArtifactsHelpers:
 
     @pytest.fixture(autouse=True)
     def _setup(self):
-        self.mod = importlib.import_module("worldfoundry.core.io.artifacts")
+        self.mod = importlib.import_module("worldfoundry.core.media.artifacts")
 
     def test_depth_helpers_available(self):
         for name in [
@@ -67,7 +67,7 @@ class TestTensorVideoHelpers:
 
     @pytest.fixture(autouse=True)
     def _setup(self):
-        self.mod = importlib.import_module("worldfoundry.core.io.artifacts")
+        self.mod = importlib.import_module("worldfoundry.core.media.artifacts")
 
     def test_tensor_video_helpers_callable(self):
         for name in [

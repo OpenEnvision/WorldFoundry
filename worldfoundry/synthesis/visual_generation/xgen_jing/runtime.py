@@ -113,8 +113,8 @@ class JINGRuntime:
         from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
         from transformers import AutoProcessor, AutoTokenizer
         from worldfoundry.base_models.diffusion_model.models.encoders.minimax_h3_qwen3vl import MiniMaxH3Qwen3VLEncoder
-        from worldfoundry.core.io.video import save_video_h264
-        from worldfoundry.core.io.audio import write_audio, mux_audio_video
+        from worldfoundry.core.media.codecs.video import save_video_h264
+        from worldfoundry.core.media.codecs.audio import write_audio, mux_audio_video
 
         for name, value in (("height", height), ("width", width)):
             if type(value) is not int or value <= 0 or value % 32:

@@ -13,7 +13,7 @@ from collections.abc import Mapping
 
 import torch
 
-from worldfoundry.core.nn.vae2d import NativeVAE2DDecoder
+from worldfoundry.core.nn.latent.vae2d import NativeVAE2DDecoder
 
 from ....components import ComponentBuildContext
 from ....contracts import DiffusionRequest

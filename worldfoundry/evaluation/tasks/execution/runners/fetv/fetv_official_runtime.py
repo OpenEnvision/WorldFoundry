@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from worldfoundry.base_models.capabilities import vbench_asset_path
-from worldfoundry.core.io.serialization import read_jsonl_objects, write_jsonl
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_prompts import (
     FETV_FRAME_COUNT,

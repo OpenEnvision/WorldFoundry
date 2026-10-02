@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from worldfoundry.core.io.serialization import iter_jsonl, write_jsonl
+from worldfoundry.core.io.formats.serialization import iter_jsonl, write_jsonl
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.tasks.embodied.merge_results import merge_embodied_results
 from worldfoundry.evaluation.tasks.embodied.orchestrator import EmbodiedEvalOrchestrator

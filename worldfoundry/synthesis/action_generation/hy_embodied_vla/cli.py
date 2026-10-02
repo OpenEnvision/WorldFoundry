@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Sequence
 
-from worldfoundry.core.io.serialization import write_json
+from worldfoundry.core.io.formats.serialization import write_json
 
 
 def _parser() -> argparse.ArgumentParser:

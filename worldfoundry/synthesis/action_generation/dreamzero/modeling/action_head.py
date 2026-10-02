@@ -18,7 +18,7 @@ from torchvision.transforms import v2
 from transformers import PretrainedConfig
 from transformers.feature_extraction_utils import BatchFeature
 
-from worldfoundry.core.nn.diffusion_schedulers import (
+from worldfoundry.core.nn.diffusion.schedulers import (
     FlowMatchScheduler,
 )
 from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
@@ -29,7 +29,7 @@ from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import (
     T5RelativeEmbedding,
 )
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
-from worldfoundry.core.model_loading.file import load_state_dict
+from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 from worldfoundry.core.vram import (
     AutoWrappedLinear,
     AutoWrappedModule,

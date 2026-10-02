@@ -13,7 +13,7 @@ import torchvision.transforms.functional as TF
 from safetensors import safe_open
 from safetensors.torch import load_file
 
-from worldfoundry.core.distributed.block_fsdp import shard_model
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.clip import CLIPModel
 from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanModel
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel

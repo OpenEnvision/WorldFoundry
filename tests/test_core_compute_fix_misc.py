@@ -19,13 +19,13 @@ import types
 import pytest
 import torch
 
-from worldfoundry.core.spatial_warp import Sparse3DCache
+from worldfoundry.core.geometry.warp import Sparse3DCache
 
 
 def test_device_import_has_no_availability_or_npu_configuration_side_effect(monkeypatch):
     import importlib
 
-    import worldfoundry.core.device as device
+    import worldfoundry.core.execution.device as device
 
     calls = {"cuda": 0, "npu": 0}
 
@@ -44,7 +44,7 @@ def test_device_import_has_no_availability_or_npu_configuration_side_effect(monk
 
 
 def test_deprecated_device_availability_constant_is_lazy(monkeypatch):
-    import worldfoundry.core.device as device
+    import worldfoundry.core.execution.device as device
 
     calls = 0
 
@@ -61,7 +61,8 @@ def test_deprecated_device_availability_constant_is_lazy(monkeypatch):
 
 
 def test_rope_and_kv_cache_default_to_runtime_selected_device(monkeypatch):
-    from worldfoundry.core.attention import kvcache, rope
+    from worldfoundry.core.attention.cache import kvcache
+    from worldfoundry.core.attention.rotary import rope
 
     selected = torch.device("cpu")
     monkeypatch.setattr(rope, "get_current_torch_device", lambda: selected)
@@ -85,7 +86,7 @@ def test_rope_and_kv_cache_default_to_runtime_selected_device(monkeypatch):
 
 
 def test_native_attention_restores_shared_context_parallel_options(monkeypatch):
-    from worldfoundry.core.attention import native
+    from worldfoundry.core.attention.backends import native
 
     options = types.SimpleNamespace(enable_load_balance=True, rotate_method="original")
     fake_attention_module = types.ModuleType("torch.distributed.tensor.experimental._attention")
@@ -198,7 +199,7 @@ def test_fp8_linear_scales_large_weights_without_saturation(monkeypatch):
 
 
 def test_litema_fuses_same_device_updates_and_validates_restore(monkeypatch):
-    from worldfoundry.core.nn.ema import LitEma
+    from worldfoundry.core.nn.blocks.ema import LitEma
 
     model = torch.nn.Linear(3, 2)
     ema = LitEma(model, decay=0.5, use_num_upates=False)
@@ -291,7 +292,7 @@ def test_sparse3d_cache_chunked_projection_matches_single_batch():
 
 
 def test_metric_sync_init_distributed_raises_on_incomplete_torchrun_env(monkeypatch):
-    from worldfoundry.core.distributed import metric_sync
+    from worldfoundry.core.distributed.collectives import metric_sync
 
     monkeypatch.setenv("RANK", "1")
     monkeypatch.setenv("WORLD_SIZE", "4")
@@ -302,7 +303,7 @@ def test_metric_sync_init_distributed_raises_on_incomplete_torchrun_env(monkeypa
 
 
 def test_configure_torch_backends_touches_real_tf32_attributes():
-    from worldfoundry.core import inference as core_inference
+    from worldfoundry.core.execution import inference as core_inference
 
     previous_matmul = torch.backends.cuda.matmul.allow_tf32
     previous_cudnn = torch.backends.cudnn.allow_tf32
@@ -329,7 +330,7 @@ def test_configure_torch_backends_touches_real_tf32_attributes():
 def test_sdpa_patch_install_uninstall_roundtrip(monkeypatch):
     import torch.nn.functional as F
 
-    from worldfoundry.core import inference as core_inference
+    from worldfoundry.core.execution import inference as core_inference
 
     monkeypatch.delenv("WORLDFOUNDRY_ATTENTION_BACKEND", raising=False)
     original = F.scaled_dot_product_attention

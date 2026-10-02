@@ -3,7 +3,7 @@ import json
 import os
 from collections import defaultdict
 
-from worldfoundry.core.distributed.evaluation_collectives import print0
+from worldfoundry.core.distributed.collectives.evaluation import print0
 from .utils import init_submodules, save_json
 
 

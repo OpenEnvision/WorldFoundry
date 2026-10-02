@@ -28,9 +28,9 @@ from torch.distributed._composable.fsdp import fully_shard
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointImpl, CheckpointWrapper
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper as ptd_checkpoint_wrapper
 
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.a2a_cp import MinimalA2AAttnOp
-from worldfoundry.core.nn.activation_checkpointing import CheckpointMode, SACConfig
+from worldfoundry.core.nn.checkpointing.activation_checkpointing import CheckpointMode, SACConfig
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.context_parallel import split_inputs_cp, cat_outputs_cp, cat_outputs_cp_with_grad, broadcast
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.kv_cache import KVCache, AttnContext, CausalInferenceState, KVCacheMode
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.blockmask import AttnMaskSpec, FlexOrSdpaLocalAttention

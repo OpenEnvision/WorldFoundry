@@ -41,7 +41,7 @@ from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
 
 from worldfoundry.core.configuration.cosmos_config import Config
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 
 # ──────────────────────────────────────────────────────────────────────────
 # Process-wide Hydra lock — ConfigStore / GlobalHydra must not leak across jobs

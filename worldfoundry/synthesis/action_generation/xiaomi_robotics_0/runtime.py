@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
-from worldfoundry.core.io.serialization import write_json
+from worldfoundry.core.io.formats.serialization import write_json
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     collect_images,
     completed_action_result,

@@ -22,8 +22,8 @@ from dataclasses import asdict, dataclass
 
 import torch
 
-from worldfoundry.core.acceleration.nvfp4 import _nvfp4_hardware_eligible
-from worldfoundry.core.attention.piecewise import piecewise_attention_available
+from worldfoundry.core.acceleration.quantization.nvfp4 import _nvfp4_hardware_eligible
+from worldfoundry.core.attention.sparse.piecewise import piecewise_attention_available
 from worldfoundry.core.kernels import kernel_device_profile, kernel_dispatch_report
 
 

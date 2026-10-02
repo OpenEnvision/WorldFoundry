@@ -19,7 +19,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_quantization_policy,
     parse_torch_dtype,
 )
-from worldfoundry.core.io.video import save_image_or_video_tensor
+from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
 from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
 
@@ -309,7 +309,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
                     raise ValueError("cfg_parallel and cfg_parallel_degree must match")
             if torch.device(device).type != "cuda":
                 raise ValueError("sequence/CFG/VAE parallelism requires a CUDA pipeline device")
-            from worldfoundry.core.distributed.sequence_parallel_runtime import (
+            from worldfoundry.core.distributed.sequence_parallel.runtime import (
                 ensure_parallel_runtime,
             )
 

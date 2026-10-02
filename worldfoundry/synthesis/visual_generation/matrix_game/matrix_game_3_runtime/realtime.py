@@ -20,7 +20,7 @@ import torch
 import torch.nn.functional as torch_F
 from PIL import Image
 
-from worldfoundry.core.execution.realtime import RealtimeSpec
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 
 _KEY_TO_ACTION = {
     "w": "forward",

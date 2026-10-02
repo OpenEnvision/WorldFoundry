@@ -50,7 +50,7 @@ from contextvars import ContextVar
 from threading import RLock
 from typing import Any
 
-from worldfoundry.core.utils.inference_graph import InferenceCUDAGraphRunner
+from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
 
 _CUDA_GRAPH_STATEFUL_CONFLICTS = (
     "adacache",

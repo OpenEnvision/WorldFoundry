@@ -94,7 +94,7 @@ class DepthAnythingOperator(BaseOperator):
         Returns:
             Visualization-ready depth image
         """
-        from worldfoundry.core.io.artifacts import prepare_depth_visualization
+        from worldfoundry.core.media.artifacts import prepare_depth_visualization
 
         return prepare_depth_visualization(depth, grayscale=grayscale)
 

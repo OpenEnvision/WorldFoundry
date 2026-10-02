@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.core.attention.varlen import flash_attention
+from worldfoundry.core.attention.sequence.varlen import flash_attention
 from worldfoundry.core.model_loading import load_torch_state_dict
 
 from .model import HuggingfaceTokenizer

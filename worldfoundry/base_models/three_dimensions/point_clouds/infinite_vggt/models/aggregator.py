@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, Tuple, Union, List, Dict, Any
 
-from worldfoundry.core.nn.layers import PatchEmbed
+from worldfoundry.core.nn.blocks.layers import PatchEmbed
 from ..layers.block import Block
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.layers.rope import RotaryPositionEmbedding2D, PositionGetter
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.layers.vision_transformer import (

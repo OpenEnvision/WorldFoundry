@@ -55,7 +55,7 @@ def _install_dependency_compatibility() -> None:
             if "integer is required" not in str(exc):
                 raise
 
-        from worldfoundry.core.io.video import save_video_h264
+        from worldfoundry.core.media.codecs.video import save_video_h264
 
         options = kwargs.get("options")
         try:

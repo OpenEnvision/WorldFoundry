@@ -16,7 +16,7 @@ import torch.nn.init
 from torch import Tensor, nn
 
 # DropPath — imported from shared canonical definition
-from worldfoundry.core.nn.layers import DropPath, drop_path
+from worldfoundry.core.nn.blocks.layers import DropPath, drop_path
 
 logger = logging.getLogger("dinov3")
 

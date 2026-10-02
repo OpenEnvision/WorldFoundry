@@ -274,7 +274,7 @@ def run(args: argparse.Namespace) -> Path:
             cached_latents = torch.cat([cached_latents[1:], next_latent.unsqueeze(0)])
             cached_actions = torch.cat([cached_actions[1:], action.view(1, 1, 2)])
 
-        from worldfoundry.core.io.video import save_video_h264
+        from worldfoundry.core.media.codecs.video import save_video_h264
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         save_video_h264(frames, output_path, fps=args.fps)

@@ -26,11 +26,11 @@ from torchvision.utils import make_grid
 # import pytorch_lightning as pl
 # from pytorch_lightning.utilities import rank_zero_only
 from worldfoundry.core.model_loading.factory import instantiate_from_config
-from worldfoundry.core.nn.ema import LitEma
-from worldfoundry.core.nn.distributions import DiagonalGaussianDistribution
+from worldfoundry.core.nn.blocks.ema import LitEma
+from worldfoundry.core.nn.latent.distributions import DiagonalGaussianDistribution
 from worldfoundry.base_models.diffusion_model.schedulers.lvdm.schedule_math import make_beta_schedule, rescale_zero_terminal_snr
-from worldfoundry.core.nn.classic_diffusion import disabled_train
-from worldfoundry.core.nn.diffusion_utils import (
+from worldfoundry.core.nn.diffusion.convolution import disabled_train
+from worldfoundry.core.nn.diffusion.utils import (
     extract_into_tensor,
     noise_like,
     exists,

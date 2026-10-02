@@ -19,7 +19,7 @@ from einops import rearrange
 from torch import nn
 from torch.nn import functional as F
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
-from worldfoundry.core.nn.distributions import DiagonalGaussianDistribution
+from worldfoundry.core.nn.latent.distributions import DiagonalGaussianDistribution
 
 
 def base_group_norm(x, norm_layer, act_silu=False, channel_last=False):

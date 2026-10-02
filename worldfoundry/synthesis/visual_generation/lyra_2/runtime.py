@@ -296,7 +296,7 @@ class Lyra2Runtime:
         import sys
         import types
 
-        from worldfoundry.core.distributed import megatron_compat
+        from worldfoundry.core.distributed.model_parallel import megatron_compat
 
         parallel_state_module = sys.modules.get("megatron.core.parallel_state")
         if parallel_state_module is None:
@@ -689,7 +689,7 @@ class Lyra2Runtime:
         import torch
 
         from worldfoundry.core.io import video_tensor_to_uint8_frames
-        from worldfoundry.core.io.image import load_pil_image
+        from worldfoundry.core.media.codecs.image import load_pil_image
 
         self._install_runtime_aliases()
         with torch.no_grad() if hasattr(torch, "no_grad") else contextlib.nullcontext():
@@ -706,7 +706,7 @@ class Lyra2Runtime:
         desired_device = self.model.tensor_kwargs.get("device", self.device)
         desired_dtype = self.model.tensor_kwargs.get("dtype", self.weight_dtype)
 
-        from worldfoundry.core.utils import inference_runtime as misc
+        from worldfoundry.core.execution import inference_runtime as misc
         from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.inference.lyra2_ar_inference import (
             run_lyra2_sample,
             safe_to,

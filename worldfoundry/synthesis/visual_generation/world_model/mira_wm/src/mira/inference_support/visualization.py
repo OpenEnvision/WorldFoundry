@@ -128,7 +128,7 @@ def write_video_ffmpeg(
     preset: str = "medium",
 ) -> None:
     """Write a ``(T,C,H,W)`` video through WorldFoundry's portable video backend."""
-    from worldfoundry.core.io.video import write_video
+    from worldfoundry.core.media.codecs.video import write_video
 
     video_np = video_to_uint8(video_tensor).permute(0, 2, 3, 1).detach().cpu().numpy()
     write_video(

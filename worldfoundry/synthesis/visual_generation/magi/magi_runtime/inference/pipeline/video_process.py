@@ -20,10 +20,10 @@ import ffmpeg
 import torch
 from einops import rearrange
 
-import worldfoundry.core.distributed.model_parallel_groups as mpu
+import worldfoundry.core.distributed.model_parallel.groups as mpu
 from inference.common.config import MagiConfig
 from inference.model.vae import AutoModel, DiagonalGaussianDistribution, VideoTokenizerABC
-from worldfoundry.core.distributed.logging import distributed_logger as magi_logger
+from worldfoundry.core.distributed.runtime.logging import distributed_logger as magi_logger
 
 
 ############################################

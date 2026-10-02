@@ -16,7 +16,7 @@ import torch.nn as nn
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple, List
 
-from worldfoundry.core.nn.layers import PatchEmbed
+from worldfoundry.core.nn.blocks.layers import PatchEmbed
 from ..layers.block import Block
 from ..layers.rope import RotaryPositionEmbedding2D, PositionGetter
 from ..layers.vision_transformer import vit_small, vit_base, vit_large, vit_giant2

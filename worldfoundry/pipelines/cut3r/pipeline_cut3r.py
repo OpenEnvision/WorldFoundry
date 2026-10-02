@@ -12,7 +12,7 @@ from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.runtime import
     CUT3RRepresentation,
 )
 from worldfoundry.core.io import artifact_root_path, write_video
-from worldfoundry.core.io.artifacts import (
+from worldfoundry.core.media.artifacts import (
     COLORMAP_VIRIDIS,
     depth_to_colormap_pil,
     save_depth_colormap,

@@ -9,7 +9,7 @@ from worldfoundry.base_models.perception_core.frame_interpolation.amt.motion_smo
     MotionSmoothness,
 )
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     distribute_list_to_rank,
     gather_list_of_dict,
     get_rank,

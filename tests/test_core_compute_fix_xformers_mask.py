@@ -52,7 +52,7 @@ def _flatten_heads(tensor: torch.Tensor) -> torch.Tensor:
 
 
 def test_bool_mask_becomes_additive_neg_inf_bias(fake_xformers):
-    from worldfoundry.core.attention.model_backends import XFormersAttention
+    from worldfoundry.core.attention.backends.model_backends import XFormersAttention
 
     torch.manual_seed(0)
     batch, heads, seq, dim = 1, 2, 5, 4
@@ -84,7 +84,7 @@ def test_bool_mask_becomes_additive_neg_inf_bias(fake_xformers):
 def test_bool_mask_actually_masks(fake_xformers):
     """Changing the content of masked-out keys must not change the output."""
 
-    from worldfoundry.core.attention.model_backends import XFormersAttention
+    from worldfoundry.core.attention.backends.model_backends import XFormersAttention
 
     torch.manual_seed(1)
     batch, heads, seq, dim = 1, 1, 4, 8
@@ -109,7 +109,7 @@ def test_bool_mask_actually_masks(fake_xformers):
 
 
 def test_float_mask_values_pass_through_unchanged(fake_xformers):
-    from worldfoundry.core.attention.model_backends import XFormersAttention
+    from worldfoundry.core.attention.backends.model_backends import XFormersAttention
 
     torch.manual_seed(2)
     batch, heads, seq, dim = 1, 2, 6, 4
@@ -133,7 +133,7 @@ def test_float_mask_values_pass_through_unchanged(fake_xformers):
 def test_mask_width_not_multiple_of_8_is_padded_storage_only(fake_xformers):
     """Logical mask width stays intact when the key length is not 8-aligned."""
 
-    from worldfoundry.core.attention.model_backends import XFormersAttention
+    from worldfoundry.core.attention.backends.model_backends import XFormersAttention
 
     torch.manual_seed(3)
     batch, heads, seq, dim = 1, 1, 5, 4  # 5 keys -> storage padded to 8

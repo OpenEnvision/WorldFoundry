@@ -7,7 +7,7 @@ preparing / computation devices. :meth:`ModelConfig.download_if_necessary`
 materializes the source and, under USP, downloads only on rank zero.
 
 This is placement and download policy, not the file deserializer
-(:mod:`worldfoundry.core.model_loading.file`).
+(:mod:`worldfoundry.core.model_loading.checkpoints.file`).
 """
 
 import glob

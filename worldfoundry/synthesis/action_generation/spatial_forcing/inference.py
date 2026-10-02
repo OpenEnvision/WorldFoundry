@@ -15,7 +15,7 @@ os.environ.setdefault("USE_TF", "0")
 os.environ.setdefault("TRANSFORMERS_NO_FLAX", "1")
 os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
 
-from worldfoundry.core.io.media import MediaKind, infer_media_kind
+from worldfoundry.core.media.types import MediaKind, infer_media_kind
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 

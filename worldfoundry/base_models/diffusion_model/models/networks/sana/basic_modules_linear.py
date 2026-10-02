@@ -24,7 +24,7 @@ same temporal depthwise mix as :class:`GLUMBConvTemp`.
 
 import torch
 import torch.nn as nn
-from worldfoundry.core.nn.layers import Mlp
+from worldfoundry.core.nn.blocks.layers import Mlp
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.activation import build_act, get_act_name
 from worldfoundry.base_models.diffusion_model.models.networks.sana.normalization import build_norm, get_norm_name

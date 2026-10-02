@@ -32,7 +32,7 @@ import torch
 from einops import rearrange
 from torch import Tensor
 
-from worldfoundry.core.io.video import write_video
+from worldfoundry.core.media.codecs.video import write_video
 
 
 def _to_uint8_thwc(tensor: Tensor) -> np.ndarray:

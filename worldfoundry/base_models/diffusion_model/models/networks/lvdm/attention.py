@@ -20,12 +20,12 @@ if importlib.util.find_spec("xformers") is not None:
     XFORMERS_IS_AVAILBLE = True
 else:
     XFORMERS_IS_AVAILBLE = False
-from worldfoundry.core.nn.diffusion_utils import (
+from worldfoundry.core.nn.diffusion.utils import (
     checkpoint,
     exists,
     default,
 )
-from worldfoundry.core.nn.classic_diffusion import zero_module
+from worldfoundry.core.nn.diffusion.convolution import zero_module
 
 
 class RelativePosition(nn.Module):

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
-from worldfoundry.core.io.video import load_video_frames, save_image_or_video_tensor
+from worldfoundry.core.media.codecs.video import load_video_frames, save_image_or_video_tensor
 
 MODEL_ID = "lingbot-world-v2"
 DISPLAY_NAME = "LingBot-World-V2"
@@ -125,7 +125,7 @@ class LingBotWorldV2Runtime:
                 )
             )
             try:
-                from worldfoundry.core.io.hf import resolve_hf_snapshot_path
+                from worldfoundry.core.io.assets.hf import resolve_hf_snapshot_path
 
                 candidates.insert(
                     0,

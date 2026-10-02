@@ -1,10 +1,9 @@
-"""Model loading helpers shared by WorldFoundry runtime integrations.
+"""Model construction, checkpoint loading, adapters and placement policy.
 
-Public names are resolved lazily via ``_EXPORT_MODULES`` so importing this
-package does not pull LoRA, factory, or file loaders. Two different
-``ModelConfig`` types exist: this package's loader/placement config
-(:class:`worldfoundry.core.model_loading.config.ModelConfig`) versus the
-DiT architecture dataclass in :mod:`worldfoundry.core.configuration.model_config`.
+checkpoints owns format/URI loading, safe tensor dictionaries, key remapping,
+streaming shards, compatibility checks and distributed checkpoint assignment.
+The remaining modules construct models, merge adapters, configure placement and
+apply load-time optimization policy. Public APIs resolve lazily.
 """
 
 from __future__ import annotations
@@ -32,15 +31,15 @@ _EXPORT_MODULES = {
     "RuntimePolicy": "worldfoundry.core.model_loading.policy",
     "count_parameters": "worldfoundry.core.model_loading.factory",
     "count_params": "worldfoundry.core.model_loading.factory",
-    "convert_keys_dict_to_single_str": "worldfoundry.core.model_loading.file",
-    "convert_state_dict_keys_to_single_str": "worldfoundry.core.model_loading.file",
-    "convert_state_dict_to_keys_dict": "worldfoundry.core.model_loading.file",
+    "convert_keys_dict_to_single_str": "worldfoundry.core.model_loading.checkpoints.file",
+    "convert_state_dict_keys_to_single_str": "worldfoundry.core.model_loading.checkpoints.file",
+    "convert_state_dict_to_keys_dict": "worldfoundry.core.model_loading.checkpoints.file",
     "get_init_context": "worldfoundry.core.model_loading.model",
     "get_obj_from_str": "worldfoundry.core.model_loading.factory",
-    "hash_model_file": "worldfoundry.core.model_loading.file",
-    "hash_state_dict_keys": "worldfoundry.core.model_loading.file",
-    "build_rename_dict": "worldfoundry.core.model_loading.file",
-    "load_keys_dict": "worldfoundry.core.model_loading.file",
+    "hash_model_file": "worldfoundry.core.model_loading.checkpoints.file",
+    "hash_state_dict_keys": "worldfoundry.core.model_loading.checkpoints.file",
+    "build_rename_dict": "worldfoundry.core.model_loading.checkpoints.file",
+    "load_keys_dict": "worldfoundry.core.model_loading.checkpoints.file",
     "load_model": "worldfoundry.core.model_loading.model",
     "load_model_loader_registry": "worldfoundry.core.model_loading.registry_config",
     "load_model_with_disk_offload": "worldfoundry.core.model_loading.model",
@@ -48,20 +47,20 @@ _EXPORT_MODULES = {
     "merge_named_lora_": "worldfoundry.core.model_loading.lora",
     "merge_flattened_path_lora_": "worldfoundry.core.model_loading.lora",
     "merge_rank_scaled_lora_": "worldfoundry.core.model_loading.lora",
-    "load_state_dict": "worldfoundry.core.model_loading.file",
-    "load_state_dict_non_strict": "worldfoundry.core.model_loading.state_dict",
-    "load_state_dict_from_folder": "worldfoundry.core.model_loading.file",
-    "load_state_dict_from_gguf": "worldfoundry.core.model_loading.file",
-    "load_state_dict_from_safetensors_index": "worldfoundry.core.model_loading.file",
-    "load_torch_checkpoint": "worldfoundry.core.model_loading.file",
-    "load_torch_state_dict": "worldfoundry.core.model_loading.file",
+    "load_state_dict": "worldfoundry.core.model_loading.checkpoints.file",
+    "load_state_dict_non_strict": "worldfoundry.core.model_loading.checkpoints.state_dict",
+    "load_state_dict_from_folder": "worldfoundry.core.model_loading.checkpoints.file",
+    "load_state_dict_from_gguf": "worldfoundry.core.model_loading.checkpoints.file",
+    "load_state_dict_from_safetensors_index": "worldfoundry.core.model_loading.checkpoints.file",
+    "load_torch_checkpoint": "worldfoundry.core.model_loading.checkpoints.file",
+    "load_torch_state_dict": "worldfoundry.core.model_loading.checkpoints.file",
     "instantiate_from_config": "worldfoundry.core.model_loading.factory",
-    "non_strict_load_model": "worldfoundry.core.model_loading.state_dict",
-    "search_for_embeddings": "worldfoundry.core.model_loading.file",
-    "search_for_files": "worldfoundry.core.model_loading.file",
-    "search_parameter": "worldfoundry.core.model_loading.file",
+    "non_strict_load_model": "worldfoundry.core.model_loading.checkpoints.state_dict",
+    "search_for_embeddings": "worldfoundry.core.model_loading.checkpoints.file",
+    "search_for_files": "worldfoundry.core.model_loading.checkpoints.file",
+    "search_parameter": "worldfoundry.core.model_loading.checkpoints.file",
     "resolve_symbol": "worldfoundry.core.model_loading.factory",
-    "split_state_dict_with_prefix": "worldfoundry.core.model_loading.file",
+    "split_state_dict_with_prefix": "worldfoundry.core.model_loading.checkpoints.file",
     "ModelLoaderRegistry": "worldfoundry.core.model_loading.registry_config",
 }
 

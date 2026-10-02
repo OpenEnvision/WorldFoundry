@@ -7,7 +7,7 @@ References: https://github.com/naver/dust3r
 
 import torch
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 import torch.nn.functional as F
 

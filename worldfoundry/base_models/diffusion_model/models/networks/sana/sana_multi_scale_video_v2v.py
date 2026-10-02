@@ -46,7 +46,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.selection imp
     resolve_attention_block,
     resolve_ffn_block,
 )
-from worldfoundry.core.distributed.generic_collectives import get_rank
+from worldfoundry.core.distributed.collectives.generic import get_rank
 
 _xformers_available = False if os.environ.get("DISABLE_XFORMERS", "0") == "1" else is_xformers_available()
 if _xformers_available:

@@ -64,7 +64,7 @@ def _extended_prompts(path: str | Path | None, count: int) -> list[str | None]:
 
 
 def _generator_state(checkpoint: object, *, use_ema: bool) -> OrderedDict[str, torch.Tensor]:
-    from worldfoundry.core.checkpoint import tensor_state_dict
+    from worldfoundry.core.model_loading.checkpoints import tensor_state_dict
 
     if not isinstance(checkpoint, Mapping):
         raise TypeError("RollingForcing checkpoint must be a mapping.")
@@ -93,7 +93,7 @@ def _distributed_device(seed: int) -> tuple[torch.device, int, int]:
     import torch
     import torch.distributed as dist
 
-    from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+    from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
     if "LOCAL_RANK" not in os.environ:
         set_seed_everywhere(seed)
@@ -116,8 +116,8 @@ def main() -> None:
     from einops import rearrange
     from omegaconf import OmegaConf
 
-    from worldfoundry.core.checkpoint import load_weights_only
-    from worldfoundry.core.io.video import write_video_torchvision
+    from worldfoundry.core.model_loading.checkpoints import load_weights_only
+    from worldfoundry.core.media.codecs.video import write_video_torchvision
 
     # The causal Wan variant is placed on PYTHONPATH by RollingForcingRuntime.
     # Delaying this import keeps module discovery and ``--help`` lightweight.

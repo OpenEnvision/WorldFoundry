@@ -1,7 +1,7 @@
 # Vendored from NVlabs/rCM (Apache-2.0); see ../THIRD_PARTY_NOTICES.md.
 #
 # `BlockPattern`, `AttnMaskSpec`, and the mask predicates now live in
-# worldfoundry/core/attention/block_pattern.py so every causal video runtime
+# worldfoundry/core/attention/sparse/block_pattern.py so every causal video runtime
 # shares one chunk-schedule definition. They are re-exported here unchanged so
 # upstream call sites keep working.
 from dataclasses import replace
@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 from torch.nn.attention.flex_attention import flex_attention as torch_flex_attention, create_block_mask
 
-from worldfoundry.core.attention.block_pattern import AttnMaskSpec, BlockPattern, build_mask_fn
+from worldfoundry.core.attention.sparse.block_pattern import AttnMaskSpec, BlockPattern, build_mask_fn
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.attention import attention
 
 
@@ -127,7 +127,7 @@ class FlexOrSdpaLocalAttention(nn.Module):
         self._magi_cache.clear()
 
     def _make_mask_fn(self, spec: AttnMaskSpec, Q_real: int, KV_real: int):
-        # Predicates live in worldfoundry.core.attention.block_pattern so packed
+        # Predicates live in worldfoundry.core.attention.sparse.block_pattern so packed
         # training masks, streaming inference, and extrapolation share one definition.
         return build_mask_fn(spec, q_real=Q_real, kv_real=KV_real)
 

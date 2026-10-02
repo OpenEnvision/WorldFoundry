@@ -9,7 +9,7 @@ import imageio
 from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.models.models.rasterization import GaussianSplatRenderer
 from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.models.utils.sh_utils import RGB2SH, SH2RGB
 from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.utils.gs_effects import GSEffects
-from worldfoundry.core.io.artifacts import apply_color_map_to_image
+from worldfoundry.core.media.artifacts import apply_color_map_to_image
 from tqdm import tqdm
 
 

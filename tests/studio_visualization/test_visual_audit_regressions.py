@@ -151,4 +151,4 @@ def test_lingbot_depth_fallback_inverts_world_to_camera_extrinsic(monkeypatch) -
 
     if stubbed_cv2:
         sys.modules.pop("worldfoundry.pipelines.lingbot_map.pipeline_lingbot_map", None)
-        sys.modules.pop("worldfoundry.core.io.artifacts", None)
+        sys.modules.pop("worldfoundry.core.media.artifacts", None)

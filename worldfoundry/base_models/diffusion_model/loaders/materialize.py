@@ -192,7 +192,7 @@ class NativeCheckpointResolver:
                 paths=tuple(root / filename for filename in checkpoint.files),
             )
 
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         root = materialize_hf_snapshot(
             checkpoint.repo_id,

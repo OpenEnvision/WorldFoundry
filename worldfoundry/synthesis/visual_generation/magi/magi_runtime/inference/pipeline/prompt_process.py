@@ -21,11 +21,11 @@ from typing import List
 import numpy as np
 import torch
 
-import worldfoundry.core.distributed.model_parallel_groups as mpu
+import worldfoundry.core.distributed.model_parallel.groups as mpu
 from inference.common.config import MagiConfig
 from inference.model.t5 import T5Embedder
 from worldfoundry.core import env_is_true, is_last_tp_cp_rank
-from worldfoundry.core.distributed.logging import distributed_logger as magi_logger
+from worldfoundry.core.distributed.runtime.logging import distributed_logger as magi_logger
 
 try:
     from worldfoundry.core.io.paths import resolve_data_path

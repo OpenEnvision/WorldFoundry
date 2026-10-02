@@ -141,7 +141,7 @@ class WorldFoundryPipelineBackend:
             raise FileNotFoundError(f"WorldFoundry output artifact is not a local file: {artifact.uri}")
         requested_output.parent.mkdir(parents=True, exist_ok=True)
         if source.resolve() != requested_output.resolve():
-            from worldfoundry.core.io.file_utils import materialize_file
+            from worldfoundry.core.io.filesystem.file_utils import materialize_file
 
             materialize_file(source, requested_output)
         return requested_output

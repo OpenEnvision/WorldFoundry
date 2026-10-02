@@ -20,8 +20,8 @@ from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtim
 from worldfoundry.base_models.diffusion_model.schedulers.cosmos.flow_match_euler import FlowMatchEulerDiscreteScheduler
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
-from worldfoundry.core.distributed import context_parallel_util
-from worldfoundry.core.distributed.context_parallel_util import init_context_parallel
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
+from worldfoundry.core.distributed.model_parallel.context_state import init_context_parallel
 
 
 TEST_CASE_ROOT = Path(__file__).resolve().parents[5] / "data" / "test_cases"

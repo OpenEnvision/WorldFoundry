@@ -16,7 +16,7 @@ from lyra_2._src.networks.clip_lyra2 import Wan2pt1CLIPEmbLyra2
 
 from worldfoundry.core.configuration.lazy_config import LazyCall as L
 from worldfoundry.core.configuration.lazy_config import LazyDict
-from worldfoundry.core.distributed.context_parallel import broadcast
+from worldfoundry.core.distributed.model_parallel.context import broadcast
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 """Pi3 uses the shared axial 2D rotary embedding and patch position cache."""
 
-from worldfoundry.core.attention.rope_2d import PositionGetter, RotaryPositionEmbedding2D
+from worldfoundry.core.attention.rotary.rope_2d import PositionGetter, RotaryPositionEmbedding2D
 
 
 class RoPE2D(RotaryPositionEmbedding2D):

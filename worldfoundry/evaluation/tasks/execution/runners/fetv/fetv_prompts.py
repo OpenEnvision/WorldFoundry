@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.serialization import read_jsonl_objects, write_jsonl
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
 from worldfoundry.evaluation.api import (
     GenerationRequest,
     GenerationResult,

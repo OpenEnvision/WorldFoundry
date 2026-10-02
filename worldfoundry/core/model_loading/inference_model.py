@@ -86,7 +86,7 @@ def instantiate_inference_network(
             network = shard(network)
         from torch.distributed.tensor import DTensor
 
-        from worldfoundry.core.distributed.device_mesh_collectives import (
+        from worldfoundry.core.distributed.collectives.device_mesh import (
             broadcast_dtensor_model_states,
         )
 

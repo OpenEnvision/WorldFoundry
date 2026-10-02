@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from worldfoundry.core.attention.chunk_partition import TemporalChunkPartition
+from worldfoundry.core.attention.cache.chunk_partition import TemporalChunkPartition
 from worldfoundry.training.post_training.distillation.anyflow.math import (
     allocate_flowmap_intervals,
     anyflow_distribution_gradient,

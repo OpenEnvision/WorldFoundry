@@ -106,7 +106,7 @@ class NativeDiffusionRunner:
                 "the cached-delta step must prove that the negative branch was skipped"
             )
         if self.cfg_parallel_degree == 2:
-            from worldfoundry.core.distributed.sequence_parallel_runtime import (
+            from worldfoundry.core.distributed.sequence_parallel.runtime import (
                 get_cfg_parallel_world_size,
             )
 
@@ -255,7 +255,7 @@ class NativeDiffusionRunner:
 
         import torch.distributed as dist
 
-        from worldfoundry.core.distributed.sequence_parallel_runtime import (
+        from worldfoundry.core.distributed.sequence_parallel.runtime import (
             get_cfg_parallel_group,
             get_cfg_parallel_rank,
         )

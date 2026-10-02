@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from worldfoundry.core.io.serialization import (
+from worldfoundry.core.io.formats.serialization import (
     append_jsonl,
     jsonable,
     read_json as load_json,

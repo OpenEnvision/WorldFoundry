@@ -8,7 +8,7 @@ pytest.importorskip("hydra")
 pytest.importorskip("tree")
 pytest.importorskip("omegaconf")
 
-from worldfoundry.core.io import config_utils
+from worldfoundry.core.configuration import hydra_utils as config_utils
 
 
 def _unique_name(label: str) -> str:

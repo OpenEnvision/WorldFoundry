@@ -943,7 +943,7 @@ class OfficialVideoRuntime:
         finally:
             torch.load = original_torch_load  # type: ignore[assignment]
         from modelscope.pipelines.multi_modal.text_to_video_synthesis_pipeline import tensor2vid
-        from worldfoundry.core.io.video import save_video_h264
+        from worldfoundry.core.media.codecs.video import save_video_h264
 
         def _postprocess_video(inputs: dict[str, Any], **post_params: Any) -> dict[str, str]:
             # Preserve ModelScope's frame conversion and encoding parameters while

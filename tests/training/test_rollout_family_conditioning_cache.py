@@ -13,7 +13,7 @@ from worldfoundry.base_models.diffusion_model.components import ComponentKey, Co
 from worldfoundry.base_models.diffusion_model.contracts import Conditioning
 from worldfoundry.cli.training_commands import register_training_subparser
 from worldfoundry.cli.training_commands.common import training_family
-from worldfoundry.core.io.integrity import canonical_json
+from worldfoundry.core.io.filesystem.integrity import canonical_json
 from worldfoundry.training.data.hunyuan_video import HunyuanVideoTextFeatureEncoder
 from worldfoundry.training.data.ltx import LTXTextFeatureEncoder
 from worldfoundry.training.data.ltx.rollout_cache import (

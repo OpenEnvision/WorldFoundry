@@ -29,7 +29,7 @@ from einops import rearrange
 from torch import nn
 from torch.distributed._composable.fsdp import fully_shard
 
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.core.kernels import layer_norm_scale_shift, residual_gate_add
 from worldfoundry.base_models.diffusion_model.models.encoders.structured_conditioning import DataType
 from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.action_encoder import (

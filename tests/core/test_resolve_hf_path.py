@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from worldfoundry.core.io.hf import (
+from worldfoundry.core.io.assets.hf import (
     HF_URI_SCHEME,
     _allow_patterns_for_subpath,
     _download_snapshot,
@@ -15,7 +15,7 @@ from worldfoundry.core.io.hf import (
     resolve_hf_path,
     resolve_hf_snapshot_path,
 )
-from worldfoundry.core.io.easy_io import resolve_checkpoint_path
+from worldfoundry.core.io.assets.easy_io import resolve_checkpoint_path
 
 
 def test_resolve_hf_path_passthrough_for_non_string() -> None:
@@ -55,7 +55,7 @@ def test_allow_patterns_cover_directory_subtrees() -> None:
     assert _allow_patterns_for_subpath("") is None
 
 
-@patch("worldfoundry.core.io.hf.materialize_hf_snapshot", return_value=Path("/cache/repo-root"))
+@patch("worldfoundry.core.io.assets.hf.materialize_hf_snapshot", return_value=Path("/cache/repo-root"))
 def test_resolve_hf_path_downloads_hf_uri_rank_safely(mock_materialize) -> None:
     resolved = resolve_hf_path("hf://owner/repo/checkpoints/model.pth")
 
@@ -66,7 +66,7 @@ def test_resolve_hf_path_downloads_hf_uri_rank_safely(mock_materialize) -> None:
     assert resolved == "/cache/repo-root/checkpoints/model.pth"
 
 
-@patch("worldfoundry.core.io.hf.materialize_hf_snapshot", return_value=Path("/cache/repo-root"))
+@patch("worldfoundry.core.io.assets.hf.materialize_hf_snapshot", return_value=Path("/cache/repo-root"))
 def test_hf_download_or_fpath_is_alias(mock_materialize) -> None:
     resolved = hf_download_or_fpath("hf://owner/repo")
 
@@ -77,8 +77,8 @@ def test_hf_download_or_fpath_is_alias(mock_materialize) -> None:
 def test_materialize_hf_snapshot_downloads_on_rank_zero_then_reopens_locally() -> None:
     patterns = ["weights/model.safetensors"]
     with (
-        patch("worldfoundry.core.io.hf.maybe_download_hf_repo_on_rank0") as mock_rank_safe_download,
-        patch("worldfoundry.core.io.hf._snapshot_download", return_value="/cache/repo-root") as mock_snapshot,
+        patch("worldfoundry.core.io.assets.hf.maybe_download_hf_repo_on_rank0") as mock_rank_safe_download,
+        patch("worldfoundry.core.io.assets.hf._snapshot_download", return_value="/cache/repo-root") as mock_snapshot,
     ):
         resolved = materialize_hf_snapshot("owner/repo", allow_patterns=patterns)
 
@@ -105,10 +105,10 @@ def test_materialize_hf_snapshot_downloads_on_rank_zero_then_reopens_locally() -
 def test_download_snapshot_preflights_and_holds_repo_lock(tmp_path: Path) -> None:
     cache_dir = tmp_path / "hub"
     with (
-        patch("worldfoundry.core.io.hf.cache_min_free_bytes", return_value=0),
-        patch("worldfoundry.core.io.hf.ensure_free_disk") as mock_preflight,
-        patch("worldfoundry.core.io.hf.FileLock") as mock_lock,
-        patch("worldfoundry.core.io.hf._snapshot_download") as mock_snapshot,
+        patch("worldfoundry.core.io.assets.hf.cache_min_free_bytes", return_value=0),
+        patch("worldfoundry.core.io.assets.hf.ensure_free_disk") as mock_preflight,
+        patch("worldfoundry.core.io.assets.hf.FileLock") as mock_lock,
+        patch("worldfoundry.core.io.assets.hf._snapshot_download") as mock_snapshot,
     ):
         _download_snapshot(
             "owner/repo",
@@ -133,7 +133,7 @@ def test_download_snapshot_preflights_and_holds_repo_lock(tmp_path: Path) -> Non
 
 
 def test_resolve_checkpoint_path_delegates_hf_uri() -> None:
-    with patch("worldfoundry.core.io.hf.resolve_hf_path", return_value="/cache/model.pth") as mock_resolve:
+    with patch("worldfoundry.core.io.assets.hf.resolve_hf_path", return_value="/cache/model.pth") as mock_resolve:
         resolved = resolve_checkpoint_path("hf://owner/repo/model.pth")
 
     mock_resolve.assert_called_once_with("hf://owner/repo/model.pth")

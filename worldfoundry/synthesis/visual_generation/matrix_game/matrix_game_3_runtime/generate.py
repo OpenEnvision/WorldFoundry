@@ -9,10 +9,10 @@ import torch.distributed as dist
 warnings.filterwarnings('ignore')
 from PIL import Image
 from worldfoundry.base_models.diffusion_model.recipes.wan_configs.action_22 import MAX_AREA_CONFIGS, WAN_CONFIGS
-from worldfoundry.core.distributed.sequence_ops import init_distributed_group
+from worldfoundry.core.distributed.sequence_parallel.ops import init_distributed_group
 from pipeline.inference_interactive_pipeline import MatrixGame3Pipeline as MatrixGame3InteractivePipeline
 from pipeline.inference_pipeline import MatrixGame3Pipeline
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 def _validate_args(args):
     if args.ulysses_size <= 1:
         if args.t5_fsdp or args.dit_fsdp:

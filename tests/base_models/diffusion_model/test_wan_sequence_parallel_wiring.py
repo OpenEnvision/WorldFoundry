@@ -36,7 +36,7 @@ class _IdentityVaceMainBlock(torch.nn.Module):
 def test_wan_sequence_parallel_pads_shards_per_token_modulation_and_gathers(
     monkeypatch,
 ) -> None:
-    from worldfoundry.core.distributed import sequence_parallel_runtime
+    from worldfoundry.core.distributed.sequence_parallel import runtime as sequence_parallel_runtime
 
     model = WanModel(
         dim=32,
@@ -84,7 +84,7 @@ def test_wan_sequence_parallel_pads_shards_per_token_modulation_and_gathers(
 
 
 def test_wan_vace_sequence_parallel_shards_control_and_main_streams(monkeypatch) -> None:
-    from worldfoundry.core.distributed import sequence_parallel_runtime
+    from worldfoundry.core.distributed.sequence_parallel import runtime as sequence_parallel_runtime
 
     model = VaceWanModel(
         vace_layers=(0,),
@@ -141,7 +141,7 @@ def test_wan_vace_real_four_rank_sequence_parallel_matches_full_attention() -> N
     from worldfoundry.base_models.diffusion_model.optimizations.sequence_parallel import (
         enable_sequence_parallel,
     )
-    from worldfoundry.core.distributed.sequence_parallel_runtime import (
+    from worldfoundry.core.distributed.sequence_parallel.runtime import (
         ensure_parallel_runtime,
     )
 
@@ -191,7 +191,7 @@ def test_wan_real_four_rank_bfloat16_flash_sequence_parallel_matches_full_attent
     from worldfoundry.base_models.diffusion_model.optimizations.sequence_parallel import (
         enable_sequence_parallel,
     )
-    from worldfoundry.core.distributed.sequence_parallel_runtime import (
+    from worldfoundry.core.distributed.sequence_parallel.runtime import (
         ensure_parallel_runtime,
     )
     from worldfoundry.core.model_loading.optimize import apply_attention_policy

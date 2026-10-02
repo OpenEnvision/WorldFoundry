@@ -9,7 +9,7 @@ from huggingface_hub import PyTorchModelHubMixin
 from worldfoundry.base_models.perception_core.general_perception.dinov2.hub.backbones import (
     dinov2_vitl14_reg,
 )
-from worldfoundry.core.nn.layers import Mlp, PatchEmbed
+from worldfoundry.core.nn.blocks.layers import Mlp, PatchEmbed
 
 from ..utils.geometry import get_pixel, homogenize_points, se3_inverse
 from .layers.attention import FlashAttentionRope

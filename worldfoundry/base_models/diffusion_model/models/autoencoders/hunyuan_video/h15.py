@@ -32,8 +32,8 @@ from torch.nn import Conv3d
 from torch import distributed as dist
 
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
-from worldfoundry.core.nn.distributions import AutoencoderKLOutput, DecoderOutput, DiagonalGaussianDistribution
-from worldfoundry.core.distributed.sequence_mesh_state import get_parallel_state
+from worldfoundry.core.nn.latent.distributions import AutoencoderKLOutput, DecoderOutput, DiagonalGaussianDistribution
+from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
 
 
 def swish(x: Tensor, inplace=False) -> Tensor:

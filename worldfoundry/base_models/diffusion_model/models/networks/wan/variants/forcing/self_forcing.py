@@ -3,7 +3,7 @@
 Causal self-attention over generated prefixes.  Used by the shared
 Self-Forcing runtime.  Adds causal attention; no VACE or linear attn.
 """
-from worldfoundry.core.attention.varlen import attention
+from worldfoundry.core.attention.sequence.varlen import attention
 from .model import (
     WanRMSNorm,
     rope_apply,

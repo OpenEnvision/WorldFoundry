@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.core.io import cache as io_cache
-from worldfoundry.core.io import download as io_download
+from worldfoundry.core.io.assets import cache as io_cache
+from worldfoundry.core.io.assets import download as io_download
 
 
 class _FakeResponse(io.BytesIO):

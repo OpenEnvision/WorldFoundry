@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from einops import rearrange
 
-from worldfoundry.core.attention.projective_rope import invert_k, invert_se3, lift_k
+from worldfoundry.core.attention.rotary.projective_rope import invert_k, invert_se3, lift_k
 from worldfoundry.core.nn import RMSNorm, sinusoidal_embedding_1d
 
 from ...components import ComponentBuildContext

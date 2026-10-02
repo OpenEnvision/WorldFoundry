@@ -49,7 +49,7 @@ def test_xfuser_attention_projects_and_normalizes_query(monkeypatch):
     attention.xFuserLongContextAttention = Attention
     kernels = types.ModuleType("yunchang.kernels")
     kernels.AttnType = types.SimpleNamespace(FA="fa", NPU="npu")
-    parallel = types.ModuleType("worldfoundry.core.distributed.xfuser_parallel")
+    parallel = types.ModuleType("worldfoundry.core.distributed.sequence_parallel.xfuser_parallel")
     parallel.initialize_usp = lambda: None
     for name, module in [
         (distributed.__name__, distributed),
@@ -59,7 +59,7 @@ def test_xfuser_attention_projects_and_normalizes_query(monkeypatch):
     ]:
         monkeypatch.setitem(sys.modules, name, module)
     spec = importlib.util.spec_from_file_location(
-        "isolated_scope_xdit", package_root() / "core/attention/scope_xdit_context_parallel.py"
+        "isolated_scope_xdit", package_root() / "core/attention/parallel/scope_xdit_context_parallel.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

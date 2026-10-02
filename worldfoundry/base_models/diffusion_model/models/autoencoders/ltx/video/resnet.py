@@ -21,7 +21,7 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.conv
     make_linear_nd,
 )
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.enums import NormLayerType, PaddingModeType
-from worldfoundry.core.nn.timestep import (
+from worldfoundry.core.nn.diffusion.timestep import (
     PixArtAlphaCombinedTimestepSizeEmbeddings,
 )
 

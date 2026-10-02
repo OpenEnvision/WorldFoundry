@@ -10,7 +10,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Literal
 
-from worldfoundry.core.utils.import_guard import third_party_lazy_import_guard
+from worldfoundry.core.utils.python.import_guard import third_party_lazy_import_guard
 
 from .allegro_runtime import load_allegro_components
 

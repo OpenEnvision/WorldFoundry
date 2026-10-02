@@ -150,7 +150,7 @@ def run(args: argparse.Namespace) -> Path:
 
     from tesseract.modules.tesseract_model import TesserActDepthNormal
     from tesseract.modules.tesseract_pipeline import TesserActImageToDepthNormalVideoPipeline
-    from worldfoundry.core.io.video import save_video_h264
+    from worldfoundry.core.media.codecs.video import save_video_h264
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is unavailable; TesserAct inference cannot run")

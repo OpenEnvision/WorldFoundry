@@ -159,7 +159,7 @@ def run(args: argparse.Namespace) -> Path:
     import torch
     from diffusers import AutoencoderKLWan
 
-    from worldfoundry.core.io.video import save_video_h264
+    from worldfoundry.core.media.codecs.video import save_video_h264
     from worldfoundry.synthesis.visual_generation.giga_world_0.giga_models_compat import (
         selective_giga_world_imports,
     )

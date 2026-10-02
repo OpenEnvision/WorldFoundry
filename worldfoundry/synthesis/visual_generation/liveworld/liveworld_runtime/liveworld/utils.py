@@ -15,8 +15,8 @@ import numpy as np
 import torch
 
 from worldfoundry.core.model_loading import GeneralLoRALoader
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere as set_seed
-from worldfoundry.core.nn.diffusion_schedulers import (
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
+from worldfoundry.core.nn.diffusion.schedulers import (
     FlowMatchScheduler,
     SchedulerInterface,
 )

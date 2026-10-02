@@ -454,7 +454,7 @@ def test_execution_helpers_are_owned_by_execution_package() -> None:
     import worldfoundry.evaluation.tasks.execution.orchestration.contract as canonical_contract
     import worldfoundry.evaluation.tasks.execution.orchestration.existing_results as canonical_existing_results
     import worldfoundry.evaluation.tasks.execution.framework.io as canonical_io
-    from worldfoundry.core.io.serialization import write_json as core_write_json
+    from worldfoundry.core.io.formats.serialization import write_json as core_write_json
     import worldfoundry.evaluation.tasks.catalog.benchmark_catalog as canonical_benchmark_catalog
     import worldfoundry.evaluation.tasks.execution.orchestration.materialize as canonical_materialize
     import worldfoundry.evaluation.tasks.execution.orchestration.run_mode as canonical_run_mode

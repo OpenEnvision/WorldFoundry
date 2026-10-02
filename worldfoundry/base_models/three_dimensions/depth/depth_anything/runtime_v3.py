@@ -81,7 +81,7 @@ def _prediction_to_world_point_clouds(
 
 
 def _build_depth_visualizations(depth: np.ndarray) -> np.ndarray:
-    from worldfoundry.core.io.artifacts import build_depth_visualizations
+    from worldfoundry.core.media.artifacts import build_depth_visualizations
 
     return build_depth_visualizations(depth)
 

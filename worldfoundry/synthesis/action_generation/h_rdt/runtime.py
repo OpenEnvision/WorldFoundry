@@ -82,7 +82,7 @@ class HRDTRuntime:
         if self._snapshot is not None and self._model_dir is not None:
             return self._snapshot, self._model_dir
 
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
         from worldfoundry.core.io.paths import (
             resolve_local_hf_model_path,
             resolve_worldfoundry_path,
@@ -127,9 +127,9 @@ class HRDTRuntime:
 
         import torch
 
-        from worldfoundry.core.checkpoint.assignment import assign_state_dict_strict
+        from worldfoundry.core.model_loading.checkpoints.assignment import assign_state_dict_strict
         from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
-        from worldfoundry.core.model_loading.file import load_torch_state_dict
+        from worldfoundry.core.model_loading.checkpoints.file import load_torch_state_dict
 
         from .modeling import HRDTRunner
 
@@ -223,7 +223,7 @@ class HRDTRuntime:
         import torch
         from transformers import AutoTokenizer, T5EncoderModel
 
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         self._load_model()
         location = materialize_hf_snapshot(
@@ -415,7 +415,7 @@ class HRDTRuntime:
                 raise ValueError("H-RDT image tokens must have shape [tokens, 2176] or [batch, tokens, 2176]")
             return tokens, max(1, int(tokens.shape[1]) // self.config.vision_tokens_per_view)
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
 
         values = collect_images(
             observation,

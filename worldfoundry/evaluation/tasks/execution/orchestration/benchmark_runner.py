@@ -25,8 +25,8 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
 from worldfoundry.core.execution.process import run_logged_subprocess
+from worldfoundry.core.io.formats.serialization import write_json
 from worldfoundry.core.io.paths import resolve_worldfoundry_path
-from worldfoundry.core.io.serialization import write_json
 from worldfoundry.core.observability.logging_setup import get_logger, log_context
 from worldfoundry.core.observability.time import utc_now_iso
 from worldfoundry.evaluation.reporting import inspect_scorecard_runtime_flags

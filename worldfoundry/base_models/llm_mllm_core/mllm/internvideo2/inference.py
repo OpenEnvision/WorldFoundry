@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 
-from worldfoundry.core.io.python_config import load_python_config
+from worldfoundry.core.configuration.python import load_python_config
 from worldfoundry.core import (
     get_video_details,
     load_frames_from_video,

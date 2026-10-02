@@ -8,7 +8,7 @@ from PIL import Image
 from vbench.utils import load_video, load_dimension_info, clip_transform, read_frames_decord_by_fps, clip_transform_Image
 from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

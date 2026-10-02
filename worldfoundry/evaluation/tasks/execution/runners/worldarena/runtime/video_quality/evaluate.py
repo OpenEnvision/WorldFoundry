@@ -1,6 +1,6 @@
 import torch
 import os
-from worldfoundry.core.distributed.evaluation_collectives import dist_init, print0
+from worldfoundry.core.distributed.collectives.evaluation import dist_init, print0
 try:
     from .WorldArena import WorldArenaBenchmark
 except ImportError:

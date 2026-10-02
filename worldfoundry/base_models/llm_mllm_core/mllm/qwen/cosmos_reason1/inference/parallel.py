@@ -33,7 +33,7 @@ from worldfoundry.base_models.llm_mllm_core.mllm.qwen.cosmos_reason1.inference.c
 # from torchtitan.config_manager import TORCH_DTYPE_MAP
 # from torchtitan.logging import logger
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.cosmos_reason1.inference.parallel_dims import ParallelDims
-from worldfoundry.core.distributed.logging import log as logger
+from worldfoundry.core.distributed.runtime.logging import log as logger
 
 TORCH_DTYPE_MAP = {
     "float16": torch.float16,

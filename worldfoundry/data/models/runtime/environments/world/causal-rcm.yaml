@@ -36,7 +36,7 @@ validation_imports:
 - regex
 - safetensors
 - imageio
-- worldfoundry.core.attention.block_pattern
+- worldfoundry.core.attention.sparse.block_pattern
 - worldfoundry.synthesis.visual_generation.rcm
 notes:
 - Covers only the vendored causal inference path. Upstream's training extras (megatron-core,

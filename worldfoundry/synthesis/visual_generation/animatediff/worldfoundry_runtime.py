@@ -461,7 +461,7 @@ class AnimateDiffRuntime:
         if target.suffix.lower() != ".mp4":
             target = target.with_suffix(".mp4")
 
-        from worldfoundry.core.io.video import save_videos_grid
+        from worldfoundry.core.media.codecs.video import save_videos_grid
 
         # Save the generated video tensor to a file
         save_videos_grid(sample, str(target), fps=fps or int(kwargs.get("fps", 8)))

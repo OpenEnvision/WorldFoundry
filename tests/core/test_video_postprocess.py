@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from worldfoundry.core.video.postprocess import (
+from worldfoundry.core.media.processing.postprocess import (
     IdentityVideoPostProcessor,
     VideoChunk,
     VideoPostprocessChain,

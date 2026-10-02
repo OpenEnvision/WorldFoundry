@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path, resolve_worldfoundry_path
-from worldfoundry.core.io.serialization import jsonable, write_json
+from worldfoundry.core.io.formats.serialization import jsonable, write_json
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 
 from .preprocessing import CAMERA_KEYS, build_model_batch

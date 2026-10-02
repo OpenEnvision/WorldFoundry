@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from worldfoundry.core.nn.layers import LayerNorm2d, SamHeadMLP
+from worldfoundry.core.nn.blocks.layers import LayerNorm2d, SamHeadMLP
 
 
 class MaskDecoder(nn.Module):

@@ -36,7 +36,7 @@ _TARGET_PREFIXES = (
     ),
     (
         "groot.vla.model.dreamzero.modules.flow_match_scheduler",
-        "worldfoundry.core.nn.diffusion_schedulers",
+        "worldfoundry.core.nn.diffusion.schedulers",
     ),
     (
         "groot.vla.model.dreamzero.modules.flow_unipc_multistep_scheduler",
@@ -76,7 +76,7 @@ _ALLOWED_INFERENCE_TARGET_PREFIXES = (
     "worldfoundry.base_models.diffusion_model.models.encoders.wan.",
     "worldfoundry.base_models.diffusion_model.models.autoencoders.wan.",
     "worldfoundry.base_models.diffusion_model.schedulers.flow_unipc.",
-    "worldfoundry.core.nn.diffusion_schedulers.",
+    "worldfoundry.core.nn.diffusion.schedulers.",
 )
 
 

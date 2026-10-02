@@ -12,7 +12,7 @@ Not this package: Hydra compose of attrs :class:`Config` lives in
 :mod:`worldfoundry.core.configuration.hydra`. DiT architecture
 dataclasses live in :mod:`worldfoundry.core.configuration.model_config`.
 Legacy ``cls``/``class`` instantiate lives in
-:mod:`worldfoundry.core.io.config_utils`.
+:mod:`worldfoundry.core.configuration.hydra_utils`.
 
 Trust boundary: ``.py`` configs loaded here are trusted executable code
 (``exec``). YAML configs are data (``yaml.safe_load``).

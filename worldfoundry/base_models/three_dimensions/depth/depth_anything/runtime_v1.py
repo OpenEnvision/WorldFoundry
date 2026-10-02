@@ -284,7 +284,7 @@ class DepthAnything1Representation:
         
         # Add visualization if requested
         if return_visualization:
-            from worldfoundry.core.io.artifacts import (
+            from worldfoundry.core.media.artifacts import (
                 depth_to_colormap_rgb,
                 depth_to_uint8,
             )

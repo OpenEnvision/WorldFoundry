@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torchvision.io
 
-from worldfoundry.core.io import video
+from worldfoundry.core.media.codecs import video
 
 
 def test_ffmpeg_resolver_uses_imageio_bundle_when_system_binary_is_missing(monkeypatch) -> None:

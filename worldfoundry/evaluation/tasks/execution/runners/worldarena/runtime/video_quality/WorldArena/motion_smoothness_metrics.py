@@ -12,7 +12,7 @@ from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba.bench
 from worldfoundry.core.execution.device import get_current_torch_device
 
 from .utils import load_dimension_info, read_video_frames_cv2
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     distribute_list_to_rank,

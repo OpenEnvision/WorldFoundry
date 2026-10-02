@@ -19,7 +19,7 @@ from torch import Tensor
 from torch.distributed import ProcessGroup, all_gather, broadcast_object_list, get_process_group_ranks, get_world_size
 from torch.distributed.utils import _verify_param_shape_across_processes
 
-from worldfoundry.core.distributed import torch_process_group as distributed
+from worldfoundry.core.distributed.runtime import torch_process_group as distributed
 
 
 def split_inputs_cp(x: Tensor, seq_dim: int, cp_group: ProcessGroup) -> Tensor:

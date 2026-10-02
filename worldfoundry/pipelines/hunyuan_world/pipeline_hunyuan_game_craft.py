@@ -64,7 +64,7 @@ class HunyuanGameCraftPipeline(PipelineABC):
         args.cpu_offload = cpu_offload
         args.seed = seed
 
-        from worldfoundry.core.distributed.sequence_parallel_runtime import initialize_distributed
+        from worldfoundry.core.distributed.sequence_parallel.runtime import initialize_distributed
 
         initialize_distributed(args.seed)
 

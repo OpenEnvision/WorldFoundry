@@ -252,7 +252,7 @@ def test_cosmos_shared_utility_uses_direct_imports_and_tree_has_no_symlinks():
     direct_import_expectations = {
         "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/cosmos_predict1/diffusion/training/conditioner.py": (
             "worldfoundry.base_models.diffusion_model.video.cosmos.shared.batch_ops",
-            "worldfoundry.core.distributed.context_parallel",
+            "worldfoundry.core.distributed.model_parallel.context",
         ),
         "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/cosmos_predict1/diffusion/model/model_world_interpolator.py": (
             "worldfoundry.base_models.diffusion_model.video.cosmos.shared.batch_ops",
@@ -523,10 +523,10 @@ def test_lingbot_wan2_2_vae_lives_under_base_model_without_runtime_facade():
 
 def test_lingbot_wan_leaf_modules_are_reexported_from_base_model():
     expected_imports = {
-        "distributed/fsdp.py": "worldfoundry.core.distributed.block_fsdp",
-        "distributed/sequence_parallel.py": "worldfoundry.core.attention.causal_rope_sequence_parallel",
-        "distributed/ulysses.py": "worldfoundry.core.attention.causal_ulysses_attention",
-        "distributed/util.py": "worldfoundry.core.distributed.sequence_ops",
+        "distributed/fsdp.py": "worldfoundry.core.distributed.sharding.block_fsdp",
+        "distributed/sequence_parallel.py": "worldfoundry.core.attention.parallel.causal_rope_sequence_parallel",
+        "distributed/ulysses.py": "worldfoundry.core.attention.parallel.causal_ulysses_attention",
+        "distributed/util.py": "worldfoundry.core.distributed.sequence_parallel.ops",
         "modules/attention.py": (
             "worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.lingbot_attention"
         ),
@@ -670,7 +670,7 @@ def test_lingbot_wan_leaf_modules_are_reexported_from_base_model():
         "from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.lingbot_model import sinusoidal_embedding_1d"
         in base_lingbot_sequence_parallel
     )
-    assert "from worldfoundry.core.attention.causal_ulysses_attention import distributed_attention" in base_lingbot_sequence_parallel
+    assert "from worldfoundry.core.attention.parallel.causal_ulysses_attention import distributed_attention" in base_lingbot_sequence_parallel
     assert (
         "from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.lingbot_attention import flash_attention"
         in base_lingbot_ulysses
@@ -1611,7 +1611,7 @@ def test_neoverse_runtime_logic_lives_under_synthesis():
 
 
 def test_core_inference_official_demo_fixtures_are_in_tree():
-    source = (REPO_ROOT / "worldfoundry/core/inference.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "worldfoundry/core/execution/inference.py").read_text(encoding="utf-8")
 
     assert 'official_runtime_repo_path("Matrix-Game")' not in source
     assert 'official_runtime_repo_path("Astra")' not in source
@@ -3400,8 +3400,8 @@ def test_hunyuan_worldmirror_common_layers_use_canonical_owner():
 
     assert [path for path in removed_layer_files if (REPO_ROOT / path).exists()] == []
     assert [path for path in common_layer_files if (REPO_ROOT / path).exists()] == []
-    assert (REPO_ROOT / "worldfoundry/core/nn/layers.py").exists()
-    assert (REPO_ROOT / "worldfoundry/core/attention/rope_2d.py").exists()
+    assert (REPO_ROOT / "worldfoundry/core/nn/blocks/layers.py").exists()
+    assert (REPO_ROOT / "worldfoundry/core/attention/rotary/rope_2d.py").exists()
 
     importer_files = [
         "worldfoundry/base_models/three_dimensions/point_clouds/hunyuan_mirror/models/layers/__init__.py",

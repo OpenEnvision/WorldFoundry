@@ -24,12 +24,12 @@ from torch import nn
 from worldfoundry.base_models.diffusion_model.models.networks.wan.mixins import (
     WanTransformerMethodsMixin,
 )
-from worldfoundry.core.distributed.sequence_parallel_runtime import (
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
     get_sequence_parallel_rank,
     get_sequence_parallel_world_size,
     get_sp_group,
 )
-from worldfoundry.core.attention.varlen import attention
+from worldfoundry.core.attention.sequence.varlen import attention
 from worldfoundry.base_models.diffusion_model.optimizations.wan.cfg_skip import cfg_skip
 from worldfoundry.base_models.diffusion_model.optimizations.wan.teacache import TeaCache
 from worldfoundry.base_models.diffusion_model.models.networks.wan.adapter import (
@@ -879,7 +879,7 @@ class WanTransformer3DModel(WanTransformerMethodsMixin, nn.Module, NativeConfigM
         ).to(device)
 
     def enable_multi_gpus_inference(self,):
-        from worldfoundry.core.distributed.wan_xfuser import (
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.parallel_adapter import (
             usp_attn_forward,
         )
 

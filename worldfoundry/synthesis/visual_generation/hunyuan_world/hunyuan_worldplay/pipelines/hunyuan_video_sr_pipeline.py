@@ -15,7 +15,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.
     ARHunyuanVideo_1_5_DiffusionTransformer as HunyuanVideo_1_5_DiffusionTransformer,
 )
 from worldfoundry.base_models.diffusion_model.models.upsamplers.hunyuan_video.h15 import SRTo720pUpsampler
-from worldfoundry.core.distributed.sequence_mesh_state import get_parallel_state
+from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
 from worldfoundry.synthesis.visual_generation.hunyuan_world import generate_crop_size_list
 
 from ..commons import auto_offload_model, get_rank

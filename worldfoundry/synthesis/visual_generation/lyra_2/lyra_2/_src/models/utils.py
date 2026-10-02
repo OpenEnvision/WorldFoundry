@@ -15,7 +15,7 @@
 
 import torch
 
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 
 
 # based on https://github.com/huggingface/diffusers/blob/b793debd9d09225582943a1e9cb4ccdab30f1b37/src/diffusers/loaders/lora_conversion_utils.py#L1817

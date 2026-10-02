@@ -5,7 +5,7 @@ import pickle
 import pytest
 import torch
 
-from worldfoundry.core.checkpoint.safe_loading import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints.safe_loading import load_tensor_state_dict
 
 
 class _UnsafeCheckpointMetadata:

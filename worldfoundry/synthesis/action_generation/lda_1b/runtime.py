@@ -92,7 +92,7 @@ class LDA1BRuntime:
         revision: str | None,
         required_files: Sequence[str] = (),
     ) -> Path:
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._local_path(location)
         source = str(direct) if direct is not None else location

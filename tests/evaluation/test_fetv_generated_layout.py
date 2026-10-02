@@ -5,7 +5,7 @@ import json
 import pytest
 from PIL import Image
 
-from worldfoundry.core.io.serialization import read_jsonl_objects, write_jsonl
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
 from worldfoundry.evaluation.tasks.execution.runners.fetv import fetv_official_runtime
 from worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_official_runtime import (
     materialize_bounded_fetv_prompt_file,

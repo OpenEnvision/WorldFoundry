@@ -15,14 +15,14 @@ import torchvision.transforms.functional as TF
 from tqdm import tqdm
 
 from worldfoundry.core import autocast_context
-from worldfoundry.core.distributed.block_fsdp import shard_model
-from worldfoundry.core.attention.causal_rope_sequence_parallel import (
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
+from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import (
     sp_attn_forward_causal,
     sp_attn_forward_causal_chunked,
     sp_dit_forward_causal,
     sp_dit_forward_causal_chunked,
 )
-from worldfoundry.core.distributed.sequence_ops import get_world_size
+from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot.fast import WanModelFast
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21_streaming import Wan2_1_VAE

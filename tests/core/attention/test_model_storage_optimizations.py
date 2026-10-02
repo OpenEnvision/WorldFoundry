@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import copy
+import sys
 
 import pytest
 import torch
 
-from scripts.benchmark_model_attention import legacy_hrdt, legacy_longcat
 from worldfoundry.synthesis.action_generation.h_rdt import modeling as hrdt
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.attention import (
     Attention as LongCatAttention,
@@ -13,6 +13,60 @@ from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtim
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.rope_3d import (
     RotaryPositionalEmbedding,
 )
+
+
+# Historical reference forwards stay with their public regression tests.
+def legacy_hrdt(layer, values, condition=None, mask=None):
+    """H-RDT's original explicit-head expansion, including output projection."""
+    from worldfoundry.synthesis.action_generation.h_rdt.modeling import (
+        _attention_backends,
+        _repeat_kv,
+        scaled_dot_product_attention,
+    )
+
+    batch, sequence, _ = values.shape
+    condition = values if condition is None else condition
+    key_length = condition.shape[1]
+    query = layer.wq(values).view(batch, sequence, layer.n_heads, layer.head_size)
+    key_value = layer.wkv(condition).view(batch, key_length, layer.n_kv_heads, layer.head_size, 2)
+    key, value = key_value.unbind(-1)
+    query = layer.norm_q(query).transpose(1, 2)
+    key = _repeat_kv(layer.norm_k(key), layer.n_rep).transpose(1, 2)
+    value = _repeat_kv(value, layer.n_rep).transpose(1, 2)
+    attention_mask = None
+    if mask is not None:
+        attention_mask = mask.to(torch.bool).reshape(batch, 1, 1, key_length).expand(-1, -1, sequence, -1)
+    output = scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=attention_mask,
+        dropout_p=0.0,
+        is_causal=False,
+        scale=layer.attn_scale,
+        backends=_attention_backends(layer.attention_backend, query.device, has_mask=mask is not None),
+    )
+    return layer.wo(output.transpose(1, 2).contiguous().view(batch, sequence, -1))
+
+
+def legacy_longcat(layer, hidden, shape, num_cond_latents, kv_cache):
+    """LongCat's original batch repeats and full-length padded-query RoPE."""
+    batch, sequence, dim = hidden.shape
+    qkv = layer.qkv(hidden).view(batch, sequence, 3, layer.num_heads, layer.head_dim).permute(2, 0, 3, 1, 4)
+    query, key, value = qkv.unbind(0)
+    query, key = layer.q_norm(query), layer.k_norm(key)
+    history_key, history_value = kv_cache
+    if history_key.shape[0] == 1:
+        history_key = history_key.repeat(batch, 1, 1, 1)
+        history_value = history_value.repeat(batch, 1, 1, 1)
+    full_key = torch.cat((history_key, key), dim=2).contiguous()
+    full_value = torch.cat((history_value, value), dim=2).contiguous()
+    padded_query = torch.cat((torch.empty_like(history_key), query), dim=2).contiguous()
+    frames, height, width = shape
+    padded_query, full_key = layer.rope_3d(padded_query, full_key, (frames + num_cond_latents, height, width))
+    query = padded_query[:, :, -sequence:].contiguous()
+    output = layer._process_attn(query, full_key, full_value, shape)
+    return layer.proj(output.transpose(1, 2).reshape(batch, sequence, dim))
 
 
 @pytest.fixture(autouse=True)
@@ -146,6 +200,9 @@ def test_hrdt_gradients_match_explicit_heads():
 @pytest.mark.parametrize("enabled", [None, False, True])
 @torch.no_grad()
 def test_longcat_real_cached_attention_matches_padded_query(monkeypatch, batch, cache_batch, enabled):
+    # Exercise the supported SDPA fallback on CPU even when a CUDA provider is installed.
+    # The CUDA parity test below runs the installed provider with half-precision inputs.
+    monkeypatch.setitem(sys.modules, "flash_attn_interface", None)
     torch.manual_seed(31)
     layer = LongCatAttention(64, 4, enable_flashattn3=True, cp_split_hw=(1, 1), enable_kv_optimization=enabled).eval()
     rope = layer.rope_3d.forward

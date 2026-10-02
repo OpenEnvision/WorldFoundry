@@ -287,7 +287,7 @@ def run(args: argparse.Namespace) -> Path:
             inference_kwargs["max_guidance_scale"] = 2.0
         frames = pipeline(image, **inference_kwargs).frames[0]
 
-        from worldfoundry.core.io.video import save_video_h264
+        from worldfoundry.core.media.codecs.video import save_video_h264
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         save_video_h264([image, *frames], output_path, fps=args.fps)

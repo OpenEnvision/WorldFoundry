@@ -4,7 +4,7 @@ import torch.distributed as dist
 from PIL import Image
 from diffusers.utils import export_to_video
 from worldfoundry.pipelines.lingbot_world.pipeline_lingbot_world import LingBotPipeline
-from worldfoundry.core.distributed.sequence_ops import init_distributed_group
+from worldfoundry.core.distributed.sequence_parallel.ops import init_distributed_group
 
 
 def _env_bool(name, default):

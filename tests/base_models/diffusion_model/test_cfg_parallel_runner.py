@@ -36,7 +36,7 @@ class _ParallelRunner(NativeDiffusionRunner):
 def test_cfg_parallel_runs_one_local_branch_and_gathers_both(monkeypatch) -> None:
     import torch.distributed as dist
 
-    from worldfoundry.core.distributed import sequence_parallel_runtime
+    from worldfoundry.core.distributed.sequence_parallel import runtime as sequence_parallel_runtime
 
     group = object()
     monkeypatch.setattr(

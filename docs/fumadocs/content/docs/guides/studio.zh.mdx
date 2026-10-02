@@ -442,8 +442,8 @@ effect 并处理一帧代表性输入，因此 driver image 不完整时会在 S
 和完整 native probe：
 
 ```bash
-python -c 'from worldfoundry.core.video.rtx import inspect_rtx_vfx_capability as check; print(check(device=0).to_payload())'
-python -c 'from worldfoundry.core.video.rtx import probe_rtx_vfx_runtime as probe; print(probe(device=0).to_payload())'
+python -c 'from worldfoundry.core.media.processing.rtx import inspect_rtx_vfx_capability as check; print(check(device=0).to_payload())'
+python -c 'from worldfoundry.core.media.processing.rtx import probe_rtx_vfx_runtime as probe; print(probe(device=0).to_payload())'
 ```
 
 Linux 上的 `VideoSuperRes` 还需要 `libnvidia-ngx.so.1`。即使 CUDA 与 `nvidia-smi`

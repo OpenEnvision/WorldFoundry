@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io.serialization import JsonlWriter
+from worldfoundry.core.io.formats.serialization import JsonlWriter
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.tasks.embodied.config_loader import load_canonical_embodied_config
 from worldfoundry.evaluation.tasks.embodied.docker_runner import inside_docker, run_embodied_via_docker

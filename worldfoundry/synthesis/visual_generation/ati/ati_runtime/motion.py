@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 
-from worldfoundry.core.checkpoint import load_weights_only
+from worldfoundry.core.model_loading.checkpoints import load_weights_only
 
 
 def load_packed_tracks(path: str) -> bytes:

@@ -23,7 +23,7 @@ names onto :mod:`.parallel_state` :class:`GroupCoordinator` objects.
 Not a second source of truth — it never creates process groups.
 :func:`initialize_parallel_state` is a no-op; real init is
 :func:`~.parallel_state.maybe_init_distributed_environment_and_model_parallel`.
-Do not confuse with :mod:`worldfoundry.core.distributed.sequence_mesh_state`,
+Do not confuse with :mod:`worldfoundry.core.distributed.model_parallel.sequence_mesh_state`,
 which builds a DeviceMesh.
 
 Public surface: :class:`ParallelDims`, :func:`get_parallel_state`,

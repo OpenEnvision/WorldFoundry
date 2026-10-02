@@ -5,7 +5,7 @@
 
 Safety classifiers and face-blur postprocessors need a tiny, imageio-
 backed read/write path that does not pull Studio or the full
-:mod:`worldfoundry.core.io.video` stack. This module:
+:mod:`worldfoundry.core.media.codecs.video` stack. This module:
 
 - :func:`get_video_filepaths` — recursive ``mp4`` / ``avi`` / ``mov``
   discovery.
@@ -24,7 +24,7 @@ from pathlib import Path
 import imageio
 import numpy as np
 
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 
 # ──────────────────────────────────────────────────────────────────────────
 # Decode / encode — imageio ffmpeg only; odd resolutions stay unpadded

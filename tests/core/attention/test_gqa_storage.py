@@ -4,7 +4,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from worldfoundry.core.attention import native
+from worldfoundry.core.attention.backends import native
 
 
 @pytest.mark.parametrize("mask_kind", ["none", "boolean", "additive", "head", "batch"])

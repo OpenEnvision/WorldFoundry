@@ -40,7 +40,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from worldfoundry.core.nn.layers import DropPath
+from worldfoundry.core.nn.blocks.layers import DropPath
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules import (
     GLUMBConv,
@@ -76,8 +76,8 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.selection imp
     resolve_ffn_block,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.linear import BlockHook
-from worldfoundry.core.checkpoint import load_weights_only, require_tensor
-from worldfoundry.core.distributed.generic_collectives import get_rank
+from worldfoundry.core.model_loading.checkpoints import load_weights_only, require_tensor
+from worldfoundry.core.distributed.collectives.generic import get_rank
 
 from .sana_camctrl_blocks import (
     _maybe_drop_cam_branch,

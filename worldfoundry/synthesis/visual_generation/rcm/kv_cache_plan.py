@@ -7,8 +7,8 @@ optional CUDA attention packages.
 
 from __future__ import annotations
 
-from worldfoundry.core.attention.block_pattern import BlockPattern
-from worldfoundry.core.attention.kv_cache_policy import CachedBlock, CacheState, KVCachePolicy, SlidingWindowPolicy
+from worldfoundry.core.attention.sparse.block_pattern import BlockPattern
+from worldfoundry.core.attention.cache.kv_cache_policy import CachedBlock, CacheState, KVCachePolicy, SlidingWindowPolicy
 
 
 def make_kv_cache_plan(

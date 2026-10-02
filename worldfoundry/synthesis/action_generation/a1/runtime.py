@@ -93,7 +93,7 @@ def checkpoint_shapes(root: str | Path) -> dict[str, tuple[int, ...]]:
             raise FileNotFoundError(
                 f"A1 checkpoint requires model.pt or model.safetensors under {directory}"
             )
-    from worldfoundry.core.model_loading.file import load_torch_checkpoint
+    from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
     try:
         payload = load_torch_checkpoint(model_file, map_location="cpu", weights_only=True, mmap=True)
@@ -126,7 +126,7 @@ def _load_checkpoint(model: torch.nn.Module, root: Path, *, strict: bool) -> Non
             if len(candidates) != 1:
                 raise FileNotFoundError(f"No unambiguous A1 PyTorch checkpoint under {root}")
             model_file = candidates[0]
-        from worldfoundry.core.model_loading.file import load_torch_checkpoint
+        from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
         try:
             payload = load_torch_checkpoint(

@@ -10,7 +10,7 @@ from worldfoundry.base_models.diffusion_model.loaders.module import (
     ModuleLoadSpec,
     NativeModuleLoader,
 )
-from worldfoundry.core.model_loading.file import (
+from worldfoundry.core.model_loading.checkpoints.file import (
     load_keys_dict,
     load_state_dict,
 )

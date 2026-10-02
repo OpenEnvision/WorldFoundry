@@ -4,7 +4,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from worldfoundry.core.attention.kv_arena import KVSegmentArena, KVSegmentLayout
+from worldfoundry.core.attention.cache.kv_arena import KVSegmentArena, KVSegmentLayout
 
 
 def pair(tokens, *, seq_dim=2, dtype=torch.float32, device="cpu"):

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from filelock import FileLock
 
-from worldfoundry.core.io.download import download_to_cache
+from worldfoundry.core.io.assets.download import download_to_cache
 from worldfoundry.core.io.paths import checkpoint_root_path
 
 DROID_GOOGLE_DRIVE_ID = "1PpqVt1H4maBa_GbPJp4NwxRsd9jk-elh"

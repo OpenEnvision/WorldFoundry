@@ -22,7 +22,7 @@ from worldfoundry.base_models.three_dimensions.depth.moge.utils.io import (
 from worldfoundry.base_models.three_dimensions.general_3d.eastern_journalist.utils3d import (
     numpy as utils3d_np,
 )
-from worldfoundry.core.io.artifacts import colorize_depth_map
+from worldfoundry.core.media.artifacts import colorize_depth_map
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

@@ -872,7 +872,7 @@ def _load_test_clip(
     start_seconds: float = 0.0,
 ) -> torch.Tensor:
     """Load mp4, resample source_fps to target_fps, center-crop and resize. Returns [3, T, H, W] in [-1, 1] fp32 CPU."""
-    from worldfoundry.core.io.video import (
+    from worldfoundry.core.media.codecs.video import (
         get_video_details,
         load_frames_from_video,
         resize_video_tensor_to_resolution,

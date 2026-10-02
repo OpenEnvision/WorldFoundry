@@ -10,7 +10,7 @@
 from typing import List, Optional, Type
 
 import torch
-from worldfoundry.core.nn.layers import LayerNorm2d, SamHeadMLP
+from worldfoundry.core.nn.blocks.layers import LayerNorm2d, SamHeadMLP
 from torch import nn
 from torch.nn import functional as F
 

@@ -23,7 +23,7 @@ rCM 论文是 [Large Scale Diffusion Distillation via Score-Regularized Continuo
 
 `causal-rcm` 是记录的交互世界线。要用动作推进世界时从这里起步。
 
-按论文（arXiv 2510.08431），rCM 结合分数正则化的一致性蒸馏实现少步采样。内置栈去掉了上游 imaginaire 框架——由 WorldFoundry 自有的 lazy_config、easy_io 与日志支撑——块因果掩码谓词提取到 worldfoundry/core/attention/block_pattern.py，并在 702 种掩码与 162 种 chunk 调度配置下对照上游验证。该模型由英伟达（NVIDIA）发布。
+按论文（arXiv 2510.08431），rCM 结合分数正则化的一致性蒸馏实现少步采样。内置栈去掉了上游 imaginaire 框架——由 WorldFoundry 自有的 lazy_config、easy_io 与日志支撑——块因果掩码谓词提取到 worldfoundry/core/attention/sparse/block_pattern.py，并在 702 种掩码与 162 种 chunk 调度配置下对照上游验证。该模型由英伟达（NVIDIA）发布。
 
 catalog 记录的任务包括 autoregressive-video-generation、streaming-video-generation、交互式世界模型、文生视频。别名包括 `rcm`、`causal_rcm`、`rcm-causal`、`causal-rcm-wan2.1`。模态上，它接受文本、图像，输出视频。
 

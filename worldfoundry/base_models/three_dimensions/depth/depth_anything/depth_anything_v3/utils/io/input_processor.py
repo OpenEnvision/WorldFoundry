@@ -28,7 +28,7 @@ import torchvision.transforms as T
 from PIL import Image
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import logger
-from worldfoundry.core.utils.parallel_execution import parallel_execution
+from worldfoundry.core.execution.parallel_execution import parallel_execution
 
 
 class InputProcessor:

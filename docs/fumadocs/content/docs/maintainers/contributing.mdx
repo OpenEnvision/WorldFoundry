@@ -206,7 +206,8 @@ cd docs/fumadocs && npm run types:check && npm run build
 Public CPU checks do not require model weights:
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,test]"
+make test-infer
 make cli-check cli-entrypoint-check packaging-check
 ```
 
@@ -253,3 +254,6 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
 <Callout title="Review rule">
   A PR can add planned or source-verified entries without runnable support. It must not claim demo parity, checkpoint parity, or benchmark readiness without matching fresh evidence.
 </Callout>
+
+
+Public test sources live under `tests/`; model weights, test media and generated replay evidence stay outside git. Inference changes must replay affected real-checkpoint cases and pass `make test-geometry` against an accepted reference. See [Validation](/docs/reference/validation) for numerical comparison and source-hash verification.

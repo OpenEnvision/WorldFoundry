@@ -15,14 +15,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange, repeat
 
-from worldfoundry.core.nn.classic_diffusion import (
+from worldfoundry.core.nn.diffusion.convolution import (
     avg_pool_nd,
     conv_nd,
     linear,
     normalization,
     zero_module,
 )
-from worldfoundry.core.nn.diffusion_utils import checkpoint
+from worldfoundry.core.nn.diffusion.utils import checkpoint
 from worldfoundry.base_models.diffusion_model.schedulers.lvdm.schedule_math import timestep_embedding
 from worldfoundry.base_models.diffusion_model.models.networks.lvdm.attention import SpatialTransformer, TemporalTransformer
 

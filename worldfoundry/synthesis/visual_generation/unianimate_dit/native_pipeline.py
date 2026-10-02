@@ -110,7 +110,7 @@ class WanUniAnimateVideoPipeline(WanStagedPipeline):
 
         if use_usp:
             from xfuser.core.distributed import get_sequence_parallel_world_size
-            from worldfoundry.core.attention.patch_xdit_context_parallel import usp_attn_forward, usp_dit_forward
+            from worldfoundry.core.attention.parallel.patch_xdit_context_parallel import usp_attn_forward, usp_dit_forward
 
             for block in pipe.dit.blocks:
                 block.self_attn.forward = types.MethodType(usp_attn_forward, block.self_attn)

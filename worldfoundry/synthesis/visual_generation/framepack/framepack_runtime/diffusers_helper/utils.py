@@ -12,7 +12,7 @@ import torch
 import torchvision
 from PIL import Image
 
-from worldfoundry.core.io.video import write_video_torchvision
+from worldfoundry.core.media.codecs.video import write_video_torchvision
 
 
 def min_resize(x, m):

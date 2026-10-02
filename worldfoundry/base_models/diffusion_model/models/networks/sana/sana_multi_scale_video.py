@@ -37,7 +37,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from worldfoundry.core.nn.layers import DropPath
+from worldfoundry.core.nn.blocks.layers import DropPath
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules import (
     CachedGLUMBConvTemp,
@@ -75,7 +75,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities 
     is_xformers_available,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.linear import BlockHook
-from worldfoundry.core.distributed.generic_collectives import get_rank
+from worldfoundry.core.distributed.collectives.generic import get_rank
 
 _triton_modules_available = False
 if is_triton_module_available():

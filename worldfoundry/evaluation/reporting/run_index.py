@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io.serialization import iter_jsonl_objects
+from worldfoundry.core.io.formats.serialization import iter_jsonl_objects
 from worldfoundry.evaluation.utils import (
     escape_markdown_cell as _escape_markdown_cell,
 )

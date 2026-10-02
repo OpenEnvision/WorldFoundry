@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.file_utils import materialize_file
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.tasks.execution.runners.ewmbench.ewmbench_paths import load_task_manifest
 from worldfoundry.evaluation.utils import write_jsonl

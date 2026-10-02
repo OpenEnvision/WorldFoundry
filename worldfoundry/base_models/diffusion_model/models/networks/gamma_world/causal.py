@@ -32,11 +32,11 @@ from torch.distributed import ProcessGroup, get_process_group_ranks, get_rank, i
 from torch.distributed._composable.fsdp import fully_shard
 from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
-from worldfoundry.core.attention.native import NativeAttention
-from worldfoundry.core.attention.rope_kernel import apply_rotary_pos_emb
-from worldfoundry.core.distributed import torch_process_group as distributed
-from worldfoundry.core.distributed.context_parallel import cat_outputs_cp
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.attention.backends.native import NativeAttention
+from worldfoundry.core.attention.rotary.rope_kernel import apply_rotary_pos_emb
+from worldfoundry.core.distributed.runtime import torch_process_group as distributed
+from worldfoundry.core.distributed.model_parallel.context import cat_outputs_cp
+from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.core.kernels import layer_norm_scale_shift, qk_rmsnorm_rope, residual_gate_add
 from worldfoundry.runtime.compile_cache import CompilePolicy, compile_callable_cached
 from worldfoundry.base_models.diffusion_model.models.encoders.structured_conditioning import DataType
@@ -1851,7 +1851,7 @@ class CosmosCausalDiT(nn.Module):
 
         cp_enabled = self._is_context_parallel_enabled and self.cp_group is not None
         if cp_enabled and self.cp_group.size() > 1:
-            from worldfoundry.core.distributed.context_parallel import split_inputs_cp
+            from worldfoundry.core.distributed.model_parallel.context import split_inputs_cp
 
             assert not self.use_sparse_hub, (
                 "sparse_hub inference does not support cp_size > 1 yet: "

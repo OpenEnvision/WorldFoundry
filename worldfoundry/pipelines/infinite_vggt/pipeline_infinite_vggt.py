@@ -20,7 +20,7 @@ from worldfoundry.base_models.three_dimensions.point_clouds.infinite_vggt.runtim
     InfiniteVGGTRepresentation,
 )
 from worldfoundry.core.io import artifact_root_path, write_text_file
-from worldfoundry.core.io.artifacts import (
+from worldfoundry.core.media.artifacts import (
     depth_to_colormap_pil,
     save_depth_colormap,
 )

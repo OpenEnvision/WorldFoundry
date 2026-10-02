@@ -52,7 +52,7 @@ from worldfoundry.core.kernels import (
 from worldfoundry.core.kernels.registry import kernel_dispatch_receipt_scope
 from worldfoundry.core.nn import RMSNorm, sinusoidal_embedding_1d
 from worldfoundry.core.nn import scale_shift as modulate  # noqa: F401
-from worldfoundry.core.nn.gradient import gradient_checkpoint_forward
+from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
 
 from .adapter import SimpleAdapter
 
@@ -1231,7 +1231,7 @@ class WanModel(torch.nn.Module):
         )
         sequence_parallel_length = x.shape[1]
         if sequence_parallel_state is not None:
-            from worldfoundry.core.distributed.sequence_parallel_runtime import (
+            from worldfoundry.core.distributed.sequence_parallel.runtime import (
                 sequence_parallel_chunk,
             )
 
@@ -1383,7 +1383,7 @@ class WanModel(torch.nn.Module):
                 x = block_input + residual
 
         if sequence_parallel_state is not None:
-            from worldfoundry.core.distributed.sequence_parallel_runtime import (
+            from worldfoundry.core.distributed.sequence_parallel.runtime import (
                 sequence_parallel_all_gather,
             )
 

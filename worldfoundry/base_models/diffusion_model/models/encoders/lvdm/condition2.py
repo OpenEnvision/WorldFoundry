@@ -21,7 +21,7 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer
 
-from worldfoundry.core.nn.diffusion_utils import autocast
+from worldfoundry.core.nn.diffusion.utils import autocast
 from worldfoundry.core.model_loading.factory import count_params
 
 

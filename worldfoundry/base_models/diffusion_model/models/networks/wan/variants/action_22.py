@@ -726,7 +726,7 @@ class WanAttentionBlock(nn.Module):
                 x = x + self.cross_attn(self.norm3(x), context, context_lens, fa_version=fa_version)
 
             if self.action_model is not None:
-                from worldfoundry.core.distributed.sequence_ops import get_world_size, get_rank, gather_forward
+                from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size, get_rank, gather_forward
                 dtype = self.ffn[0].weight.dtype
                 
                 valid_len = int(grid_sizes[0].prod().item())

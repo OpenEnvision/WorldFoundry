@@ -7,7 +7,7 @@ from torch import nn
 
 from .utils import allgather_wgrad
 from ..utils.distributed import get_rank, get_world_size
-from worldfoundry.core.io.python_config import EasyDict
+from worldfoundry.core.configuration.python import EasyDict
 
 logger = logging.getLogger(__name__)
 

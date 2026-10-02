@@ -20,7 +20,7 @@ from contextlib import contextmanager
 import torch
 from safetensors.torch import load as safetensors_torch_load
 
-from worldfoundry.core.io.easy_io import easy_io
+from worldfoundry.core.io.assets.easy_io import easy_io
 
 
 @contextmanager

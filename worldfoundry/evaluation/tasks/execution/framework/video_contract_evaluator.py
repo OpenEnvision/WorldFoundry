@@ -14,8 +14,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Mapping
 
-from worldfoundry.core.io.serialization import iter_jsonl, write_json, write_jsonl
-from worldfoundry.core.io.video import probe_video_metadata
+from worldfoundry.core.io.formats.serialization import iter_jsonl, write_json, write_jsonl
+from worldfoundry.core.media.codecs.video import probe_video_metadata
 from worldfoundry.core.observability.time import utc_now_iso
 from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION
 from worldfoundry.evaluation.tasks.execution.framework.io import optional_float

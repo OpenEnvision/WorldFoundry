@@ -4,7 +4,7 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from worldfoundry.core.checkpoint import load_weights_only
+from worldfoundry.core.model_loading.checkpoints import load_weights_only
 
 
 def test_load_weights_only_supports_safetensors_without_pickle(tmp_path) -> None:

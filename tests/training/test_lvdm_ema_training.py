@@ -9,7 +9,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("safetensors")
 
-from worldfoundry.core.nn.ema import LitEma  # noqa: E402
+from worldfoundry.core.nn.blocks.ema import LitEma  # noqa: E402
 from worldfoundry.training.data.video_bucketing import VideoLatentGeometry  # noqa: E402
 from worldfoundry.training.data.video_cache import (  # noqa: E402
     VideoCachedDataset,

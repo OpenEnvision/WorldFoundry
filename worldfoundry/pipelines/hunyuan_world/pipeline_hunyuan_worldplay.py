@@ -32,7 +32,7 @@ def _initialize_worldplay_parallel_runtime() -> None:
     if torch.cuda.is_available():
         torch.cuda.set_device(min(local_rank, max(torch.cuda.device_count() - 1, 0)))
     if world_size > 1:
-        from worldfoundry.core.distributed.sequence_mesh_state import initialize_parallel_state
+        from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import initialize_parallel_state
 
         initialize_parallel_state(sp=world_size)
 

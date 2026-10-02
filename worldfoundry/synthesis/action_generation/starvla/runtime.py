@@ -19,7 +19,7 @@ from worldfoundry.core.io.paths import (
     resolve_local_hf_model_path,
     resolve_worldfoundry_path,
 )
-from worldfoundry.core.io.serialization import jsonable
+from worldfoundry.core.io.formats.serialization import jsonable
 
 RUNTIME_ROOT = Path(__file__).resolve().parent
 

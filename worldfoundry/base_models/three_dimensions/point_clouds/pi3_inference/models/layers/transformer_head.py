@@ -3,7 +3,7 @@ from functools import partial
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.core.nn.layers import Mlp
+from worldfoundry.core.nn.blocks.layers import Mlp
 
 from .attention import FlashAttentionRope, FlashCrossAttentionRope
 from .block import BlockRope, CrossOnlyBlockRope

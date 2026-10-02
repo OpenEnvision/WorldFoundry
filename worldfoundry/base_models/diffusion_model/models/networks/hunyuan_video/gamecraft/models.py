@@ -14,11 +14,11 @@ except ImportError:
     flash_attn_varlen_func = None
 
 from worldfoundry.core.attention import apply_nd_rotary_embedding as apply_rotary_emb
-from worldfoundry.core.attention.sequence_metadata import get_cu_seqlens
-from worldfoundry.core.attention.sequence_parallel_attention import (
+from worldfoundry.core.attention.sequence.sequence_metadata import get_cu_seqlens
+from worldfoundry.core.attention.parallel.sequence_parallel_attention import (
     parallel_attention,
 )
-from worldfoundry.core.distributed.sequence_parallel_runtime import (
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
     all_gather,
     get_sequence_parallel_state,
     nccl_info,

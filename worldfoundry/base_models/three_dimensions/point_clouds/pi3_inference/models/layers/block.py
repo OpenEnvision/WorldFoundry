@@ -11,7 +11,7 @@ from typing import Callable
 
 from torch import Tensor, nn
 
-from worldfoundry.core.nn.layers import DropPath, LayerScale, Mlp
+from worldfoundry.core.nn.blocks.layers import DropPath, LayerScale, Mlp
 
 from ...utils.geometry import se3_inverse
 from .attention import Attention, CrossAttentionRope, PRopeFlashAttention

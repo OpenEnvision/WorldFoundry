@@ -262,7 +262,7 @@ class VaceWanModel(WanModel):
         )
         sequence_parallel_length = hidden_states.shape[1]
         if sequence_parallel_state is not None:
-            from worldfoundry.core.distributed.sequence_parallel_runtime import (
+            from worldfoundry.core.distributed.sequence_parallel.runtime import (
                 sequence_parallel_chunk,
             )
 
@@ -306,7 +306,7 @@ class VaceWanModel(WanModel):
                 context_scale=vace_context_scale,
             )
         if sequence_parallel_state is not None:
-            from worldfoundry.core.distributed.sequence_parallel_runtime import (
+            from worldfoundry.core.distributed.sequence_parallel.runtime import (
                 sequence_parallel_all_gather,
             )
 

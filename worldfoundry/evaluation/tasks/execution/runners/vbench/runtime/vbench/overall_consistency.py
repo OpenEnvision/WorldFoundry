@@ -8,7 +8,7 @@ from vbench.utils import load_video, load_dimension_info, clip_transform, read_f
 from worldfoundry.base_models.perception_core.video_text.viclip.simple_tokenizer import SimpleTokenizer
 from worldfoundry.base_models.perception_core.video_text.viclip.viclip import ViCLIP
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

@@ -12,7 +12,7 @@ import torch
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 from torch import nn
 
-from worldfoundry.core.attention.varlen import (
+from worldfoundry.core.attention.sequence.varlen import (
     attention,
     flash_attention,
 )

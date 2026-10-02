@@ -321,7 +321,7 @@ def install_worldfoundry_inference_infra(
     _configure_torch_backends(matmul_precision=precision, enable_tf32=use_tf32)
     if _env_flag("WORLDFOUNDRY_DETERMINISTIC", default=False):
         try:
-            from worldfoundry.core.utils.torch_utils import set_deterministic
+            from worldfoundry.core.utils.tensors.torch import set_deterministic
 
             set_deterministic(True)
         except Exception as exc:
@@ -766,7 +766,7 @@ def _normalize_attention_backend(value: str) -> str:
     """Resolve ``WORLDFOUNDRY_ATTENTION_BACKEND`` into an SDPA kernel policy.
 
     The same environment variable is also read by the attention dispatch layer
-    (``worldfoundry.core.attention.backends``) with a wider vocabulary
+    (``worldfoundry.core.attention.backends.probe``) with a wider vocabulary
     (``flash_attention_2``, ``sage_attention``, ``xformers``...). Values from
     that vocabulary are accepted here instead of crashing (CC-31): the SDPA
     kernel policy resolves to ``auto`` and the dispatch layer stays
@@ -780,14 +780,14 @@ def _normalize_attention_backend(value: str) -> str:
 
     canonical: str | None
     try:
-        from worldfoundry.core.attention.backends import normalize_attention_backend
+        from worldfoundry.core.attention.backends.probe import normalize_attention_backend
 
         canonical = normalize_attention_backend(normalized)
     except ValueError:
         raise ValueError(
             "WORLDFOUNDRY_ATTENTION_BACKEND must be an SDPA kernel policy (auto, flash, cudnn, "
             "efficient, math) or an attention dispatch backend name accepted by "
-            f"worldfoundry.core.attention.backends.normalize_attention_backend (got {value!r})."
+            f"worldfoundry.core.attention.backends.probe.normalize_attention_backend (got {value!r})."
         ) from None
     except ImportError:
         # torch (and therefore the dispatch layer) is unavailable; accept the

@@ -17,12 +17,12 @@ from PIL import Image
 from tqdm import tqdm
 from einops import rearrange
 from functools import partial
-from worldfoundry.core.distributed.block_fsdp import shard_model
-from worldfoundry.core.attention.memory_rope_sequence_parallel import (
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
+from worldfoundry.core.attention.parallel.memory_rope_sequence_parallel import (
     sp_attn_forward,
     sp_dit_forward,
 )
-from worldfoundry.core.distributed.sequence_ops import get_world_size
+from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
 from worldfoundry.base_models.diffusion_model.schedulers import FlowUniPCMultistepScheduler
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_22 import WanModel
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.full_context_t5 import T5EncoderModel

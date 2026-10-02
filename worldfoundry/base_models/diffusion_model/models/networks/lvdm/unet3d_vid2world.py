@@ -11,8 +11,8 @@ import torch.nn as nn
 from einops import rearrange
 import torch.nn.functional as F
 from worldfoundry.base_models.diffusion_model.schedulers.lvdm.schedule_math import timestep_embedding
-from worldfoundry.core.nn.diffusion_utils import checkpoint
-from worldfoundry.core.nn.classic_diffusion import (
+from worldfoundry.core.nn.diffusion.utils import checkpoint
+from worldfoundry.core.nn.diffusion.convolution import (
     zero_module,
     conv_nd,
     linear,

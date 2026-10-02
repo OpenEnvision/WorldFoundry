@@ -17,7 +17,7 @@ from tqdm import tqdm
 from worldfoundry.core.io import sample_video_frames
 from worldfoundry.core.execution.device import resolve_inference_dtype
 from worldfoundry.core.utils import extract_yes_no_answer, resolve_generation_max_new_tokens
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

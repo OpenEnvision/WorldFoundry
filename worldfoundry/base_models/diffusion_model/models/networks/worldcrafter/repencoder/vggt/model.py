@@ -11,7 +11,7 @@ import torch.nn as nn
 from ..config import RepEncoderConfig
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.layers.attention import MemEffAttention
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.layers.block import Block
-from worldfoundry.core.attention.rope_2d import PositionGetter, RotaryPositionEmbedding2D
+from worldfoundry.core.attention.rotary.rope_2d import PositionGetter, RotaryPositionEmbedding2D
 
 
 def _slice_expand_and_flatten(token: torch.Tensor, batch: int, views: int) -> torch.Tensor:

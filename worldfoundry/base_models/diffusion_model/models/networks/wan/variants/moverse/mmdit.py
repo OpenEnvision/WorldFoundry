@@ -9,7 +9,7 @@ from typing import List, Optional, Set, Tuple
 import torch
 import torch.nn as nn
 
-from worldfoundry.core.attention.varlen import (
+from worldfoundry.core.attention.sequence.varlen import (
     attention,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import (

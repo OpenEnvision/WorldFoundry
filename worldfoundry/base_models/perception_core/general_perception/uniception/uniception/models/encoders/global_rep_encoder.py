@@ -7,7 +7,7 @@ from typing import Callable, List, Optional, Type, Union
 
 import torch
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 
 from uniception.models.encoders.base import EncoderGlobalRepInput, EncoderGlobalRepOutput

@@ -26,7 +26,7 @@ from pathlib import Path
 import loguru
 
 from worldfoundry.core.configuration.flags import FLAGS, VERBOSE
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 
 """Package initialization."""
 
@@ -141,7 +141,7 @@ def _init_log_files(output_dir: Path):
 
 def _init_distributed():
     """Helper function to init distributed."""
-    from worldfoundry.core.distributed import torch_process_group as distributed
+    from worldfoundry.core.distributed.runtime import torch_process_group as distributed
 
     distributed.init()
 
@@ -149,7 +149,7 @@ def _init_distributed():
 def _cleanup_distributed():
     """Helper function to cleanup distributed."""
     import torch.distributed as dist
-    from worldfoundry.core.distributed.megatron_compat import parallel_state
+    from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
 
     if parallel_state.is_initialized():
         parallel_state.destroy_model_parallel()

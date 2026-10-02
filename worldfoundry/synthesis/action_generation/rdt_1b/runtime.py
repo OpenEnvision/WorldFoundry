@@ -309,8 +309,8 @@ class RDT1BRuntime:
         import torch
         from PIL import Image
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
-        from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
         policy, image_processor, vision_model = self._load()
         state = self._state(observation)

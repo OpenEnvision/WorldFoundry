@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping
 
 from worldfoundry.core.io import artifact_root_path
-from worldfoundry.core.io.image import load_pil_image, materialize_image_input
+from worldfoundry.core.media.codecs.image import load_pil_image, materialize_image_input
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
 from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory

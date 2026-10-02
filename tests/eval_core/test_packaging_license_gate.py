@@ -17,12 +17,12 @@ from scripts.setup.check_packaging_license_gate import (
     license_gated_paths,
     load_find_config,
     main,
+    missing_core_sources,
     missing_required_wheel_packages,
     package_data_exclusion_gaps,
     private_file,
     selected_packages,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -92,6 +92,34 @@ def test_built_wheel_audit_checks_gated_files_and_first_party_wrapper(tmp_path: 
 
     assert audit_wheel(leaking_wheel, ["worldfoundry/wrapper/gated"]) == [gated_entry]
     assert missing_required_wheel_packages(leaking_wheel) == list(REQUIRED_WHEEL_PACKAGES)
+
+
+@pytest.mark.parametrize("artifact_name", ["worldfoundry.whl", "worldfoundry.tar.gz"])
+def test_distribution_audit_rejects_missing_core_implementation(tmp_path: Path, artifact_name: str) -> None:
+    source_root = tmp_path / "source"
+    package = "worldfoundry/core/model_loading/checkpoints"
+    core_dir = source_root / package
+    core_dir.mkdir(parents=True)
+    (core_dir / "__init__.py").write_text("", encoding="utf-8")
+    (core_dir / "file.py").write_text("", encoding="utf-8")
+    (core_dir / "__pycache__").mkdir()
+    (core_dir / "__pycache__/ignored.py").write_text("", encoding="utf-8")
+    artifact = tmp_path / artifact_name
+
+    def write_artifact(entries: list[str]) -> None:
+        if artifact.suffix == ".whl":
+            _write_wheel(artifact, entries)
+        else:
+            with tarfile.open(artifact, "w:gz") as archive:
+                for entry in entries:
+                    archive.addfile(tarfile.TarInfo("worldfoundry-0.0.0/" + entry), io.BytesIO())
+
+    entries = [f"{package}/__init__.py"]
+    write_artifact(entries)
+    assert missing_core_sources(artifact, repo_root=source_root) == [f"{package}/file.py"]
+
+    write_artifact([*entries, f"{package}/file.py"])
+    assert missing_core_sources(artifact, repo_root=source_root) == []
 
 
 def test_repository_license_gate_uses_narrow_hunyuan_excludes() -> None:

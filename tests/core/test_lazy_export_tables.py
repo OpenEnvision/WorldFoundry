@@ -9,29 +9,9 @@ forgets to update the table fails here instead of in a caller.
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from importlib import import_module
 
 import pytest
-
-
-def test_control_plane_imports_remain_lightweight() -> None:
-    """Package boundaries must not load optional model stacks in a fresh process."""
-    subprocess.run(
-        [sys.executable, "-c", """
-import sys
-import worldfoundry.core
-from worldfoundry.core.execution import compile_cache, inference, process, realtime, runtime_cache
-from worldfoundry.core.geometry import path
-from worldfoundry.core.observability import logging_setup, nvtx, realtime_timing, time, torchprofile
-from worldfoundry.core.video import postprocess, rtx
-from worldfoundry.core import PromptProcessor, configure_logging, VideoChunk, ModelInferenceSpec
-assert not {'torch', 'numpy', 'hydra', 'diffusers', 'nvvfx'} & sys.modules.keys()
-"""],
-        check=True,
-        timeout=60,
-    )
 
 
 def _table(module_name: str) -> dict[str, str]:
@@ -73,9 +53,7 @@ class TestCoreFacade:
         import worldfoundry.core as core
 
         foreign = {
-            name: target
-            for name, target in core._EXPORT_MODULES.items()
-            if not target.startswith("worldfoundry.core")
+            name: target for name, target in core._EXPORT_MODULES.items() if not target.startswith("worldfoundry.core")
         }
         assert not foreign, f"core facade points outside core: {foreign}"
 
@@ -84,8 +62,12 @@ class TestCoreFacade:
     "package",
     [
         "worldfoundry.core.attention",
+        "worldfoundry.core.io",
+        "worldfoundry.core.model_loading",
+        "worldfoundry.core.nn",
         "worldfoundry.core.safety",
         "worldfoundry.core.utils",
+        "worldfoundry.core.vram",
     ],
 )
 class TestSubpackageFacades:

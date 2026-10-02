@@ -31,7 +31,7 @@ SCAN_ROOTS = (
 # WONTFIX: these either *are* the process logging entrypoint, or sit in a
 # tree this tick must not edit (core/distributed).
 ALLOWLIST = {
-    "worldfoundry/core/logging_setup.py": (
+    "worldfoundry/core/observability/logging_setup.py": (
         "WONTFIX: configure_logging is the CLI/process entry that must "
         "install root handlers"
     ),
@@ -41,7 +41,7 @@ ALLOWLIST = {
 }
 
 FIRST_ROUND_CLEAN = (
-    "worldfoundry/core/io/wan_video_geometry.py",
+    "worldfoundry/base_models/diffusion_model/models/networks/wan/media_geometry.py",
     "worldfoundry/evaluation/tasks/metrics/jedi/V_JEPA.py",
     "worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench/evaluation/run_eval.py",
 )

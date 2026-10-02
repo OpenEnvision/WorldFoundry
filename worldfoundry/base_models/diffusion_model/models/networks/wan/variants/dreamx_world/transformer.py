@@ -25,7 +25,7 @@ from worldfoundry.core.nn import ModuleDeviceDtypeMixin
 from worldfoundry.base_models.diffusion_model.models.networks.wan.mixins import (
     WanTransformerMethodsMixin,
 )
-from worldfoundry.core.distributed.sequence_parallel_runtime import (
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
     get_sequence_parallel_rank,
     get_sequence_parallel_world_size,
     get_sp_group,
@@ -679,7 +679,7 @@ class WanTransformer3DModel(
 
 
     def enable_multi_gpus_inference(self,):
-        from worldfoundry.core.distributed.wan_xfuser import sp_prope_forward, usp_attn_forward
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.parallel_adapter import sp_prope_forward, usp_attn_forward
 
         self.sp_world_size = get_sequence_parallel_world_size()
         self.sp_world_rank = get_sequence_parallel_rank()

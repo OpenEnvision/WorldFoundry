@@ -85,7 +85,7 @@ class SequenceParallelSelfAttentionProcessor:
 
         from worldfoundry.core.attention import apply_complex_rotary_embedding as rope_apply
         from worldfoundry.core.attention import packed_sequence_attention
-        from worldfoundry.core.distributed.sequence_parallel_runtime import (
+        from worldfoundry.core.distributed.sequence_parallel.runtime import (
             all_to_all_4D,
             all_to_all_4d_many,
             get_sequence_parallel_group,
@@ -222,7 +222,7 @@ def enable_sequence_parallel(model: nn.Module, sp_degree: int) -> _SPState:
     """Install the SP self-attention processor on every Wan ``SelfAttention``.
 
     Requires an already-initialized sequence-parallel process group of size
-    ``sp_degree`` (see :func:`worldfoundry.core.distributed.sequence_parallel_runtime.set_multi_gpus_devices`).
+    ``sp_degree`` (see :func:`worldfoundry.core.distributed.sequence_parallel.runtime.set_multi_gpus_devices`).
     Idempotent: re-enabling replaces a prior SP processor. Returns a state handle
     for the audit record.
     """
@@ -261,7 +261,7 @@ def require_sequence_parallel_runtime(sp_degree: int) -> None:
 
     import torch.distributed as dist
 
-    from worldfoundry.core.distributed.sequence_parallel_runtime import (
+    from worldfoundry.core.distributed.sequence_parallel.runtime import (
         get_sequence_parallel_group,
     )
 

@@ -39,7 +39,6 @@ Most runs follow the same shape even when the model or benchmark changes: make t
 
 - **OS:** Linux recommended for GPU inference and most benchmark runners
 - **Install track:** use `python -m pip install -e ".[tui]"` for lightweight CPU catalog/CLI/TUI work; use `bash scripts/setup/bootstrap_worldfoundry.sh` for the CUDA conda runtime. That bootstrap is the official first-clone script; it already calls `scripts/setup/unified_install.sh` to create the unified GPU env, so you do not start from `unified_install.sh` unless you are only refreshing that env. Optional extras do not select a CUDA PyTorch wheel index.
-- **Optional native kernels:** `packages/worldfoundry-native-kernels` is a separate, ABI-sensitive wheel. CPU-only hosts should skip it; GPU hosts must build it with `--no-isolation` inside the target PyTorch environment.
 - **Python:** 3.10+; the GPU path manages it through the WorldFoundry unified conda environment
 - **Optional:** CUDA-capable GPU, Hugging Face token for gated checkpoints
 

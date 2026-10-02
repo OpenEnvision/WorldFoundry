@@ -26,8 +26,8 @@ import numpy as np
 from packaging.requirements import InvalidRequirement, Requirement
 from PIL import Image
 
-from worldfoundry.core.io.serialization import write_json as _core_write_json
-from worldfoundry.core.utils.import_guard import third_party_lazy_import_guard
+from worldfoundry.core.io.formats.serialization import write_json as _core_write_json
+from worldfoundry.core.utils.python.import_guard import third_party_lazy_import_guard
 from worldfoundry.runtime.compile_cache import configure_persistent_compile_cache
 from worldfoundry.runtime.conda import RuntimeCondaEnvSpec, load_runtime_conda_env_specs_with_overrides
 from worldfoundry.studio.inference.catalog import CatalogEntry, find_entry

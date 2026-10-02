@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from aiohttp import ClientSession, WSMsgType, web
 
-from worldfoundry.core.execution.realtime import RealtimeSpec
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 from worldfoundry.studio.serving.realtime.input import RealtimeControlResampler
 from worldfoundry.studio.serving.realtime.media import (
     ChunkPresentationBuffer,

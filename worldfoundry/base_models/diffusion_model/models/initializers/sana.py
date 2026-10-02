@@ -158,7 +158,7 @@ class SanaVideoToVideoInitializer(SanaNoiseInitializer):
         device: torch.device,
         dtype: torch.dtype,
     ) -> LatentInitialization:
-        from worldfoundry.core.io.video import coerce_video_frames
+        from worldfoundry.core.media.codecs.video import coerce_video_frames
 
         value = request.inputs.get("video", request.inputs.get("videos"))
         if value is None:

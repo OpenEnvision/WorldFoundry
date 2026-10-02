@@ -10,7 +10,7 @@ import torch.nn as nn
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 from einops import repeat
 
-from worldfoundry.core.attention.varlen import flash_attention
+from worldfoundry.core.attention.sequence.varlen import flash_attention
 
 try:
     from worldfoundry.core.distributed.sequence_parallel.communication_op import (

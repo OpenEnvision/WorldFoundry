@@ -9,8 +9,8 @@ from einops import rearrange
 from .rope_3d import RotaryPositionalEmbedding
 from .blocks import RMSNorm_FP32
 from ..block_sparse_attention.bsa_interface import flash_attn_bsa_3d
-from worldfoundry.core.attention.long_context_ulysses import ulysses_wrapper
-from worldfoundry.core.utils.misc_utils import env_is_true
+from worldfoundry.core.attention.parallel.long_context_ulysses import ulysses_wrapper
+from worldfoundry.core.utils.python.misc_utils import env_is_true
 
 
 class Attention(nn.Module):

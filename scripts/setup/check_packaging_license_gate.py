@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Audit the Apache-2.0 package boundary against license-gated source trees.
+"""Audit public distributions for license boundaries and core source completeness.
 
 ``MANIFEST.in`` controls sdists, while setuptools package discovery and
 ``include-package-data`` control wheels.  This checker keeps all three paths
-aligned and can additionally inspect the contents of a built wheel.
+aligned and checks that built distributions contain every core source module.
 """
 
 from __future__ import annotations
@@ -255,6 +255,22 @@ def missing_required_wheel_packages(
     )
 
 
+def missing_core_sources(artifact_path: Path, *, repo_root: Path = REPO_ROOT) -> list[str]:
+    """Catch source modules lost to Git ignores or distribution filtering."""
+    required = {
+        path.relative_to(repo_root).as_posix()
+        for path in (repo_root / "worldfoundry/core").rglob("*.py")
+        if "__pycache__" not in path.parts
+    }
+    if artifact_path.suffix == ".whl":
+        with zipfile.ZipFile(artifact_path) as archive:
+            entries = set(archive.namelist())
+    else:
+        with tarfile.open(artifact_path, "r:gz") as archive:
+            entries = {member.name.partition("/")[2] for member in archive.getmembers() if member.isfile()}
+    return sorted(required - entries)
+
+
 def _print_items(header: str, items: Sequence[str], *, limit: int | None = None) -> None:
     print(header)
     visible = items if limit is None else items[:limit]
@@ -352,6 +368,14 @@ def main(argv: list[str] | None = None) -> int:
         if source_leaks:
             failures += 1
             _print_items("FAIL: private or gated files found in source artifact:", source_leaks, limit=50)
+
+    for artifact_path in (args.wheel, args.sdist):
+        if artifact_path is None:
+            continue
+        missing = missing_core_sources(artifact_path)
+        if missing:
+            failures += 1
+            _print_items(f"FAIL: core source module(s) absent from {artifact_path.name}:", missing, limit=50)
 
     if failures:
         return 1

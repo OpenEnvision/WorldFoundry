@@ -1,4 +1,4 @@
-from worldfoundry.core.io.image import load_pil_image
+from worldfoundry.core.media.codecs.image import load_pil_image
 from worldfoundry.pipelines.lyra.pipeline_lyra1 import Lyra1Pipeline
 from worldfoundry.runtime.inference_catalog import get_model_inference_spec
 from worldfoundry.studio.inference.catalog import find_entry

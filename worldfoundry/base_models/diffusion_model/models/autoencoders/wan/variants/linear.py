@@ -24,7 +24,7 @@ from einops import rearrange
 from omegaconf import MISSING, OmegaConf
 
 from worldfoundry.core.io import hf_download_or_fpath
-from worldfoundry.core.model_loading.file import load_state_dict, load_torch_state_dict
+from worldfoundry.core.model_loading.checkpoints.file import load_state_dict, load_torch_state_dict
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 __all__ = [

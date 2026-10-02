@@ -11,7 +11,7 @@ import torch.nn.functional as torch_F
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 from einops import rearrange
 
-from worldfoundry.core.attention.varlen import (
+from worldfoundry.core.attention.sequence.varlen import (
     attention,
     flash_attention,
 )

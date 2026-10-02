@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam2_utils import get_clones
-from worldfoundry.core.nn.layers import DropPath, LayerNorm2d
+from worldfoundry.core.nn.blocks.layers import DropPath, LayerNorm2d
 
 
 class MaskDownSampler(nn.Module):

@@ -83,7 +83,7 @@ class AlayaWorldV11Runtime(OfficialInferenceRuntime):
         rounds = positive_int(request.get("rounds", 5), "rounds")
         output = local_path(output_dir)
         output.mkdir(parents=True, exist_ok=True)
-        from worldfoundry.core.io.image import load_pil_image, materialize_image_input
+        from worldfoundry.core.media.codecs.image import load_pil_image, materialize_image_input
 
         image = materialize_image_input(load_pil_image(request["images"]), str(output), filename="input.png")
         payload = {

@@ -17,7 +17,7 @@ def _race(worker, *, participants: int = 16):
 
 
 def test_global_once_is_atomic_across_threads() -> None:
-    from worldfoundry.core.utils.misc_utils import global_once
+    from worldfoundry.core.utils.python.misc_utils import global_once
 
     name = f"test-global-once-{uuid.uuid4().hex}"
     results = _race(lambda: global_once(name))
@@ -25,7 +25,7 @@ def test_global_once_is_atomic_across_threads() -> None:
 
 
 def test_global_n_times_is_atomic_across_threads() -> None:
-    from worldfoundry.core.utils.misc_utils import global_n_times
+    from worldfoundry.core.utils.python.misc_utils import global_n_times
 
     name = f"test-global-n-times-{uuid.uuid4().hex}"
     results = _race(lambda: global_n_times(name, 3))
@@ -36,7 +36,7 @@ def test_attention_unavailable_backend_snapshots_are_thread_safe() -> None:
     import pytest
 
     pytest.importorskip("torch")
-    from worldfoundry.core.attention import dispatch
+    from worldfoundry.core.attention.backends import dispatch
 
     dispatch.clear_attention_dispatch_cache()
     names = tuple(f"test-backend-{index}" for index in range(32))

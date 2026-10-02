@@ -23,8 +23,8 @@ from worldfoundry.base_models.perception_core.general_perception.dinov2.variants
     MemEffAttention,
     NestedTensorBlock as Block,
 )
-from worldfoundry.core.nn.layers import Mlp, PatchEmbed as BasePatchEmbed
-from worldfoundry.core.nn.module_utils import named_apply
+from worldfoundry.core.nn.blocks.layers import Mlp, PatchEmbed as BasePatchEmbed
+from worldfoundry.core.nn.blocks.module_utils import named_apply
 
 logger = logging.getLogger(__name__)
 

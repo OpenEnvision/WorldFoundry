@@ -98,7 +98,7 @@ def apply_attention_policy(
     different providers in one worker.
     """
 
-    from worldfoundry.core.attention.backends import (
+    from worldfoundry.core.attention.backends.probe import (
         normalize_attention_backend,
         probe_attention_backends,
         require_generic_attention_backend,
@@ -198,7 +198,7 @@ def apply_quantization_policy(model: "nn.Module", policy: QuantizationPolicy) ->
     keep_dense_default = mode in {QuantizationMode.FP8, QuantizationMode.NVFP4}
     keep_dense = bool(_option(policy, "keep_dense_fallback", keep_dense_default))
     if mode is QuantizationMode.FP8:
-        from worldfoundry.core.acceleration.quantization import replace_linear_with_float8
+        from worldfoundry.core.acceleration.quantization.linear import replace_linear_with_float8
 
         scaling = str(_option(policy, "scaling", "auto"))
         use_fast_accum = bool(_option(policy, "use_fast_accum", True))
@@ -213,7 +213,7 @@ def apply_quantization_policy(model: "nn.Module", policy: QuantizationPolicy) ->
         storage = f"fp8-{scaling}"
         execution = "fp8-wrapper-installed (runtime-pending)"
     elif mode is QuantizationMode.NVFP4:
-        from worldfoundry.core.acceleration.nvfp4 import replace_linear_with_nvfp4
+        from worldfoundry.core.acceleration.quantization.nvfp4 import replace_linear_with_nvfp4
 
         scaling = "nvfp4-1x16"
         replaced = replace_linear_with_nvfp4(
@@ -225,7 +225,7 @@ def apply_quantization_policy(model: "nn.Module", policy: QuantizationPolicy) ->
         storage = "nvfp4-1x16"
         execution = "nvfp4-wrapper-installed (runtime-pending)"
     else:
-        from worldfoundry.core.acceleration.quantization import (
+        from worldfoundry.core.acceleration.quantization.linear import (
             replace_linear_with_weight_only,
         )
 

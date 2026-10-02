@@ -27,9 +27,9 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.t
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import (
     T5EncoderModel,
 )
-from worldfoundry.core.acceleration.quantization import replace_linear_with_float8
+from worldfoundry.core.acceleration.quantization.linear import replace_linear_with_float8
 from worldfoundry.core.kernels.capabilities import kernel_device_profile
-from worldfoundry.core.utils.image_utils import load_pil_image
+from worldfoundry.core.media.processing.image_utils import load_pil_image
 
 
 ACTION_KEYS = ("W", "A", "S", "D", "I", "J", "K", "L")

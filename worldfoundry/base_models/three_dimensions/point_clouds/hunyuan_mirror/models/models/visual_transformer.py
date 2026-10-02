@@ -8,9 +8,9 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from worldfoundry.core.nn.layers import PatchEmbed, PatchEmbed_Mlp
+from worldfoundry.core.nn.blocks.layers import PatchEmbed, PatchEmbed_Mlp
 from ..layers.block import Block
-from worldfoundry.core.attention.rope_2d import (
+from worldfoundry.core.attention.rotary.rope_2d import (
     PositionGetter,
     RotaryPositionEmbedding2D,
 )

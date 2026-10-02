@@ -7,7 +7,7 @@ from omegaconf import OmegaConf
 from PIL import Image
 from transformers import AutoTokenizer
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 current_file_path = os.path.abspath(__file__)
 project_roots = [os.path.dirname(current_file_path), os.path.dirname(os.path.dirname(current_file_path)), os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))]
@@ -23,10 +23,10 @@ from worldfoundry.base_models.diffusion_model.loaders.wan_variant import load_wa
 from worldfoundry.base_models.diffusion_model.optimizations.wan.teacache import (
     get_teacache_coefficients,
 )
-from worldfoundry.core.distributed.sequence_parallel_runtime import (
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
     set_multi_gpus_devices,
 )
-from worldfoundry.core.distributed.block_fsdp import shard_model
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 from videox_fun.pipeline import WanFunControlPipeline, WanPipeline
 from videox_fun.utils import (register_auto_device_hook,
                               safe_enable_group_offload)

@@ -22,7 +22,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from worldfoundry.core.attention.kv_cache_policy import (
+from worldfoundry.core.attention.cache.kv_cache_policy import (
     BankedSinkPolicy,
     BlockRelativeRoPEPolicy,
     CacheDecision,
@@ -198,7 +198,7 @@ def test_memory_stops_growing_once_the_budget_is_reached() -> None:
 
 def test_bounded_plan_fits_the_real_readonly_and_append_lifecycle() -> None:
     """The allocation plan must fit the transient current block at every step."""
-    from worldfoundry.core.attention.block_pattern import BlockPattern
+    from worldfoundry.core.attention.sparse.block_pattern import BlockPattern
     from worldfoundry.synthesis.visual_generation.rcm.kv_cache_plan import make_kv_cache_plan
 
     pattern = BlockPattern(frame_tokens=2, first_chunk_frames=1, chunk_frames=3)

@@ -29,7 +29,7 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.v
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import (
     WanT5EncoderModel,
 )
-from worldfoundry.core.distributed.sequence_parallel_runtime import (
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
     set_multi_gpus_devices,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.versecrafter import (
@@ -38,7 +38,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.verse
 from worldfoundry.base_models.diffusion_model.loaders.wan_variant import (
     load_wan_transformer,
 )
-from worldfoundry.core.distributed.block_fsdp import shard_model
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 from videox_fun.utils.fp8_optimization import (convert_model_weight_to_float8,
                                                convert_weight_dtype_wrapper,
                                                replace_parameters_by_name)

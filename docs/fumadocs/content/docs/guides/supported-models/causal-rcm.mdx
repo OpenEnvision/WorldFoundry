@@ -23,7 +23,7 @@ Execution is **blocked** until the public DiT, Wan2.1 VAE, and umT5 are staged. 
 
 `causal-rcm` is the recorded interactive world line. Start here when the job is stepping a world with actions.
 
-Per the paper (arXiv 2510.08431), rCM combines score-regularized consistency distillation for few-step sampling. The vendored stack drops the upstream imaginaire framework — WorldFoundry's own lazy_config, easy_io, and logging back it — and the block-causal mask predicates were lifted into worldfoundry/core/attention/block_pattern.py, verified against upstream across 702 mask and 162 chunk-schedule configurations.
+Per the paper (arXiv 2510.08431), rCM combines score-regularized consistency distillation for few-step sampling. The vendored stack drops the upstream imaginaire framework — WorldFoundry's own lazy_config, easy_io, and logging back it — and the block-causal mask predicates were lifted into worldfoundry/core/attention/sparse/block_pattern.py, verified against upstream across 702 mask and 162 chunk-schedule configurations.
 
 Catalog tasks include autoregressive-video-generation, streaming-video-generation, interactive-world-model, and text-to-video. Catalog aliases include `rcm`, `causal_rcm`, `rcm-causal`, and `causal-rcm-wan2.1`. Documented modalities: text and image in, video out.
 

@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 from worldfoundry.core.nn import modulate_sequence as modulate
-from worldfoundry.core.nn.layers import to_2tuple
+from worldfoundry.core.nn.blocks.layers import to_2tuple
 
 
 class MLP(nn.Module):

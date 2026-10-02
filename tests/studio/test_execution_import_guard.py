@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from types import SimpleNamespace
 
-from worldfoundry.core.utils.import_guard import third_party_lazy_import_guard
+from worldfoundry.core.utils.python.import_guard import third_party_lazy_import_guard
 from worldfoundry.studio.inference.execution import StudioManager
 
 

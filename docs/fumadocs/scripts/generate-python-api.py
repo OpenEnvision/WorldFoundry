@@ -10,15 +10,14 @@ from __future__ import annotations
 
 import argparse
 import ast
-from dataclasses import dataclass
 import inspect
 import json
-from pathlib import Path
 import re
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable
 
 from api_symbol_intros import CURATED_INTROS, GROUP_HINTS
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_PATH = REPO_ROOT / "docs" / "fumadocs" / "generated" / "python-api.json"
@@ -146,10 +145,10 @@ CORE_GROUP_BY_MODULE = {
     "io": "core-io-media",
     "distributed": "core-distributed",
     "model_loading": "core-model-loading",
-    "checkpoint": "core-model-loading",
     "execution": "core-runtime",
     "observability": "core-runtime",
-    "video": "core-io-media",
+    "media": "core-io-media",
+    "configuration": "core-configuration",
     "nn": "core-nn-math",
     "geometry": "core-nn-math",
     "acceleration": "core-acceleration-memory",
@@ -164,12 +163,12 @@ CORE_GROUP_BY_MODULE = {
 # additional public imports that recur throughout model integrations.
 CORE_ADDITIONAL_SYMBOLS = (
     # Attention state and dispatch controls.
-    SymbolSpec("worldfoundry.core.attention", "NativeAttention", "worldfoundry/core/attention/native.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "ContextParallelAttention", "worldfoundry/core/attention/cp.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "BlockKVCache", "worldfoundry/core/attention/kvcache.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "packed_sequence_attention", "worldfoundry/core/attention/dispatch.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "attention_dispatch_report", "worldfoundry/core/attention/dispatch.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "clear_attention_dispatch_cache", "worldfoundry/core/attention/dispatch.py", "core-attention"),
+    SymbolSpec("worldfoundry.core.attention", "NativeAttention", "worldfoundry/core/attention/backends/native.py", "core-attention"),
+    SymbolSpec("worldfoundry.core.attention", "ContextParallelAttention", "worldfoundry/core/attention/parallel/cp.py", "core-attention"),
+    SymbolSpec("worldfoundry.core.attention", "BlockKVCache", "worldfoundry/core/attention/cache/kvcache.py", "core-attention"),
+    SymbolSpec("worldfoundry.core.attention", "packed_sequence_attention", "worldfoundry/core/attention/backends/dispatch.py", "core-attention"),
+    SymbolSpec("worldfoundry.core.attention", "attention_dispatch_report", "worldfoundry/core/attention/backends/dispatch.py", "core-attention"),
+    SymbolSpec("worldfoundry.core.attention", "clear_attention_dispatch_cache", "worldfoundry/core/attention/backends/dispatch.py", "core-attention"),
     # Lazy configuration is the construction seam used by released configs.
     SymbolSpec("worldfoundry.core.configuration", "Config", "worldfoundry/core/configuration/cosmos_config.py", "core-configuration"),
     SymbolSpec("worldfoundry.core.configuration", "CheckpointConfig", "worldfoundry/core/configuration/cosmos_config.py", "core-configuration"),
@@ -189,12 +188,12 @@ CORE_ADDITIONAL_SYMBOLS = (
     SymbolSpec("worldfoundry.core.io.paths", "resolve_data_path", "worldfoundry/core/io/paths.py", "core-io-media"),
     SymbolSpec("worldfoundry.core.io.paths", "local_model_root_path", "worldfoundry/core/io/paths.py", "core-io-media"),
     # Context-parallel helpers are a public subpackage boundary.
-    SymbolSpec("worldfoundry.core.distributed", "split_inputs_cp", "worldfoundry/core/distributed/context_parallel.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "cat_outputs_cp", "worldfoundry/core/distributed/context_parallel.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "cat_outputs_cp_with_grad", "worldfoundry/core/distributed/context_parallel.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "broadcast", "worldfoundry/core/distributed/context_parallel.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "broadcast_split_tensor", "worldfoundry/core/distributed/context_parallel.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "find_split", "worldfoundry/core/distributed/context_parallel.py", "core-distributed"),
+    SymbolSpec("worldfoundry.core.distributed", "split_inputs_cp", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
+    SymbolSpec("worldfoundry.core.distributed", "cat_outputs_cp", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
+    SymbolSpec("worldfoundry.core.distributed", "cat_outputs_cp_with_grad", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
+    SymbolSpec("worldfoundry.core.distributed", "broadcast", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
+    SymbolSpec("worldfoundry.core.distributed", "broadcast_split_tensor", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
+    SymbolSpec("worldfoundry.core.distributed", "find_split", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
     # In-tree acceleration, memory, kernel, and safety primitives.
     SymbolSpec("worldfoundry.core.acceleration", "FixedStepCache", "worldfoundry/core/acceleration/cache.py", "core-acceleration-memory"),
     SymbolSpec("worldfoundry.core.acceleration", "AdaptiveResidualCache", "worldfoundry/core/acceleration/cache.py", "core-acceleration-memory"),
@@ -210,7 +209,7 @@ CORE_ADDITIONAL_SYMBOLS = (
     SymbolSpec("worldfoundry.core.kernels", "layer_norm_scale_shift", "worldfoundry/core/kernels/diffusion.py", "core-acceleration-memory"),
     SymbolSpec("worldfoundry.core.memory", "BaseMemory", "worldfoundry/core/memory/base.py", "core-acceleration-memory"),
     SymbolSpec("worldfoundry.core.memory", "MemoryStore", "worldfoundry/core/memory/store.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.execution.realtime", "RealtimeSpec", "worldfoundry/core/execution/realtime.py", "core-runtime"),
+    SymbolSpec("worldfoundry.core.execution.realtime.contracts", "RealtimeSpec", "worldfoundry/core/execution/realtime/contracts.py", "core-runtime"),
     SymbolSpec("worldfoundry.core.safety", "ContentSafetyGuardrail", "worldfoundry/core/safety/guardrails.py", "core-foundations"),
     SymbolSpec("worldfoundry.core.safety", "PostprocessingGuardrail", "worldfoundry/core/safety/guardrails.py", "core-foundations"),
     SymbolSpec("worldfoundry.core.safety", "GuardrailRunner", "worldfoundry/core/safety/guardrails.py", "core-foundations"),

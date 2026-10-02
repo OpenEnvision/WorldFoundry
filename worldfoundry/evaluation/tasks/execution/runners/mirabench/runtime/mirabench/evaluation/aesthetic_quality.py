@@ -9,8 +9,8 @@ from PIL import Image
 from torchvision import transforms
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize
 
-from worldfoundry.core.io.video import list_numbered_frame_paths
-from worldfoundry.core.utils.inference_runtime import (
+from worldfoundry.core.media.codecs.video import list_numbered_frame_paths
+from worldfoundry.core.execution.inference_runtime import (
     adaptive_batched_inference,
     resolve_inference_batch_size,
 )

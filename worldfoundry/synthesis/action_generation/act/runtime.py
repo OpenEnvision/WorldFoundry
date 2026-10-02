@@ -128,7 +128,7 @@ class ACTRuntime:
         policy_cls = build_policy_class()
         self.policy = policy_cls(args).to(torch.device(self.config.device))
         self.policy.eval()
-        from worldfoundry.core.model_loading.file import load_torch_checkpoint
+        from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
         payload = load_torch_checkpoint(
             checkpoint,

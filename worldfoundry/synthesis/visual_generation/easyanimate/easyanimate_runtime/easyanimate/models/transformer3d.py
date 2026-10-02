@@ -36,7 +36,7 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange
 from torch import nn
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 from .attention import (EasyAnimateDiTBlock, HunyuanDiTBlock,
                         SelfAttentionTemporalTransformerBlock,

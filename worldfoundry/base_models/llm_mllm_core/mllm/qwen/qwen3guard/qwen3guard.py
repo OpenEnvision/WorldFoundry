@@ -22,9 +22,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.qwen3guard.categories import UNSAFE_CATEGORIES
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.core.safety import ContentSafetyGuardrail, GuardrailRunner
-from worldfoundry.core.utils import inference_runtime as misc
+from worldfoundry.core.execution import inference_runtime as misc
 
 SAFE = misc.Color.green("SAFE")
 UNSAFE = misc.Color.red("UNSAFE")

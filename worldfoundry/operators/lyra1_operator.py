@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from worldfoundry.core.io.image import load_pil_image
+from worldfoundry.core.media.codecs.image import load_pil_image
 
 from .base_operator import BaseOperator
 

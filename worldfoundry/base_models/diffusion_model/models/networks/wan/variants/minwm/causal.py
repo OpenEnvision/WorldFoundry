@@ -3,7 +3,7 @@
 Causal official-layout Wan 2.1.  Action and ProPE live in sibling
 modules.  Adds causal attention.
 """
-from worldfoundry.core.attention.varlen import attention
+from worldfoundry.core.attention.sequence.varlen import attention
 from .action import (
     WanRMSNorm,
     rope_apply,

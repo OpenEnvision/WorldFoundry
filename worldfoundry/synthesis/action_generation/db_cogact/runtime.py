@@ -62,7 +62,7 @@ def _runtime_for(location: str, device: str, options: Mapping[str, Any]) -> Any:
     from transformers.modeling_utils import no_init_weights
 
     from worldfoundry.core.attention import resolve_transformers_attention_implementation
-    from worldfoundry.core.checkpoint import load_safetensors_into_model_streaming
+    from worldfoundry.core.model_loading.checkpoints import load_safetensors_into_model_streaming
     from worldfoundry.core.vram import skip_model_initialization
 
     from .modeling.architecture import CogACTForCausalLM, CogActConfig

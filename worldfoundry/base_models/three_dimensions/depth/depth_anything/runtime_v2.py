@@ -309,7 +309,7 @@ class DepthAnything2Representation:
 
         result = {"depth": depth}
         if return_visualization:
-            from worldfoundry.core.io.artifacts import (
+            from worldfoundry.core.media.artifacts import (
                 depth_to_colormap_rgb,
                 depth_to_uint8,
             )

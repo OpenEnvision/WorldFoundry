@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from worldfoundry.core.attention import native_sdpa_priority, scaled_dot_product_attention
-from worldfoundry.core.utils.misc_utils import env_is_true
+from worldfoundry.core.utils.python.misc_utils import env_is_true
 
 
 def _one_dimensional_embedding(embed_dim: int, positions: np.ndarray) -> np.ndarray:

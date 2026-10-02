@@ -528,7 +528,7 @@ class NativeModuleLoader:
             )
 
         if policy.compile:
-            from worldfoundry.core.attention.dispatch import (
+            from worldfoundry.core.attention.backends.dispatch import (
                 attention_compile_receipt_scope,
             )
             from worldfoundry.runtime.compile_cache import compile_callable_cached

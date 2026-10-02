@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from worldfoundry.core.io.integrity import canonical_json
+from worldfoundry.core.io.filesystem.integrity import canonical_json
 from worldfoundry.training.data import RolloutPromptDataset, RolloutPromptRecord
 from worldfoundry.training.safety import PromptSafetyAudit
 from worldfoundry.training.safety.shieldgemma import SHIELDGEMMA_PROMPT_POLICIES

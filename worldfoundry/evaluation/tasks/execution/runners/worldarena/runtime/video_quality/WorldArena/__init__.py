@@ -7,7 +7,7 @@ from pathlib import Path
 import importlib.util
 import json
 
-from worldfoundry.core.distributed.evaluation_collectives import get_rank, print0
+from worldfoundry.core.distributed.collectives.evaluation import get_rank, print0
 
 import re
 from collections import defaultdict

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from worldfoundry.core.checkpoint import select_profile_checkpoint, selected_checkpoint_options
+from worldfoundry.core.model_loading.checkpoints import select_profile_checkpoint, selected_checkpoint_options
 from worldfoundry.synthesis.action_generation.base_action_synthesis import ActionModelSynthesis
 from worldfoundry.synthesis.action_generation.official_policy import OfficialPolicySynthesis
 from worldfoundry.synthesis.action_generation.official_policy.runtime import (

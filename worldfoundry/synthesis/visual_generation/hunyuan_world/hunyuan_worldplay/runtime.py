@@ -36,7 +36,7 @@ from worldfoundry.base_models.diffusion_model.models.upsamplers.hunyuan_video.h1
 from worldfoundry.base_models.diffusion_model.schedulers.hunyuan_compat import (
     HunyuanVideoFlowMatchDiscreteScheduler as FlowMatchDiscreteScheduler,
 )
-from worldfoundry.core.distributed.sequence_mesh_state import get_parallel_state
+from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
 from worldfoundry.synthesis.visual_generation.hunyuan_world import (
     generate_crop_size_list,
     get_closest_ratio,

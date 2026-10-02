@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.file_utils import materialize_file
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
     bundled_benchmark_asset,

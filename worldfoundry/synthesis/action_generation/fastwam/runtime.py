@@ -106,7 +106,7 @@ class FastWAMRuntime:
     def _resolve_release(self) -> tuple[Path, Path]:
         if self._release_root is not None and self._checkpoint_file is not None:
             return self._release_root, self._checkpoint_file
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._existing_path(self.config.checkpoint_location)
         if direct is not None and direct.is_file():
@@ -147,7 +147,7 @@ class FastWAMRuntime:
         required_files: Sequence[str],
         allow_patterns: Sequence[str] | None = None,
     ) -> Path:
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._existing_path(explicit)
         location = str(direct) if direct is not None else reference
@@ -181,9 +181,9 @@ class FastWAMRuntime:
         import torch
         from torch import nn
 
-        from worldfoundry.core.checkpoint.assignment import assign_state_dict_strict
+        from worldfoundry.core.model_loading.checkpoints.assignment import assign_state_dict_strict
         from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
-        from worldfoundry.core.model_loading.file import load_state_dict, load_torch_checkpoint
+        from worldfoundry.core.model_loading.checkpoints.file import load_state_dict, load_torch_checkpoint
 
         from .action_dit import ActionDiT
         from .mot import MoT
@@ -268,8 +268,8 @@ class FastWAMRuntime:
             return self._tokenizer, self._text_encoder
         import torch
 
-        from worldfoundry.core.checkpoint.assignment import assign_state_dict_strict
-        from worldfoundry.core.model_loading.file import load_state_dict
+        from worldfoundry.core.model_loading.checkpoints.assignment import assign_state_dict_strict
+        from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 
         from .wan_video_text_encoder import HuggingfaceTokenizer, WanTextEncoder
 
@@ -446,7 +446,7 @@ class FastWAMRuntime:
         if isinstance(image, Image.Image):
             return image
         if isinstance(image, (str, Path)):
-            from worldfoundry.core.utils.image_utils import load_pil_image
+            from worldfoundry.core.media.processing.image_utils import load_pil_image
 
             return load_pil_image(image, first_sequence_item=False)
         return Image.fromarray(np.asarray(image).astype(np.uint8))
@@ -482,7 +482,7 @@ class FastWAMRuntime:
         import numpy as np
         import torch
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
 
         image_mapping = image if isinstance(image, Mapping) else {}
         image_sequence = (

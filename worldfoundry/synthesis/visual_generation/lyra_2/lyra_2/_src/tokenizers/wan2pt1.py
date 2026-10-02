@@ -27,8 +27,8 @@ from lyra_2._src.tokenizers.interface import VideoTokenizerInterface
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 from worldfoundry.core.configuration.lazy_config import LazyCall as L
 from worldfoundry.core.configuration.lazy_config import LazyDict
-from worldfoundry.core.distributed.logging import log
-from worldfoundry.core.distributed.torch_process_group import broadcast, get_rank, sync_model_states
+from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.distributed.runtime.torch_process_group import broadcast, get_rank, sync_model_states
 from worldfoundry.data.io import easy_io
 
 __all__ = [

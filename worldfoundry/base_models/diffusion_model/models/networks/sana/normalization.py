@@ -123,7 +123,7 @@ def reset_bn(
     from packages.models.utils import get_device, list_join
     from tqdm import tqdm
 
-    from worldfoundry.core.distributed.generic_collectives import is_master, sync_tensor
+    from worldfoundry.core.distributed.collectives.generic import is_master, sync_tensor
 
     bn_mean = {}
     bn_var = {}

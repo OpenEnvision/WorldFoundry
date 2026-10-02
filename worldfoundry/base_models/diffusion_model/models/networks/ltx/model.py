@@ -38,7 +38,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.ltx.transformer_ar
 )
 from worldfoundry.core.nn import DEFAULT_TRANSFORMER_OPS, TransformerOpsConfig
 from worldfoundry.core.nn import velocity_to_denoised as to_denoised
-from worldfoundry.core.nn.gradient import gradient_checkpoint_forward
+from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
 
 
 class LTXModelType(Enum):

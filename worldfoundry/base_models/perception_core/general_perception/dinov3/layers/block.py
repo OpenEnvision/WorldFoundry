@@ -13,7 +13,7 @@ from torch import Tensor, nn
 from ..utils import cat_keep_shapes, uncat_with_shapes
 
 from .attention import CausalSelfAttention, SelfAttention
-from worldfoundry.core.nn.layers import LayerScale, Mlp
+from worldfoundry.core.nn.blocks.layers import LayerScale, Mlp
 
 
 class SelfAttentionBlock(nn.Module):

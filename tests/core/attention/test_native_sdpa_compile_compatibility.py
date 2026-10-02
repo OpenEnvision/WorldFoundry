@@ -6,7 +6,7 @@ from contextlib import nullcontext
 
 import torch
 
-from worldfoundry.core.attention import native
+from worldfoundry.core.attention.backends import native
 
 
 def test_sdpa_kernel_context_is_skipped_while_compiling(monkeypatch) -> None:

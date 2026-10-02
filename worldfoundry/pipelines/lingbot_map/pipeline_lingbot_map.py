@@ -13,7 +13,7 @@ from worldfoundry.base_models.three_dimensions.point_clouds.lingbot_map.runtime 
     LingBotMapRepresentation,
 )
 from worldfoundry.core.io import artifact_root_path
-from worldfoundry.core.io.artifacts import depths_to_pil_images
+from worldfoundry.core.media.artifacts import depths_to_pil_images
 
 from ...operators.lingbot_map_operator import LingBotMapOperator
 from ...synthesis.visual_generation.memory.runtime import RuntimeMemory

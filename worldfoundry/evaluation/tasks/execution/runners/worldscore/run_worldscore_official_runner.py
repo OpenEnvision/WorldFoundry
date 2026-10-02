@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.file_utils import materialize_file
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.framework.io import (
     env_path,

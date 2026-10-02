@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from worldfoundry.core.attention.kv_quantization import (
+from worldfoundry.core.attention.cache.kv_quantization import (
     KVQuantConfig,
     QuantizedKVStore,
     dequantize_kv,

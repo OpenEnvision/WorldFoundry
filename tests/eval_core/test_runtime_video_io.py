@@ -14,7 +14,7 @@ from worldfoundry.core.io import (
     save_video_frames,
     video_tensor_to_uint8_frames,
 )
-from worldfoundry.core.io import video as video_io
+from worldfoundry.core.media.codecs import video as video_io
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

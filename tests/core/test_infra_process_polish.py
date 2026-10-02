@@ -27,7 +27,7 @@ def test_wan_video_logging_does_not_configure_root_logger(
     for dependency in ("imageio", "torch", "torchvision"):
         monkeypatch.setitem(sys.modules, dependency, types.ModuleType(dependency))
     module = _load_source(
-        "worldfoundry/core/io/wan_video_geometry.py",
+        "worldfoundry/base_models/diffusion_model/models/networks/wan/media_geometry.py",
         "test_wan_video_geometry_logging",
     )
 

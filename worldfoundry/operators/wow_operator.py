@@ -6,8 +6,8 @@ from pathlib import Path
 
 from PIL import Image
 
-from worldfoundry.core.io.media import VIDEO_EXTENSIONS
-from worldfoundry.core.io.video import load_frames_from_video
+from worldfoundry.core.media.types import VIDEO_EXTENSIONS
+from worldfoundry.core.media.codecs.video import load_frames_from_video
 from worldfoundry.core.utils import load_pil_image
 
 from .base_operator import BaseOperator

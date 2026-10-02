@@ -29,11 +29,11 @@ from urllib.parse import quote
 import numpy as np
 from PIL import Image
 
-from worldfoundry.core.acceleration.prewarm import run_async_prewarm_sequence
-from worldfoundry.core.execution.realtime import RealtimeSpec
+from worldfoundry.core.execution.realtime.prewarm import run_async_prewarm_sequence
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 from worldfoundry.core.observability.logging_setup import get_logger, write_jsonl_event
 from worldfoundry.core.observability.realtime_timing import RealtimeChunkTiming, RealtimeTimingWindow
-from worldfoundry.core.video.postprocess import (
+from worldfoundry.core.media.processing.postprocess import (
     IdentityVideoPostProcessor,
     VideoPostprocessChain,
     VideoPostprocessStream,
@@ -664,7 +664,7 @@ def _realtime_postprocess_stream(
             fps=fps,
         )
 
-    from worldfoundry.core.video.rtx import (
+    from worldfoundry.core.media.processing.rtx import (
         require_rtx_vfx_runtime,
         rtx_postprocessor_from_preset,
     )

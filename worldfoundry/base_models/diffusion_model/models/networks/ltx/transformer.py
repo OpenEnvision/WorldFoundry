@@ -17,7 +17,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.ltx.attention impo
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.feed_forward import FeedForward
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.rope import LTXRopeType
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.transformer_args import TransformerArgs
-from worldfoundry.core.attention.model_backends import AttentionCallable
+from worldfoundry.core.attention.backends.model_backends import AttentionCallable
 from worldfoundry.core.nn import TransformerOpsConfig, rms_norm
 
 

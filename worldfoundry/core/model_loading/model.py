@@ -10,7 +10,7 @@ transformers is imported only for DeepSpeed ZeRO-3; a plain torch load
 must not require that package.
 
 Not this module: file deserialization
-(:mod:`worldfoundry.core.model_loading.file`), Hydra instantiation
+(:mod:`worldfoundry.core.model_loading.checkpoints.file`), Hydra instantiation
 (:mod:`.factory`), or LoRA merge (:mod:`.lora`).
 """
 
@@ -18,7 +18,7 @@ import contextlib
 
 import torch
 
-from worldfoundry.core.model_loading.file import load_state_dict
+from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 from worldfoundry.core.vram.disk_map import DiskMap
 from worldfoundry.core.vram.initialization import skip_model_initialization
 from worldfoundry.core.vram.layers import enable_vram_management

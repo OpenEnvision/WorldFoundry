@@ -74,7 +74,7 @@ def clean_dist_env(monkeypatch):
 
 def test_reset_context_parallel_clears_module_globals() -> None:
     pytest.importorskip("einops")
-    from worldfoundry.core.distributed import context_parallel_util as cpu
+    from worldfoundry.core.distributed.model_parallel import context_state as cpu
 
     cpu.dp_size = 8
     cpu.cp_size = 4
@@ -100,7 +100,7 @@ def test_reset_context_parallel_clears_module_globals() -> None:
 
 
 def test_context_parallel_util_uses_logging_not_print() -> None:
-    tree = _parse("worldfoundry/core/distributed/context_parallel_util.py")
+    tree = _parse("worldfoundry/core/distributed/model_parallel/context_state.py")
     assert _print_calls(tree) == []
     names = _names_in(_function(tree, "init_context_parallel"))
     assert "logger" in names
@@ -112,7 +112,7 @@ def test_context_parallel_util_uses_logging_not_print() -> None:
 def test_dist_init_wrapper_emits_deprecation_and_calls_canonical(clean_dist_env) -> None:
     import torch
 
-    from worldfoundry.core.distributed import generic_collectives
+    from worldfoundry.core.distributed.collectives import generic as generic_collectives
 
     monkeypatch = clean_dist_env
     called: list[tuple[tuple, dict]] = []
@@ -125,7 +125,7 @@ def test_dist_init_wrapper_emits_deprecation_and_calls_canonical(clean_dist_env)
     monkeypatch.setattr(torch.distributed, "is_available", lambda: True)
     monkeypatch.setattr(torch.distributed, "is_initialized", lambda: initialized["value"])
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         fake_init,
     )
 
@@ -136,7 +136,7 @@ def test_dist_init_wrapper_emits_deprecation_and_calls_canonical(clean_dist_env)
 
 
 def test_metric_sync_init_distributed_wrapper_emits_deprecation(clean_dist_env) -> None:
-    from worldfoundry.core.distributed import metric_sync
+    from worldfoundry.core.distributed.collectives import metric_sync
 
     monkeypatch = clean_dist_env
     called: list[dict] = []
@@ -145,7 +145,7 @@ def test_metric_sync_init_distributed_wrapper_emits_deprecation(clean_dist_env) 
         called.append(kwargs)
 
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         fake_init,
     )
 
@@ -157,18 +157,18 @@ def test_metric_sync_init_distributed_wrapper_emits_deprecation(clean_dist_env) 
 
 
 def test_generic_collectives_get_rank_delegates_to_torch_process_group(monkeypatch) -> None:
-    from worldfoundry.core.distributed import generic_collectives
+    from worldfoundry.core.distributed.collectives import generic as generic_collectives
 
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.get_rank",
+        "worldfoundry.core.distributed.runtime.torch_process_group.get_rank",
         lambda group=None: 7,
     )
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.get_world_size",
+        "worldfoundry.core.distributed.runtime.torch_process_group.get_world_size",
         lambda group=None: 4,
     )
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.get_local_rank",
+        "worldfoundry.core.distributed.runtime.torch_process_group.get_local_rank",
         lambda: 2,
     )
     assert generic_collectives.get_rank() == 7
@@ -177,21 +177,21 @@ def test_generic_collectives_get_rank_delegates_to_torch_process_group(monkeypat
 
 
 def test_canonical_init_and_wrappers_are_wired_in_source() -> None:
-    tpg = _parse("worldfoundry/core/distributed/torch_process_group.py")
+    tpg = _parse("worldfoundry/core/distributed/runtime/torch_process_group.py")
     assert any(
         isinstance(node, ast.FunctionDef) and node.name == "init_torch_distributed" for node in tpg.body
     )
-    dist_init = _function(_parse("worldfoundry/core/distributed/generic_collectives.py"), "dist_init")
+    dist_init = _function(_parse("worldfoundry/core/distributed/collectives/generic.py"), "dist_init")
     dist_init_names = _names_in(dist_init)
     assert "DeprecationWarning" in dist_init_names
     assert "init_torch_distributed" in dist_init_names
 
-    metric_init = _function(_parse("worldfoundry/core/distributed/metric_sync.py"), "init_distributed")
+    metric_init = _function(_parse("worldfoundry/core/distributed/collectives/metric_sync.py"), "init_distributed")
     metric_names = _names_in(metric_init)
     assert "DeprecationWarning" in metric_names
     assert "init_torch_distributed" in metric_names
 
-    worker = _function(_parse("worldfoundry/core/distributed/multiprocess_launch.py"), "distributed_worker")
+    worker = _function(_parse("worldfoundry/core/distributed/runtime/multiprocess_launch.py"), "distributed_worker")
     worker_names = _names_in(worker)
     assert "DeprecationWarning" in worker_names
     assert "init_torch_distributed" in worker_names
@@ -200,13 +200,13 @@ def test_canonical_init_and_wrappers_are_wired_in_source() -> None:
 @pytest.mark.parametrize(
     "relpath",
     [
-        "worldfoundry/core/distributed/context_parallel.py",
-        "worldfoundry/core/distributed/fsdp_runtime.py",
-        "worldfoundry/core/distributed/inference_runtime.py",
-        "worldfoundry/core/distributed/multiprocess_launch.py",
-        "worldfoundry/core/distributed/pipeline_parallel.py",
-        "worldfoundry/core/distributed/generic_collectives.py",
-        "worldfoundry/core/distributed/metric_sync.py",
+        "worldfoundry/core/distributed/model_parallel/context.py",
+        "worldfoundry/core/distributed/sharding/fsdp_runtime.py",
+        "worldfoundry/core/distributed/runtime/inference_runtime.py",
+        "worldfoundry/core/distributed/runtime/multiprocess_launch.py",
+        "worldfoundry/core/distributed/model_parallel/pipeline.py",
+        "worldfoundry/core/distributed/collectives/generic.py",
+        "worldfoundry/core/distributed/collectives/metric_sync.py",
         "worldfoundry/core/distributed/sequence_parallel/parallel_state.py",
         "worldfoundry/core/distributed/sequence_parallel/logger.py",
         "worldfoundry/core/distributed/sequence_parallel/cuda_utils.py",

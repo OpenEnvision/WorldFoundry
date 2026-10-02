@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
-from worldfoundry.core.attention.varlen import flash_attention
+from worldfoundry.core.attention.sequence.varlen import flash_attention
 
 __all__ = ['WanModel']
 

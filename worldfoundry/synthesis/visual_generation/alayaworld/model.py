@@ -27,8 +27,8 @@ from worldfoundry.base_models.diffusion_model.models.networks.ltx.modality impor
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.model import LTXModel
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.transformer_args import TransformerArgs
 from worldfoundry.base_models.diffusion_model.optimizations import RuntimePolicy
-from worldfoundry.core.attention.ulysses_attention import flattened_ulysses_attention
-from worldfoundry.core.distributed.context_parallel import cat_outputs_cp, split_inputs_cp
+from worldfoundry.core.attention.parallel.ulysses_attention import flattened_ulysses_attention
+from worldfoundry.core.distributed.model_parallel.context import cat_outputs_cp, split_inputs_cp
 
 
 @dataclass(frozen=True)

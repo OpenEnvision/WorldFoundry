@@ -32,7 +32,7 @@ import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, T5ForConditionalGeneration
 
-from worldfoundry.core.checkpoint import load_weights_only, tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_weights_only, tensor_state_dict
 
 
 def load_glyph_byT5_v2(args, device):

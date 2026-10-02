@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from worldfoundry.core.io.serialization import read_jsonl_objects, write_jsonl
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
 from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
 from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,

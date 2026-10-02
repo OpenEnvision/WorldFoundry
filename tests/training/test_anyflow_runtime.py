@@ -7,7 +7,7 @@ import pytest
 import torch
 from torch import nn
 
-from worldfoundry.core.attention.chunk_partition import TemporalChunkPartition
+from worldfoundry.core.attention.cache.chunk_partition import TemporalChunkPartition
 from worldfoundry.training.post_training.distillation.anyflow import (
     AnyFlowDecisionRNG,
     AnyFlowEMA,

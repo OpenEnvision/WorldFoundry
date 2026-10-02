@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from worldfoundry.core.attention import varlen
+from worldfoundry.core.attention.sequence import varlen
 
 
 def _qkv() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

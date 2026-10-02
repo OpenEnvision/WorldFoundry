@@ -294,7 +294,7 @@ class Inferencer:
 
 
             if self.args.return_action:
-                from worldfoundry.core.io.artifacts import save_openloop_action_comparison
+                from worldfoundry.core.media.artifacts import save_openloop_action_comparison
 
                 save_openloop_action_comparison(
                     gt_actions_arr_all,

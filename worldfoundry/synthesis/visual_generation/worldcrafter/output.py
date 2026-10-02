@@ -13,8 +13,8 @@ from pathlib import Path
 
 import torch
 
-from worldfoundry.core.io.file_utils import file_sha256 as sha256
-from worldfoundry.core.io.video import _resolve_ffmpeg_executable
+from worldfoundry.core.io.filesystem.file_utils import file_sha256 as sha256
+from worldfoundry.core.media.codecs.video import _resolve_ffmpeg_executable
 
 
 def save_chunk_state(

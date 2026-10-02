@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io.image import load_pil_image
+from worldfoundry.core.media.codecs.image import load_pil_image
 from worldfoundry.pipelines.video_official.pipeline_official_video import (
     OfficialVideoPipeline,
 )

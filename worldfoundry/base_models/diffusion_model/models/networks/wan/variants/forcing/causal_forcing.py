@@ -3,7 +3,7 @@
 Sibling of :mod:`.self_forcing` with the Causal-Forcing cache contract.
 Adds causal attention.
 """
-from worldfoundry.core.attention.varlen import attention
+from worldfoundry.core.attention.sequence.varlen import attention
 from .model import (
     WanRMSNorm,
     rope_apply,

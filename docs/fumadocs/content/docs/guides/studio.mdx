@@ -461,8 +461,8 @@ and its borrowed DLPack output is cloned before the next effect call. Inspect
 static prerequisites or run the full native probe without starting Studio:
 
 ```bash
-python -c 'from worldfoundry.core.video.rtx import inspect_rtx_vfx_capability as check; print(check(device=0).to_payload())'
-python -c 'from worldfoundry.core.video.rtx import probe_rtx_vfx_runtime as probe; print(probe(device=0).to_payload())'
+python -c 'from worldfoundry.core.media.processing.rtx import inspect_rtx_vfx_capability as check; print(check(device=0).to_payload())'
+python -c 'from worldfoundry.core.media.processing.rtx import probe_rtx_vfx_runtime as probe; print(probe(device=0).to_payload())'
 ```
 
 On Linux, `VideoSuperRes` also needs `libnvidia-ngx.so.1`. Compute-only or

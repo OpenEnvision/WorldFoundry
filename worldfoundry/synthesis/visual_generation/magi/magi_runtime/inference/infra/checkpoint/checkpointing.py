@@ -20,8 +20,8 @@ import numpy as np
 import torch
 import torch.distributed
 
-import worldfoundry.core.distributed.model_parallel_groups as mpu
-from worldfoundry.core.checkpoint import load_sharded_safetensors_parallel_with_progress, unwrap_model
+import worldfoundry.core.distributed.model_parallel.groups as mpu
+from worldfoundry.core.model_loading.checkpoints import load_sharded_safetensors_parallel_with_progress, unwrap_model
 from worldfoundry.core.distributed import print_per_rank, print_rank_0
 
 

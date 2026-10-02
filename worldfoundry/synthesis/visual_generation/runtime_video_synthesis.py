@@ -18,7 +18,7 @@ import numpy as np
 import torch
 
 from worldfoundry.core.io import load_serialized, resolve_data_path
-from worldfoundry.core.io.image import load_pil_image, materialize_image_input
+from worldfoundry.core.media.codecs.image import load_pil_image, materialize_image_input
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 
 from ..base_synthesis import BaseSynthesis

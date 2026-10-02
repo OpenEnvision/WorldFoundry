@@ -22,9 +22,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-from worldfoundry.core.distributed.logging import log
-from worldfoundry.core.distributed.torch_process_group import get_rank, sync_model_states
-from worldfoundry.core.io.easy_io import easy_io
+from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.distributed.runtime.torch_process_group import get_rank, sync_model_states
+from worldfoundry.core.io.assets.easy_io import easy_io
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.tokenizers.interface import VideoTokenizerInterface
 
 __all__ = [

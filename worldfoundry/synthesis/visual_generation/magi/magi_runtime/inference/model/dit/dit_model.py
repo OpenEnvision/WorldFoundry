@@ -22,7 +22,7 @@ import torch.distributed
 import torch.nn as nn
 from einops import rearrange
 
-import worldfoundry.core.distributed.model_parallel_groups as mpu
+import worldfoundry.core.distributed.model_parallel.groups as mpu
 from inference.common.config import MagiConfig
 from inference.infra.checkpoint.checkpointing import load_checkpoint
 from worldfoundry.core import (

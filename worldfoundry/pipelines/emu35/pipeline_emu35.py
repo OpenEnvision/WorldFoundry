@@ -57,7 +57,7 @@ class Emu35Pipeline(PipelineABC):
             if isinstance(images, (str, Path)) and Path(images).is_file():
                 image_path = str(images)
             else:
-                from worldfoundry.core.io.image import materialize_image_input
+                from worldfoundry.core.media.codecs.image import materialize_image_input
 
                 image_path = materialize_image_input(images, target.parent / f".{target.stem}_inputs")
         result = self.runtime.predict(prompt=prompt, image_path=image_path, output_path=target, **kwargs)

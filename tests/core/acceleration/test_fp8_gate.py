@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import torch
 
-from worldfoundry.core.acceleration import quantization as Q
+from worldfoundry.core.acceleration.quantization import linear as Q
 
 
 def _make_input(tokens: int, in_features: int) -> torch.Tensor:

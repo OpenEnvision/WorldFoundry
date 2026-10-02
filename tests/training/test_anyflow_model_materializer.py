@@ -16,7 +16,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     OffloadPolicy,
     RuntimePolicy,
 )
-from worldfoundry.core.attention.chunk_partition import TemporalChunkPartition
+from worldfoundry.core.attention.cache.chunk_partition import TemporalChunkPartition
 from worldfoundry.training.models import anyflow as model_boundary
 from worldfoundry.training.models.anyflow import (
     ANYFLOW_BIDIRECTIONAL_WAN_SMALL_CHECKPOINT,

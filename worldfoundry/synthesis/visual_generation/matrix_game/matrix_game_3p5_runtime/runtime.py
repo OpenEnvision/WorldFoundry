@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.file_utils import file_sha256
+from worldfoundry.core.io.filesystem.file_utils import file_sha256
 from worldfoundry.core.io.paths import (
     resolve_local_checkpoint_file,
     resolve_local_hf_model_path,

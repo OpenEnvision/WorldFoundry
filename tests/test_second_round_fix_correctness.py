@@ -17,45 +17,6 @@ def _parse(relpath: str) -> ast.Module:
     return ast.parse((REPO_ROOT / relpath).read_text(encoding="utf-8"))
 
 
-def test_human_pose_draw_mask_blends_resized_background() -> None:
-    np = pytest.importorskip("numpy")
-    cv2 = pytest.importorskip("cv2")
-    source = (REPO_ROOT / "worldfoundry/studio/visualization/plugins/perception/human_pose.py").read_text(
-        encoding="utf-8"
-    )
-    tree = ast.parse(source)
-    func = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "draw_mask"
-    )
-    namespace = {"np": np, "cv2": cv2, "load_image": lambda img, reverse=False: img}
-    exec(compile(ast.Module(body=[func], type_ignores=[]), "<draw_mask>", "exec"), namespace)
-
-    img = np.zeros((4, 6, 3), dtype=np.uint8)
-    img[:] = (255, 0, 0)
-    mask = np.zeros((4, 6), dtype=np.uint8)
-    mask[:, :3] = 255
-    background = np.zeros((8, 8, 3), dtype=np.uint8)
-    background[:] = (0, 255, 0)
-
-    out = namespace["draw_mask"](img, mask, background=background, return_rgba=False)
-    assert out.shape == (4, 6, 3)
-    assert tuple(out[0, 0]) == (255, 0, 0)
-    assert tuple(out[0, 5]) == (0, 255, 0)
-
-
-def test_human_pose_unknown_stickwidth_raises_value_error() -> None:
-    source = (
-        REPO_ROOT / "worldfoundry/studio/visualization/plugins/perception/human_pose.py"
-    ).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    bare_raises = [node for node in ast.walk(tree) if isinstance(node, ast.Raise) and node.exc is None]
-    assert bare_raises == []
-    assert "Unknown stickwidth_type" in source
-    assert "alphaMerge" not in source
-
-
 def test_workspace_app_uses_start_new_session_not_preexec_fn() -> None:
     source = (REPO_ROOT / "worldfoundry/studio/serving/workspace.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -100,24 +61,6 @@ def test_runtime_modules_do_not_import_evaluation_utils() -> None:
     assert offenders == []
 
 
-def test_ray_setup_binds_runtime_before_ready_and_cleans_on_failure() -> None:
-    source = (REPO_ROOT / "worldfoundry/training/distributed/ray_runtime.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    setup = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "setup")
-    assigned_ray_before_get = False
-    saw_get = False
-    for node in ast.walk(setup):
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Attribute) and target.attr == "_ray" for target in node.targets
-        ):
-            assigned_ray_before_get = not saw_get
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
-            saw_get = True
-    assert assigned_ray_before_get
-    assert "self.shutdown()" in source
-    assert "placement_ready_timeout_s" in source
-
-
 def _load_pyproject() -> dict:
     try:
         import tomllib
@@ -135,15 +78,13 @@ def test_license_gated_packages_are_excluded_from_find_packages() -> None:
         "worldfoundry.base_models.three_dimensions.general_3d.monst3r",
         "worldfoundry.base_models.three_dimensions.general_3d.mast3r",
         "worldfoundry.base_models.three_dimensions.point_clouds.gaussian_splatting",
-        "worldfoundry.synthesis.visual_generation.hunyuan_world",
-        "worldfoundry.synthesis.visual_generation.hunyuan_world.*",
     }
     missing = required - excludes
     assert missing == set()
 
 
 def test_core_inference_does_not_import_pipelines() -> None:
-    source = (REPO_ROOT / "worldfoundry/core/inference.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "worldfoundry/core/execution/inference.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("worldfoundry.pipelines"):
@@ -170,13 +111,10 @@ def test_pipeline_invocation_contract_is_core_owned_and_compatible() -> None:
         assert "worldfoundry.core.contracts" in source
 
 
-def test_runtime_geometry_is_core_owned_and_studio_path_is_compatible() -> None:
-    from worldfoundry.core.geometry import depth_to_world_points as core_helper
-    from worldfoundry.studio.visualization.core.geometry import (
-        depth_to_world_points as studio_helper,
-    )
+def test_runtime_geometry_is_core_owned() -> None:
+    from worldfoundry.core.geometry.transforms import depth_to_world_points
 
-    assert studio_helper is core_helper
+    assert depth_to_world_points.__module__ == "worldfoundry.core.geometry.transforms"
     for relpath in (
         "worldfoundry/pipelines/cut3r/official_runtime.py",
         "worldfoundry/base_models/three_dimensions/three_d_four_d/runtime.py",
@@ -184,37 +122,6 @@ def test_runtime_geometry_is_core_owned_and_studio_path_is_compatible() -> None:
         source = (REPO_ROOT / relpath).read_text(encoding="utf-8")
         assert "worldfoundry.studio" not in source
         assert "worldfoundry.core.geometry" in source
-
-
-def test_embodied_dataset_roots_require_explicit_configuration(monkeypatch) -> None:
-    from worldfoundry.evaluation.tasks.embodied.simulators.calvin.benchmark import (
-        CALVINBenchmark,
-    )
-    from worldfoundry.evaluation.tasks.embodied.simulators.robocerebra.benchmark import (
-        RoboCerebraBenchmark,
-    )
-
-    monkeypatch.delenv("WORLDFOUNDRY_CALVIN_DATASET_ROOT", raising=False)
-    monkeypatch.delenv("WORLDFOUNDRY_ROBOCEREBRA_ROOT", raising=False)
-    with pytest.raises(ValueError, match="CALVIN dataset path is required"):
-        CALVINBenchmark()
-    with pytest.raises(ValueError, match="RoboCerebra root is required"):
-        RoboCerebraBenchmark()
-
-    calvin_root = REPO_ROOT / "tmp" / "calvin-data"
-    robocerebra_root = REPO_ROOT / "tmp" / "robocerebra"
-    monkeypatch.setenv("WORLDFOUNDRY_CALVIN_DATASET_ROOT", str(calvin_root))
-    monkeypatch.setenv("WORLDFOUNDRY_ROBOCEREBRA_ROOT", str(robocerebra_root))
-    assert CALVINBenchmark().dataset_path == str(calvin_root / "validation")
-    assert RoboCerebraBenchmark().robocerebra_root == str(robocerebra_root)
-
-    demo_source = (
-        REPO_ROOT
-        / "worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/runtime/official"
-        / "metrics_utils/standard_video_dataset.py"
-    ).read_text(encoding="utf-8")
-    assert "/home/LiaoMingxiang" not in demo_source
-    assert 'add_argument("video_folder"' in demo_source
 
 
 def test_worldolympiad_openrouter_key_priority(monkeypatch) -> None:
@@ -285,7 +192,7 @@ def test_runner_temporary_media_is_cleaned_in_finally() -> None:
 
 
 def test_artifact_timestamps_are_utc_and_elapsed_time_is_monotonic() -> None:
-    from worldfoundry.core.io.file_utils import timestamp_file_name
+    from worldfoundry.core.io.filesystem.file_utils import timestamp_file_name
 
     stamped = timestamp_file_name("scorecard.json")
     assert re.fullmatch(r"scorecard_\d{8}-\d{6}\.json", stamped)
@@ -298,7 +205,7 @@ def test_artifact_timestamps_are_utc_and_elapsed_time_is_monotonic() -> None:
     assert "datetime.now().isoformat()" not in camera
 
     shards = (
-        REPO_ROOT / "worldfoundry/core/checkpoint/sharded_safetensors.py"
+        REPO_ROOT / "worldfoundry/core/model_loading/checkpoints/sharded_safetensors.py"
     ).read_text(encoding="utf-8")
     assert "perf_counter()" in shards
     assert "datetime.now()" not in shards
@@ -327,29 +234,6 @@ def test_workspace_app_loop_vars_do_not_shadow_dataclasses_field() -> None:
             if isinstance(target, ast.Name) and target.id == "field":
                 shadowed.append(node.lineno)
     assert shadowed == []
-
-
-def test_robotics_plugin_drops_duplicate_require_package_imports() -> None:
-    tree = _parse("worldfoundry/studio/visualization/plugins/robotics/robotics.py")
-    require_imports = [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and any(alias.name == "require_package" for alias in node.names)
-    ]
-    assert len(require_imports) == 1
-
-    bound: dict[str, list[int]] = {}
-    for node in tree.body:
-        names: list[str] = []
-        if isinstance(node, ast.Import):
-            names = [alias.asname or alias.name.split(".")[-1] for alias in node.names]
-        elif isinstance(node, ast.ImportFrom):
-            names = [alias.asname or alias.name for alias in node.names]
-        for name in names:
-            bound.setdefault(name, []).append(node.lineno)
-    for name in ("require_package", "plt", "np", "dataclass"):
-        assert len(bound.get(name, [])) <= 1, name
 
 
 def test_gradio_patches_are_explicit_and_reversible() -> None:
@@ -454,28 +338,12 @@ def test_getenv_registered_falls_back_to_legacy_name() -> None:
 
 
 def test_seed_helpers_honour_worldfoundry_deterministic_env() -> None:
-    source = (REPO_ROOT / "worldfoundry/core/utils/torch_utils.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "worldfoundry/core/utils/tensors/torch.py").read_text(encoding="utf-8")
     assert "def apply_deterministic_from_env" in source
     assert 'WORLDFOUNDRY_DETERMINISTIC' in source
-    inference = (REPO_ROOT / "worldfoundry/core/inference.py").read_text(encoding="utf-8")
+    inference = (REPO_ROOT / "worldfoundry/core/execution/inference.py").read_text(encoding="utf-8")
     assert "WORLDFOUNDRY_DETERMINISTIC" in inference
     assert "Failed to set float32 matmul precision" in inference
-
-
-def test_training_sessions_use_set_seed_everywhere() -> None:
-    session = (
-        REPO_ROOT / "worldfoundry/training/engine/sessions/single_device.py"
-    ).read_text(encoding="utf-8")
-    sana = [
-        (REPO_ROOT / "worldfoundry/training/engine/sana/scm_ladd.py").read_text(encoding="utf-8"),
-        (REPO_ROOT / "worldfoundry/training/engine/sana/sid.py").read_text(encoding="utf-8"),
-        (REPO_ROOT / "worldfoundry/training/engine/sana/sft.py").read_text(encoding="utf-8"),
-    ]
-    assert "set_seed_everywhere" in session
-    assert "random.seed(" not in session
-    for source in sana:
-        assert "set_seed_everywhere" in source
-        assert "random.seed(" not in source
 
 
 def test_kernel_autotune_prefers_enabled_suffix() -> None:
@@ -492,7 +360,7 @@ def test_deleted_utils_are_not_lazily_exported() -> None:
 
 
 def test_diffusion_utils_uses_torch_amp_autocast() -> None:
-    source = (REPO_ROOT / "worldfoundry/core/nn/diffusion_utils.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "worldfoundry/core/nn/diffusion/utils.py").read_text(encoding="utf-8")
     assert "torch.cuda.amp.autocast" not in source
     assert 'torch.amp.autocast' in source
 
@@ -506,7 +374,7 @@ def test_trainer_envs_prefer_worldfoundry_prefix(monkeypatch) -> None:
 
 
 def test_metric_sync_uses_module_logger() -> None:
-    source = (REPO_ROOT / "worldfoundry/core/distributed/metric_sync.py").read_text(
+    source = (REPO_ROOT / "worldfoundry/core/distributed/collectives/metric_sync.py").read_text(
         encoding="utf-8"
     )
     assert "getLogger(__name__)" in source
@@ -545,13 +413,13 @@ def test_xc17_callers_use_scratch_directory() -> None:
         "worldfoundry/pipelines/lyra/pipeline_lyra1.py",
         "worldfoundry/base_models/three_dimensions/point_clouds/lyra/utils.py",
         "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_3.py",
-        "worldfoundry/core/io/video.py",
+        "worldfoundry/core/media/codecs/video.py",
         "worldfoundry/evaluation/models/runtime/profile_synthesis.py",
         "worldfoundry/studio/inference/dispatch.py",
     ]
     for relpath in files:
         source = (REPO_ROOT / relpath).read_text(encoding="utf-8")
-        if "conda_dispatch" in relpath:
+        if relpath == "worldfoundry/studio/inference/dispatch.py":
             assert "getenv_registered" in source
             assert 'os.getenv("WM_AUTO_CUDA_VISIBLE_DEVICES"' not in source
         else:

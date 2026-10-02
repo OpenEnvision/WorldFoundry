@@ -679,7 +679,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
     ) -> str:
         """Save decoded video frames and mux the 32 kHz stereo track via ffmpeg."""
 
-        from worldfoundry.core.io.video import save_image_or_video_tensor
+        from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if audio is None:

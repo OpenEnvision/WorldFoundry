@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from worldfoundry.core.io.artifacts import process_game_control_video as process_video
+from worldfoundry.core.media.artifacts import process_game_control_video as process_video
 
 from ..runtime_facade import RuntimeFacadeSynthesis
 

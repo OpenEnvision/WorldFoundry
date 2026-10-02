@@ -15,7 +15,7 @@ import numpy as np
 from diffusers.models import AutoencoderKL
 from PIL import Image
 
-from worldfoundry.core.distributed import metric_sync as dist
+from worldfoundry.core.distributed.collectives import metric_sync as dist
 from worldfoundry.synthesis.visual_generation.world_model.nwm import misc
 from worldfoundry.synthesis.visual_generation.world_model.nwm.config_paths import (
     load_runtime_yaml,

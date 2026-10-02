@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from worldfoundry.base_models.perception_core.segment.sam3.model.memory import SimpleMaskEncoder
 from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_tracker_utils import get_1d_sine_pe, select_closest_cond_frames
 from worldfoundry.base_models.perception_core.segment.sam3.sam.mask_decoder import MaskDecoder
-from worldfoundry.core.nn.layers import SamHeadMLP
+from worldfoundry.core.nn.blocks.layers import SamHeadMLP
 from worldfoundry.base_models.perception_core.segment.sam3.sam.prompt_encoder import PromptEncoder
 from worldfoundry.base_models.perception_core.segment.sam3.sam.transformer import TwoWayTransformer
 from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import BatchedDatapoint

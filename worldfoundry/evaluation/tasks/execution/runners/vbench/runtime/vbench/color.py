@@ -9,7 +9,7 @@ from worldfoundry.base_models.perception_core.captioning.grit.model import Dense
 
 import logging
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

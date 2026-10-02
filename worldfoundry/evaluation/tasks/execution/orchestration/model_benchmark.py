@@ -14,8 +14,8 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from worldfoundry.core.io.file_utils import materialize_file
-from worldfoundry.core.io.serialization import read_jsonl_objects
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects
 from worldfoundry.core.observability.time import utc_now_iso
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.api.artifacts import local_path_for_uri

@@ -18,7 +18,7 @@ from worldfoundry.core.attention import (
 from worldfoundry.core.attention import (
     get_cu_seqlens,
 )
-from worldfoundry.core.attention.hybrid import attention, parallel_attention
+from worldfoundry.core.attention.backends.hybrid import attention, parallel_attention
 from worldfoundry.core.nn import ConditioningProjection as TextProjection
 from worldfoundry.core.nn import (
     DiTFinalLayer as FinalLayer,
@@ -45,7 +45,7 @@ from worldfoundry.core.nn import (
 from worldfoundry.core.nn import (
     normalization_layer as get_norm_layer,
 )
-from worldfoundry.core.nn.gradient import gradient_checkpoint_forward
+from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
 
 from ..layers.embed_layers import PatchEmbed
 from ..layers.token_refiner import SingleTokenRefiner

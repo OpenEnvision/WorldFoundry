@@ -426,7 +426,7 @@ class WanTextImageToVideoLatentInitializer(WanTextToVideoLatentInitializer):
             )
 
         from worldfoundry.core import load_pil_image
-        from worldfoundry.core.utils.image_utils import resize_and_center_crop
+        from worldfoundry.core.media.processing.image_utils import resize_and_center_crop
 
         array = np.array(
             load_pil_image(image, first_sequence_item=False),
@@ -494,7 +494,7 @@ class WanVaceLatentInitializer(WanTextToVideoLatentInitializer):
         device: torch.device,
         dtype: torch.dtype,
     ) -> torch.Tensor:
-        from worldfoundry.core.io.video import coerce_video_frames
+        from worldfoundry.core.media.codecs.video import coerce_video_frames
 
         value = request.inputs.get("video", request.inputs.get("videos"))
         if value is None:
@@ -530,8 +530,8 @@ class WanVaceLatentInitializer(WanTextToVideoLatentInitializer):
         dtype: torch.dtype,
     ) -> torch.Tensor:
         from worldfoundry.core import load_pil_image
-        from worldfoundry.core.io.media import IMAGE_EXTENSIONS
-        from worldfoundry.core.io.video import coerce_video_frames
+        from worldfoundry.core.media.types import IMAGE_EXTENSIONS
+        from worldfoundry.core.media.codecs.video import coerce_video_frames
 
         value = request.inputs.get("vace_mask", request.inputs.get("mask"))
         if value is None:

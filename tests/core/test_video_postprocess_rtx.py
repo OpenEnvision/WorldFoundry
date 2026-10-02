@@ -7,9 +7,9 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import worldfoundry.core.video.rtx as rtx_module
-from worldfoundry.core.video.postprocess import VideoPostprocessChain, VideoPostprocessStream, VideoSpec
-from worldfoundry.core.video.rtx import (
+import worldfoundry.core.media.processing.rtx as rtx_module
+from worldfoundry.core.media.processing.postprocess import VideoPostprocessChain, VideoPostprocessStream, VideoSpec
+from worldfoundry.core.media.processing.rtx import (
     RTXVFXCapability,
     RTXVideoSuperResolutionConfig,
     RTXVideoSuperResolutionPostProcessor,

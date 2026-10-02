@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import torch
 
-from worldfoundry.core.utils.inference_graph import InferenceCUDAGraphRunner
+from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
 
 
 def test_cpu_inputs_fall_back_to_eager() -> None:

@@ -45,8 +45,8 @@ from lyra_2._src.inference.lyra2_zoomgs_inference import (
 from lyra_2._src.utils.model_loader import load_model_from_checkpoint
 
 from worldfoundry.core.attention import attention_backend_context
-from worldfoundry.core.distributed.logging import log
-from worldfoundry.core.utils import inference_runtime as misc
+from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.execution import inference_runtime as misc
 from worldfoundry.data.io import save_img_or_video
 
 torch.enable_grad(False)
@@ -241,8 +241,8 @@ if __name__ == "__main__":
 
     process_group = None
     if args.context_parallel_size > 1:
-        from worldfoundry.core.distributed import torch_process_group as distributed
-        from worldfoundry.core.distributed.megatron_compat import parallel_state
+        from worldfoundry.core.distributed.runtime import torch_process_group as distributed
+        from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
 
         distributed.init()
         parallel_state.initialize_model_parallel(context_parallel_size=args.context_parallel_size)
@@ -564,7 +564,7 @@ if __name__ == "__main__":
 
     # Clean up distributed
     if args.context_parallel_size > 1:
-        from worldfoundry.core.distributed.megatron_compat import parallel_state
+        from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
 
         parallel_state.destroy_model_parallel()
         try:

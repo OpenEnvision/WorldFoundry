@@ -6,7 +6,7 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from worldfoundry.core.checkpoint.sharded_safetensors import (
+from worldfoundry.core.model_loading.checkpoints.sharded_safetensors import (
     load_safetensors_into_model_streaming,
     safetensor_checkpoint_files,
 )

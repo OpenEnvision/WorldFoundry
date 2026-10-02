@@ -27,11 +27,11 @@ import torch
 from torch import nn
 
 from worldfoundry.core.configuration.lazy_config import instantiate
-from worldfoundry.core.distributed.context_parallel import broadcast
-from worldfoundry.core.distributed.logging import log
-from worldfoundry.core.io.easy_io import easy_io
-from worldfoundry.core.utils.batch_ops import batch_mul
-from worldfoundry.core.utils.inference_runtime import disabled_train
+from worldfoundry.core.distributed.model_parallel.context import broadcast
+from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.io.assets.easy_io import easy_io
+from worldfoundry.core.utils.tensors.batch import batch_mul
+from worldfoundry.core.execution.inference_runtime import disabled_train
 
 
 class DataType(str, Enum):

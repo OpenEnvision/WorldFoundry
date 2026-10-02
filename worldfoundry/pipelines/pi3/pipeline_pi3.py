@@ -15,7 +15,7 @@ from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.runtim
     Pi3XRepresentation,
 )
 from worldfoundry.core.io import artifact_root_path
-from worldfoundry.core.io.artifacts import render_point_cloud
+from worldfoundry.core.media.artifacts import render_point_cloud
 
 from ...operators.pi3_operator import Pi3Operator
 from ..pipeline_utils import PipelineABC

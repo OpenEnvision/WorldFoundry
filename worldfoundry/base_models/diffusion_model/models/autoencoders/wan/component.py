@@ -945,7 +945,7 @@ def load_wan_video_codec(
     else:
         source = str(checkpoint_path)
         if source.startswith("hf://"):
-            from worldfoundry.core.io.easy_io import resolve_checkpoint_path
+            from worldfoundry.core.io.assets.easy_io import resolve_checkpoint_path
 
             source = resolve_checkpoint_path(source)
         checkpoint = CheckpointSpec(source=source)

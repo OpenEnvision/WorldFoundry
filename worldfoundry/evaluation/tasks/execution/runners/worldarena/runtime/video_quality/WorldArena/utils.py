@@ -27,7 +27,7 @@ if CACHE_DIR is None:
     CACHE_DIR = os.path.join(os.path.expanduser('~'), '.cache', 'worldarena')
 
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_rank,
     barrier,
 )

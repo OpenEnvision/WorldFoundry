@@ -63,7 +63,7 @@ if find_spec("torch") is None:
     )
 
 with patch.dict(sys.modules, missing_modules):
-    s3_filesystem = import_module("worldfoundry.core.io.s3_filesystem")
+    s3_filesystem = import_module("worldfoundry.core.io.filesystem.s3_filesystem")
 
 
 class _FakeS3Client:

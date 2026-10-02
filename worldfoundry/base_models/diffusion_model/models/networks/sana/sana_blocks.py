@@ -54,8 +54,8 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.normalization import RMSNorm
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 from worldfoundry.core.nn import get_same_padding, to_2tuple, to_3tuple
-from worldfoundry.core.nn.layers import Mlp
-from worldfoundry.core.nn.layers import VisionAttention as Attention_
+from worldfoundry.core.nn.blocks.layers import Mlp
+from worldfoundry.core.nn.blocks.layers import VisionAttention as Attention_
 
 _xformers_available = False if os.environ.get("DISABLE_XFORMERS", "0") == "1" else is_xformers_available()
 if _xformers_available:

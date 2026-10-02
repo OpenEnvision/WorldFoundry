@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from uuid import uuid4
 
-from worldfoundry.core.io.serialization import JsonlWriter
+from worldfoundry.core.io.formats.serialization import JsonlWriter
 from worldfoundry.evaluation.api import (
     GenerationRequest,
     GenerationResult,

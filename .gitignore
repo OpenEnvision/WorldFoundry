@@ -350,6 +350,10 @@ worldfoundry/**/*.pth
 worldfoundry/**/*.pt
 worldfoundry/**/*.safetensors
 worldfoundry/**/*.bin
+# This is checkpoint-loading source code, not downloaded model weights.
+!worldfoundry/core/model_loading/checkpoints/
+worldfoundry/core/model_loading/checkpoints/*
+!worldfoundry/core/model_loading/checkpoints/*.py
 worldfoundry/**/*.onnx
 worldfoundry/**/*.pb
 worldfoundry/**/*.tflite

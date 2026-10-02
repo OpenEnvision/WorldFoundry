@@ -20,7 +20,7 @@ try:
 except:
     XFORMERS_IS_AVAILBLE = False
     
-from worldfoundry.core.nn.diffusion_utils import (
+from worldfoundry.core.nn.diffusion.utils import (
     checkpoint,
     exists,
     uniq,
@@ -28,7 +28,7 @@ from worldfoundry.core.nn.diffusion_utils import (
     max_neg_value,
     init_
 )
-from worldfoundry.core.nn.classic_diffusion import (
+from worldfoundry.core.nn.diffusion.convolution import (
     conv_nd,
     zero_module,
     normalization

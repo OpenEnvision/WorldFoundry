@@ -62,7 +62,7 @@ class WorldCrafterPipeline(PipelineABC):
         mode: str | None = None, **kwargs: Any,
     ) -> Any:
         import numpy as np
-        from worldfoundry.core.utils.image_utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
         from worldfoundry.synthesis.visual_generation.worldcrafter.camera import (
             parse_trajectory, build_trajectory, save_trajectory,
         )

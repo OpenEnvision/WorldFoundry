@@ -130,7 +130,7 @@ def _prepare_distributed(runtime_args, cfg):
     if runtime_args.ulysses_size > 1:
         if runtime_args.ulysses_size != world_size:
             raise RuntimeError("The number of ulysses_size should be equal to the world size.")
-        from worldfoundry.core.distributed.sequence_ops import init_distributed_group
+        from worldfoundry.core.distributed.sequence_parallel.ops import init_distributed_group
 
         init_distributed_group()
 
@@ -197,7 +197,7 @@ def main():
     from worldfoundry.base_models.diffusion_model.recipes.wan_configs.action_22 import MAX_AREA_CONFIGS, WAN_CONFIGS
     import pipeline.inference_pipeline as mg3_inference
     from utils.cam_utils import get_extrinsics
-    from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+    from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
     from utils.transform import get_video_transform
     from utils.utils import compute_all_poses_from_actions
     import utils.visualize as visualize_utils

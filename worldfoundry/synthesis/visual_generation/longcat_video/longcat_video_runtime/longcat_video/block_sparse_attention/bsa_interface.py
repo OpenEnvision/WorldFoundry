@@ -13,7 +13,7 @@ from .flash_attn_bsa_varlen_mask import (
 
 from .communicate import p2p_communicate
 
-from worldfoundry.core.distributed import context_parallel_util
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 
 torch._dynamo.config.cache_size_limit = 32
 

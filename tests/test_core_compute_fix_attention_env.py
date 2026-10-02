@@ -19,13 +19,13 @@ import types
 import pytest
 import torch
 
-from worldfoundry.core import inference as core_inference
-from worldfoundry.core.attention import backends
-from worldfoundry.core.attention.backends import AttentionKernelCapability
+from worldfoundry.core.execution import inference as core_inference
+from worldfoundry.core.attention.backends import probe as backends
+from worldfoundry.core.attention.backends.probe import AttentionKernelCapability
 
 
 def test_varlen_flash_attention_accepts_precomputed_max_lengths(monkeypatch):
-    from worldfoundry.core.attention import varlen
+    from worldfoundry.core.attention.sequence import varlen
 
     observed: dict[str, object] = {}
 
@@ -61,7 +61,7 @@ def test_varlen_flash_attention_accepts_precomputed_max_lengths(monkeypatch):
 
 
 def test_varlen_flash_attention_rejects_too_small_precomputed_max(monkeypatch):
-    from worldfoundry.core.attention import varlen
+    from worldfoundry.core.attention.sequence import varlen
 
     query = torch.randn(2, 4, 2, 8)
     lengths = torch.tensor([3, 1], dtype=torch.int32)
@@ -168,7 +168,7 @@ def _fake_capabilities(**usable_flags):
 def test_explicit_unusable_backend_warns_and_degrades(monkeypatch, caplog):
     monkeypatch.setattr(backends, "probe_attention_backends", lambda device=None: _fake_capabilities())
     backends._EXPLICIT_FALLBACK_WARNED.clear()
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.core.attention.backends"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.core.attention.backends.probe"):
         resolved = backends.resolve_attention_backend("flash_attention_2")
     assert resolved == "torch"
     messages = [record.getMessage() for record in caplog.records]
@@ -185,7 +185,7 @@ def test_explicit_usable_backend_resolves_without_warning(monkeypatch, caplog):
         lambda device=None: _fake_capabilities(flash_attention_2=True),
     )
     backends._EXPLICIT_FALLBACK_WARNED.clear()
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.core.attention.backends"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.core.attention.backends.probe"):
         resolved = backends.resolve_attention_backend("flash_attention_2")
     assert resolved == "flash_attention_2"
     assert not caplog.records
@@ -194,7 +194,7 @@ def test_explicit_usable_backend_resolves_without_warning(monkeypatch, caplog):
 def test_flash_auto_unusable_warns_with_reasons(monkeypatch, caplog):
     monkeypatch.setattr(backends, "probe_attention_backends", lambda device=None: _fake_capabilities())
     backends._EXPLICIT_FALLBACK_WARNED.clear()
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.core.attention.backends"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.core.attention.backends.probe"):
         resolved = backends.resolve_attention_backend("flash")
     assert resolved == "torch"
     combined = " ".join(record.getMessage() for record in caplog.records)
@@ -213,7 +213,7 @@ def test_auto_logs_usable_external_backends(monkeypatch, caplog):
         lambda device=None: _fake_capabilities(flash_attention_2=True, xformers=True),
     )
     backends._AUTO_FASTER_BACKENDS_LOGGED.clear()
-    with caplog.at_level(logging.INFO, logger="worldfoundry.core.attention.backends"):
+    with caplog.at_level(logging.INFO, logger="worldfoundry.core.attention.backends.probe"):
         resolved = backends.resolve_attention_backend("auto")
     assert resolved == "torch"
     combined = " ".join(record.getMessage() for record in caplog.records)
@@ -222,7 +222,7 @@ def test_auto_logs_usable_external_backends(monkeypatch, caplog):
 
     # The hint is emitted once per usable-backend set.
     caplog.clear()
-    with caplog.at_level(logging.INFO, logger="worldfoundry.core.attention.backends"):
+    with caplog.at_level(logging.INFO, logger="worldfoundry.core.attention.backends.probe"):
         backends.resolve_attention_backend("auto")
     assert not caplog.records
 
@@ -235,7 +235,7 @@ def test_auto_logs_usable_external_backends(monkeypatch, caplog):
 def test_dispatch_import_does_not_initialize_cuda():
     code = (
         "import torch\n"
-        "import worldfoundry.core.attention.dispatch as d\n"
+        "import worldfoundry.core.attention.backends.dispatch as d\n"
         "assert not torch.cuda.is_initialized(), 'import initialized CUDA'\n"
         "assert isinstance(d.ATTENTION_IMPLEMENTATION, str)\n"
         "assert isinstance(d.FLASH_ATTN_2_AVAILABLE, bool)\n"

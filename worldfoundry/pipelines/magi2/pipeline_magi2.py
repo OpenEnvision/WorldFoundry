@@ -491,7 +491,7 @@ class NativeMagi2Pipeline(PipelineABC):
 
     @staticmethod
     def _write_mp4_with_audio(*, video: torch.Tensor, audio: torch.Tensor | None, output_path: Path, fps: float) -> str:
-        from worldfoundry.core.io.video import save_image_or_video_tensor
+        from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if audio is None:

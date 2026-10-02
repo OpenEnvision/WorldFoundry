@@ -145,7 +145,7 @@ class ActionDiT(nn.Module):
         action_state = action_expert.state_dict()
         expected_backbone_keys = cls.backbone_key_set(action_state.keys())
 
-        from worldfoundry.core.model_loading.file import load_torch_checkpoint
+        from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
         payload = load_torch_checkpoint(
             action_dit_pretrained_path,

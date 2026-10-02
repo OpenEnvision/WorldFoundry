@@ -6,7 +6,7 @@ from datetime import datetime
 
 import torch
 from vbench import VBench
-from worldfoundry.core.distributed.evaluation_collectives import dist_init, print0
+from worldfoundry.core.distributed.collectives.evaluation import dist_init, print0
 
 
 def _str_bool(value: str | bool | None) -> bool:

@@ -223,7 +223,7 @@ class DM0Runtime:
     def _images(self, observation: Mapping[str, Any], image: Any, model: Any) -> tuple[Any, Any]:
         import torch
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
 
         values = collect_images(observation, image, self.config.camera_keys)
         if not values:

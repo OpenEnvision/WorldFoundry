@@ -24,7 +24,7 @@ from worldfoundry.core.attention import (
     complex_rotary_frequencies,
     flattened_multihead_attention,
 )
-from worldfoundry.core.attention.projective_rope import prope_dot_product_attention
+from worldfoundry.core.attention.rotary.projective_rope import prope_dot_product_attention
 from worldfoundry.core.nn import RMSNorm, sinusoidal_embedding_1d
 from worldfoundry.core.nn import scale_shift as modulate
 

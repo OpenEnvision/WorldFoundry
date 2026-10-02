@@ -7,14 +7,14 @@ from PIL import Image
 from tqdm import tqdm
 from vbench.utils import dino_transform, dino_transform_Image, load_dimension_info, load_video
 
-from worldfoundry.core.distributed.evaluation_collectives import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     distribute_list_to_rank,
     gather_list_of_dict,
     get_rank,
     get_world_size,
 )
-from worldfoundry.core.utils.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
-from worldfoundry.core.utils.torch_utils import temporal_feature_consistency
+from worldfoundry.core.execution.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
+from worldfoundry.core.utils.tensors.torch import temporal_feature_consistency
 
 logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

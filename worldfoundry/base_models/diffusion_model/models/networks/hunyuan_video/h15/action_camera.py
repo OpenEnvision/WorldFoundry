@@ -27,8 +27,8 @@ from einops import rearrange, repeat
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.minwm.prope import prope_qkv
 from worldfoundry.core.attention import apply_nd_rotary_embedding as apply_rotary_emb
 from worldfoundry.core.attention import get_nd_rotary_pos_embed
-from worldfoundry.core.attention.multimodal_sequence import parallel_attention
-from worldfoundry.core.distributed.sequence_mesh_state import get_parallel_state
+from worldfoundry.core.attention.sequence.multimodal_sequence import parallel_attention
+from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
 from worldfoundry.core.distributed.sequence_parallel.communication_op import sequence_model_parallel_all_gather
 from worldfoundry.core.nn import ConditioningProjection as TextProjection
 from worldfoundry.core.nn import DiTModulation as ModulateDiT

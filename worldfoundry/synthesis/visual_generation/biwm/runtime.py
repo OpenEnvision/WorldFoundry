@@ -93,8 +93,8 @@ class BiWMRuntime:
                  chunk_size=4, max_chunks=5, sink_chunks=1, num_frames=77,
                  num_inference_steps=None, guidance_scale=None, negative_prompt=None,
                  sigma_shift=5., sigmas=(1., .75, .5, .25), seed=42, fps=24.):
-        from worldfoundry.core.io.video import save_video_h264
-        from worldfoundry.core.utils.image_utils import load_pil_image
+        from worldfoundry.core.media.codecs.video import save_video_h264
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
         if stage not in (1, 2) or (stage == 1 and image is not None):
             raise ValueError("Stage 1 supports T2V; stage 2 supports T2V and I2V")
         multiple = self.spatial_stride * 2

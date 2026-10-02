@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from einops import rearrange
-from worldfoundry.core.distributed import object_collectives as dist_fn
+from worldfoundry.core.distributed.collectives import objects as dist_fn
 
 # Copyright 2018 The Sonnet Authors. All Rights Reserved.
 #

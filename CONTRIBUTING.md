@@ -62,8 +62,8 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
 
 Keep `worldfoundry/core` model-neutral. Place camera geometry in `core.geometry`,
 inference execution and process-local caches in `core.execution`, logging and timing
-in `core.observability`, and streaming video post-processing in `core.video`.
-Use the existing `nn`, `attention`, `io`, `checkpoint`, and other domain packages
+in `core.observability`, and media codecs and streaming processing in `core.media`.
+Use the existing `nn`, `attention`, `io`, `model_loading/checkpoints`, and other domain packages
 for their respective primitives. The root is reserved for the lazy public facade
 and cross-cutting contracts, registries, and input normalization.
 
@@ -104,11 +104,13 @@ make lint
 make docs-check
 ```
 
-The public distribution includes inference and evaluation. Training sources and
-local test suites stay in the development repository. For a CPU smoke run:
+The public distribution includes inference, evaluation, and the source tests.
+Model weights, test media and generated replay evidence stay outside git. For the
+public CPU inference gate:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[dev,test]"
+make test-infer
 make cli-entrypoint-check
 make cli-check
 make packaging-check
@@ -121,3 +123,9 @@ checked-in recipe data:
 npm --prefix docs/fumadocs run models:generate
 npm --prefix docs/fumadocs run models:check
 ```
+
+
+For inference changes, replay the affected real-checkpoint cases and pass
+`make test-geometry` against an accepted reference before publishing. See the
+[validation guide](docs/fumadocs/content/docs/reference/validation.mdx) for fixed
+assets, environments, numerical comparison, and source-hash verification.

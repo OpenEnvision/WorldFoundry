@@ -42,7 +42,7 @@ from worldfoundry.base_models.diffusion_model.runners.staged import (
     InferenceStageRunner,
     StagedDiffusionPipeline,
 )
-from worldfoundry.core.distributed.sequence_ops import gather_forward
+from worldfoundry.core.distributed.sequence_parallel.ops import gather_forward
 from worldfoundry.core.model_loading import GeneralLoRALoader, ModelConfig, load_state_dict
 from worldfoundry.core.nn import FlowMatchScheduler, RMSNorm, sinusoidal_embedding_1d
 from worldfoundry.core.vram import (
@@ -425,7 +425,7 @@ class LongViePipeline(StagedDiffusionPipeline):
 
     def enable_usp(self):
         """Enable usp."""
-        from worldfoundry.core.attention.patch_xdit_context_parallel import usp_attn_forward, usp_dit_forward
+        from worldfoundry.core.attention.parallel.patch_xdit_context_parallel import usp_attn_forward, usp_dit_forward
 
         for block in self.dit.blocks:
             block.self_attn.forward = types.MethodType(usp_attn_forward, block.self_attn)

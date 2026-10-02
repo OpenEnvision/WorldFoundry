@@ -8,7 +8,7 @@
 
 import torch.nn as nn
 from models.layers.attention import Attention
-from worldfoundry.core.nn.layers import Mlp
+from worldfoundry.core.nn.blocks.layers import Mlp
 
 
 #################################################################################

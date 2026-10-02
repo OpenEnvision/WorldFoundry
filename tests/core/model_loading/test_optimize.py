@@ -11,7 +11,7 @@ import pytest
 import torch
 from torch import nn
 
-from worldfoundry.core.acceleration.quantization import (
+from worldfoundry.core.acceleration.quantization.linear import (
     _int8_linear_profitable,
     quantization_runtime_report,
     reset_quantization_runtime_window,

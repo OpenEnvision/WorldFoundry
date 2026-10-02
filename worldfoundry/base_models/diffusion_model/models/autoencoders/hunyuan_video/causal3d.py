@@ -13,7 +13,7 @@ from torch import nn
 
 from worldfoundry.core.model_loading import load_state_dict as load_core_state_dict
 from worldfoundry.core.model_loading.model_configuration import ConfigNamespace
-from worldfoundry.core.nn.distributions import (
+from worldfoundry.core.nn.latent.distributions import (
     AutoencoderKLOutput,
     DecoderOutput,
     DiagonalGaussianDistribution,

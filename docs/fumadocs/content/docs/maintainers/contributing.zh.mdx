@@ -206,7 +206,8 @@ cd docs/fumadocs && npm run types:check && npm run build
 公开版本的 CPU 检查无需模型权重：
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,test]"
+make test-infer
 make cli-check cli-entrypoint-check packaging-check
 ```
 
@@ -253,3 +254,6 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
 <Callout title="Review 规则">
   PR 可以新增 planned 或 source-verified 条目而不提供 runnable 支持。但不能在没有匹配新鲜证据时声称 demo parity、checkpoint parity 或 benchmark readiness。
 </Callout>
+
+
+测试源码统一放在公开的 `tests/`；模型权重、测试媒体和生成的回放记录留在 git 之外。推理变更需回放受影响的真实权重案例，并针对已接受的基准通过 `make test-geometry`。数值比较及源码哈希检查见[验证指南](/zh/docs/reference/validation)。

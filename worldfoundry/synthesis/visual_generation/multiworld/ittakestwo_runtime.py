@@ -139,7 +139,7 @@ def load_ittakestwo_action_csv(
 
 
 def _derive_env_obv_from_image(input_image_path: str | Path) -> torch.Tensor:
-    from worldfoundry.core.io.environment_observation import load_and_preprocess_images
+    from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.environment_observation import load_and_preprocess_images
 
     left = load_and_preprocess_images([input_image_path], mode="pad", return_view="left")
     right = load_and_preprocess_images([input_image_path], mode="pad", return_view="right")

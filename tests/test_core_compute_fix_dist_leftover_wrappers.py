@@ -59,27 +59,27 @@ def _assert_wrapper_calls_canonical(relpath: str, func_name: str) -> None:
 
 def test_evaluation_collectives_dist_init_is_canonical_wrapper() -> None:
     _assert_wrapper_calls_canonical(
-        "worldfoundry/core/distributed/evaluation_collectives.py",
+        "worldfoundry/core/distributed/collectives/evaluation.py",
         "dist_init",
     )
 
 
 def test_runtime_setup_init_distributed_is_canonical_wrapper() -> None:
     _assert_wrapper_calls_canonical(
-        "worldfoundry/core/distributed/runtime_setup.py",
+        "worldfoundry/core/distributed/runtime/runtime_setup.py",
         "init_distributed",
     )
 
 
 def test_sequence_ops_init_distributed_group_is_canonical_wrapper() -> None:
     _assert_wrapper_calls_canonical(
-        "worldfoundry/core/distributed/sequence_ops.py",
+        "worldfoundry/core/distributed/sequence_parallel/ops.py",
         "init_distributed_group",
     )
 
 
 def test_inference_runtime_dist_init_wontfix_keeps_own_init() -> None:
-    relpath = "worldfoundry/core/distributed/inference_runtime.py"
+    relpath = "worldfoundry/core/distributed/runtime/inference_runtime.py"
     func = _function(_parse(relpath), "dist_init")
     names = _names_in(func)
     assert "init_torch_distributed" not in names
@@ -93,7 +93,7 @@ def test_inference_runtime_dist_init_wontfix_keeps_own_init() -> None:
 def test_evaluation_collectives_wrapper_emits_deprecation_and_calls_canonical(clean_dist_env) -> None:
     import torch
 
-    from worldfoundry.core.distributed import evaluation_collectives
+    from worldfoundry.core.distributed.collectives import evaluation as evaluation_collectives
 
     monkeypatch = clean_dist_env
     called: list[tuple[tuple, dict]] = []
@@ -105,7 +105,7 @@ def test_evaluation_collectives_wrapper_emits_deprecation_and_calls_canonical(cl
     monkeypatch.setattr(torch.distributed, "is_initialized", lambda: False)
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         fake_init,
     )
 
@@ -125,7 +125,7 @@ def test_evaluation_collectives_wrapper_emits_deprecation_and_calls_canonical(cl
 def test_evaluation_collectives_preserves_existing_master_env(clean_dist_env) -> None:
     import torch
 
-    from worldfoundry.core.distributed import evaluation_collectives
+    from worldfoundry.core.distributed.collectives import evaluation as evaluation_collectives
 
     monkeypatch = clean_dist_env
     monkeypatch.setenv("MASTER_ADDR", "10.0.0.1")
@@ -137,7 +137,7 @@ def test_evaluation_collectives_preserves_existing_master_env(clean_dist_env) ->
     monkeypatch.setattr(torch.distributed, "is_initialized", lambda: False)
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         lambda *args, **kwargs: called.append(kwargs),
     )
 
@@ -153,7 +153,7 @@ def test_evaluation_collectives_preserves_existing_master_env(clean_dist_env) ->
 def test_evaluation_collectives_uses_nccl_when_cuda_available(clean_dist_env) -> None:
     import torch
 
-    from worldfoundry.core.distributed import evaluation_collectives
+    from worldfoundry.core.distributed.collectives import evaluation as evaluation_collectives
 
     monkeypatch = clean_dist_env
     called: list[dict] = []
@@ -163,7 +163,7 @@ def test_evaluation_collectives_uses_nccl_when_cuda_available(clean_dist_env) ->
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
     monkeypatch.setattr(torch.cuda, "set_device", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         lambda *args, **kwargs: called.append(kwargs),
     )
 
@@ -176,7 +176,7 @@ def test_evaluation_collectives_uses_nccl_when_cuda_available(clean_dist_env) ->
 def test_evaluation_collectives_noop_when_already_initialized(clean_dist_env) -> None:
     import torch
 
-    from worldfoundry.core.distributed import evaluation_collectives
+    from worldfoundry.core.distributed.collectives import evaluation as evaluation_collectives
 
     monkeypatch = clean_dist_env
     called: list[tuple] = []
@@ -184,7 +184,7 @@ def test_evaluation_collectives_noop_when_already_initialized(clean_dist_env) ->
     monkeypatch.setattr(torch.distributed, "is_available", lambda: True)
     monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         lambda *args, **kwargs: called.append((args, kwargs)),
     )
 
@@ -198,7 +198,7 @@ def test_evaluation_collectives_noop_when_already_initialized(clean_dist_env) ->
 def test_runtime_setup_wrapper_emits_deprecation_and_forwards_ranks(clean_dist_env) -> None:
     import torch
 
-    from worldfoundry.core.distributed import runtime_setup
+    from worldfoundry.core.distributed.runtime import runtime_setup
 
     monkeypatch = clean_dist_env
     called: list[dict] = []
@@ -206,7 +206,7 @@ def test_runtime_setup_wrapper_emits_deprecation_and_forwards_ranks(clean_dist_e
 
     monkeypatch.setattr(torch.cuda, "set_device", lambda device: devices.append(int(device)))
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         lambda *args, **kwargs: called.append(kwargs),
     )
 
@@ -221,7 +221,7 @@ def test_runtime_setup_wrapper_emits_deprecation_and_forwards_ranks(clean_dist_e
 def test_sequence_ops_wrapper_emits_deprecation_and_calls_canonical(clean_dist_env) -> None:
     import torch
 
-    from worldfoundry.core.distributed import sequence_ops
+    from worldfoundry.core.distributed.sequence_parallel import ops as sequence_ops
 
     monkeypatch = clean_dist_env
     called: list[dict] = []
@@ -229,7 +229,7 @@ def test_sequence_ops_wrapper_emits_deprecation_and_calls_canonical(clean_dist_e
     monkeypatch.setattr(torch.distributed, "is_available", lambda: True)
     monkeypatch.setattr(torch.distributed, "is_initialized", lambda: False)
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         lambda *args, **kwargs: called.append(kwargs),
     )
 
@@ -242,7 +242,7 @@ def test_sequence_ops_wrapper_emits_deprecation_and_calls_canonical(clean_dist_e
 def test_sequence_ops_skips_canonical_when_already_initialized(clean_dist_env) -> None:
     import torch
 
-    from worldfoundry.core.distributed import sequence_ops
+    from worldfoundry.core.distributed.sequence_parallel import ops as sequence_ops
 
     monkeypatch = clean_dist_env
     called: list[tuple] = []
@@ -250,7 +250,7 @@ def test_sequence_ops_skips_canonical_when_already_initialized(clean_dist_env) -
     monkeypatch.setattr(torch.distributed, "is_available", lambda: True)
     monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
     monkeypatch.setattr(
-        "worldfoundry.core.distributed.torch_process_group.init_torch_distributed",
+        "worldfoundry.core.distributed.runtime.torch_process_group.init_torch_distributed",
         lambda *args, **kwargs: called.append((args, kwargs)),
     )
 

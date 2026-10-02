@@ -35,8 +35,8 @@ import torch.nn as nn
 from worldfoundry.core.attention import rotate_half as _rotate_half
 from worldfoundry.core.attention import scaled_dot_product_attention
 from worldfoundry.core.nn import DomainAwareLinear
-from worldfoundry.core.nn.gradient import gradient_checkpoint_forward
-from worldfoundry.core.nn.timestep import TimestepEmbedding, Timesteps
+from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
+from worldfoundry.core.nn.diffusion.timestep import TimestepEmbedding, Timesteps
 
 
 def _module_param_device(module: nn.Module) -> torch.device | None:

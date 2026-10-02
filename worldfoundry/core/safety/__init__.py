@@ -1,6 +1,6 @@
 """Reusable safety guardrail interfaces.
 
-Exports resolve lazily (same pattern as ``core.checkpoint``/``core.utils``)
+Exports resolve lazily (same pattern as ``core.model_loading.checkpoints``/``core.utils``)
 so that importing the guardrail Protocols does not pull the video-io stack
 (imageio/numpy) or, transitively, torch.
 """

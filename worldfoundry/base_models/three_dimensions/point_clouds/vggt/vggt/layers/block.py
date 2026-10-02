@@ -18,7 +18,7 @@ import torch
 from torch import nn, Tensor
 
 from .attention import Attention
-from worldfoundry.core.nn.layers import DropPath, LayerScale, Mlp
+from worldfoundry.core.nn.blocks.layers import DropPath, LayerScale, Mlp
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 

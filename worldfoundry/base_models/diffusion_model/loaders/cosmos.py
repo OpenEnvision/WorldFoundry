@@ -35,7 +35,7 @@ from huggingface_hub import hf_hub_download, snapshot_download
 from typing_extensions import override
 
 from worldfoundry.core.configuration.flags import EXPERIMENTAL_CHECKPOINTS, INTERNAL
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 
 
 class _CheckpointUri(pydantic.BaseModel):

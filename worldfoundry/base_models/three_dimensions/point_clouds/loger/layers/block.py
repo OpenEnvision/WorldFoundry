@@ -18,7 +18,7 @@ import torch
 from torch import nn, Tensor
 
 from .attention import Attention, MemEffAttention, CrossAttentionRope, MemEffCrossAttentionRope, FlashAttentionRope
-from worldfoundry.core.nn.layers import DropPath, LayerScale, Mlp
+from worldfoundry.core.nn.blocks.layers import DropPath, LayerScale, Mlp
 
 XFORMERS_ENABLED = os.environ.get("XFORMERS_DISABLED") is None
 try:

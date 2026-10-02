@@ -8,8 +8,8 @@ from PIL import Image
 from pyiqa.archs.musiq_arch import MUSIQ
 from torchvision import transforms
 
-from worldfoundry.core.io.video import list_numbered_frame_paths
-from worldfoundry.core.utils.inference_runtime import (
+from worldfoundry.core.media.codecs.video import list_numbered_frame_paths
+from worldfoundry.core.execution.inference_runtime import (
     adaptive_batched_inference,
     resolve_inference_batch_size,
 )

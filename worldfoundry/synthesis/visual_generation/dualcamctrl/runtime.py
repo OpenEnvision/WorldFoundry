@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.core.checkpoint import load_weights_only
+from worldfoundry.core.model_loading.checkpoints import load_weights_only
 from worldfoundry.synthesis.visual_generation.dualcamctrl.native_pipeline import (
     WanVideoCameraPipeline,
 )
@@ -20,7 +20,7 @@ from worldfoundry.core.io.paths import (
     local_model_root_path,
     resolve_local_hf_model_path,
 )
-from worldfoundry.core.io.video import write_video
+from worldfoundry.core.media.codecs.video import write_video
 from worldfoundry.core.model_loading import ModelConfig, load_state_dict
 from worldfoundry.evaluation.utils import worldfoundry_data_path
 

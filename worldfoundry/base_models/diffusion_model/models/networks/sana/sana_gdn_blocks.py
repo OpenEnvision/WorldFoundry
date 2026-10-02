@@ -43,7 +43,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from worldfoundry.core.nn.layers import VisionAttention as Attention_
+from worldfoundry.core.nn.blocks.layers import VisionAttention as Attention_
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.short_convolution import ShortConvolution
 

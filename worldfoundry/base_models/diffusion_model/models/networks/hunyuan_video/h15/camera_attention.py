@@ -19,7 +19,7 @@
 import torch
 
 from worldfoundry.core.attention import scaled_dot_product_attention
-from worldfoundry.core.distributed.sequence_mesh_state import get_parallel_state
+from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
 from worldfoundry.core.distributed.sequence_parallel.communication_op import (
     sequence_model_parallel_all_gather,
     sequence_model_parallel_all_to_all_4D,

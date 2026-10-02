@@ -16,7 +16,7 @@ from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam.mask_dec
 from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam.prompt_encoder import PromptEncoder
 from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam.transformer import TwoWayTransformer
 from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam2_utils import get_1d_sine_pe, select_closest_cond_frames
-from worldfoundry.core.nn.layers import SamHeadMLP
+from worldfoundry.core.nn.blocks.layers import SamHeadMLP
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0

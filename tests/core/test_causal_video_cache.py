@@ -4,7 +4,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from worldfoundry.core.attention.causal_cache import (  # noqa: E402
+from worldfoundry.core.attention.cache.causal_cache import (  # noqa: E402
     CausalVideoCacheGeometry,
     allocate_causal_video_cache,
     begin_causal_video_cache_block,

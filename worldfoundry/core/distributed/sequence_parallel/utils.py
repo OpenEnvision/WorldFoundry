@@ -27,7 +27,7 @@ from typing import Any
 import torch
 from torch.distributed import TCPStore
 
-from worldfoundry.core.utils.misc_utils import divide
+from worldfoundry.core.utils.python.misc_utils import divide
 
 from .logger import init_logger
 

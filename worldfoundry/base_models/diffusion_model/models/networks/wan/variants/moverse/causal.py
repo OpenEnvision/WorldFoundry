@@ -7,7 +7,7 @@ inference is :mod:`.mmdit`.
 from worldfoundry.base_models.diffusion_model.models.networks.wan.mixins import (
     WanTransformerMethodsMixin,
 )
-from worldfoundry.core.attention.varlen import (
+from worldfoundry.core.attention.sequence.varlen import (
     attention,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import (

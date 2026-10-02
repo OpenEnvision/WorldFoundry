@@ -8,7 +8,7 @@ import pytest
 import torch
 from torch import nn
 
-from worldfoundry.core.attention.block_pattern import AttnMaskSpec
+from worldfoundry.core.attention.sparse.block_pattern import AttnMaskSpec
 from worldfoundry.training.post_training.distillation.consistency.math import (
     batch_coefficients,
 )

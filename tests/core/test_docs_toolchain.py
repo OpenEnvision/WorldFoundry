@@ -120,6 +120,10 @@ def test_local_ssd_dev_sync_refreshes_source_without_copying_dependency_trees() 
     assert "--exclude 'node_modules'" in source
     assert "--exclude 'tmp/'" in source
     assert "npm ci --prefer-offline --no-audit --no-fund" in source
-    assert "npm run predev" in source
-    assert "run_dev() {\n  sync_to_local" in source
+    assert "run_predev()" in source
+    assert "node scripts/predev.mjs" in source
+    run_dev = source[source.index("run_dev() {") : source.index("\nusage() {")]
+    assert "rsync -a" in run_dev
+    assert "sync_to_local full" in run_dev
+    assert run_dev.index("run_predev") < run_dev.index("exec npx")
     assert "CPFS" not in source

@@ -9,7 +9,7 @@ import numpy as np
 import torch.nn as nn
 from einops import rearrange
 from worldfoundry.core.model_loading.factory import instantiate_from_config
-from worldfoundry.core.nn.distributions import DiagonalGaussianDistribution
+from worldfoundry.core.nn.latent.distributions import DiagonalGaussianDistribution
 from worldfoundry.base_models.diffusion_model.models.networks.lvdm.attention import LinearAttention
 
 def nonlinearity(x):

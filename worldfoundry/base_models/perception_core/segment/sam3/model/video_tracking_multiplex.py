@@ -33,7 +33,7 @@ import torch.nn.functional as F
 from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import BatchedDatapoint, NestedTensor
 from worldfoundry.base_models.perception_core.segment.sam3.model.memory import SimpleMaskEncoder
 from worldfoundry.base_models.perception_core.segment.sam3.model.multiplex_mask_decoder import MultiplexMaskDecoder
-from worldfoundry.core.nn.layers import PositionEmbeddingRandom, SamHeadMLP
+from worldfoundry.core.nn.blocks.layers import PositionEmbeddingRandom, SamHeadMLP
 from worldfoundry.base_models.perception_core.segment.sam3.model.multiplex_utils import MultiplexController, MultiplexState
 from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_tracker_utils import (
     get_1d_sine_pe,

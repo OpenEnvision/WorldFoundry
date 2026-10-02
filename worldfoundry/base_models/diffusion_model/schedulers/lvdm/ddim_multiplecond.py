@@ -14,8 +14,8 @@ import numpy as np
 from tqdm import tqdm
 import torch
 from worldfoundry.base_models.diffusion_model.schedulers.lvdm.schedule_math import make_ddim_sampling_parameters, make_ddim_timesteps, rescale_noise_cfg
-from worldfoundry.core.nn.diffusion_utils import noise_like
-from worldfoundry.core.nn.diffusion_utils import extract_into_tensor
+from worldfoundry.core.nn.diffusion.utils import noise_like
+from worldfoundry.core.nn.diffusion.utils import extract_into_tensor
 import copy
 
 

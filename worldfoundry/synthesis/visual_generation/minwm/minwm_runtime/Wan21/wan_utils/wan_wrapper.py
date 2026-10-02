@@ -8,7 +8,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.minwm
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import umt5_xxl
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import HuggingfaceTokenizer
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import _video_vae
-from worldfoundry.core.nn.diffusion_schedulers import FlowMatchScheduler, SchedulerInterface
+from worldfoundry.core.nn.diffusion.schedulers import FlowMatchScheduler, SchedulerInterface
 
 
 _BASE_MODEL_ROOT = os.environ.get(

@@ -17,7 +17,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
-from worldfoundry.core.nn.convolutional_mlp import GLUMBConvTemp, Mlp
+from worldfoundry.core.nn.blocks.convolutional_mlp import GLUMBConvTemp, Mlp
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.linear_attention import flash_attention
 
 __all__ = ["WanModel"]

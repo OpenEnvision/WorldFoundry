@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from worldfoundry.core.attention import backends, dispatch
-from worldfoundry.core.attention.backends import ModelSpecificAttentionBackendError
+from worldfoundry.core.attention.backends import probe as backends, dispatch
+from worldfoundry.core.attention.backends.probe import ModelSpecificAttentionBackendError
 
 _MODEL_SPECIFIC_BACKENDS = (
     "video_sparse_attention",

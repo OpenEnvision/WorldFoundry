@@ -12,7 +12,7 @@ from __future__ import annotations
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.networks.wan.model import WanModel
-from worldfoundry.core.attention.complex_rope import complex_rotary_frequencies_3d
+from worldfoundry.core.attention.rotary.complex_rope import complex_rotary_frequencies_3d
 
 
 class _Stub:

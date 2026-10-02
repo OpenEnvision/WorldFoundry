@@ -10,7 +10,7 @@ from functools import partial
 import torch
 from torch.distributions import LogisticNormal
 
-from worldfoundry.core.distributed import context_parallel_util
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 
 # some code are inspired by https://github.com/magic-research/piecewise-rectified-flow/blob/main/scripts/train_perflow.py
 # and https://github.com/magic-research/piecewise-rectified-flow/blob/main/src/scheduler_perflow.py

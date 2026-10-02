@@ -15,7 +15,7 @@ CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 # print(CUR_DIR)
 import sys
 
-from worldfoundry.core.io.disk import default_worldfoundry_cache_dir
+from worldfoundry.core.io.filesystem.disk import default_worldfoundry_cache_dir
 
 sys.path.append(os.path.join(CUR_DIR, './centernet2/'))
 from centernet.config import add_centernet_config

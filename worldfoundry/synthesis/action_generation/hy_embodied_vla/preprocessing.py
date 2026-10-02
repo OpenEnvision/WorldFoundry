@@ -20,7 +20,7 @@ _CAMERA_ALIASES = {
 def _frame_tensor(frame: Any):
     import torch
 
-    from worldfoundry.core.utils.image_utils import load_pil_image
+    from worldfoundry.core.media.processing.image_utils import load_pil_image
 
     if torch.is_tensor(frame):
         tensor = frame.detach()

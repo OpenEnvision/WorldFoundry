@@ -255,7 +255,7 @@ def run(args: argparse.Namespace) -> Path:
     from models.ctrl_world import CrtlWorld
     from models.pipeline_ctrl_world import CtrlWorldDiffusionPipeline
     from models.utils import split_ctrl_world_latents
-    from worldfoundry.core.io.video import save_video_h264
+    from worldfoundry.core.media.codecs.video import save_video_h264
     from worldfoundry.core.model_loading import load_torch_checkpoint
 
     if not torch.cuda.is_available():

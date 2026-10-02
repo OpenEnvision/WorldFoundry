@@ -10,7 +10,7 @@ from PIL import Image
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from tqdm import tqdm
 
-from worldfoundry.core.io.file_utils import file_sha256
+from worldfoundry.core.io.filesystem.file_utils import file_sha256
 
 from .model import build_model
 from .simple_tokenizer import SimpleTokenizer as _Tokenizer

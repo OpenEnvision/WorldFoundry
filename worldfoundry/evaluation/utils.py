@@ -37,7 +37,7 @@ from worldfoundry.core.io.paths import (
     project_root,
     resolve_worldfoundry_path,
 )
-from worldfoundry.core.io.serialization import (
+from worldfoundry.core.io.formats.serialization import (
     append_jsonl,
     jsonable,
     read_json,

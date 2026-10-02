@@ -9,8 +9,8 @@ from einops import rearrange
 from omegaconf import OmegaConf
 from safetensors.torch import load_file
 
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere as set_seed
-from worldfoundry.core.io.artifacts import process_game_control_video as process_video
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
+from worldfoundry.core.media.artifacts import process_game_control_video as process_video
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
 from worldfoundry.evaluation.utils import worldfoundry_data_path
 

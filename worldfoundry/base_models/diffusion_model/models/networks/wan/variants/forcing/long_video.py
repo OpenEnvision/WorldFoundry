@@ -13,7 +13,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
-from worldfoundry.core.attention.varlen import attention
+from worldfoundry.core.attention.sequence.varlen import attention
 from .model import (
     WAN_CROSSATTENTION_CLASSES,
     MLPProj,

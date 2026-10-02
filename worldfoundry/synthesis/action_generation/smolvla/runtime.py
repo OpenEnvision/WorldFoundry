@@ -108,7 +108,7 @@ class SmolVLARuntime:
         from accelerate import init_empty_weights
         from safetensors.torch import load_file
 
-        from worldfoundry.core.checkpoint import load_safetensors_into_model_streaming
+        from worldfoundry.core.model_loading.checkpoints import load_safetensors_into_model_streaming
         from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .configuration import SmolVLAConfig
@@ -233,8 +233,8 @@ class SmolVLARuntime:
         import numpy as np
         import torch
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
-        from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
         model = self._load()
         config = self._policy_config

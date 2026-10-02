@@ -228,7 +228,7 @@ def test_public_native_pipeline_initializes_sequence_parallel_runtime(monkeypatc
         "from_pretrained",
         classmethod(fake_from_pretrained),
     )
-    from worldfoundry.core.distributed import sequence_parallel_runtime
+    from worldfoundry.core.distributed.sequence_parallel import runtime as sequence_parallel_runtime
 
     initialized: list[int] = []
 

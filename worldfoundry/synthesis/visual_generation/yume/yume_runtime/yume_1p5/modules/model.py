@@ -5,7 +5,7 @@ from torch.cuda import amp
 from worldfoundry.core.model_loading.model_configuration import register_to_config
 from typing import Tuple
 
-from worldfoundry.core.attention.varlen import flash_attention
+from worldfoundry.core.attention.sequence.varlen import flash_attention
 from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_22 import WanModel, Head, rope_params, sinusoidal_embedding_1d, WanSelfAttention, WanCrossAttention, WanLayerNorm
 
 
