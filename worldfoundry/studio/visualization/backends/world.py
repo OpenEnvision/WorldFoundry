@@ -32,8 +32,8 @@ from worldfoundry.runtime.inference_catalog import (
     LINGBOT_VARIANT_BASE_ACT_PREVIEW,
     LINGBOT_VARIANT_BASE_CAM,
 )
-from worldfoundry.studio.catalog import CatalogEntry, lingbot_world_fast_load_kwargs
-from worldfoundry.studio.execution import (
+from worldfoundry.studio.inference.catalog import CatalogEntry, lingbot_world_fast_load_kwargs
+from worldfoundry.studio.inference.execution import (
     IMAGE_EXTS,
     LINGBOT_VARIANT_FAST,
     LINGBOT_WORLD_MODEL_ID,
@@ -47,12 +47,9 @@ from worldfoundry.studio.execution import (
     ensure_torchrun_lingbot_fast_control_group,
     shutdown_torchrun_lingbot_fast_runtime,
 )
-from worldfoundry.studio.interfaces import interface_spec_for_entry
-from worldfoundry.studio.launch_config import (
-    StudioLaunchConfig,
-    env_first,
-    launch_uses_lingbot_torchrun_rollout,
-)
+from worldfoundry.studio.ui.interfaces import interface_spec_for_entry
+from worldfoundry.studio.ui.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
+from worldfoundry.studio.inference.config import env_first
 from worldfoundry.studio.serving import (
     StudioServiceTelemetry,
     parse_byte_range,

@@ -33,6 +33,7 @@ WorldFoundry 统一使用 conda 路径。文档里的标准流程为主框架创
     { name: <><code>video</code></>, description: "覆盖视频、媒体、数据和 3D 的宽 runtime 依赖。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[video]</code></> }] },
     { name: <><code>vipe</code></>, description: "ViPE 几何/深度 runtime 与可视化栈。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[vipe]</code></> }] },
     { name: <><code>molmoact2</code></>, description: "MolmoAct2 模型服务栈及其窄版本 Transformers 契约。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[molmoact2]</code></> }] },
+    { name: <><code>molmobot_pi0</code></>, description: "固定版本的 MolmoBot Pi0 策略运行时。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[molmobot_pi0]</code></> }] },
     { name: <><code>metrics</code></>, description: "通用评测指标和数据集 I/O。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[metrics]</code></> }] },
     { name: <><code>distribution_metrics</code></>, description: "感知与分布类指标模型。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[distribution_metrics]</code></> }] },
     { name: <><code>dvlt</code></>, description: "DVLT 3D/可视化 runtime。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[dvlt]</code></> }] },
@@ -51,6 +52,7 @@ WorldFoundry 统一使用 conda 路径。文档里的标准流程为主框架创
     { name: <><code>studio_geometry</code></>, description: "Studio 几何与 Open3D 可视化。", reads: [{ label: "包含于 all", value: "是" }, { label: "安装", value: <><code>.[studio_geometry]</code></> }] },
     { name: <><code>studio_plot</code></>, description: "Studio 绘图与颜色工具。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[studio_plot]</code></> }] },
     { name: <><code>dev</code></>, description: "构建、pre-commit 和仓库固定版本的 lint 工具。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[dev]</code></> }] },
+    { name: <><code>test</code></>, description: "公开的 CPU 推理和打包测试，无需 Torch 或下载模型。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[test]</code></> }] },
     { name: <><code>eval_core</code></>, description: "可选的 CPU 评估依赖。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[eval_core]</code></> }] },
     { name: <><code>all</code></>, description: "上述经过筛选的通用 runtime bundle。", reads: [{ label: "安装", value: <><code>.[all]</code></> }] }
   ]} />
@@ -144,7 +146,7 @@ setup 后启动 Workspace：
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 PYTHONPATH=. WORLDFOUNDRY_WORKSPACE_MAX_JOBS=8 \
-python -m worldfoundry.studio.workspace_app --host 127.0.0.1 --port 7870
+python -m worldfoundry.studio.serving.workspace --host 127.0.0.1 --port 7870
 ```
 
 如果 datasets 或 checkpoints 要放到共享存储，显式传入路径：

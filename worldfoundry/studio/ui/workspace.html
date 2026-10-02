@@ -1,0 +1,2797 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenEnvision Workspace</title>
+  <link rel="icon" href="/assets/openenvision-logo.png" type="image/png" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d0d0f;
+      --panel: #161719;
+      --panel-2: #1e1f22;
+      --line: #2b2d31;
+      --line-hover: #3a3d42;
+      --text: #ecedef;
+      --muted: #8b929a;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --accent-2: #f59e0b;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --warn: #f59e0b;
+      --radius: 12px;
+      --radius-sm: 8px;
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3a3d42; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4b5057; }
+    .app {
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: #111214;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 8px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brandLogo {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      background: #fff;
+      object-fit: contain;
+      padding: 2px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .brand strong { display: block; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .brand span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .navGroup { display: grid; gap: 4px; }
+    .navLabel {
+      padding: 6px 12px;
+      color: #6b7280;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .navBtn {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      text-align: left;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .navBtn.active {
+      background: #232529;
+      color: #fff;
+    }
+    .navBtn:hover:not(.active) {
+      background: #1a1c1e;
+      color: var(--text);
+    }
+    .main {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .topbar {
+      height: 64px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      background: rgba(13, 13, 15, 0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    .topbarRight { display: flex; align-items: center; gap: 16px; }
+    .statusDot {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .statusDot:before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    }
+    button, input, textarea, select {
+      font: inherit;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: #232529;
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 8px 14px;
+      font-weight: 500;
+      font-size: 13px;
+      cursor: pointer;
+      min-height: 36px;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn:hover { border-color: var(--line-hover); background: #2b2d31; }
+    .btn.primary {
+      border-color: transparent;
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    .btn.primary:hover { background: var(--accent-hover); }
+    .btn.danger {
+      border-color: transparent;
+      background: var(--danger);
+      color: #fff;
+    }
+    .btn.danger:hover { background: var(--danger-hover); }
+    .content {
+      padding: 24px 28px 40px;
+      overflow: auto;
+    }
+    .view { display: none; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .view.active { display: block; }
+    .toolbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .filters {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    label {
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    input, textarea, select {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: #09090b;
+      color: var(--text);
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+    }
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+    .split {
+      --split-left: 360px;
+      --split-handle: 10px;
+      display: grid;
+      grid-template-columns: var(--split-left) var(--split-handle) minmax(0, 1fr);
+      gap: 0;
+      align-items: stretch;
+      min-width: 0;
+    }
+    .splitHandle {
+      position: relative;
+      width: var(--split-handle);
+      cursor: col-resize;
+      touch-action: none;
+      user-select: none;
+      border-radius: 999px;
+      background: transparent;
+      align-self: stretch;
+      z-index: 2;
+    }
+    .splitHandle::before {
+      content: "";
+      position: absolute;
+      top: 12px;
+      bottom: 12px;
+      left: 50%;
+      width: 3px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: var(--line);
+      transition: background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .splitHandle:hover::before,
+    .splitHandle:focus-visible::before,
+    .split.is-resizing .splitHandle::before {
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+    }
+    .splitHandle:focus-visible {
+      outline: none;
+    }
+    .split.is-resizing {
+      cursor: col-resize;
+      user-select: none;
+    }
+    .split.is-resizing .panel {
+      pointer-events: none;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      overflow: hidden;
+      min-width: 0;
+    }
+    .panelHead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel-2);
+    }
+    .panelHead strong { font-size: 15px; font-weight: 600; }
+    .jobList { display: grid; }
+    .jobRow {
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      padding: 16px 20px;
+      cursor: pointer;
+      display: grid;
+      gap: 8px;
+      transition: background 0.15s ease;
+    }
+    .jobRow:last-child { border-bottom: 0; }
+    .jobRow:hover, .jobRow.active { background: #1c1e22; }
+    .jobRow.active { border-left: 3px solid var(--accent); padding-left: 17px; }
+    .jobTitleLine {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .jobTitleLine strong { font-size: 14px; font-weight: 500; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      background: #232529;
+      border-radius: 999px;
+      padding: 4px 10px;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .pill.running { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .pill.completed { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+    .pill.failed, .pill.cancelled { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+    .muted { color: var(--muted); }
+    .tiny { font-size: 12px; }
+    .detail {
+      align-content: start;
+      display: grid;
+      gap: 14px;
+      padding: 16px 20px 20px;
+      min-height: 0;
+    }
+    .detailTabs {
+      align-items: center;
+      align-self: start;
+      display: flex;
+      flex-wrap: wrap;
+      flex: none;
+      gap: 8px;
+      margin: 0;
+    }
+    .detailTab {
+      appearance: none;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: #111214;
+      color: var(--muted);
+      border-radius: 999px;
+      display: inline-flex;
+      flex: none;
+      gap: 2px;
+      height: auto;
+      line-height: 1.2;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .detailTab:hover { border-color: var(--line-hover); color: var(--text); }
+    .detailTab.active {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.45);
+      color: #34d399;
+    }
+    .detailTabPanel { display: none; gap: 16px; min-width: 0; }
+    .detailTabPanel.active { display: grid; align-content: start; }
+    .logToolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .logFilter {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #111214;
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .logFilter.active {
+      color: var(--text);
+      border-color: var(--line-hover);
+      background: #1a1c1e;
+    }
+    .logFilter.system.active { color: #fbbf24; border-color: rgba(251, 191, 36, 0.35); }
+    .logFilter.stdout.active { color: #60a5fa; border-color: rgba(96, 165, 250, 0.35); }
+    .logFilter.stderr.active { color: #f87171; border-color: rgba(248, 113, 113, 0.35); }
+    .logFollow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+    }
+    .logFollow input {
+      width: 14px;
+      height: 14px;
+      min-height: 0;
+      margin: 0;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .logPanel {
+      margin: 0;
+      border: 1px solid var(--line);
+      background: #09090b;
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      color: #e5e7eb;
+      overflow: auto;
+      min-height: 50vh;
+      max-height: min(72vh, 900px);
+      font-family: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .logLine {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 2px 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .logMeta {
+      color: #71717a;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .logLine.log-stream-system .logMeta { color: #fbbf24; }
+    .logLine.log-stream-stdout .logMeta { color: #60a5fa; }
+    .logLine.log-stream-stderr .logMeta { color: #f87171; }
+    .logText { color: #e5e7eb; }
+    .logBadge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      margin-left: 4px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #232529;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .detailTab.active .logBadge { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
+    .detailGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      background: #111214;
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      min-height: 64px;
+    }
+    .metric span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; font-weight: 500; }
+    .metric strong { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    .metric-wide { grid-column: 1 / -1; }
+    .pathMetric { min-height: 0; }
+    .pathRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .pathBasename {
+      font-size: 14px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      flex: 1;
+    }
+    .pathParent {
+      margin-top: 6px;
+      font-family: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .btn.tiny {
+      min-height: 28px;
+      padding: 4px 10px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .artifactLinks {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      align-self: start;
+      gap: 8px;
+    }
+    .artifactLink {
+      appearance: none;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      height: 32px;
+      min-height: 32px;
+      max-height: 32px;
+      border: 1px solid var(--line);
+      background: #111214;
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1;
+      text-decoration: none;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .artifactLink:hover { border-color: var(--line-hover); background: #1a1c1e; }
+    .artifactLink.galleryDelete { color: #fca5a5; }
+    .artifactLink.galleryDelete:hover { border-color: #ef4444; background: #1c1010; }
+    pre {
+      margin: 0;
+      border: 1px solid var(--line);
+      background: #09090b;
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      color: #e5e7eb;
+      overflow: auto;
+      min-height: 240px;
+      max-height: min(72vh, 900px);
+      font-family: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .gridCards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .itemCard {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      min-height: 160px;
+      min-width: 0;
+      overflow: hidden;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .itemCard > .artifactLinks {
+      margin-top: auto;
+      align-self: stretch;
+    }
+    .itemCard:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--line-hover);
+    }
+    .itemCard strong { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+    .itemCard p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .catalogCard .catalogName {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      overflow: hidden;
+      line-height: 1.3;
+      min-height: calc(15px * 1.3 * 2);
+    }
+    .catalogCard .catalogSummary {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+      min-height: calc(13px * 1.5 * 3);
+    }
+    .galleryPrompt {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+    .galleryPromptText {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+    }
+    .galleryPrompt.is-expanded .galleryPromptText,
+    .galleryPrompt.is-short .galleryPromptText {
+      display: block;
+      -webkit-line-clamp: unset;
+      line-clamp: unset;
+      overflow: visible;
+    }
+    .galleryPromptToggle {
+      appearance: none;
+      border: 0;
+      background: none;
+      padding: 0;
+      margin: 0;
+      width: fit-content;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+    }
+    .galleryPromptToggle:hover { color: var(--accent-hover); }
+    #galleryGrid.gridCards { align-items: stretch; }
+    .galleryCard { height: 100%; }
+    .galleryCard > strong {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      overflow: hidden;
+      line-height: 1.3;
+      min-height: calc(15px * 1.3 * 2);
+    }
+    .galleryCard .mediaBox,
+    .galleryCard .mediaStack { flex-shrink: 0; }
+    .galleryCard .galleryPrompt {
+      flex: 1 1 auto;
+      min-height: calc(13px * 1.5 * 3 + 24px);
+    }
+    .galleryCard .galleryPromptText {
+      min-height: calc(13px * 1.5 * 3);
+    }
+    .galleryCard > .artifactLinks {
+      min-height: 32px;
+      flex-shrink: 0;
+    }
+    .visualizerCard {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 100%;
+      height: 100%;
+    }
+    #visualizerGrid.gridCards {
+      align-items: stretch;
+    }
+    .visualizerHead {
+      display: grid;
+      gap: 8px;
+    }
+    .visualizerHead strong {
+      min-height: 2.5em;
+      line-height: 1.25;
+    }
+    .visualizerAliases {
+      margin: 0;
+      min-height: 2.8em;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+    .visualizerControls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      min-height: 214px;
+      align-content: start;
+    }
+    .visualizerControls label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .visualizerControls .wide { grid-column: 1 / -1; }
+    .visualizerControls textarea {
+      min-height: 118px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+    }
+    .visualizerFieldReserved {
+      opacity: 0;
+      pointer-events: none;
+      user-select: none;
+    }
+    .visualizerFooter {
+      margin-top: auto;
+      display: grid;
+      gap: 10px;
+    }
+    .visualizerActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .visualizerStatus {
+      border: 1px solid var(--line);
+      background: #111214;
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .visualizerPreviewPanel {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    .visualizerPreviewPanel.hidden { display: none; }
+    .visualizerPreviewPanel .panelHead {
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .visualizerPreviewTabs {
+      display: flex;
+      flex: 1 1 auto;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .visualizerPreviewTab {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #111214;
+      color: var(--text);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .visualizerPreviewTab:hover { border-color: var(--line-hover); background: #1a1c1e; }
+    .visualizerPreviewTab.active {
+      border-color: var(--accent);
+      background: rgba(16, 185, 129, 0.12);
+      color: #6ee7b7;
+    }
+    .visualizerPreviewFrame {
+      width: 100%;
+      height: min(68vh, 720px);
+      min-height: 420px;
+      border: 0;
+      display: block;
+      background: #050505;
+    }
+    .mediaBox {
+      border: 1px solid var(--line);
+      background: #09090b;
+      border-radius: var(--radius-sm);
+      aspect-ratio: 16 / 9;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 180px;
+      display: grid;
+      grid-template: 1fr / 1fr;
+      overflow: hidden;
+      position: relative;
+      contain: layout paint style;
+      isolation: isolate;
+    }
+    .mediaBox > * {
+      grid-area: 1 / 1;
+    }
+    .mediaBox video, .mediaBox img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #09090b;
+    }
+    .mediaBox video:not([src]) { visibility: hidden; }
+    .mediaPoster {
+      z-index: 1;
+      pointer-events: none;
+    }
+    .mediaBox video[src] {
+      visibility: visible;
+      z-index: 0;
+      background: transparent;
+    }
+    .media-has-frame video {
+      z-index: 2;
+      background: #09090b;
+    }
+    .mediaStack {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      min-width: 0;
+    }
+    .mediaLoad {
+      appearance: none;
+      align-self: flex-start;
+      border: 1px solid var(--line);
+      background: #111214;
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      height: 32px;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .mediaLoad:hover { border-color: var(--line-hover); background: #1a1c1e; }
+    .mediaHint {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      background: rgba(0,0,0,0.45);
+      border-radius: 999px;
+      padding: 4px 8px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .media-loaded .mediaLoad, .media-loaded .mediaHint { display: none; }
+    dialog {
+      width: min(800px, calc(100vw - 32px));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--text);
+      padding: 0;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); }
+    .modalHead, .modalFoot {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--panel-2);
+    }
+    .modalFoot { border-top: 1px solid var(--line); border-bottom: 0; justify-content: flex-end; gap: 12px; }
+    .modalBody { padding: 24px; display: grid; gap: 16px; max-height: calc(100vh - 160px); overflow-y: auto; }
+    .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .formGrid .wide { grid-column: 1 / -1; }
+    .dynamicGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .dynamicGrid .wide { grid-column: 1 / -1; }
+    .checks {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--line);
+      background: #111214;
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .check:hover { background: #1a1c1e; border-color: var(--line-hover); }
+    .check input { width: 16px; height: 16px; min-height: 0; margin: 0; cursor: pointer; accent-color: var(--accent); }
+    .hidden { display: none !important; }
+    @media (max-width: 920px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: sticky; top: 0; z-index: 20; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 12px 16px; gap: 12px; align-items: center; }
+      .brand { border-bottom: 0; min-width: max-content; padding: 0 12px 0 0; }
+      .navGroup { display: flex; align-items: center; gap: 8px; }
+      .navLabel { display: none; }
+      .navBtn { white-space: nowrap; }
+      .split { grid-template-columns: 1fr; gap: 16px; }
+      .splitHandle { display: none; }
+      .formGrid, .checks, .visualizerControls { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><img class="brandLogo" src="/assets/openenvision-logo.png" alt="" /><div><strong>WorldFoundry Workspace</strong><span>OpenEnvision</span></div></div>
+      <div class="navGroup">
+        <div class="navLabel">Jobs</div>
+        <button class="navBtn active" data-view="inference">Inference</button>
+        <button class="navBtn" data-view="evaluation">Evaluation</button>
+      </div>
+      <div class="navGroup">
+        <div class="navLabel">Assets</div>
+        <button class="navBtn" data-view="catalog">Catalog</button>
+        <button class="navBtn" data-view="gallery">Gallery</button>
+        <button class="navBtn" data-view="artifacts">Artifacts</button>
+        <button class="navBtn" data-view="visualizers">Visualizers</button>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <h1 id="pageTitle">Inference</h1>
+        <div class="topbarRight">
+          <span class="statusDot" id="serverState">API connected</span>
+          <button class="btn primary" id="openCreate">Create Job</button>
+        </div>
+      </header>
+      <div class="content">
+        <section id="view-inference" class="view active">
+          <div class="toolbar"><div class="filters"><label>Type<select id="jobTypeFilter"><option value="all">All jobs</option><option value="inference">Inference</option><option value="evaluation">Evaluation</option></select></label><label>Status<select id="statusFilter"><option value="all">All status</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>cancelled</option></select></label></div><button class="btn" id="refreshJobs">Refresh</button></div>
+          <div class="split" id="jobSplit" data-split-key="worldfoundry.studio.jobSplitLeft" data-split-default="360" data-split-min-left="240" data-split-min-right="360"><div class="panel"><div class="panelHead"><strong>Job Queue</strong><span class="muted tiny" id="jobCount">0 jobs</span></div><div class="jobList" id="jobList"></div></div><div class="splitHandle" role="separator" aria-orientation="vertical" aria-label="Resize job queue and detail" title="Drag to resize · double-click to reset" tabindex="0"></div><div class="panel"><div class="panelHead"><strong>Job Detail</strong><button class="btn danger" id="stopJob">Stop</button></div><div class="detail" id="jobDetail"><span class="muted">Select a job.</span></div></div></div>
+        </section>
+        <section id="view-catalog" class="view"><div class="toolbar"><div class="filters"><label>Search<input id="catalogSearch" placeholder="model, tag, family" /></label><label>Workload<select id="catalogWorkload"><option value="all">All</option><option value="t2v">T2V</option><option value="i2v">I2V</option><option value="v2v">V2V</option><option value="3d">3D</option><option value="geometry">Geometry</option><option value="action">Action</option><option value="api">API</option><option value="world">World</option></select></label></div></div><div class="gridCards" id="catalogGrid"></div></section>
+        <section id="view-gallery" class="view"><div class="gridCards" id="galleryGrid"></div></section>
+        <section id="view-artifacts" class="view"><div class="panel"><div class="panelHead"><strong>Artifacts</strong></div><div class="detail" id="artifactList"></div></div></section>
+        <section id="view-visualizers" class="view">
+          <div class="toolbar"><span class="muted tiny" id="visualizerLiveState">Live sync idle</span><button class="btn" id="refreshVisualizers">Refresh</button></div>
+          <div class="gridCards" id="visualizerGrid"></div>
+          <div class="visualizerPreviewPanel hidden" id="visualizerPreviewPanel">
+            <div class="panelHead">
+              <strong>Live Preview</strong>
+              <div class="visualizerPreviewTabs" id="visualizerPreviewTabs"></div>
+              <button class="btn" id="visualizerPreviewPopout" type="button">Open Tab</button>
+            </div>
+            <iframe class="visualizerPreviewFrame" id="visualizerPreviewFrame" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-pointer-lock" allow="fullscreen; clipboard-read; clipboard-write" title="Visualizer preview"></iframe>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <dialog id="createDialog">
+    <form method="dialog">
+      <div class="modalHead"><strong>Create Job</strong><button class="btn" value="cancel">Close</button></div>
+      <div class="modalBody">
+        <div class="formGrid">
+          <label>Job Type<select id="jobType"><option value="inference">Inference</option><option value="evaluation">Evaluation</option></select></label>
+          <label>Workload<select id="workloadType"><option value="t2v">T2V</option><option value="i2v">I2V</option><option value="v2v">V2V</option><option value="3d">3D</option><option value="geometry">Geometry</option><option value="action">Action</option><option value="api">API</option><option value="world">World</option></select></label>
+          <label class="wide">Model<select id="modelSelect"></select></label>
+          <label>Variant<select id="variantSelect"></select></label>
+          <label>Task<select id="taskProfile"></select></label>
+          <div class="wide metric" id="inferSpecSummary"><span>Inference Contract</span><strong>Select a model.</strong></div>
+          <div class="wide dynamicGrid" id="inferDynamicFields"></div>
+          <label class="wide">Prompt<textarea id="prompt" placeholder="Describe the world, scene, or instruction"></textarea></label>
+          <label class="wide">Negative Prompt<textarea id="negativePrompt" placeholder="Optional negative prompt"></textarea></label>
+          <label class="wide">Input Path<input id="inputPath" placeholder="/path/to/image.mp4, image, dataset, or scene folder" /></label>
+          <label>Frames<input id="numFrames" type="number" min="0" /></label>
+          <label>FPS<input id="fps" type="number" min="1" /></label>
+          <label>Height<input id="height" type="number" min="0" /></label>
+          <label>Width<input id="width" type="number" min="0" /></label>
+          <label>Steps<input id="steps" type="number" min="1" /></label>
+          <label>Guidance<input id="guidance" type="number" step="0.1" /></label>
+          <label>Seed<input id="seed" type="number" /></label>
+          <label>Device<input id="device" placeholder="cuda" /></label>
+          <label>Backend<select id="backend"><option value="auto">auto</option><option value="from_pretrained">from_pretrained</option><option value="api_init">api_init</option></select></label>
+          <label>Attention<select id="attention"><option value="auto">auto</option><option value="torch">torch</option><option value="flash_attn_2">flash_attn_2</option><option value="flash_attn_3">flash_attn_3</option><option value="sage">sage</option><option value="xformers">xformers</option></select></label>
+          <label class="wide">Model Ref<input id="modelRef" placeholder="checkpoint path or repo id" /></label>
+          <label class="wide">Endpoint<input id="endpoint" placeholder="hosted API endpoint" /></label>
+          <label class="wide">API Key<input id="apiKey" type="password" autocomplete="off" placeholder="optional hosted API key" /></label>
+          <label class="wide">Call JSON<textarea id="callJson">{}</textarea></label>
+          <label class="wide">Load JSON<textarea id="loadJson">{}</textarea></label>
+          <label>Eval Mode<select id="evalMode"><option value="score-artifacts">Score My Artifacts</option><option value="model-benchmark">Model Benchmark</option><option value="generate-and-score">Generate &amp; Score Dataset</option><option value="existing-results">Existing Results</option><option value="model">Generic Model Runner</option></select></label>
+          <label>Eval Preset<select id="evalPreset"></select></label>
+          <label>Benchmark<select id="evalBenchmark"></select></label>
+          <label class="wide">Results Path<input id="evalResultsPath" placeholder="/path/to/results.jsonl for existing-results mode" /></label>
+          <label class="wide">Requests Path<input id="evalRequestsPath" placeholder="/path/to/requests.jsonl for model mode" /></label>
+          <label class="wide">Eval Output Dir<input id="evalOutputDir" placeholder="defaults to workspace/evaluations/<job_id>" /></label>
+          <label class="wide">Run Plan Path<input id="evalRunPlanPath" placeholder="optional worldfoundry run plan JSON" /></label>
+          <label>Eval Model ID<input id="evalModelId" placeholder="model id for model mode" /></label>
+          <label>Model Runner<input id="evalModelRunner" placeholder="optional runner id/target" /></label>
+          <label>Model Variant<input id="evalModelVariant" placeholder="optional model-zoo variant" /></label>
+          <label>Dataset ID<input id="evalDatasetId" placeholder="optional dataset id" /></label>
+          <label class="wide">Dataset Root<input id="evalDatasetRoot" placeholder="optional benchmark dataset root" /></label>
+          <label class="wide">Dataset Manifest<input id="evalDatasetManifest" placeholder="optional dataset manifest JSON/JSONL" /></label>
+          <label>Cache<select id="evalCacheMode"><option value="off">off</option><option value="read">read</option><option value="write">write</option><option value="read-write">read-write</option><option value="refresh">refresh</option></select></label>
+          <label class="wide">Metrics<input id="evalMetrics" value="artifact_count" list="evalMetricSuggestions" placeholder="artifact_count, required_artifacts_present" /></label>
+          <datalist id="evalMetricSuggestions"></datalist>
+          <label class="wide">Required Artifacts<input id="evalRequiredArtifacts" placeholder="generated_video, generated_image" /></label>
+          <label class="wide">Eval Model Parameters JSON<textarea id="evalModelParameters">{}</textarea></label>
+          <label class="wide">Eval Runtime JSON<textarea id="evalRuntime">{}</textarea></label>
+        </div>
+        <div class="checks" id="runtimeChecks">
+          <label class="check"><input type="checkbox" id="torchCompile" /> Torch Compile</label>
+          <label class="check"><input type="checkbox" id="cpuOffload" /> CPU Offload</label>
+          <label class="check"><input type="checkbox" id="vaeOffload" /> VAE Offload</label>
+          <label class="check"><input type="checkbox" id="textOffload" /> Text Encoder Offload</label>
+          <label class="check"><input type="checkbox" id="fuseQkv" /> Fused QKV</label>
+          <label class="check"><input type="checkbox" id="inplaceResidual" /> In-place Residual</label>
+          <label class="check"><input type="checkbox" id="staticCrossKv" /> Static Cross-KV</label>
+          <label class="check"><input type="checkbox" id="fusedRope" /> Fused RoPE</label>
+        </div>
+        <div class="formGrid" id="runtimeValues">
+          <label>QKV Execution<select id="qkvStrategy"><option value="auto">auto</option><option value="packed">packed</option><option value="split">split</option></select></label>
+          <label>QKV Split Threshold<input id="qkvSplitThreshold" type="number" min="1" value="8192" /></label>
+          <label>RoPE Precision<select id="ropePrecision"><option value="fp32">fp32</option><option value="fp64">fp64</option></select></label>
+          <label>RMSNorm Precision<select id="rmsNormPrecision"><option value="input">input</option><option value="fp32">fp32</option></select></label>
+        </div>
+      </div>
+      <div class="modalFoot"><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="createJob" value="default">Create Job</button></div>
+    </form>
+  </dialog>
+  <script>
+    const studioAuthToken = new URLSearchParams(window.location.search).get("token") || "";
+    const state = { view: "inference", jobs: [], models: [], evaluationCatalog: {benchmarks: [], metrics: [], models: []}, visualizers: [], visualizerPreviewMode: "", activeJob: "", detailRenderKey: "", detailTab: "preview", detailLogCount: 0, logStreamFilter: "all", logFollowTail: true, settings: {}, lazyVideoObserver: null, autoVideoPreloads: 0, visualizerRefreshInFlight: false, visualizerLastSync: 0 };
+    const MAX_AUTO_VIDEO_PRELOADS = 4;
+    const JOB_VIEWS = new Set(["inference", "evaluation"]);
+    const INFER_INFRA_FIELDS = ["workloadType","modelSelect","variantSelect","taskProfile","device","backend","attention","modelRef","endpoint","apiKey","callJson","loadJson"];
+    const INFER_TASK_FIELD_CONTROLS = {
+      prompt: ["prompt"],
+      negativePrompt: ["negative_prompt", "negative-prompt"],
+      inputPath: ["input_path", "image", "video", "last_frame", "reference_file", "reference_files"],
+      numFrames: ["frames", "num_frames", "num-frames"],
+      fps: ["fps"],
+      height: ["height"],
+      width: ["width"],
+      steps: ["steps", "num_inference_steps", "num-inference-steps", "sampling_steps", "sampling-steps"],
+      guidance: ["guidance", "guidance_scale", "guidance-scale"],
+      seed: ["seed"]
+    };
+    const DEDICATED_INFER_FIELD_IDS = new Set(Object.values(INFER_TASK_FIELD_CONTROLS).flat().map(normalizeFieldId));
+    const PARAM_KEY_BY_FIELD_ID = {
+      frames: "num_frames",
+      "num-frames": "num_frames",
+      num_frames: "num_frames",
+      steps: "num_inference_steps",
+      "num-inference-steps": "num_inference_steps",
+      num_inference_steps: "num_inference_steps",
+      "sampling-steps": "num_inference_steps",
+      sampling_steps: "num_inference_steps",
+      guidance: "guidance_scale",
+      "guidance-scale": "guidance_scale",
+      guidance_scale: "guidance_scale"
+    };
+    const RUNTIME_CHECK_OPTIONS = {
+      torchCompile: "torch_compile",
+      cpuOffload: "cpu_offload",
+      vaeOffload: "vae_cpu_offload",
+      textOffload: "text_encoder_cpu_offload",
+      fuseQkv: "fuse_qkv",
+      inplaceResidual: "inplace_residual",
+      staticCrossKv: "static_cross_kv",
+      fusedRope: "fused_rope"
+    };
+    const RUNTIME_VALUE_CONTROLS = {
+      qkvStrategy: {key: "qkv_strategy", kind: "choice", fallback: "auto"},
+      qkvSplitThreshold: {key: "qkv_split_threshold", kind: "integer", fallback: 8192},
+      ropePrecision: {key: "rope_precision", kind: "choice", fallback: "fp32"},
+      rmsNormPrecision: {key: "rms_norm_precision", kind: "choice", fallback: "input"}
+    };
+    const VIEW_TITLES = {
+      inference: "Inference",
+      evaluation: "Evaluation",
+      catalog: "Catalog",
+      gallery: "Gallery",
+      artifacts: "Artifacts",
+      visualizers: "Visualizers"
+    };
+    const $ = (id) => document.getElementById(id);
+    function isSameOriginHttpUrl(raw) {
+      try {
+        const url = new URL(String(raw || ""), window.location.href);
+        return url.origin === window.location.origin && ["http:", "https:"].includes(url.protocol);
+      } catch {
+        return false;
+      }
+    }
+    function authenticatedUrl(raw) {
+      const value = String(raw || "");
+      if (!studioAuthToken || !value) return value;
+      try {
+        const url = new URL(value, window.location.href);
+        if (isSameOriginHttpUrl(url)) {
+          url.searchParams.set("token", studioAuthToken);
+        }
+        return url.toString();
+      } catch {
+        return value;
+      }
+    }
+    async function api(path, opts = {}) {
+      const headers = new Headers(opts.headers || {});
+      const url = authenticatedUrl(path);
+      if (studioAuthToken && isSameOriginHttpUrl(url)) {
+        headers.set("Authorization", `Bearer ${studioAuthToken}`);
+      }
+      const res = await fetch(url, { ...opts, headers });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+    function splitList(value) {
+      return String(value || "").split(",").map(item => item.trim()).filter(Boolean);
+    }
+    function parseJsonField(id, fallback) {
+      const text = $(id).value || "";
+      if (!text.trim()) return fallback;
+      return JSON.parse(text);
+    }
+    function optionInArgs(args, ...names) {
+      return args.some(arg => names.some(name => arg === name || arg.startsWith(`${name}=`)));
+    }
+    function normalizeFieldId(value) {
+      return String(value || "").trim().toLowerCase().replaceAll("_", "-");
+    }
+    function fieldControlVisible(id) {
+      const el = $(id);
+      if (!el) return false;
+      const wrapper = el.closest("label") || el;
+      return !wrapper.classList.contains("hidden");
+    }
+    function runtimeCheckVisible(id) {
+      const el = $(id);
+      if (!el) return false;
+      const wrapper = el.closest(".check") || el;
+      return !wrapper.classList.contains("hidden");
+    }
+    function inferTaskFields() {
+      const task = selectedTaskProfile();
+      return task && Array.isArray(task.inputs) ? task.inputs : [];
+    }
+    function inferTaskFieldIds() {
+      return new Set(inferTaskFields().map(field => normalizeFieldId(field.field_id)));
+    }
+    function coerceInferFieldValue(input) {
+      if (input.type === "checkbox") return input.checked;
+      const raw = input.value;
+      const kind = input.dataset.kind || "string";
+      if (raw === "" && input.dataset.required !== "true") return undefined;
+      if (kind === "integer") return Number.parseInt(raw || "0", 10);
+      if (kind === "number") return Number(raw || "0");
+      if (kind === "interaction_tokens") {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+          if (typeof parsed === "string") return splitList(parsed);
+        } catch {}
+        return splitList(raw);
+      }
+      if (kind === "json") return JSON.parse(raw || "null");
+      if (kind === "boolean") return Boolean(input.checked);
+      return raw;
+    }
+    function applyInferValue(target, fieldId, value, payload) {
+      if (value === undefined || value === null || value === "") return;
+      const key = PARAM_KEY_BY_FIELD_ID[fieldId] || fieldId.replaceAll("-", "_");
+      if (target === "prompt") payload.prompt = String(value);
+      else if (target === "input_path") payload.input_path = String(value);
+      else if (target === "params") payload.params[key] = value;
+      else if (target === "load_kwargs") payload.load_kwargs[key] = value;
+      else payload.call_kwargs[key] = value;
+    }
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[ch]);
+    }
+    function safeClassToken(value) {
+      return String(value ?? "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+    }
+    function optionHtml(value, label, attrs = {}) {
+      const extra = Object.entries(attrs)
+        .map(([key, attrValue]) => ` ${safeClassToken(key)}="${escapeHtml(attrValue)}"`)
+        .join("");
+      return `<option value="${escapeHtml(value)}"${extra}>${escapeHtml(label ?? value)}</option>`;
+    }
+    function pillHtml(value, extraClass = "") {
+      return `<span class="pill ${safeClassToken(extraClass || value)}">${escapeHtml(value)}</span>`;
+    }
+    function renderVideoBox(url, options = {}) {
+      const src = escapeHtml(authenticatedUrl(url));
+      const posterUrl = options.poster ? authenticatedUrl(options.poster) : "";
+      const poster = posterUrl ? ` poster="${escapeHtml(posterUrl)}"` : "";
+      const posterImg = posterUrl
+        ? `<img class="mediaPoster" loading="lazy" decoding="async" src="${escapeHtml(posterUrl)}" alt="" onerror="this.remove()" />`
+        : "";
+      const eager = !!options.eager;
+      return `<div class="mediaStack ${eager ? "media-loaded" : ""}" data-media-box>
+        <div class="mediaBox">
+          ${posterImg}
+          <video controls playsinline controlsList="nodownload" preload="${eager ? "metadata" : "none"}"${poster} data-src="${src}" data-eager="${eager ? "true" : "false"}"></video>
+          ${eager ? "" : `<span class="mediaHint">video</span>`}
+        </div>
+        ${eager ? "" : `<button class="mediaLoad" type="button" data-load-video>Play preview</button>`}
+      </div>`;
+    }
+    function gallerySubtitle(row) {
+      const prompt = String(row.prompt || "").trim();
+      if (prompt) return prompt;
+      const runId = String(row.run_id || "").trim();
+      if (runId) return runId;
+      return pathBasename(row.output_dir || "");
+    }
+    function renderGalleryPrompt(row) {
+      return `<div class="galleryPrompt">
+        <p class="galleryPromptText">${escapeHtml(gallerySubtitle(row))}</p>
+        <button type="button" class="galleryPromptToggle" hidden aria-expanded="false">Show more</button>
+      </div>`;
+    }
+    function bindGalleryPrompts(root) {
+      if (!root) return;
+      root.querySelectorAll(".galleryPrompt").forEach(box => {
+        const textEl = box.querySelector(".galleryPromptText");
+        const btn = box.querySelector(".galleryPromptToggle");
+        if (!textEl || !btn) return;
+        const text = (textEl.textContent || "").trim();
+        const overflows = textEl.scrollHeight > textEl.clientHeight + 2;
+        if (!overflows && text.length < 120) {
+          box.classList.add("is-short");
+          btn.hidden = true;
+          return;
+        }
+        btn.hidden = false;
+        btn.onclick = () => {
+          const expanded = box.classList.toggle("is-expanded");
+          btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+          btn.textContent = expanded ? "Show less" : "Show more";
+        };
+      });
+    }
+    function normalizePathText(path) {
+      return String(path || "").trim().replace(/\/+$/, "");
+    }
+    function pathBasename(path) {
+      const cleaned = normalizePathText(path);
+      if (!cleaned) return "";
+      const parts = cleaned.split("/");
+      return parts[parts.length - 1] || cleaned;
+    }
+    function pathParentText(path) {
+      const cleaned = normalizePathText(path);
+      const parts = cleaned.split("/");
+      if (parts.length <= 1) return cleaned;
+      parts.pop();
+      return parts.join("/");
+    }
+    function pathParentDisplay(path) {
+      const parent = pathParentText(path);
+      if (!parent) return "";
+      if (parent.length <= 56) return parent;
+      return "…" + parent.slice(-55);
+    }
+    function renderOutputPath(path) {
+      const value = normalizePathText(path);
+      if (!value) {
+        return `<div class="metric metric-wide pathMetric"><span>Output</span><strong class="muted">pending</strong></div>`;
+      }
+      const base = pathBasename(value);
+      const parent = pathParentDisplay(value);
+      return `<div class="metric metric-wide pathMetric">
+        <span>Output directory</span>
+        <div class="pathRow">
+          <strong class="pathBasename" title="${escapeHtml(value)}">${escapeHtml(base)}</strong>
+          <button type="button" class="btn tiny" data-copy-path="${escapeHtml(value)}">Copy path</button>
+        </div>
+        ${parent ? `<div class="pathParent muted tiny" title="${escapeHtml(value)}">${escapeHtml(parent)}</div>` : ""}
+      </div>`;
+    }
+    function renderImageBox(url) {
+      return `<div class="mediaBox"><img loading="lazy" decoding="async" src="${escapeHtml(authenticatedUrl(url))}" /></div>`;
+    }
+    function artifactUrl(path) {
+      return authenticatedUrl(`/api/artifacts/file?path=${encodeURIComponent(path || "")}`);
+    }
+    function artifactLink(label, path) {
+      if (!path) return "";
+      return `<a class="artifactLink" href="${artifactUrl(path)}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
+    }
+    function externalLink(label, url) {
+      if (!url) return "";
+      return `<a class="artifactLink" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+    }
+    function catalogLinksHtml(links) {
+      if (!links) return "";
+      const parts = [
+        externalLink("Project", links.project),
+        externalLink("GitHub", links.github),
+        externalLink("arXiv", links.paper),
+      ].filter(Boolean);
+      return parts.length ? `<div class="artifactLinks">${parts.join("")}</div>` : "";
+    }
+    function artifactVisualizeButton(label, path, mode, modelId = "") {
+      if (!path || !mode) return "";
+      return `<button class="artifactLink" type="button" data-visualize-artifact="${escapeHtml(mode)}" data-artifact-path="${escapeHtml(path)}" data-artifact-model="${escapeHtml(modelId)}">${escapeHtml(label || "Visualize")}</button>`;
+    }
+    function artifactRefineButton(jobId = "", runId = "") {
+      if (!jobId && !runId) return "";
+      return `<button class="artifactLink" type="button" data-refine-job="${escapeHtml(jobId || "")}" data-refine-run="${escapeHtml(runId || "")}">Refine</button>`;
+    }
+    function refineInputPreference(full) {
+      const metadata = (full && full.metadata) || {};
+      const contract = metadata.infer_contract || {};
+      const task = contract.task || {};
+      const fields = Array.isArray(task.inputs) ? task.inputs : [];
+      const fieldIds = new Set(fields.map(field => normalizeFieldId(field.field_id)));
+      const model = full && full.model_id ? state.models.find(item => item.id === full.model_id) : null;
+      const workload = String((model && model.workload_type) || metadata.workload_type || "").toLowerCase();
+      const taskText = [
+        full && full.model_id,
+        task.task_id,
+        task.label,
+        task.description,
+        fields.map(field => [field.field_id, field.label, field.target].join(" ")).join(" ")
+      ].join(" ").toLowerCase();
+      if (workload === "i2v" || fieldIds.has("image") || fieldIds.has("input-image") || fieldIds.has("reference-image") || fieldIds.has("last-frame")) return "image";
+      if (workload === "v2v" || fieldIds.has("video") || fieldIds.has("input-video") || fieldIds.has("video-path") || /\b(video_path|input_video|conditioning_video)\b/.test(taskText)) return "video";
+      return "";
+    }
+    function bestRefineInputPath(result, full = null) {
+      if (!result) return "";
+      const preference = refineInputPreference(full);
+      if (preference === "image") return result.preview_image || result.preview_video || result.preview_model || result.preview_splat || "";
+      if (preference === "video") return result.preview_video || result.preview_image || result.preview_model || result.preview_splat || "";
+      return result.preview_video || result.preview_image || result.preview_model || result.preview_splat || "";
+    }
+    function renderResultActions(full, result) {
+      const actions = [];
+      if (result.preview_video) actions.push(artifactLink("Open Video", result.preview_video));
+      if (result.preview_image) actions.push(artifactLink("Open Image", result.preview_image));
+      if (result.preview_model) actions.push(artifactLink("Open Model", result.preview_model));
+      if (result.preview_splat) actions.push(artifactLink("Open Splat", result.preview_splat));
+      if (full.job_type === "inference" && full.status === "completed" && bestRefineInputPath(result, full)) {
+        actions.push(artifactRefineButton(full.job_id || full.id || "", full.run_id || ""));
+      }
+      (full.visualization_actions || []).forEach(action => {
+        actions.push(artifactVisualizeButton(action.label, action.path, action.mode, action.model_id || full.model_id));
+      });
+      const unique = [];
+      const seen = new Set();
+      actions.filter(Boolean).forEach(html => {
+        if (seen.has(html)) return;
+        seen.add(html);
+        unique.push(html);
+      });
+      return unique.length ? `<div class="artifactLinks">${unique.join("")}</div>` : "";
+    }
+    function bindArtifactVisualizerButtons(root = document) {
+      root.querySelectorAll("[data-visualize-artifact]").forEach(button => {
+        button.onclick = () => visualizeArtifact(
+          button.dataset.visualizeArtifact,
+          button.dataset.artifactPath,
+          button.dataset.artifactModel
+        );
+      });
+      root.querySelectorAll("[data-refine-job], [data-refine-run]").forEach(button => {
+        button.onclick = () => refineFromRecord(button.dataset.refineJob || "", button.dataset.refineRun || "");
+      });
+    }
+    function setSelectValue(id, value, label = "") {
+      if (!value) return;
+      ensureSelectOption(id, value, label || value);
+      $(id).value = value;
+    }
+    function selectInferModel(modelId, variantId, taskId) {
+      const model = state.models.find(item => item.id === modelId);
+      const workload = (model && model.workload_type) || $("workloadType").value || "world";
+      setSelectValue("workloadType", workload);
+      populateModelSelect();
+      setSelectValue("modelSelect", modelId);
+      populateInferSpecControls();
+      if (variantId) {
+        setSelectValue("variantSelect", variantId);
+      }
+      if (taskId) {
+        setSelectValue("taskProfile", taskId);
+      }
+      renderInferDynamicFields();
+      renderInferSpecSummary();
+      applySelectedModelDefaults();
+      updateCreateMode();
+    }
+    function firstDefined(...values) {
+      return values.find(value => value !== undefined && value !== null && value !== "");
+    }
+    function recordRequest(full) {
+      const metadata = (full && full.metadata) || {};
+      const resultMetadata = (full && full.result && full.result.metadata) || {};
+      const request = resultMetadata.request || metadata.request || {};
+      return request && typeof request === "object" ? request : {};
+    }
+    function recordInferContract(full, request) {
+      const metadata = (full && full.metadata) || {};
+      const resultMetadata = (full && full.result && full.result.metadata) || {};
+      const contract = (request && request.infer_contract) || metadata.infer_contract || resultMetadata.infer_contract || {};
+      return contract && typeof contract === "object" ? contract : {};
+    }
+    const REFINE_PATH_KWARG_KEYS = new Set([
+      "input_path", "input-dir", "input_dir", "image", "images", "image_path", "image-path",
+      "input_image", "input-image", "input_image_path", "input-image-path", "video", "videos",
+      "video_path", "video-path", "input_video", "input-video", "input_video_path", "input-video-path",
+      "last_frame", "last-frame", "reference_file", "reference-file", "reference_files", "reference-files",
+      "validation_image", "validation-image", "validation_images", "validation-images",
+      "output", "output_path", "output-path", "output_dir", "output-dir", "out_path", "out-path",
+      "out_dir", "out-dir", "outdir", "save_path", "save-path", "save_dir", "save-dir"
+    ]);
+    function sanitizedRefineKwargs(value) {
+      if (Array.isArray(value)) {
+        return value.map(item => sanitizedRefineKwargs(item));
+      }
+      if (!value || typeof value !== "object") {
+        return value;
+      }
+      const clean = {};
+      Object.entries(value).forEach(([key, item]) => {
+        const normalized = normalizeFieldId(key);
+        if (REFINE_PATH_KWARG_KEYS.has(normalized) || REFINE_PATH_KWARG_KEYS.has(key)) return;
+        clean[key] = sanitizedRefineKwargs(item);
+      });
+      return clean;
+    }
+    function payloadFromRefineRecord(full) {
+      const metadata = full.metadata || {};
+      const request = recordRequest(full);
+      const contract = recordInferContract(full, request);
+      const variant = contract.variant || {};
+      const task = contract.task || {};
+      const result = full.result || {};
+      return {
+        modelId: full.model_id || contract.model_family_id || metadata.model_id || "",
+        variantId: firstDefined(metadata.variant_id, request.variant_id, contract.variant_id, variant.variant_id, "default"),
+        taskId: firstDefined(metadata.task_profile_id, request.task_profile_id, contract.task_profile_id, task.task_id, "default"),
+        prompt: firstDefined(metadata.prompt, request.prompt, ""),
+        negativePrompt: firstDefined(metadata.negative_prompt, request.negative_prompt, ""),
+        inputPath: bestRefineInputPath(result, full),
+        device: firstDefined(metadata.device, request.device, "cuda"),
+        modelRef: firstDefined(request.model_ref, variant.model_ref, metadata.model_ref, ""),
+        callKwargs: sanitizedRefineKwargs({...((variant.call_kwargs || {})), ...((request.call_kwargs || {}))}),
+        loadKwargs: sanitizedRefineKwargs({...((variant.load_kwargs || {})), ...((request.load_kwargs || {}))})
+      };
+    }
+    async function refineFromRecord(jobId, runId) {
+      try {
+        const full = jobId
+          ? await api(`/api/jobs/${encodeURIComponent(jobId)}`)
+          : await api(`/api/runs/${encodeURIComponent(runId)}`);
+        const refine = payloadFromRefineRecord(full);
+        if (!refine.modelId || !refine.inputPath) throw new Error("Selected record does not contain enough model/output metadata to refine.");
+        setView("inference");
+        $("jobType").value = "inference";
+        selectInferModel(refine.modelId, refine.variantId, refine.taskId);
+        setControlDefault("prompt", refine.prompt);
+        setControlDefault("negativePrompt", refine.negativePrompt);
+        setControlDefault("inputPath", refine.inputPath);
+        setControlDefault("device", refine.device);
+        if (refine.modelRef) setControlDefault("modelRef", refine.modelRef);
+        delete refine.callKwargs.output_path;
+        delete refine.callKwargs.output_dir;
+        setJsonInputValue("callJson", refine.callKwargs);
+        setJsonInputValue("loadJson", refine.loadKwargs);
+        $("createDialog").showModal();
+      } catch (error) {
+        alert(error.message || String(error));
+      }
+    }
+    async function visualizeArtifact(mode, path, modelId) {
+      if (!mode || !path) return;
+      const payload = {
+        model_id: modelId || "",
+        asset_path: path,
+        host: "127.0.0.1",
+        port: null,
+        reuse: false,
+        params: visualizerDefaultParams(mode)
+      };
+      setView("visualizers");
+      state.visualizers = await api("/api/visualizers");
+      renderVisualizers(false);
+      updateVisualizerStatus(mode, "Launching...");
+      try {
+        const status = await api(`/api/visualizers/${encodeURIComponent(mode)}/launch`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        });
+        state.visualizers = await api("/api/visualizers");
+        const row = state.visualizers.find(item => item.mode === mode);
+        if (row) row.status = status;
+      } catch (error) {
+        updateVisualizerStatus(mode, `Launch failed: ${escapeHtml(error.message || error)}`);
+        return;
+      }
+      renderVisualizers(false);
+    }
+    function renderEvaluationSummary(result) {
+      if (!result || !(result.schema_version === "worldfoundry-evaluate-run-result" || result.scorecard_path)) return "";
+      const outputDir = String(result.output_dir || "").replace(/\/+$/, "");
+      const reportPath = outputDir ? `${outputDir}/report.md` : "";
+      const links = [
+        artifactLink("Scorecard", result.scorecard_path),
+        artifactLink("Manifest", result.manifest_path),
+        artifactLink("Execution Plan", result.execution_plan_path),
+        artifactLink("Report", reportPath)
+      ].filter(Boolean).join("");
+      return `
+        <div class="detailGrid">
+          <div class="metric"><span>Samples</span><strong>${escapeHtml(result.sample_count ?? "0")}</strong></div>
+          <div class="metric"><span>Successful</span><strong>${escapeHtml(result.successful_sample_count ?? "0")}</strong></div>
+          <div class="metric"><span>Failed</span><strong>${escapeHtml(result.failed_sample_count ?? "0")}</strong></div>
+          <div class="metric"><span>Artifacts</span><strong>${escapeHtml(result.artifact_count ?? "0")}</strong></div>
+          <div class="metric"><span>Mode</span><strong>${escapeHtml(result.mode || "")}</strong></div>
+          <div class="metric"><span>Runner</span><strong>${escapeHtml(result.delegate_runner || "")}</strong></div>
+        </div>
+        ${links ? `<div class="artifactLinks">${links}</div>` : ""}`;
+    }
+    function revealVideoFrame(video) {
+      const box = video && video.closest("[data-media-box]");
+      if (box) box.classList.add("media-has-frame");
+    }
+    function paintVideoFirstFrame(video, autoplay) {
+      if (!video || video.dataset.posterSeek === "1") return;
+      const seekFirst = () => {
+        if (video.dataset.posterSeek === "1") return;
+        video.dataset.posterSeek = "1";
+        if (!autoplay && video.paused) {
+          try {
+            const duration = Number(video.duration);
+            video.currentTime = Number.isFinite(duration) && duration > 0
+              ? Math.min(0.04, duration)
+              : 0.001;
+          } catch {}
+        }
+        if (video.readyState >= 2) revealVideoFrame(video);
+      };
+      video.addEventListener("seeked", () => revealVideoFrame(video), { once: true });
+      video.addEventListener("playing", () => revealVideoFrame(video), { once: true });
+      video.addEventListener("loadeddata", seekFirst, { once: true });
+      if (video.readyState >= 2) seekFirst();
+    }
+    function activateVideo(video, autoplay = false) {
+      if (!video || !video.dataset.src) return;
+      if (!video.getAttribute("src")) {
+        video.setAttribute("src", video.dataset.src);
+        video.preload = "metadata";
+        video.load();
+      }
+      const box = video.closest("[data-media-box]");
+      if (box) box.classList.add("media-loaded");
+      paintVideoFirstFrame(video, autoplay);
+      if (autoplay) video.play().catch(() => {});
+    }
+    function lazyVideoObserver() {
+      if (!("IntersectionObserver" in window)) return null;
+      if (!state.lazyVideoObserver) {
+        state.lazyVideoObserver = new IntersectionObserver(entries => {
+          entries.forEach(entry => {
+            if (!entry.isIntersecting || state.autoVideoPreloads >= MAX_AUTO_VIDEO_PRELOADS) return;
+            state.autoVideoPreloads += 1;
+            activateVideo(entry.target, false);
+            state.lazyVideoObserver.unobserve(entry.target);
+          });
+        }, { rootMargin: "360px 0px", threshold: 0.01 });
+      }
+      return state.lazyVideoObserver;
+    }
+    function hydrateLazyMedia(root = document) {
+      root.querySelectorAll("video[data-src]").forEach(video => {
+        const button = video.closest("[data-media-box]")?.querySelector("[data-load-video]");
+        if (button) button.onclick = () => activateVideo(video, true);
+        if (video.dataset.eager === "true") {
+          activateVideo(video, false);
+          return;
+        }
+        const observer = lazyVideoObserver();
+        if (observer) observer.observe(video);
+      });
+    }
+    function setFieldVisible(id, visible) {
+      const el = $(id);
+      if (!el) return;
+      const wrapper = el.closest("label") || el;
+      wrapper.classList.toggle("hidden", !visible);
+    }
+    function setRuntimeCheckVisible(id, visible) {
+      const el = $(id);
+      if (!el) return;
+      const wrapper = el.closest(".check") || el;
+      wrapper.classList.toggle("hidden", !visible);
+    }
+    function setView(view) {
+      state.view = view;
+      document.querySelectorAll(".navBtn").forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
+      const contentView = JOB_VIEWS.has(view) ? "inference" : view;
+      document.querySelectorAll(".view").forEach(el => el.classList.toggle("active", el.id === "view-" + contentView));
+      if (JOB_VIEWS.has(view)) {
+        $("jobTypeFilter").value = view;
+        $("jobType").value = view;
+        updateCreateMode();
+        renderJobs();
+      }
+      $("pageTitle").textContent = VIEW_TITLES[view] || (view[0].toUpperCase() + view.slice(1));
+    }
+    function statusClass(status) { return "pill " + safeClassToken(status); }
+    function logStreamClass(stream) { return "log-stream-" + safeClassToken(stream || "log"); }
+    function logRowsFiltered(logRows) {
+      const filter = state.logStreamFilter || "all";
+      if (filter === "all") return logRows;
+      return logRows.filter(row => String(row.stream || "log") === filter);
+    }
+    function renderLogLine(row) {
+      const stream = String(row.stream || "log");
+      return `<div class="logLine ${logStreamClass(stream)}"><span class="logMeta">[${escapeHtml(stream)}]</span><span class="logText">${escapeHtml(row.text || "")}</span></div>`;
+    }
+    function renderLogPanelHtml(logRows) {
+      const rows = logRowsFiltered(logRows);
+      if (!rows.length) {
+        const filter = state.logStreamFilter || "all";
+        if (filter !== "all") return `<span class="muted">No ${escapeHtml(filter)} logs.</span>`;
+        return `<span class="muted">No logs yet.</span>`;
+      }
+      return rows.map(renderLogLine).join("");
+    }
+    function logPanelNearBottom(panel) {
+      if (!panel) return true;
+      return panel.scrollHeight - panel.scrollTop - panel.clientHeight < 48;
+    }
+    function scrollLogPanelToBottom(panel) {
+      if (!panel) return;
+      panel.scrollTop = panel.scrollHeight;
+    }
+    function updateLogBadge(count) {
+      const badge = $("jobLogBadge");
+      if (badge) badge.textContent = String(count || 0);
+    }
+    function setDetailTab(tab) {
+      state.detailTab = tab;
+      document.querySelectorAll("[data-detail-tab]").forEach(btn => btn.classList.toggle("active", btn.dataset.detailTab === tab));
+      document.querySelectorAll("[data-detail-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.detailPanel === tab));
+    }
+    function bindDetailTabs(root = document) {
+      root.querySelectorAll("[data-detail-tab]").forEach(btn => {
+        btn.onclick = () => setDetailTab(btn.dataset.detailTab || "preview");
+      });
+      root.querySelectorAll("[data-log-filter]").forEach(btn => {
+        btn.onclick = () => {
+          state.logStreamFilter = btn.dataset.logFilter || "all";
+          state.detailLogCount = -1;
+          root.querySelectorAll("[data-log-filter]").forEach(el => el.classList.toggle("active", el.dataset.logFilter === state.logStreamFilter));
+          const panel = $("jobLogPanel");
+          if (panel && panel.dataset.logSource) {
+            try {
+              updateJobLogs(JSON.parse(panel.dataset.logSource), { forceRebuild: true });
+            } catch {}
+          }
+        };
+      });
+      const follow = $("jobLogFollow");
+      if (follow) {
+        follow.checked = state.logFollowTail;
+        follow.onchange = () => { state.logFollowTail = follow.checked; };
+      }
+      const copyBtn = $("jobLogCopy");
+      if (copyBtn) {
+        copyBtn.onclick = async () => {
+          const panel = $("jobLogPanel");
+          if (!panel) return;
+          const text = panel.innerText || "";
+          try {
+            await navigator.clipboard.writeText(text);
+            copyBtn.textContent = "Copied";
+            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1200);
+          } catch {
+            alert("Copy failed.");
+          }
+        };
+      }
+      root.querySelectorAll("[data-copy-path]").forEach(btn => {
+        btn.onclick = async () => {
+          const text = btn.dataset.copyPath || "";
+          if (!text) return;
+          try {
+            await navigator.clipboard.writeText(text);
+            const label = btn.textContent;
+            btn.textContent = "Copied";
+            setTimeout(() => { btn.textContent = label; }, 1200);
+          } catch {
+            alert("Copy failed.");
+          }
+        };
+      });
+      setDetailTab(state.detailTab || "preview");
+    }
+    function updateJobLogs(full, options = {}) {
+      const panel = $("jobLogPanel");
+      if (!panel) return false;
+      const logRows = full.logs || [];
+      const forceRebuild = !!options.forceRebuild;
+      updateLogBadge(logRows.length);
+      panel.dataset.logSource = JSON.stringify(logRows);
+      const prevCount = state.detailLogCount || 0;
+      const filterChanged = panel.dataset.logFilter !== state.logStreamFilter;
+      if (filterChanged || forceRebuild || prevCount > logRows.length || state.logStreamFilter !== panel.dataset.activeFilter) {
+        const nearBottom = logPanelNearBottom(panel);
+        panel.innerHTML = renderLogPanelHtml(logRows);
+        panel.dataset.logFilter = state.logStreamFilter;
+        panel.dataset.activeFilter = state.logStreamFilter;
+        state.detailLogCount = logRows.length;
+        if (state.logFollowTail && (nearBottom || full.status === "running" || full.status === "queued")) scrollLogPanelToBottom(panel);
+        return true;
+      }
+      if (logRows.length <= prevCount) return false;
+      const nearBottom = logPanelNearBottom(panel);
+      logRows.slice(prevCount).forEach(row => {
+        if (state.logStreamFilter !== "all" && String(row.stream || "log") !== state.logStreamFilter) return;
+        panel.insertAdjacentHTML("beforeend", renderLogLine(row));
+      });
+      state.detailLogCount = logRows.length;
+      if (state.logFollowTail && (nearBottom || full.status === "running" || full.status === "queued")) scrollLogPanelToBottom(panel);
+      return true;
+    }
+    function renderJobs() {
+      const type = $("jobTypeFilter").value;
+      const status = $("statusFilter").value;
+      let jobs = state.jobs;
+      if (type !== "all") jobs = jobs.filter(j => j.job_type === type);
+      if (status !== "all") jobs = jobs.filter(j => j.status === status);
+      $("jobCount").textContent = jobs.length + " jobs";
+      $("jobList").innerHTML = jobs.length ? jobs.map(job => `
+        <button class="jobRow ${job.id === state.activeJob ? "active" : ""}" data-job="${escapeHtml(job.id)}">
+          <div class="jobTitleLine"><strong>${escapeHtml(job.title)}</strong><span class="${statusClass(job.status)}">${escapeHtml(job.status)}</span></div>
+          <div class="muted tiny">${escapeHtml(job.model_name)} · ${escapeHtml(job.elapsed)} · ${escapeHtml(job.id)}</div>
+        </button>`).join("") : `<div class="detail muted">No jobs yet. Create one above.</div>`;
+      document.querySelectorAll("[data-job]").forEach(btn => btn.onclick = () => {
+        const nextJob = btn.dataset.job;
+        if (nextJob !== state.activeJob) {
+          state.activeJob = nextJob;
+          state.detailRenderKey = "";
+          state.detailLogCount = 0;
+          const selected = state.jobs.find(item => item.id === nextJob);
+          state.detailTab = (selected && (selected.status === "running" || selected.status === "queued")) ? "logs" : "preview";
+        }
+        renderJobs();
+      });
+      renderDetail();
+    }
+    async function refreshJobs() {
+      state.jobs = await api("/api/jobs");
+      if (!state.activeJob && state.jobs[0]) state.activeJob = state.jobs[0].id;
+      renderJobs();
+    }
+    async function renderDetail() {
+      const job = state.jobs.find(j => j.id === state.activeJob);
+      if (!job) {
+        state.detailRenderKey = "";
+        state.detailLogCount = 0;
+        $("jobDetail").innerHTML = `<span class="muted">Select a job.</span>`;
+        return;
+      }
+      let full = job;
+      try { full = await api("/api/jobs/" + job.id); } catch {}
+      const logRows = full.logs || [];
+      const result = full.result || {};
+      const actionKey = (full.visualization_actions || []).map(action => [action.mode, action.path, action.label].join(":")).join("|");
+      const detailKey = [job.id, full.status, full.error || "", result.preview_video || "", result.preview_image || "", result.preview_model || "", result.preview_splat || "", actionKey].join("|");
+      const needsShellRender = state.detailRenderKey !== detailKey;
+      if (needsShellRender) {
+        state.detailRenderKey = detailKey;
+        state.detailLogCount = 0;
+        const video = result.preview_video ? renderVideoBox(`/api/jobs/${job.id}/video`, { eager: true, poster: `/api/jobs/${job.id}/image` }) : "";
+        const image = result.preview_image ? renderImageBox(`/api/jobs/${job.id}/image`) : "";
+        const evaluationSummary = renderEvaluationSummary(result);
+        const resultActions = renderResultActions(full, result);
+        const resultJson = full.result ? JSON.stringify(full.result, null, 2) : "";
+        const logFilterBtn = (filter, label) => `<button type="button" class="logFilter ${safeClassToken(filter)} ${state.logStreamFilter === filter ? "active" : ""}" data-log-filter="${escapeHtml(filter)}">${escapeHtml(label)}</button>`;
+        $("jobDetail").innerHTML = `
+          <div class="detailTabs">
+            <button type="button" class="detailTab ${state.detailTab === "preview" ? "active" : ""}" data-detail-tab="preview">Preview</button>
+            <button type="button" class="detailTab ${state.detailTab === "logs" ? "active" : ""}" data-detail-tab="logs">Logs<span class="logBadge" id="jobLogBadge">${logRows.length}</span></button>
+            <button type="button" class="detailTab ${state.detailTab === "result" ? "active" : ""}" data-detail-tab="result">Result</button>
+          </div>
+          <div class="detailTabPanel ${state.detailTab === "preview" ? "active" : ""}" data-detail-panel="preview">
+            ${video || image || `<span class="muted">No preview yet.</span>`}
+            ${resultActions}
+            <div class="detailGrid">
+              <div class="metric"><span>Status</span><strong>${escapeHtml(full.status)}</strong></div>
+              <div class="metric"><span>Model</span><strong>${escapeHtml(full.model_name)}</strong></div>
+              <div class="metric"><span>Type</span><strong>${escapeHtml(full.job_type)}</strong></div>
+            </div>
+            ${renderOutputPath(full.output_dir)}
+            ${full.error ? `<div class="metric"><span>Error</span><strong>${escapeHtml(full.error)}</strong></div>` : ""}
+            ${evaluationSummary}
+          </div>
+          <div class="detailTabPanel ${state.detailTab === "logs" ? "active" : ""}" data-detail-panel="logs">
+            <div class="logToolbar">
+              ${logFilterBtn("all", "All")}
+              ${logFilterBtn("system", "System")}
+              ${logFilterBtn("stdout", "Stdout")}
+              ${logFilterBtn("stderr", "Stderr")}
+              <button type="button" class="btn" id="jobLogCopy">Copy</button>
+              <label class="logFollow"><input type="checkbox" id="jobLogFollow" ${state.logFollowTail ? "checked" : ""} />Follow tail</label>
+            </div>
+            <div class="logPanel" id="jobLogPanel">${renderLogPanelHtml(logRows)}</div>
+          </div>
+          <div class="detailTabPanel ${state.detailTab === "result" ? "active" : ""}" data-detail-panel="result">
+            ${resultJson ? `<pre>${escapeHtml(resultJson)}</pre>` : `<span class="muted">No structured result yet.</span>`}
+          </div>`;
+        hydrateLazyMedia($("jobDetail"));
+        bindArtifactVisualizerButtons($("jobDetail"));
+        bindDetailTabs($("jobDetail"));
+        const panel = $("jobLogPanel");
+        if (panel) {
+          panel.dataset.logSource = JSON.stringify(logRows);
+          panel.dataset.logFilter = state.logStreamFilter;
+          panel.dataset.activeFilter = state.logStreamFilter;
+          state.detailLogCount = logRows.length;
+          if (state.logFollowTail && (full.status === "running" || full.status === "queued")) scrollLogPanelToBottom(panel);
+        }
+      } else {
+        updateJobLogs(full);
+        updateLogBadge(logRows.length);
+      }
+    }
+    async function loadModels() {
+      state.models = await api("/api/models");
+      populateModelSelect();
+      renderCatalog();
+    }
+    async function loadEvaluationCatalog() {
+      state.evaluationCatalog = await api("/api/evaluation/catalog");
+      populateEvaluationControls();
+    }
+    function populateEvaluationControls() {
+      const rows = (state.evaluationCatalog.benchmarks || []).slice(0, 500);
+      $("evalBenchmark").innerHTML = optionHtml("", "optional") + rows.map(row => {
+        const label = `${row.task_type || row.name} · ${row.benchmark_name || row.name}`;
+        return optionHtml(row.benchmark_name || row.name, label, {"data-task": row.task_type || row.name});
+      }).join("");
+      const examples = state.evaluationCatalog.examples || [];
+      $("evalPreset").innerHTML = optionHtml("", "Custom") + examples.map(example => optionHtml(example.id, example.label || example.id)).join("");
+      if (!$("evalPreset").dataset.initialized && examples[0]) {
+        $("evalPreset").value = examples[0].id;
+        $("evalPreset").dataset.initialized = "true";
+        applyEvaluationPreset();
+      }
+      syncEvaluationBenchmarkDefaults();
+      syncEvaluationMode();
+    }
+    function selectedEvaluationBenchmarkId() {
+      return String($("evalBenchmark").value || "").trim().toLowerCase().replace(/_/g, "-");
+    }
+    function evaluationBenchmarkHints(id = selectedEvaluationBenchmarkId()) {
+      const hints = state.evaluationCatalog.benchmark_runtime_hints || {};
+      return hints[id] || {};
+    }
+    function syncEvaluationMetricSuggestions() {
+      const datalist = $("evalMetricSuggestions");
+      if (!datalist) return;
+      const hints = evaluationBenchmarkHints();
+      const dimensions = hints.dimensions || hints.metrics || [];
+      const presets = Object.keys(hints.presets || {});
+      datalist.innerHTML = [...dimensions, ...presets].map(item => `<option value="${escapeHtml(item)}"></option>`).join("");
+    }
+    function syncEvaluationBenchmarkDefaults() {
+      const benchmarkId = selectedEvaluationBenchmarkId();
+      const metrics = $("evalMetrics");
+      const datasetRoot = $("evalDatasetRoot");
+      const resultsPath = $("evalResultsPath");
+      syncEvaluationMetricSuggestions();
+      const hints = evaluationBenchmarkHints(benchmarkId);
+      const dimensions = hints.dimensions || hints.metrics || [];
+      const defaultMetrics = hints.default_metrics || (hints.primary_presets && hints.primary_presets.default) || dimensions.slice(0, 1);
+      if (hints && Object.keys(hints).length) {
+        metrics.placeholder = dimensions.slice(0, 4).concat(Object.keys(hints.presets || {}).slice(0, 2)).join(", ") || "metric_or_dimension";
+        if (!metrics.value.trim() || ["artifact_count", "required_artifacts_present"].includes(metrics.value.trim())) {
+          metrics.value = (defaultMetrics && defaultMetrics.length ? defaultMetrics : dimensions.slice(0, 1)).join(", ");
+        }
+        datasetRoot.placeholder = "generated videos or benchmark data root";
+        resultsPath.placeholder = "official results file, or generated video directory for supported runners";
+      } else {
+        metrics.placeholder = "artifact_count, required_artifacts_present";
+        datasetRoot.placeholder = "optional benchmark dataset root";
+        resultsPath.placeholder = "/path/to/results.jsonl for existing-results mode";
+      }
+    }
+    function selectedEvaluationPreset() {
+      const id = $("evalPreset").value;
+      return (state.evaluationCatalog.examples || []).find(example => example.id === id);
+    }
+    function setInputValue(id, value) {
+      const el = $(id);
+      if (!el) return;
+      el.value = Array.isArray(value) ? value.join(", ") : String(value ?? "");
+    }
+    function ensureSelectOption(id, value, label) {
+      if (!value) return;
+      const el = $(id);
+      if (!el || Array.from(el.options).some(option => option.value === value)) return;
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label || value;
+      el.appendChild(option);
+    }
+    function setJsonInputValue(id, value) {
+      const el = $(id);
+      if (!el) return;
+      el.value = JSON.stringify(value || {}, null, 2);
+    }
+    function applyEvaluationPreset() {
+      const preset = selectedEvaluationPreset();
+      if (!preset) {
+        syncEvaluationMode();
+        return;
+      }
+      setInputValue("evalMode", preset.eval_mode || "existing-results");
+      ensureSelectOption("evalBenchmark", preset.benchmark_id || "", preset.benchmark_id || "");
+      setInputValue("evalBenchmark", preset.benchmark_id || "");
+      setInputValue("evalResultsPath", preset.results_path || "");
+      setInputValue("evalRequestsPath", preset.requests_path || "");
+      setInputValue("evalModelId", preset.model_id || "");
+      setInputValue("evalModelRunner", preset.model_runner || "");
+      setInputValue("evalModelVariant", preset.model_variant_id || "");
+      setInputValue("evalDatasetId", preset.dataset_id || "");
+      setInputValue("evalDatasetRoot", preset.dataset_root || "");
+      setInputValue("evalDatasetManifest", preset.dataset_manifest || "");
+      setInputValue("evalMetrics", preset.metrics || ["artifact_count"]);
+      setInputValue("evalRequiredArtifacts", preset.required_artifacts || []);
+      setJsonInputValue("evalModelParameters", preset.call_kwargs || {});
+      setJsonInputValue("evalRuntime", preset.load_kwargs || {});
+      syncEvaluationBenchmarkDefaults();
+      syncEvaluationMode();
+    }
+    function syncEvaluationMode() {
+      const evaluation = $("jobType").value === "evaluation";
+      const mode = $("evalMode").value;
+      const modelMode = mode === "model" || mode === "model-benchmark" || mode === "generate-and-score";
+      const existingMode = mode === "existing-results";
+      const benchmarkRuntimeMode = evaluation && Object.keys(evaluationBenchmarkHints()).length > 0;
+      setFieldVisible("evalResultsPath", evaluation && existingMode);
+      setFieldVisible("evalRequestsPath", evaluation && (mode === "model" || mode === "model-benchmark"));
+      ["evalModelId", "evalModelRunner", "evalModelVariant", "evalCacheMode", "evalModelParameters"].forEach(id => setFieldVisible(id, evaluation && modelMode));
+      setFieldVisible("evalRuntime", evaluation && (modelMode || benchmarkRuntimeMode));
+      setFieldVisible("evalDatasetId", evaluation);
+      setFieldVisible("evalDatasetRoot", evaluation && mode !== "generate-and-score");
+      setFieldVisible("evalDatasetManifest", evaluation && mode === "generate-and-score");
+    }
+    function populateModelSelect() {
+      const workload = $("workloadType").value;
+      const models = state.models.filter(m => m.workload_type === workload || workload === "inference");
+      $("modelSelect").innerHTML = models.map(m => optionHtml(m.id, `${m.name} · ${m.category}`)).join("");
+      populateInferSpecControls();
+      applySelectedModelDefaults();
+    }
+    function inputTypeForInferField(field) {
+      const kind = field.kind || "string";
+      if (kind === "integer" || kind === "number") return "number";
+      if (kind === "path") return "text";
+      if (kind === "boolean") return "checkbox";
+      return "text";
+    }
+    function inferFieldInputValue(field) {
+      const value = field.default;
+      if (value === null || value === undefined) return "";
+      if (Array.isArray(value) || (typeof value === "object" && value !== null)) return JSON.stringify(value);
+      return String(value);
+    }
+    function renderInferDynamicFields() {
+      const fields = inferTaskFields().filter(field => !DEDICATED_INFER_FIELD_IDS.has(normalizeFieldId(field.field_id)));
+      $("inferDynamicFields").innerHTML = fields.map(field => {
+        const fieldId = normalizeFieldId(field.field_id);
+        const inputId = `inferDyn_${fieldId.replace(/[^a-z0-9-]/g, "_")}`;
+        const label = escapeHtml(field.label || field.field_id);
+        const target = escapeHtml(field.target || "call_kwargs");
+        const kind = escapeHtml(field.kind || "string");
+        const required = field.required ? "true" : "false";
+        const description = field.description ? ` placeholder="${escapeHtml(field.description)}"` : "";
+        const common = `id="${inputId}" data-infer-field-id="${escapeHtml(fieldId)}" data-target="${target}" data-kind="${kind}" data-required="${required}"`;
+        if (Array.isArray(field.choices) && field.choices.length) {
+          return `<label>${label}<select ${common}>${field.choices.map(choice => `<option value="${escapeHtml(choice)}" ${String(choice) === String(field.default) ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select></label>`;
+        }
+        if (field.kind === "boolean") {
+          return `<label class="check"><input type="checkbox" ${common} ${field.default ? "checked" : ""} /> ${label}</label>`;
+        }
+        const value = ` value="${escapeHtml(inferFieldInputValue(field))}"`;
+        return `<label>${label}<input type="${inputTypeForInferField(field)}" ${common}${value}${description} /></label>`;
+      }).join("");
+    }
+    function updateCreateMode() {
+      const type = $("jobType").value;
+      const inference = type === "inference";
+      const evaluation = type === "evaluation";
+      INFER_INFRA_FIELDS.forEach(id => setFieldVisible(id, inference));
+      const currentModel = selectedModel();
+      const apiBackend = inference && currentModel && currentModel.supports_api_init && $("backend").value === "api_init";
+      const attentionVisible = inference && currentModel && currentModel.supports_attention_backend;
+      setFieldVisible("endpoint", apiBackend);
+      setFieldVisible("apiKey", apiBackend);
+      setFieldVisible("attention", attentionVisible);
+      if (!attentionVisible) $("attention").value = "auto";
+      const fieldIds = inferTaskFieldIds();
+      const variantWorkload = (selectedVariant() && selectedVariant().workload_type) || (currentModel && currentModel.workload_type) || "";
+      Object.entries(INFER_TASK_FIELD_CONTROLS).forEach(([controlId, aliases]) => {
+        let visible = inference && aliases.some(alias => fieldIds.has(normalizeFieldId(alias)));
+        if (controlId === "inputPath" && variantWorkload === "t2v") visible = false;
+        if (controlId === "inputPath" && variantWorkload === "i2v") visible = true;
+        setFieldVisible(controlId, visible);
+      });
+      $("inferDynamicFields").classList.toggle("hidden", !inference || !inferTaskFields().some(field => !DEDICATED_INFER_FIELD_IDS.has(normalizeFieldId(field.field_id))));
+      $("inferSpecSummary").classList.toggle("hidden", !inference);
+      [
+        "evalMode","evalPreset","evalBenchmark","evalResultsPath","evalRequestsPath","evalOutputDir","evalRunPlanPath",
+        "evalModelId","evalModelRunner","evalModelVariant","evalDatasetId","evalDatasetRoot","evalDatasetManifest","evalCacheMode","evalMetrics",
+        "evalRequiredArtifacts","evalModelParameters","evalRuntime"
+      ].forEach(id => setFieldVisible(id, evaluation));
+      syncEvaluationMode();
+      const runtimeOptions = (selectedModel() && selectedModel().runtime_options) || {};
+      let runtimeVisible = false;
+      Object.entries(RUNTIME_CHECK_OPTIONS).forEach(([id, key]) => {
+        const visible = inference && !!(runtimeOptions[key] && runtimeOptions[key].supported);
+        setRuntimeCheckVisible(id, visible);
+        if (!visible) $(id).checked = false;
+        runtimeVisible = runtimeVisible || visible;
+      });
+      $("runtimeChecks").classList.toggle("hidden", !runtimeVisible);
+      let runtimeValueVisible = false;
+      Object.entries(RUNTIME_VALUE_CONTROLS).forEach(([id, spec]) => {
+        const visible = inference && !!(runtimeOptions[spec.key] && runtimeOptions[spec.key].supported);
+        setFieldVisible(id, visible);
+        runtimeValueVisible = runtimeValueVisible || visible;
+      });
+      $("runtimeValues").classList.toggle("hidden", !runtimeValueVisible);
+    }
+    function selectedModel() {
+      return state.models.find(m => m.id === $("modelSelect").value);
+    }
+    function selectedVariant() {
+      const model = selectedModel();
+      const variants = model && model.variants && model.variants.length ? model.variants : [{variant_id: "default", label: "Default", model_ref: model ? model.model_ref : ""}];
+      return variants.find(v => v.variant_id === $("variantSelect").value) || variants[0];
+    }
+    function selectedTaskProfile() {
+      const model = selectedModel();
+      const variant = selectedVariant();
+      const tasks = variant && variant.tasks ? variant.tasks : model && model.tasks && model.tasks.length ? model.tasks : [{task_id: "default", label: "Default Inference", inputs: [], outputs: []}];
+      return tasks.find(t => t.task_id === $("taskProfile").value) || tasks[0];
+    }
+    function taskDefaultForAliases(aliases, fallback) {
+      const normalized = new Set(aliases.map(alias => normalizeFieldId(alias)));
+      const field = inferTaskFields().find(item => normalized.has(normalizeFieldId(item.field_id)));
+      if (!field) return undefined;
+      if (field.default === null || field.default === undefined) return selectedVariant()?.tasks ? "" : fallback;
+      return field.default;
+    }
+    function taskFieldForAliases(aliases) {
+      const normalized = new Set(aliases.map(alias => normalizeFieldId(alias)));
+      return inferTaskFields().find(item => normalized.has(normalizeFieldId(item.field_id)));
+    }
+    function applyDedicatedInferValue(controlId, aliases, value, payload) {
+      if (!fieldControlVisible(controlId) || $(controlId).value === "") return;
+      const field = taskFieldForAliases(aliases);
+      const fieldId = field ? normalizeFieldId(field.field_id) : normalizeFieldId(aliases[0] || controlId);
+      const target = field && field.target ? field.target : "params";
+      applyInferValue(target, fieldId, value, payload);
+    }
+    function setControlDefault(id, value) {
+      if (value === undefined || value === null) return;
+      const el = $(id);
+      if (!el) return;
+      el.value = String(value);
+    }
+    function applyInferTaskDefaults() {
+      const variant = selectedVariant() || {};
+      const callKwargs = variant.call_kwargs || {};
+      setControlDefault("prompt", variant.default_prompt || taskDefaultForAliases(["prompt"], ""));
+      setControlDefault("inputPath", variant.default_input_path || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.inputPath, ""));
+      setControlDefault("numFrames", callKwargs.num_frames || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.numFrames, state.settings.num_frames));
+      setControlDefault("fps", callKwargs.fps || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.fps, state.settings.fps));
+      setControlDefault("height", callKwargs.height || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.height, state.settings.height));
+      setControlDefault("width", callKwargs.width || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.width, state.settings.width));
+      setControlDefault("steps", callKwargs.num_inference_steps || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.steps, state.settings.num_inference_steps));
+      setControlDefault("guidance", callKwargs.guidance_scale || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.guidance, state.settings.guidance_scale));
+      setControlDefault("seed", callKwargs.seed || taskDefaultForAliases(INFER_TASK_FIELD_CONTROLS.seed, state.settings.seed));
+    }
+    function populateInferSpecControls() {
+      const model = selectedModel();
+      const variants = model && model.variants && model.variants.length ? model.variants : [{variant_id: "default", label: "Default"}];
+      const tasks = model && model.tasks && model.tasks.length ? model.tasks : [{task_id: "default", label: "Default Inference"}];
+      $("variantSelect").innerHTML = variants.map(v => optionHtml(v.variant_id, `${v.label || v.variant_id} · ${v.status || "configured"}`)).join("");
+      $("variantSelect").value = (model && model.default_variant_id) || variants[0].variant_id;
+      $("taskProfile").innerHTML = tasks.map(t => optionHtml(t.task_id, t.label || t.task_id)).join("");
+      $("taskProfile").value = (model && model.default_task_id) || tasks[0].task_id;
+      renderInferDynamicFields();
+      renderInferSpecSummary();
+      updateCreateMode();
+      applyInferTaskDefaults();
+    }
+    function backendOptionsForModel(model) {
+      const options = [["auto", "auto"]];
+      if (!model || model.supports_from_pretrained) options.push(["from_pretrained", "from_pretrained"]);
+      if (model && model.supports_api_init) options.push(["api_init", "api_init"]);
+      return options;
+    }
+    function refreshBackendOptions(selected) {
+      const model = selected || selectedModel();
+      const previous = $("backend").value || "auto";
+      const options = backendOptionsForModel(model);
+      $("backend").innerHTML = options.map(([value, label]) => optionHtml(value, label)).join("");
+      const values = new Set(options.map(([value]) => value));
+      const preferred = model && model.backend && values.has(model.backend) ? model.backend : "auto";
+      $("backend").value = values.has(previous) ? previous : preferred;
+    }
+    function renderInferSpecSummary() {
+      const variant = selectedVariant();
+      const task = selectedTaskProfile();
+      const inputs = ((task && task.inputs) || []).map(item => item.label || item.field_id).join(", ") || "generic inputs";
+      const outputs = ((task && task.outputs) || []).map(item => item.kind || item.artifact_id).join(", ") || "artifacts";
+      $("inferSpecSummary").innerHTML = `<span>Inference Contract</span><strong>${escapeHtml(variant.label || variant.variant_id)} / ${escapeHtml(task.label || task.task_id)}</strong><p class="muted tiny">Inputs: ${escapeHtml(inputs)}</p><p class="muted tiny">Outputs: ${escapeHtml(outputs)}</p>`;
+    }
+    function applySelectedRuntimeDefaults() {
+      const runtimeOptions = (selectedModel() && selectedModel().runtime_options) || {};
+      ["vaeOffload", "textOffload", "fuseQkv", "inplaceResidual", "staticCrossKv", "fusedRope"].forEach(id => {
+        const option = runtimeOptions[RUNTIME_CHECK_OPTIONS[id]] || {};
+        if ($(id) && option.supported) $(id).checked = !!option.default;
+      });
+      Object.entries(RUNTIME_VALUE_CONTROLS).forEach(([id, spec]) => {
+        const option = runtimeOptions[spec.key] || {};
+        if (!$(id) || !option.supported) return;
+        const value = option.default === undefined || option.default === null ? spec.fallback : option.default;
+        $(id).value = String(value);
+      });
+    }
+    function applySelectedModelDefaults() {
+      const selected = selectedModel();
+      const variant = selectedVariant();
+      if (selected) {
+        refreshBackendOptions(selected);
+        const backendSetting = state.settings.backend || "";
+        const backend = backendSetting && backendSetting !== "auto" ? backendSetting : (selected.backend || "auto");
+        const backendValues = new Set(backendOptionsForModel(selected).map(([value]) => value));
+        $("backend").value = backendValues.has(backend) ? backend : "auto";
+        $("modelRef").value = (variant && variant.model_ref) || selected.model_ref || "";
+        $("endpoint").value = selected.endpoint || "";
+      }
+      applySelectedRuntimeDefaults();
+      updateCreateMode();
+      applyInferTaskDefaults();
+    }
+    function renderCatalog() {
+      const q = $("catalogSearch").value.toLowerCase();
+      const workload = $("catalogWorkload").value;
+      let models = state.models;
+      if (workload !== "all") models = models.filter(m => m.workload_type === workload || (m.variants || []).some(v => v.workload_type === workload));
+      if (q) models = models.filter(m => [
+        m.name,
+        m.id,
+        m.category,
+        m.family,
+        (m.tags || []).join(" "),
+        (m.aliases || []).join(" "),
+        (m.variants || []).map(v => [v.variant_id, v.label].join(" ")).join(" "),
+      ].join(" ").toLowerCase().includes(q));
+      $("catalogGrid").innerHTML = models.map(m => `<div class="itemCard catalogCard"><strong class="catalogName">${escapeHtml(m.name)}</strong>${pillHtml(m.workload_type)}<p class="catalogSummary">${escapeHtml(m.summary)}</p><p class="muted tiny">${escapeHtml(m.id)}</p>${catalogLinksHtml(m.links)}</div>`).join("");
+    }
+    async function renderGallery() {
+      const rows = await api("/api/gallery");
+      if (state.lazyVideoObserver) state.lazyVideoObserver.disconnect();
+      state.lazyVideoObserver = null;
+      state.autoVideoPreloads = 0;
+      $("galleryGrid").innerHTML = rows.length ? rows.map(row => {
+        const media = row.video_url
+          ? renderVideoBox(row.video_url, { poster: row.poster_url || row.image_url || "" })
+          : row.image_url
+            ? renderImageBox(row.image_url)
+            : "";
+        const actions = (row.visualization_actions || [])
+          .map(action => artifactVisualizeButton(action.label, action.path, action.mode, action.model_id || row.model_id || ""))
+          .filter(Boolean)
+          .join("");
+        const refine = (row.video_url || row.image_url || row.model_url) ? artifactRefineButton(row.job_id || "", row.run_id || "") : "";
+        const remove = galleryDeleteButton(row);
+        const allActions = [refine, actions, remove].filter(Boolean).join("");
+        return `<div class="itemCard galleryCard">${media}<strong>${escapeHtml(row.title)}</strong>${renderGalleryPrompt(row)}<div class="artifactLinks">${allActions}</div></div>`;
+      }).join("") : `<div class="muted">No completed inference outputs yet.</div>`;
+      hydrateLazyMedia($("galleryGrid"));
+      bindArtifactVisualizerButtons($("galleryGrid"));
+      bindGalleryDeleteButtons($("galleryGrid"));
+      bindGalleryPrompts($("galleryGrid"));
+    }
+    function galleryDeleteButton(row) {
+      if (!row.job_id && !row.run_id) return "";
+      return `<button class="artifactLink galleryDelete" type="button" data-delete-job="${escapeHtml(row.job_id || "")}" data-delete-run="${escapeHtml(row.run_id || "")}">Delete</button>`;
+    }
+    function bindGalleryDeleteButtons(root = document) {
+      root.querySelectorAll("[data-delete-job], [data-delete-run]").forEach(button => {
+        button.onclick = async () => {
+          const jobId = button.dataset.deleteJob || "";
+          const runId = button.dataset.deleteRun || "";
+          if (!jobId && !runId) return;
+          if (!window.confirm("Delete this result from Gallery? The saved run files will be removed.")) return;
+          button.disabled = true;
+          try {
+            const params = new URLSearchParams();
+            if (jobId) params.set("job_id", jobId);
+            if (runId) params.set("run_id", runId);
+            await api(`/api/gallery?${params.toString()}`, { method: "DELETE" });
+            await renderGallery();
+          } catch (error) {
+            button.disabled = false;
+            window.alert(error && error.message ? error.message : "Failed to delete gallery item.");
+          }
+        };
+      });
+    }
+    async function renderArtifacts() {
+      const rows = await api("/api/artifacts");
+      $("artifactList").innerHTML = rows.length ? rows.map(artifactCard).join("") : `<span class="muted">No artifacts yet.</span>`;
+      bindArtifactVisualizerButtons($("artifactList"));
+    }
+    function artifactCard(row) {
+      const canOpen = row.name !== "output_dir";
+      const link = canOpen ? artifactLink("Open", row.path) : "";
+      const visualize = artifactVisualizeButton(row.visualizer_label, row.path, row.visualizer_mode, row.model_id);
+      const actions = [link, visualize].filter(Boolean).join("");
+      return `<div class="metric"><span>${escapeHtml(row.model_name)} · ${escapeHtml(row.job_type)} · ${escapeHtml(row.job_id || row.run_id || "")}</span><strong>${escapeHtml(row.name)}</strong><p class="muted tiny">${escapeHtml(row.path)}</p>${actions ? `<div class="artifactLinks">${actions}</div>` : ""}</div>`;
+    }
+    function viewerUrlForBrowser(raw) {
+      if (!raw) return "";
+      try {
+        const url = new URL(raw, window.location.href);
+        const localHosts = new Set(["127.0.0.1", "localhost", "0.0.0.0"]);
+        if (localHosts.has(url.hostname) && !localHosts.has(window.location.hostname)) {
+          url.hostname = window.location.hostname;
+        }
+        return url.toString();
+      } catch {
+        return String(raw || "");
+      }
+    }
+    function visualizerStatusHtml(v) {
+      const status = v.status;
+      if (!status) return `<div class="visualizerStatus" data-visualizer-status="${escapeHtml(v.mode)}">Not running.</div>`;
+      const running = status.running ? "running" : "stopped";
+      const url = viewerUrlForBrowser(status.url);
+      const urlLink = url ? `<a class="artifactLink" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>` : "";
+      const log = status.log_path ? `<br>Log: ${escapeHtml(status.log_path)}` : "";
+      const params = status.params && Object.keys(status.params).length
+        ? `<br>Params: ${escapeHtml(JSON.stringify(status.params))}`
+        : "";
+      return `<div class="visualizerStatus" data-visualizer-status="${escapeHtml(v.mode)}">${escapeHtml(running)}${urlLink ? ` · ${urlLink}` : ""}${log}${params}</div>`;
+    }
+    function runningVisualizers() {
+      return state.visualizers.filter(item => item.status && item.status.running && item.status.url);
+    }
+    function syncVisualizerPreview(preferredMode = "") {
+      const running = runningVisualizers();
+      const panel = $("visualizerPreviewPanel");
+      const frame = $("visualizerPreviewFrame");
+      const tabs = $("visualizerPreviewTabs");
+      if (!panel || !frame) return;
+      if (!running.length) {
+        panel.classList.add("hidden");
+        frame.removeAttribute("src");
+        state.visualizerPreviewMode = "";
+        if (tabs) tabs.innerHTML = "";
+        return;
+      }
+      panel.classList.remove("hidden");
+      const modes = running.map(item => item.mode);
+      if (preferredMode && modes.includes(preferredMode)) state.visualizerPreviewMode = preferredMode;
+      if (!modes.includes(state.visualizerPreviewMode)) state.visualizerPreviewMode = modes[0];
+      const selected = running.find(item => item.mode === state.visualizerPreviewMode) || running[0];
+      if (tabs) {
+        tabs.innerHTML = running.map(item => {
+          const active = item.mode === selected.mode ? " active" : "";
+          return `<button type="button" class="visualizerPreviewTab${active}" data-preview-mode="${escapeHtml(item.mode)}">${escapeHtml(item.title || item.mode)}</button>`;
+        }).join("");
+        tabs.querySelectorAll("[data-preview-mode]").forEach(button => {
+          button.onclick = () => syncVisualizerPreview(button.dataset.previewMode);
+        });
+      }
+      const url = viewerUrlForBrowser(selected.status.url);
+      if (frame.getAttribute("src") !== url) frame.setAttribute("src", url);
+      const popout = $("visualizerPreviewPopout");
+      if (popout) popout.onclick = () => window.open(url, "_blank", "noopener,noreferrer");
+    }
+    function visualizerPlaceholder(mode, kind) {
+      if (kind === "asset") {
+        if (mode === "media") return "/path/to/preview.png or preview.mp4";
+        if (mode === "points") return "/path/to/points.npz or scene.ply";
+        if (mode === "rerun") return "/path/to/timeline.rrd";
+        if (mode === "spark") return "/path/to/scene.splat (optional)";
+        return "optional asset path";
+      }
+      if (mode === "embodied") return "http://127.0.0.1:18610";
+      if (mode === "rerun") return "existing Rerun URL (optional)";
+      return "external viewer URL";
+    }
+    function visualizerDefaultParams(mode) {
+      if (mode === "points") {
+        return {
+          coordinate_preset: "auto",
+          up_direction: "auto",
+          alignment: "auto",
+          point_size: 0.02,
+          point_shape: "circle",
+          max_points: 400000
+        };
+      }
+      return {};
+    }
+    function visualizerParamsText(mode, status) {
+      const params = status && status.params && Object.keys(status.params).length
+        ? status.params
+        : visualizerDefaultParams(mode);
+      return JSON.stringify(params, null, 2);
+    }
+    function visualizerCard(v) {
+      const mode = v.mode;
+      const status = v.status || null;
+      const aliases = (v.aliases || []).join(", ") || mode;
+      const assetDisplay = v.requires_asset ? "Asset path" : "Asset path";
+      const paramsText = visualizerParamsText(mode, status);
+      const urlField = v.accepts_external_url
+        ? `<label class="wide visualizerField">External URL<input data-visualizer-field="url" placeholder="${escapeHtml(visualizerPlaceholder(mode, "url"))}" /></label>`
+        : `<label class="wide visualizerField visualizerFieldReserved" aria-hidden="true"><span>External URL</span><input disabled tabindex="-1" aria-hidden="true" placeholder="${escapeHtml(visualizerPlaceholder(mode, "url"))}" /></label>`;
+      return `<div class="itemCard visualizerCard" data-visualizer-mode="${escapeHtml(mode)}" data-default-port="${escapeHtml(v.default_port || "")}">
+        <div class="visualizerHead">
+          <strong>${escapeHtml(v.title)}</strong>
+        </div>
+        <p class="visualizerAliases">Aliases: ${escapeHtml(aliases)}</p>
+        <div class="visualizerControls">
+          <label>Model<input data-visualizer-field="model" value="${escapeHtml(v.default_model || "")}" /></label>
+          <label>Port<input data-visualizer-field="port" type="number" min="1" max="65535" value="${escapeHtml(v.default_port || "")}" /></label>
+          <label class="wide">${escapeHtml(assetDisplay)}<input data-visualizer-field="asset" placeholder="${escapeHtml(visualizerPlaceholder(mode, "asset"))}" /></label>
+          ${urlField}
+          <label class="wide visualizerField">Params JSON<textarea data-visualizer-field="params" spellcheck="false">${escapeHtml(paramsText)}</textarea></label>
+        </div>
+        <div class="visualizerFooter">
+          <div class="visualizerActions">
+            <button class="btn primary" data-launch-visualizer="${escapeHtml(mode)}">Launch</button>
+            <button class="btn" data-open-visualizer="${escapeHtml(mode)}">Open</button>
+            <button class="btn danger" data-stop-visualizer="${escapeHtml(mode)}">Stop</button>
+          </div>
+          ${visualizerStatusHtml(v)}
+        </div>
+      </div>`;
+    }
+    function visualizerStatusKey(v) {
+      const status = v && v.status ? v.status : {};
+      return [
+        Boolean(status.running),
+        status.url || "",
+        status.asset_path || "",
+        status.model_id || "",
+        JSON.stringify(status.params || {}),
+        status.returncode ?? "",
+        status.log_path || ""
+      ].join("|");
+    }
+    function setVisualizerLiveState(text) {
+      const node = $("visualizerLiveState");
+      if (node) node.textContent = text;
+    }
+    function applyVisualizerRealtimeUpdate(nextItems) {
+      if (!Array.isArray(nextItems)) return;
+      const currentModes = state.visualizers.map(item => item.mode).join("|");
+      const nextModes = nextItems.map(item => item.mode).join("|");
+      if (!state.visualizers.length || currentModes !== nextModes || !$("visualizerGrid").children.length) {
+        state.visualizers = nextItems;
+        renderVisualizers(false);
+        return;
+      }
+      nextItems.forEach(next => {
+        const index = state.visualizers.findIndex(item => item.mode === next.mode);
+        if (index < 0) return;
+        const previous = state.visualizers[index];
+        state.visualizers[index] = next;
+        const card = document.querySelector(`[data-visualizer-mode="${CSS.escape(next.mode)}"]`);
+        if (!card) return;
+        if (visualizerStatusKey(previous) !== visualizerStatusKey(next)) {
+          const statusNode = card.querySelector(`[data-visualizer-status="${CSS.escape(next.mode)}"]`);
+          if (statusNode) statusNode.outerHTML = visualizerStatusHtml(next);
+        }
+      });
+      syncVisualizerPreview(state.visualizerPreviewMode);
+    }
+    function updateVisualizerStatus(mode, html) {
+      const node = document.querySelector(`[data-visualizer-mode="${CSS.escape(mode)}"] [data-visualizer-status="${CSS.escape(mode)}"]`);
+      if (node) node.innerHTML = html;
+    }
+    function visualizerPayload(mode) {
+      const card = document.querySelector(`[data-visualizer-mode="${CSS.escape(mode)}"]`);
+      const field = (name) => card?.querySelector(`[data-visualizer-field="${name}"]`)?.value?.trim() || "";
+      const portText = field("port");
+      const defaultPort = card?.dataset.defaultPort || "";
+      let params = {};
+      const paramsText = field("params") || "{}";
+      try {
+        params = JSON.parse(paramsText);
+      } catch (error) {
+        throw new Error(`${mode} Params JSON must be valid JSON.`);
+      }
+      if (!params || Array.isArray(params) || typeof params !== "object") {
+        throw new Error(`${mode} Params JSON must be an object.`);
+      }
+      return {
+        model_id: field("model"),
+        asset_path: field("asset"),
+        simulator_url: field("url"),
+        host: "127.0.0.1",
+        port: portText && portText !== defaultPort ? Number(portText) : null,
+        reuse: true,
+        params
+      };
+    }
+    async function launchVisualizer(mode) {
+      updateVisualizerStatus(mode, "Launching...");
+      try {
+        const status = await api(`/api/visualizers/${encodeURIComponent(mode)}/launch`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(visualizerPayload(mode))
+        });
+        const row = state.visualizers.find(item => item.mode === mode);
+        if (row) row.status = status;
+        renderVisualizers(false);
+        refreshVisualizersRealtime({force: true});
+      } catch (error) {
+        updateVisualizerStatus(mode, `Launch failed: ${escapeHtml(error.message || error)}`);
+      }
+    }
+    async function stopVisualizer(mode) {
+      await api(`/api/visualizers/${encodeURIComponent(mode)}/stop`, {method: "POST"});
+      const row = state.visualizers.find(item => item.mode === mode);
+      if (row) row.status = null;
+      renderVisualizers(false);
+      refreshVisualizersRealtime({force: true});
+    }
+    function openVisualizer(mode) {
+      const row = state.visualizers.find(item => item.mode === mode);
+      const url = row && row.status && row.status.url ? row.status.url : visualizerPayload(mode).simulator_url;
+      if (!url) {
+        updateVisualizerStatus(mode, "Launch the viewer first, or provide an external URL.");
+        return;
+      }
+      syncVisualizerPreview(mode);
+      window.open(viewerUrlForBrowser(url), "_blank", "noopener,noreferrer");
+    }
+    async function renderVisualizers(refresh = false) {
+      state.visualizers = refresh || !state.visualizers.length ? await api("/api/visualizers") : state.visualizers;
+      state.visualizerLastSync = Date.now();
+      setVisualizerLiveState(`Live sync ${new Date(state.visualizerLastSync).toLocaleTimeString()}`);
+      $("visualizerGrid").innerHTML = state.visualizers.map(v => {
+        return visualizerCard(v);
+      }).join("");
+      $("visualizerGrid").querySelectorAll("[data-launch-visualizer]").forEach(btn => btn.onclick = () => launchVisualizer(btn.dataset.launchVisualizer));
+      $("visualizerGrid").querySelectorAll("[data-open-visualizer]").forEach(btn => btn.onclick = () => openVisualizer(btn.dataset.openVisualizer));
+      $("visualizerGrid").querySelectorAll("[data-stop-visualizer]").forEach(btn => btn.onclick = () => stopVisualizer(btn.dataset.stopVisualizer));
+      syncVisualizerPreview(state.visualizerPreviewMode);
+    }
+    async function refreshVisualizersRealtime(options = {}) {
+      if (state.view !== "visualizers" && !options.force) return;
+      if (state.visualizerRefreshInFlight) return;
+      state.visualizerRefreshInFlight = true;
+      setVisualizerLiveState("Live sync updating...");
+      try {
+        const nextItems = await api("/api/visualizers");
+        applyVisualizerRealtimeUpdate(nextItems);
+        state.visualizerLastSync = Date.now();
+        setVisualizerLiveState(`Live sync ${new Date(state.visualizerLastSync).toLocaleTimeString()}`);
+      } catch (error) {
+        setVisualizerLiveState(`Live sync failed: ${error.message || error}`);
+      } finally {
+        state.visualizerRefreshInFlight = false;
+      }
+    }
+    function applySettingsToCreateForm() {
+      $("numFrames").value = state.settings.num_frames;
+      $("fps").value = state.settings.fps;
+      $("height").value = state.settings.height;
+      $("width").value = state.settings.width;
+      $("steps").value = state.settings.num_inference_steps;
+      $("guidance").value = state.settings.guidance_scale;
+      $("seed").value = state.settings.seed;
+      $("device").value = state.settings.device;
+      $("attention").value = state.settings.attention_backend;
+      const selected = state.models.find(m => m.id === $("modelSelect").value);
+      refreshBackendOptions(selected);
+      const backend = state.settings.backend || "auto";
+      const backendValues = new Set(backendOptionsForModel(selected).map(([value]) => value));
+      if (backend === "auto") {
+        $("backend").value = selected && selected.backend && backendValues.has(selected.backend) ? selected.backend : "auto";
+      } else {
+        $("backend").value = backendValues.has(backend) ? backend : "auto";
+      }
+      $("torchCompile").checked = !!state.settings.torch_compile;
+      $("cpuOffload").checked = !!state.settings.cpu_offload;
+      updateCreateMode();
+    }
+    async function loadSettings() {
+      state.settings = await api("/api/settings");
+      applySettingsToCreateForm();
+    }
+    async function loadOptional(label, loader) {
+      try {
+        await loader();
+      } catch (err) {
+        console.warn(`${label} unavailable`, err);
+        const message = err && err.message ? err.message : String(err);
+        $("serverState").textContent = `API connected · ${label} unavailable`;
+        return message;
+      }
+      return "";
+    }
+    async function initializeWorkspace() {
+      const required = await Promise.allSettled([loadSettings(), loadModels(), refreshJobs()]);
+      const failed = required.find(result => result.status === "rejected");
+      if (failed) {
+        throw failed.reason || new Error("Workspace failed to initialize.");
+      }
+      await Promise.all([
+        loadOptional("evaluation catalog", loadEvaluationCatalog),
+      ]);
+      setView(state.view);
+    }
+    async function createJob() {
+      const jobType = $("jobType").value;
+      let payload = { job_type: jobType };
+      try {
+        if (jobType === "inference") {
+          const callJson = parseJsonField("callJson", {});
+          const loadJson = parseJsonField("loadJson", {});
+          const params = {};
+          const dynamic = { params: {}, call_kwargs: {}, load_kwargs: {} };
+          document.querySelectorAll("[data-infer-field-id]").forEach(input => {
+            const value = coerceInferFieldValue(input);
+            applyInferValue(input.dataset.target || "call_kwargs", input.dataset.inferFieldId, value, dynamic);
+          });
+          applyDedicatedInferValue("numFrames", INFER_TASK_FIELD_CONTROLS.numFrames, Number($("numFrames").value || 0), dynamic);
+          applyDedicatedInferValue("fps", INFER_TASK_FIELD_CONTROLS.fps, Number($("fps").value || 16), dynamic);
+          applyDedicatedInferValue("height", INFER_TASK_FIELD_CONTROLS.height, Number($("height").value || 0), dynamic);
+          applyDedicatedInferValue("width", INFER_TASK_FIELD_CONTROLS.width, Number($("width").value || 0), dynamic);
+          applyDedicatedInferValue("steps", INFER_TASK_FIELD_CONTROLS.steps, Number($("steps").value || 0), dynamic);
+          applyDedicatedInferValue("guidance", INFER_TASK_FIELD_CONTROLS.guidance, Number($("guidance").value || 0), dynamic);
+          applyDedicatedInferValue("seed", INFER_TASK_FIELD_CONTROLS.seed, Number($("seed").value || -1), dynamic);
+          if (fieldControlVisible("attention")) params.attention_backend = $("attention").value;
+          if (runtimeCheckVisible("torchCompile")) params.torch_compile = $("torchCompile").checked;
+          if (runtimeCheckVisible("cpuOffload")) params.cpu_offload = $("cpuOffload").checked;
+          if (runtimeCheckVisible("vaeOffload")) params.vae_cpu_offload = $("vaeOffload").checked;
+          if (runtimeCheckVisible("textOffload")) params.text_encoder_cpu_offload = $("textOffload").checked;
+          if (runtimeCheckVisible("fuseQkv")) params.fuse_qkv = $("fuseQkv").checked;
+          if (runtimeCheckVisible("inplaceResidual")) params.inplace_residual = $("inplaceResidual").checked;
+          if (runtimeCheckVisible("staticCrossKv")) params.static_cross_kv = $("staticCrossKv").checked;
+          if (runtimeCheckVisible("fusedRope")) params.fused_rope = $("fusedRope").checked;
+          Object.entries(RUNTIME_VALUE_CONTROLS).forEach(([id, spec]) => {
+            if (!fieldControlVisible(id)) return;
+            const raw = $(id).value;
+            params[spec.key] = spec.kind === "integer" ? Number(raw) : raw;
+          });
+          Object.assign(params, dynamic.params);
+          payload = {
+            job_type: "inference",
+            workload_type: $("workloadType").value,
+            model_id: $("modelSelect").value,
+            variant_id: $("variantSelect").value,
+            task_profile_id: $("taskProfile").value,
+            prompt: fieldControlVisible("prompt") ? $("prompt").value : (dynamic.prompt || ""),
+            negative_prompt: fieldControlVisible("negativePrompt") ? $("negativePrompt").value : "",
+            input_path: fieldControlVisible("inputPath") ? $("inputPath").value : (dynamic.input_path || ""),
+            model_ref: $("modelRef").value,
+            backend: $("backend").value,
+            endpoint: fieldControlVisible("endpoint") ? $("endpoint").value : "",
+            api_key: fieldControlVisible("apiKey") ? $("apiKey").value : "",
+            device: $("device").value,
+            params,
+            call_kwargs: {...dynamic.call_kwargs, ...callJson},
+            load_kwargs: {...dynamic.load_kwargs, ...loadJson}
+          };
+        } else if (jobType === "evaluation") {
+          payload = {
+            job_type: "evaluation",
+            eval_mode: $("evalMode").value,
+            benchmark_id: $("evalBenchmark").value,
+            results_path: $("evalResultsPath").value,
+            requests_path: $("evalRequestsPath").value,
+            output_dir: $("evalOutputDir").value,
+            run_plan_path: $("evalRunPlanPath").value,
+            model_id: $("evalModelId").value,
+            model_runner: $("evalModelRunner").value,
+            model_variant_id: $("evalModelVariant").value,
+            dataset_id: $("evalDatasetId").value,
+            dataset_root: $("evalDatasetRoot").value,
+            dataset_manifest: $("evalDatasetManifest").value,
+            generation_cache_mode: $("evalCacheMode").value,
+            metrics: splitList($("evalMetrics").value),
+            required_artifacts: splitList($("evalRequiredArtifacts").value),
+            call_kwargs: parseJsonField("evalModelParameters", {}),
+            load_kwargs: parseJsonField("evalRuntime", {})
+          };
+        } else {
+          throw new Error(`Unsupported job type: ${jobType}`);
+        }
+      } catch (err) {
+        alert(err.message || "JSON fields must be valid.");
+        return;
+      }
+      if (jobType === "evaluation" && ["score-artifacts", "model-benchmark", "generate-and-score"].includes(payload.eval_mode)) {
+        const prepared = await api("/api/evaluation/prepare", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify(payload)
+        });
+        if (!prepared.ready) {
+          const errors = (prepared.issues || []).filter(issue => issue.severity === "error").map(issue => issue.message);
+          throw new Error(errors.join("\n") || "Evaluation preflight failed.");
+        }
+      }
+      const job = await api("/api/jobs", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+      state.activeJob = job.id;
+      state.detailRenderKey = "";
+      state.detailLogCount = 0;
+      state.detailTab = "logs";
+      $("createDialog").close();
+      setView(jobType);
+      await refreshJobs();
+    }
+    document.querySelectorAll(".navBtn").forEach(btn => btn.onclick = () => { setView(btn.dataset.view); if (btn.dataset.view === "gallery") renderGallery(); if (btn.dataset.view === "artifacts") renderArtifacts(); if (btn.dataset.view === "visualizers") renderVisualizers(true); });
+    $("openCreate").onclick = () => { updateCreateMode(); $("createDialog").showModal(); };
+    $("createJob").onclick = (event) => { event.preventDefault(); createJob().catch(err => alert(err.message)); };
+    $("refreshJobs").onclick = () => refreshJobs();
+    $("refreshVisualizers").onclick = () => refreshVisualizersRealtime({force: true});
+    $("jobType").onchange = updateCreateMode;
+    $("jobTypeFilter").onchange = renderJobs;
+    $("statusFilter").onchange = renderJobs;
+    $("workloadType").onchange = populateModelSelect;
+    $("evalPreset").onchange = applyEvaluationPreset;
+    $("evalMode").onchange = syncEvaluationMode;
+    $("evalBenchmark").onchange = () => { syncEvaluationBenchmarkDefaults(); syncEvaluationMode(); };
+    $("modelSelect").onchange = () => { populateInferSpecControls(); applySelectedModelDefaults(); };
+    $("variantSelect").onchange = () => { renderInferDynamicFields(); renderInferSpecSummary(); applySelectedModelDefaults(); };
+    $("taskProfile").onchange = () => { renderInferDynamicFields(); renderInferSpecSummary(); updateCreateMode(); applyInferTaskDefaults(); };
+    $("backend").onchange = updateCreateMode;
+    $("catalogSearch").oninput = renderCatalog;
+    $("catalogWorkload").onchange = renderCatalog;
+    $("stopJob").onclick = async () => { if (!state.activeJob) return; await api(`/api/jobs/${state.activeJob}/stop`, {method:"POST"}); await refreshJobs(); };
+    function readStoredSplitLeft(key) {
+      if (!key) return null;
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw == null || raw === "") return null;
+        const value = Number(raw);
+        return Number.isFinite(value) && value > 0 ? value : null;
+      } catch (_) {
+        return null;
+      }
+    }
+    function splitHandleWidth(split) {
+      const raw = getComputedStyle(split).getPropertyValue("--split-handle");
+      const value = Number.parseFloat(raw);
+      return Number.isFinite(value) && value > 0 ? value : 10;
+    }
+    function clampSplitLeft(split, width) {
+      const minLeft = Number(split.dataset.splitMinLeft || 240);
+      const minRight = Number(split.dataset.splitMinRight || 360);
+      const handle = splitHandleWidth(split);
+      const total = split.getBoundingClientRect().width;
+      const available = Math.max(0, total - handle);
+      // Absolute floors so a narrow container never forces an impossible layout.
+      const hardMinLeft = Math.min(minLeft, Math.max(160, Math.floor(available * 0.25)));
+      const hardMinRight = Math.min(minRight, Math.max(240, Math.floor(available * 0.35)));
+      const maxLeft = Math.max(hardMinLeft, available - hardMinRight);
+      const minAllowed = Math.min(hardMinLeft, maxLeft);
+      return Math.round(Math.min(Math.max(Number(width) || minAllowed, minAllowed), maxLeft));
+    }
+    function applySplitLeft(split, width, { persist = true } = {}) {
+      if (!split || split.clientWidth <= 0) return null;
+      const handle = split.querySelector(".splitHandle");
+      if (handle && getComputedStyle(handle).display === "none") return null;
+      const next = clampSplitLeft(split, width);
+      split.style.setProperty("--split-left", `${next}px`);
+      if (persist && split.dataset.splitKey) {
+        try { localStorage.setItem(split.dataset.splitKey, String(next)); } catch (_) {}
+      }
+      return next;
+    }
+    function currentSplitLeft(split, fallback) {
+      const inline = Number.parseFloat(split.style.getPropertyValue("--split-left"));
+      if (Number.isFinite(inline) && inline > 0) return inline;
+      const computed = Number.parseFloat(getComputedStyle(split).getPropertyValue("--split-left"));
+      if (Number.isFinite(computed) && computed > 0) return computed;
+      return fallback;
+    }
+    function initResizableSplits() {
+      document.querySelectorAll(".split[data-split-key]").forEach(split => {
+        const handle = split.querySelector(".splitHandle");
+        if (!handle || handle.dataset.splitBound === "1") return;
+        handle.dataset.splitBound = "1";
+        const defaultWidth = Number(split.dataset.splitDefault || 360);
+        const stored = readStoredSplitLeft(split.dataset.splitKey);
+        const syncFromStorageOrDefault = () => {
+          applySplitLeft(split, stored == null ? defaultWidth : stored, { persist: false });
+        };
+        // Layout may not be ready on first paint; sync now and on next frames.
+        syncFromStorageOrDefault();
+        requestAnimationFrame(syncFromStorageOrDefault);
+
+        let dragging = false;
+        let activePointerId = null;
+
+        const onPointerMove = (event) => {
+          if (!dragging || event.pointerId !== activePointerId) return;
+          const left = event.clientX - split.getBoundingClientRect().left;
+          applySplitLeft(split, left);
+        };
+        const stopDrag = (event) => {
+          if (!dragging) return;
+          if (event && activePointerId != null && event.pointerId !== activePointerId) return;
+          dragging = false;
+          const pointerId = activePointerId;
+          activePointerId = null;
+          split.classList.remove("is-resizing");
+          handle.removeEventListener("pointermove", onPointerMove);
+          handle.removeEventListener("pointerup", stopDrag);
+          handle.removeEventListener("pointercancel", stopDrag);
+          if (pointerId != null) {
+            try { handle.releasePointerCapture(pointerId); } catch (_) {}
+          }
+        };
+        handle.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          if (getComputedStyle(handle).display === "none") return;
+          event.preventDefault();
+          dragging = true;
+          activePointerId = event.pointerId;
+          split.classList.add("is-resizing");
+          handle.setPointerCapture(event.pointerId);
+          handle.addEventListener("pointermove", onPointerMove);
+          handle.addEventListener("pointerup", stopDrag);
+          handle.addEventListener("pointercancel", stopDrag);
+          onPointerMove(event);
+        });
+        handle.addEventListener("dblclick", () => {
+          if (getComputedStyle(handle).display === "none") return;
+          applySplitLeft(split, defaultWidth);
+        });
+        handle.addEventListener("keydown", (event) => {
+          if (getComputedStyle(handle).display === "none") return;
+          const current = currentSplitLeft(split, defaultWidth);
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            applySplitLeft(split, current - 24);
+          } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            applySplitLeft(split, current + 24);
+          } else if (event.key === "Home") {
+            event.preventDefault();
+            applySplitLeft(split, defaultWidth);
+          }
+        });
+      });
+
+      // One shared resize listener reclamps all splits when the viewport changes.
+      if (!window.__wfSplitResizeBound) {
+        window.__wfSplitResizeBound = true;
+        let resizeTimer = 0;
+        window.addEventListener("resize", () => {
+          window.clearTimeout(resizeTimer);
+          resizeTimer = window.setTimeout(() => {
+            document.querySelectorAll(".split[data-split-key]").forEach(split => {
+              const fallback = Number(split.dataset.splitDefault || 360);
+              applySplitLeft(split, currentSplitLeft(split, fallback), { persist: false });
+            });
+          }, 50);
+        });
+      }
+    }
+    initResizableSplits();
+    initializeWorkspace()
+      .catch(err => { $("serverState").textContent = err.message; });
+    setInterval(refreshJobs, 3000);
+    setInterval(() => refreshVisualizersRealtime(), 1500);
+  </script>
+</body>
+</html>

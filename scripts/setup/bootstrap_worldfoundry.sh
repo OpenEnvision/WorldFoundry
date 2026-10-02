@@ -262,7 +262,7 @@ Next shell commands:
   source ${ENV_FILE}
   conda activate "\${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
   bash scripts/setup/link_hf_checkpoints.sh --ckpt-dir "\${WORLDFOUNDRY_CKPT_DIR}" --hfd-root "\${WORLDFOUNDRY_HFD_ROOT}" --hf-hub-cache "\${HF_HUB_CACHE}" --default-world
-  PYTHONPATH=${WORLDFOUNDRY_SOURCE_ROOT} WORLDFOUNDRY_WORKSPACE_MAX_JOBS=${MAX_JOBS} python -m worldfoundry.studio.workspace_app --host ${WORKSPACE_HOST} --port ${WORKSPACE_PORT}
+  PYTHONPATH=${WORLDFOUNDRY_SOURCE_ROOT} WORLDFOUNDRY_WORKSPACE_MAX_JOBS=${MAX_JOBS} python -m worldfoundry.studio.serving.workspace --host ${WORKSPACE_HOST} --port ${WORKSPACE_PORT}
 
 Open:
   http://${WORKSPACE_HOST}:${WORKSPACE_PORT}/
@@ -275,5 +275,5 @@ if [[ "$START_WORKSPACE" == "1" ]]; then
   fi
   export PYTHONPATH="$WORLDFOUNDRY_SOURCE_ROOT${PYTHONPATH:+:$PYTHONPATH}"
   export WORLDFOUNDRY_WORKSPACE_MAX_JOBS="$MAX_JOBS"
-  exec conda run -p "$ENV_PREFIX" python -m worldfoundry.studio.workspace_app --host "$WORKSPACE_HOST" --port "$WORKSPACE_PORT"
+  exec conda run -p "$ENV_PREFIX" python -m worldfoundry.studio.serving.workspace --host "$WORKSPACE_HOST" --port "$WORKSPACE_PORT"
 fi

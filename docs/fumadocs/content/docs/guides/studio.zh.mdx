@@ -10,7 +10,6 @@ WorldFoundry Studio 是围绕仓库 pipelines 的薄可视化入口。模型在�
 Studio 现在有多前端入口：
 
 - **`world`** — 交互世界模型。独立 WebRTC 控制台：常驻模型、可靠按键边沿 DataChannel、有界内存帧队列、单一持续视频轨、沉浸式全屏和实时运行日志；控制热路径不生成 MP4。
-- **`native-world`** — CUDA/C++/ImGui world explorer（`worldfoundry/studio/native/world_explorer`）。别名：`world-explorer`、`imgui`。
 - **`points`** — Viser 点云 / mesh。直接启动原生 Viser，不嵌回游戏机界面。
 - **`embodied`** — 具身智能仿真器。**计划中。** 目前只是 URL bridge：Studio 登记外部 simulator URL 并给出 tunnel 提示，还没有仓内 embodied viewer。
 - **`spark`** — 3DGS。启动独立 Spark 3DGS viewer，复用项目内置 Spark frontend，并允许通过 `WORLDFOUNDRY_MODEL_DIR` / `WORLDFOUNDRY_ARTIFACT_DIR` 暴露本地资产。
@@ -432,7 +431,7 @@ pip install 'worldfoundry[studio_realtime,rtx_postprocess]'
 
 export WORLDFOUNDRY_REALTIME_POSTPROCESS_PRESET=rtx-super-resolution
 export WORLDFOUNDRY_REALTIME_RTX_SCALE=1.5
-python -m worldfoundry.studio.app <model-id> --frontend world --device cuda:0
+python -m worldfoundry.studio.ui.gradio_app <model-id> --frontend world --device cuda:0
 ```
 
 服务启动前，adapter 会检查 package、CUDA 可见性、device index、Turing 或更新
@@ -634,20 +633,20 @@ Gallery 提供最近 inference outputs 和 preview artifacts 的紧凑视觉检�
 
 ## 启动矩阵
 
-- **LingBot realtime** — `python -m worldfoundry.studio.app lingbot-world --variant fast --frontend world --device cuda:1`. 常驻 runtime、持续 WebRTC 视频和 DataChannel 控制。
-- **LingBot camera** — `python -m worldfoundry.studio.app lingbot-world --variant base-camera --device cuda:1`. 更慢，偏 camera-centric profile。
-- **MatrixGame** — `python -m worldfoundry.studio.app matrix-game-2 --device cuda:1`. 交互式 world navigation。
-- **WorldCam** — `python -m worldfoundry.studio.app worldcam --device cuda:1`. Camera-path generation 和 view control。
-- **Hosted APIs** — `python -m worldfoundry.studio.app <model> --backend api_init --endpoint <url>`. Endpoint 在启动时显式固定。
-- **Viser 点云** — `python -m worldfoundry.studio.app pi3 --frontend points --asset /path/to/scene.ply --port 18590`. 原生 Viser UI。
-- **Spark 3DGS** — `python -m worldfoundry.studio.app vggt --frontend spark --asset /path/to/scene.splat --port 8765`. 独立 Spark canvas，不进入游戏机 shell。
-- **Embodied simulator** — `python -m worldfoundry.studio.app openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **计划中。** 仅登记外部 simulator URL，不会启动仓内 viewer。
+- **LingBot realtime** — `python -m worldfoundry.studio.ui.gradio_app lingbot-world --variant fast --frontend world --device cuda:1`. 常驻 runtime、持续 WebRTC 视频和 DataChannel 控制。
+- **LingBot camera** — `python -m worldfoundry.studio.ui.gradio_app lingbot-world --variant base-camera --device cuda:1`. 更慢，偏 camera-centric profile。
+- **MatrixGame** — `python -m worldfoundry.studio.ui.gradio_app matrix-game-2 --device cuda:1`. 交互式 world navigation。
+- **WorldCam** — `python -m worldfoundry.studio.ui.gradio_app worldcam --device cuda:1`. Camera-path generation 和 view control。
+- **Hosted APIs** — `python -m worldfoundry.studio.ui.gradio_app <model> --backend api_init --endpoint <url>`. Endpoint 在启动时显式固定。
+- **Viser 点云** — `python -m worldfoundry.studio.ui.gradio_app pi3 --frontend points --asset /path/to/scene.ply --port 18590`. 原生 Viser UI。
+- **Spark 3DGS** — `python -m worldfoundry.studio.ui.gradio_app vggt --frontend spark --asset /path/to/scene.splat --port 8765`. 独立 Spark canvas，不进入游戏机 shell。
+- **Embodied simulator** — `python -m worldfoundry.studio.ui.gradio_app openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **计划中。** 仅登记外部 simulator URL，不会启动仓内 viewer。
 
 推荐本地启动：
 
 ```bash
 cd /path/to/WorldFoundry
-PYTHONPATH=. WORLDFOUNDRY_STUDIO_PORT=7868 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m worldfoundry.studio.app \
+PYTHONPATH=. WORLDFOUNDRY_STUDIO_PORT=7868 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m worldfoundry.studio.ui.gradio_app \
   lingbot-world \
   --variant fast \
   --model-ref /path/to/checkpoints/lingbot-world-fast \
@@ -852,7 +851,7 @@ Workspace 的 visualizer iframe 已经授予 fullscreen 权限。
             <code>--frontend</code>
           </div>
         </div>
-        <p><code>auto</code>、<code>world</code>、<code>native-world</code>（CUDA/C++/ImGui explorer）、<code>points</code>、<code>spark</code>、<code>embodied</code>，或 <code>unified</code>（Gradio，需要 <code>worldfoundry[ui]</code>）。也接受 <code>viser</code>、<code>3dgs</code>、<code>imgui</code> 等别名。</p>
+        <p><code>auto</code>、<code>world</code>、<code>points</code>、<code>spark</code>、<code>embodied</code>，或 <code>unified</code>（Gradio，需要 <code>worldfoundry[ui]</code>）。也接受 <code>viser</code>、<code>3dgs</code> 等别名。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -1100,3 +1099,37 @@ Studio 只支持 `WORLDFOUNDRY_*` 环境变量。
 只有当对应官方配置已经通过仓内 Studio 或 Studio-compatible API 路径运行后，
 才把 demo media 放到公开文档中。保留对应 run manifest、解码后的视频元数据和
 视觉 QA 记录，确保页面中嵌入的视频可以追溯到实际 release candidate run。
+
+## 代码组织
+
+Studio 的实现各自只有一个 canonical import path，根目录仅保留 CLI 与 worker 入口。
+
+| 路径 | 职责 |
+| --- | --- |
+| `inference/catalog.py` | pipeline 发现、模型默认参数与 checkpoint 解析 |
+| `inference/config.py` | 运行环境与分布式进程拓扑 |
+| `inference/execution.py` | 输入准备、模型加载、执行与原始 artifact 保存 |
+| `inference/dispatch.py` | GPU admission、受管子进程、resident worker、取消与 deadline |
+| `inference/paths.py`、`inference/variants.py` | 运行路径和模型变体选择 |
+| `serving/workspace.py`、`serving/jobs.py` | Workspace API 与 UI 任务调度 |
+| `serving/` | 认证、文件服务、遥测和 realtime transport |
+| `ui/` | Gradio 构建、浏览器启动选项、输入组件与模型展示 |
+| `ui/workspace.html`、`ui/workspace.py` | 打包的 Workspace 页面和资源加载器 |
+| `visualization/` | artifact 发现、viewer 路由与 geometry 展示 |
+| `cli.py`、`runtime_job.py`、`workspace_job.py` | 安装命令与子进程入口 |
+
+推理模块不导入 UI、serving 或 visualization。`StudioManager` 默认保存原始 artifact；需要预览的前端显式安装 `visualization.studio.prepare_run_record` 为 `record_processor`。原 `studio/native` 的 CUDA/C++/ImGui 前端已删除。
+
+`visualization/plugins` 保留实际调用的实现：`perception/render.py` 用于 CLI 和 Grounding DINO；`perception/human_pose.py` 生成 Wan Animate conditioning；`scene3d/projection.py` 服务 VIPE；`scene3d/depth_anything_v3/export_vis.py` 服务 DA3 导出；`styles/colormaps.py` 提供 depth / normal 着色。未使用的 media、robotics、pixelSplat training 可视化、重复 DVLT、HED 和 sky-segmentation/GLB 链已删除。
+
+`worldfoundry/representations` 仍是模型 adapter 包。VGGT、Pi3、WorldFM、Lyra 等 pipeline 直接使用其实现，因此保留；无实现和调用的 pixelSplat / Splatt3R marker class 已删除。
+
+### 推理生命周期
+
+受管 CUDA 推理在启动前获取设备租约。显式设备选择和 one-shot fallback 使用同一 admission 策略，resident worker 在所属进程组停止前持续持有租约。Linux 文件锁协调同一主机上的 WorldFoundry 控制器；`WORLDFOUNDRY_GPU_LEASE_DIR` 指定共享锁目录，默认 `/tmp/worldfoundry-gpu-leases-<uid>`。共享 GPU 的控制器应使用相同目录和物理设备标识；未受管 workload 不在此协调范围内。
+
+`WORLDFOUNDRY_STUDIO_INFERENCE_TIMEOUT` 为 GPU 排队、worker 分配、请求排队、执行和输出 draining 提供一个 deadline，默认继承 resident timeout（未设置时六小时），`0` 关闭。取消和失败先清理所属进程组，再释放租约。主动创建其他 session 的进程不在进程组所有权约定内；托管 API 使用 provider 的 timeout / cancellation。
+
+权重 pipeline 可缓存；API client 按请求创建，避免保留其他请求的凭据。持久命令任务使用独立 supervisor 和原子 completion receipt，控制器退出后仍能恢复真实状态。恢复后的进程必须通过 boot、start、session 和 group 身份核对才能接受信号，终态任务清理同时删除其 receipt。
+
+默认 `python -m pytest` 运行公开 CPU 门禁；UI 和 renderer 回归位于 `tests/studio` 与 `tests/studio_visualization`，需要相应依赖。默认门禁不使用真实权重或 API 凭据。

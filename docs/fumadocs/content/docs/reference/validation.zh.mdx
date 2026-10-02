@@ -17,7 +17,46 @@ description: 代码、文档、runner 和 benchmark facade 的发布门禁。
 - **Benchmark runner** — `zoo benchmark-run --mode official-validation` 或 `--mode official-run`。提升状态时的额外证据：Official result import、official runtime 和 full-suite fairness gate。
 - **Suite 或 matrix** — `run --all-benchmarks --plan-only --json`。提升状态时的额外证据：规划选中的 cells，然后用可运行 benchmark 路径验证 artifacts。
 
-## 准备 CPU eval-core 门禁环境
+## 公开测试
+
+一方测试源码统一存放在 `tests/`，随仓库和 sdist 发布，采用仓库的 Apache-2.0 许可证。wheel 只包含运行时包。
+
+```bash
+python -m pip install -e ".[test]"
+make test
+# 等价的默认选择：
+python -m pytest -q
+```
+
+默认 CPU 门禁覆盖进程日志、模拟 GPU 租约、checkpoint staging、任务持久化、Conda dispatch、推理取消与超时、worker 退出和打包边界。它不需要 CUDA、模型下载、Torch 或 API 凭据，CI 使用同一选择。`make test-infer` 是别名；系统的 `python` 仍为 Python 2 时，使用 `make test PYTHON=python3`。
+
+| 路径 | 内容与环境要求 |
+| --- | --- |
+| `tests/test_*.py` | 从旧 `test/` 迁入的模型集成与 infra 回归 |
+| `tests/core/`、`tests/runtime/`、`tests/studio/` | 共享基础设施的单元与集成测试 |
+| `tests/eval_core/` | 扩展 evaluation 契约，使用 `make test-eval-core` |
+| 其他模块目录 | 对应运行时模块的测试 |
+| `tests/training/` | 需要另行提供的 training 实现和 configs |
+| `tests/manual/` | 手动模型推理与托管 API smoke 脚本 |
+| `tests/stream/` | 手动 streaming / incremental inference 脚本 |
+
+扩展测试可能依赖 `eval_core`、`ui`、模型专用环境、本地 assets 或 CUDA。部分历史断言还涉及私有 training / benchmark 实现或旧布局；公开 CPU 门禁是当前支持的 CI 基线，安装 `test` extra 不会准备这些额外资源。
+
+```bash
+python -m pytest -q tests/eval_core/test_evaluate_runner.py
+python -m pytest -q tests/studio/test_conda_dispatch.py
+python -m pytest --collect-only tests
+PYTHONPATH=. python tests/manual/test_wan_2p2.py
+PYTHONPATH=. python tests/stream/test_wan2p2_stream.py
+WORLDFOUNDRY_DOCKER_GPUS=none tests/run_tests_docker.sh
+WORLDFOUNDRY_DOCKER_EXTRAS=test,eval_core tests/run_tests_docker.sh make:test-eval-core
+```
+
+`manual/` 和 `stream/` 不参加递归 pytest collection。直接运行前需要准备模型环境；脚本可能下载 weights、占用 GPU、调用真实 API 并写出产物。凭据使用 provider 的环境变量。MiniMax H3 的真实权重测试使用 `MINIMAX_H3_CKPT_DIR`，默认 `~/.cache/worldfoundry/checkpoints/minimax-h3-components`。
+
+新增确定性回归放在对应模块目录，小型文本 fixture 放在该 suite 内。导入时直接执行推理的脚本放入 `manual/` 或 `stream/`。checkpoint 路径使用环境变量，资源不可用时跳过真实权重测试；缓存、日志、输出、凭据和 weights 不进入 Git 或源码发行物。
+
+## 准备可选 CPU eval-core 测试环境
 
 先从 PyTorch 官方 CPU wheel index 安装 Torch/Torchvision，再从正常 package index 安装已声明的测试 extra：
 
@@ -34,13 +73,14 @@ python -m pip install -e ".[eval_core]"
 轻量 editable checkout 在运行 core 门禁前，先安装声明的测试依赖：
 
 ```bash
-python -m pip install -e ".[dev,eval_core]"
+python -m pip install -e ".[dev,test]"
 ```
 
 <Tabs items={['core', 'docs', 'model', 'benchmark']}>
   <Tab>
 
 ```bash
+make test
 make lint
 make compile-eval
 make cli-entrypoint-check

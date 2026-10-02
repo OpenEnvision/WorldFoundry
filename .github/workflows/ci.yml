@@ -11,6 +11,20 @@ permissions:
   contents: read
 
 jobs:
+  cpu-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install CPU test dependencies
+        run: python -m pip install -e ".[test]"
+      - name: Run public CPU inference and packaging tests
+        run: make test
+
   public-surface:
     runs-on: ubuntu-latest
     defaults:
@@ -90,3 +104,9 @@ jobs:
           test "$#" -eq 1
           test -f "$1"
           make packaging-check WHEEL="$wheel_path" SDIST="$1"
+          python -m pip install "${wheel_path}[test]"
+          source_dir="$audit_dir/source"
+          mkdir "$source_dir"
+          tar -xzf "$1" -C "$source_dir"
+          cd "$source_dir"/*
+          make test

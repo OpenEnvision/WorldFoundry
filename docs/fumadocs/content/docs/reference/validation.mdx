@@ -17,7 +17,93 @@ Validation evidence should be proportional to the changed surface: small enough 
 - **Benchmark runner** — `zoo benchmark-run --mode official-validation` or `--mode official-run`. Extra when promoted: Official result import, official runtime, and full-suite fairness gate.
 - **Suite or matrix** — `run --all-benchmarks --plan-only --json`. Extra when promoted: Plan selected cells, then validate artifacts with runnable benchmark paths.
 
-## Preparing the CPU eval-core gate
+## Public tests
+
+All first-party test sources live under `tests/` and are published with the
+repository and source distribution. Tests use the repository's Apache-2.0
+license. The wheel contains the runtime packages.
+
+### Public CPU gate
+
+From the repository root, with Python 3.10 or newer:
+
+```bash
+python -m pip install -e ".[test]"
+make test
+# Equivalent, including the same default selection:
+python -m pytest -q
+```
+
+The default selection in `pyproject.toml` covers process logging, GPU lease
+bookkeeping with simulated devices, checkpoint staging, job persistence,
+Conda dispatch, pipeline cleanup, job shutdown, and packaging boundaries.
+It runs without CUDA, checkpoint downloads, or provider API credentials. CI
+uses this selection. `make test-infer` is an alias; use `PYTHON=python3` on
+systems whose `python` command still points to Python 2.
+
+### Extended suites
+
+| Path | Contents / requirements |
+| --- | --- |
+| `tests/test_*.py` | Model integration and infrastructure regressions moved from `test/` |
+| `tests/eval_core/` | Evaluation contracts; `make test-eval-core` runs this suite |
+| `tests/core/`, `tests/runtime/`, `tests/studio/` | Unit and integration tests for shared infrastructure |
+| Other module directories | Tests mirroring the corresponding runtime modules |
+| `tests/training/` | Training regressions; require the separately supplied training implementation and configs |
+| `tests/manual/` | Manual model inference and provider API smoke scripts |
+| `tests/stream/` | Manual streaming inference scripts |
+
+Select an extended suite or a single test explicitly:
+
+```bash
+python -m pytest -q tests/eval_core/test_evaluate_runner.py
+python -m pytest -q tests/studio/test_conda_dispatch.py
+# Collect the extended automated suites with their dependencies installed:
+python -m pytest --collect-only tests
+```
+
+Extended tests can require additional extras (for example `eval_core`, `ui`,
+or a model's runtime environment), local benchmark helpers, assets, or CUDA.
+Some historical regression tests refer to private training/benchmark code or
+earlier repository layouts. Their sources remain available here; the public
+CPU gate is the supported CI baseline. Installing the `test` extra alone does
+not provision those resources.
+
+`manual/` and `stream/` are excluded from recursive pytest collection. Run
+their scripts directly after preparing the relevant model environment:
+
+```bash
+PYTHONPATH=. python tests/manual/test_wan_2p2.py
+PYTHONPATH=. python tests/stream/test_wan2p2_stream.py
+```
+
+These scripts can download weights, use GPU memory, call real provider APIs,
+and write output artifacts. Supply credentials through the provider's
+environment variables. Real-weight MiniMax H3 tests use
+`MINIMAX_H3_CKPT_DIR`, defaulting to
+`~/.cache/worldfoundry/checkpoints/minimax-h3-components`.
+
+### Docker helper
+
+```bash
+WORLDFOUNDRY_DOCKER_GPUS=none tests/run_tests_docker.sh
+tests/run_tests_docker.sh tests/eval_core/test_cli_ux.py
+WORLDFOUNDRY_DOCKER_EXTRAS=test,eval_core tests/run_tests_docker.sh make:test-eval-core
+```
+
+The helper mounts the checkout and local caches, installs the selected extras,
+and runs the requested target. Its default target is the public CPU gate.
+
+### Adding tests
+
+Place deterministic regressions beside the relevant module tests and store
+small text fixtures under that suite. Move scripts that run inference at
+import time into `manual/` or `stream/`. Use environment variables for local
+checkpoints and skip real-weight tests when their resources are unavailable.
+Bytecode, caches, logs, generated output directories, secrets, and weights
+remain excluded from version control and source releases.
+
+## Preparing the optional CPU eval-core suite
 
 Install Torch and Torchvision from the official CPU wheel index first, then install the declared test extra from the normal package index:
 
@@ -35,13 +121,14 @@ From a lightweight editable checkout, install the declared gate dependencies
 before running the core commands:
 
 ```bash
-python -m pip install -e ".[dev,eval_core]"
+python -m pip install -e ".[dev,test]"
 ```
 
 <Tabs items={['core', 'docs', 'model', 'benchmark']}>
   <Tab>
 
 ```bash
+make test
 make lint
 make compile-eval
 make cli-entrypoint-check

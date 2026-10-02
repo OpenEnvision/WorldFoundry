@@ -109,7 +109,7 @@ class LyraOperator(BaseOperator):
         prompt: str = "",
         region_hint: str = "",
     ) -> Dict[str, Any]:
-        """Convert the shared World Explorer schema into the native trajectory."""
+        """Convert the shared camera-path schema into the Lyra trajectory."""
 
         sampled = sample_camera_path(camera_path, frame_stride=self.chunk_stride)
         chunk_captions = dict(sampled["chunk_captions"])

@@ -33,7 +33,7 @@ recursive-include worldfoundry/base_models/perception_core/video_text/fetv_blip 
 recursive-include worldfoundry/base_models/perception_core/video_quality/fetv_stylegan_v *.py *.cpp *.cu *.h *.json *.yaml *.yml *.txt
 recursive-include worldfoundry/base_models/three_dimensions/general_3d/vipe/csrc *.cpp *.cu *.h *.cuh
 include worldfoundry/base_models/three_dimensions/general_3d/vipe/THIRD_PARTY_LICENSES.md
-recursive-include worldfoundry/studio/native/world_explorer *
+recursive-include worldfoundry/studio/ui *.html
 recursive-include worldfoundry/data/models/catalog *.yaml
 recursive-include worldfoundry/data/models/runtime *.yaml
 recursive-include worldfoundry/data/models/runtime *.json
@@ -60,12 +60,6 @@ prune worldfoundry/data/test_cases
 prune docs/fumadocs/.next
 prune docs/fumadocs/out
 prune docs/fumadocs/node_modules
-prune worldfoundry/studio/native/world_explorer/build
-prune worldfoundry/studio/native/world_explorer/dependencies/fmt
-prune worldfoundry/studio/native/world_explorer/dependencies/glfw
-prune worldfoundry/studio/native/world_explorer/dependencies/imgui
-prune worldfoundry/studio/native/world_explorer/dependencies/pybind11
-prune worldfoundry/studio/native/world_explorer/dependencies/tinylogger
 prune worldfoundry/studio/assets/vendor
 
 # License-gated upstream runtimes are allowed as ignored local checkouts only.
@@ -122,6 +116,14 @@ global-exclude */test/* */tests/* */testing/* conftest.py pytest.ini
 
 prune testcase
 global-exclude test_*.py *_test.py test_*.cpp *_test.cpp
+
+# Publish first-party test sources and fixtures in sdists, after the upstream
+# QA exclusions above. Wheels continue to contain only worldfoundry packages.
+recursive-include tests *.py *.md *.sh *.yaml *.yml *.json *.jsonl
+include .github/workflows/ci.yml
+include Makefile scripts/setup/check_packaging_license_gate.py
+global-exclude */__pycache__/* */.pytest_cache/* */.mypy_cache/* */.ruff_cache/*
+global-exclude */tmp/* */temp/* */logs/* */outputs/* .env* *.py[cod]
 
 # Required benchmark/camera inputs, reviewed individually.
 include worldfoundry/data/benchmarks/assets/iworld-bench/camera_trajectories/reference_npz/camera_1_0_0.npz

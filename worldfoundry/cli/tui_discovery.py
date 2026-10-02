@@ -1113,7 +1113,7 @@ def _infer_group_from_workload(workload: str) -> str:
 def _studio_entries_by_model_id() -> dict[str, Any]:
     """Index studio catalog entries by ``model_id`` and aliases, cached across calls."""
     try:
-        from worldfoundry.studio.studio_catalog import _studio_catalog
+        from worldfoundry.studio.ui.catalog import _studio_catalog
 
         entries: dict[str, Any] = {}
         for entry in _studio_catalog():
@@ -1204,7 +1204,7 @@ def _studio_inference_spec(model_id: str):
     if entry is None:
         return get_model_inference_spec(model_id)
     try:
-        from worldfoundry.studio.studio_catalog import _template_id_hint
+        from worldfoundry.studio.ui.catalog import _template_id_hint
     except Exception:
         template_id = ""
     else:
@@ -1662,7 +1662,7 @@ def _merge_script_infer_row(existing: ModelCatalogRow | None, script_row: ModelC
 def _studio_infer_model_row(entry: Any) -> ModelCatalogRow:
     """Build a :class:`ModelCatalogRow` from a studio catalog entry with runtime metadata."""
     try:
-        from worldfoundry.studio.studio_catalog import _template_id_hint
+        from worldfoundry.studio.ui.catalog import _template_id_hint
     except Exception:
         template_id = ""
     else:

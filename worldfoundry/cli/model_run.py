@@ -300,7 +300,7 @@ def _field_description(label: str, description: str, *, scope: str, display_name
 def _suggestions(model_id: str) -> str:
     ids: list[str] = []
     try:
-        from worldfoundry.studio.catalog import discover_catalog
+        from worldfoundry.studio.inference.catalog import discover_catalog
 
         ids.extend(entry.model_id for entry in discover_catalog())
     except Exception:
@@ -770,7 +770,7 @@ def load_model_run_schema(
     from worldfoundry.evaluation.utils import MODEL_ZOO_DIR
     from worldfoundry.runtime.inference_catalog import model_inference_spec
     from worldfoundry.runtime.interactive_inference_catalog import interactive_task_for_variant
-    from worldfoundry.studio.catalog import find_entry
+    from worldfoundry.studio.inference.catalog import find_entry
 
     canonical_model_id = model_id
     catalog_variant_id: str | None = None

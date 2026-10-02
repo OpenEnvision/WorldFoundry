@@ -1,5 +1,4 @@
-# Public branch excludes local test source and generated test artifacts below.
-/tests/
+# Local generated artifacts are not part of the public release.
 /tmp/
 
 # Local maintenance and validation scripts are not part of the public release.
@@ -380,8 +379,7 @@ worldfoundry/cli/assets/*.png
 worldfoundry/studio/assets/*.png
 worldfoundry/studio/assets/vendor/
 
-# Local-only development, test, planning, and benchmark workspaces.
-/tests/
+# Local-only development, planning, and benchmark workspaces.
 /test_stream/
 /test/
 /testcase/
@@ -391,7 +389,7 @@ worldfoundry/studio/assets/vendor/
 /benchmarks/
 /gg
 
-# Public branch: keep private training and local QA out of commits.
+# Public branch: keep private training and embedded upstream QA out of commits.
 /worldfoundry/training/
 /worldfoundry/cli/training.py
 /worldfoundry/cli/training_commands/
@@ -980,3 +978,24 @@ worldfoundry/studio/assets/vendor/
 !worldfoundry/core/checkpoint/*.py
 
 !worldfoundry/studio/assets/openenvision-logo.png
+
+# First-party tests are public. Admit source and small text fixtures only.
+!/tests/
+/tests/**
+!/tests/**/
+!/tests/**/*.py
+!/tests/**/*.md
+!/tests/**/*.sh
+!/tests/**/*.yaml
+!/tests/**/*.yml
+!/tests/**/*.json
+!/tests/**/*.jsonl
+/tests/**/__pycache__/
+/tests/**/.pytest_cache/
+/tests/**/.mypy_cache/
+/tests/**/.ruff_cache/
+/tests/**/tmp/
+/tests/**/temp/
+/tests/**/logs/
+/tests/**/outputs/
+/tests/**/.env*

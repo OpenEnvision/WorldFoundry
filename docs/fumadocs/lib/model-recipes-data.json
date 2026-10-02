@@ -11321,7 +11321,6 @@
       "notes": [
         "WorldFoundry exposes in-tree Lyra-1 and Lyra-2 pipelines backed by vendored runtime adapters.",
         "Default catalog runner targets Lyra-2; Lyra-1 remains available as an explicit variant.",
-        "The native World Explorer vendors the upstream CUDA/C++/ImGui interaction and rendering implementation behind a model-neutral inference adapter.",
         "Lyra-1 and Lyra-2 are wired through in-tree runners and unified environment profiles.",
         "Per-run validation evidence is tracked outside the model catalog.",
         "Default Lyra runtime profile uses the in-tree Lyra-2 pipeline; Lyra-1 and Lyra-2 variant profiles are also registered.",
@@ -11335,10 +11334,10 @@
           "kind": "company"
         },
         "overview": [
-          "Lyra is NVIDIA's generative world model family for exploration: from an image or video (Lyra-1) or from actions (Lyra-2) it produces an explorable world video. In this catalog both variants run through in-tree pipelines backed by vendored runtime adapters, the default runner targets Lyra-2, and runner status is verified. A native World Explorer vendors the upstream CUDA/C++/ImGui interaction and rendering stack behind a model-neutral inference adapter."
+          "Lyra is NVIDIA's generative world model family for exploration: from an image or video (Lyra-1) or from actions (Lyra-2) it produces an explorable world video. In this catalog both variants run through in-tree pipelines backed by vendored runtime adapters, the default runner targets Lyra-2, and runner status is verified."
         ],
         "overviewZh": [
-          "Lyra 是英伟达面向探索的生成式世界模型家族：Lyra-1 从图像或视频、Lyra-2 从动作输入生成可探索的世界视频。本 catalog 中两个 variant 都经由内置运行时适配器支撑的树内 pipeline 运行，默认 runner 指向 Lyra-2，runner 状态为 verified。原生 World Explorer 将上游 CUDA/C++/ImGui 交互与渲染实现内置在模型无关的推理适配器之后。"
+          "Lyra 是英伟达面向探索的生成式世界模型家族：Lyra-1 从图像或视频、Lyra-2 从动作输入生成可探索的世界视频。本 catalog 中两个 variant 都经由内置运行时适配器支撑的树内 pipeline 运行，默认 runner 指向 Lyra-2，runner 状态为 verified。"
         ],
         "architecture": [
           "The catalog records two generations: Lyra-1 for image-or-video-to-world-video and Lyra-2 for action-conditioned world video (paper on OpenReview; project page at NVIDIA Research). Runtime execution requires local Lyra checkpoints, text-encoder assets, DA3 (Depth Anything 3) assets, and CUDA dependencies; internals beyond the recorded structure are not stored in this repository."
@@ -11402,12 +11401,10 @@
           }
         ],
         "limitations": [
-          "Runtime execution needs several staged asset sets (Lyra checkpoints, text encoder, DA3, CUDA).",
-          "The native World Explorer path depends on the vendored CUDA/C++ implementation and a capable GPU."
+          "Runtime execution needs several staged asset sets (Lyra checkpoints, text encoder, DA3, CUDA)."
         ],
         "limitationsZh": [
-          "运行需要就位多套资产（Lyra checkpoint、文本编码器、DA3、CUDA）。",
-          "原生 World Explorer 路径依赖内置的 CUDA/C++ 实现与足够性能的 GPU。"
+          "运行需要就位多套资产（Lyra checkpoint、文本编码器、DA3、CUDA）。"
         ],
         "paper": null,
         "figures": []

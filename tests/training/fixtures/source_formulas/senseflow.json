@@ -1,0 +1,47 @@
+{
+  "inputs": {
+    "ida": {
+      "student_trainable": [4.0, -2.0, 8.0],
+      "student_frozen": [9.0],
+      "fake_trainable": [2.0, 6.0, 4.0],
+      "fake_frozen": [3.0],
+      "decay": 0.75
+    },
+    "isg": {
+      "anchor_sample": [[3.0, 5.0]],
+      "teacher_velocity": [[4.0, 8.0]],
+      "midpoint_student_velocity": [[2.0, 4.0]],
+      "anchor_student_velocity": [[1.0, 2.0]],
+      "anchor_sigmas": [0.5],
+      "midpoint_sigmas": [0.25],
+      "next_sigmas": [0.0]
+    },
+    "dmd": {
+      "generated_clean": [[2.0, 4.0], [3.0, 7.0]],
+      "fake_clean": [[2.0, 3.0], [4.0, 6.0]],
+      "teacher_clean": [[1.0, 1.0], [1.0, 3.0]],
+      "normalization_epsilon": 0.0
+    }
+  },
+  "expected": {
+    "ida": {
+      "fake_trainable": [2.5, 4.0, 5.0],
+      "fake_frozen": [3.0],
+      "parameter_count": 1,
+      "mean_absolute_shift": 1.1666666666666667
+    },
+    "isg": {
+      "teacher_midpoint": [[2.0, 3.0]],
+      "target_next": [[1.5, 2.0]],
+      "direct_next": [[2.5, 4.0]],
+      "mse_per_sample": [2.5]
+    },
+    "dmd": {
+      "normalizer": [2.0, 3.0],
+      "gradient": [[0.5, 1.0], [1.0, 1.0]],
+      "proxy_per_sample": [0.3125, 0.5]
+    }
+  },
+  "atol": 1e-7,
+  "rtol": 1e-6
+}

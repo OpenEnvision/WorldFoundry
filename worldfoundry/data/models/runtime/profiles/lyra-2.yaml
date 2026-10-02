@@ -36,7 +36,5 @@ integration:
   status: verified
 notes:
 - Runtime profile for the in-tree Lyra-2 pipeline.
-- The native World Explorer uses the same CUDA/C++/ImGui viewer path as the
-  acknowledged upstream GUI and exposes the backend through a reusable protocol.
 - Runtime execution requires local Lyra-2, text-encoder, DA3, transformer-engine,
   and CUDA runtime dependencies.

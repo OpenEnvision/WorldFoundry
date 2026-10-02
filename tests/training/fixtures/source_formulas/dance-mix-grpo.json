@@ -1,0 +1,57 @@
+{
+  "inputs": {
+    "component_advantages": {
+      "rewards": {
+        "quality": [1.0, 3.0, 2.0, 6.0],
+        "alignment": [4.0, 2.0, 8.0, 2.0]
+      },
+      "weights": {
+        "quality": 1.0,
+        "alignment": 3.0
+      },
+      "group_ids": ["first", "first", "second", "second"],
+      "epsilon": 0.00000001
+    },
+    "masked_objective": {
+      "old_log_probs": [
+        [0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0]
+      ],
+      "new_log_probs": [
+        [-0.001, 0.002, 0.003, -0.004, 0.0005],
+        [0.004, -0.003, 0.002, 0.001, -0.0002],
+        [-0.002, 0.003, -0.001, 0.004, 0.0003],
+        [0.001, -0.004, 0.003, -0.002, 0.0001]
+      ],
+      "step_mask": [
+        [true, false, true, true, false],
+        [false, true, true, false, true],
+        [true, true, false, false, true],
+        [false, true, false, true, true]
+      ],
+      "clip_range": 0.0001
+    }
+  },
+  "expected": {
+    "component_advantages": {
+      "quality": [-0.7071067690849304, 0.7071067690849304, -0.7071067690849304, 0.7071067690849304],
+      "alignment": [0.7071067690849304, -0.7071067690849304, 0.7071068286895752, -0.7071068286895752]
+    },
+    "normalized_weights": {
+      "quality": 0.25,
+      "alignment": 0.75
+    },
+    "merged_advantages": [0.3535533547401428, -0.3535533547401428, 0.3535534143447876, -0.3535534143447876],
+    "masked_objective": {
+      "loss": 0.00024722516536712646,
+      "approx_kl": 0.0000030058336051297374,
+      "clip_fraction": 0.9166666865348816,
+      "lower_clip_fraction": 0.5833333134651184,
+      "upper_clip_fraction": 0.3333333432674408
+    }
+  },
+  "atol": 0.0000001,
+  "rtol": 0.000001
+}

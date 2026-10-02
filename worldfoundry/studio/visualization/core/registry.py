@@ -13,18 +13,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from worldfoundry.studio.catalog import CatalogEntry
-from worldfoundry.studio.interfaces import StudioInterfaceSpec, interface_spec_for_entry
+from worldfoundry.studio.inference.catalog import CatalogEntry
+from worldfoundry.studio.ui.interfaces import StudioInterfaceSpec, interface_spec_for_entry
 
 from .artifacts import StudioVisualizationArtifact, infer_visualization_artifact
 from .scene import VisualizationScene
 
 if TYPE_CHECKING:
-    from worldfoundry.studio.launch_config import StudioLaunchConfig
+    from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 
 
 INTERACTIVE_WORLD_VISUALIZATION = "world"
-NATIVE_WORLD_EXPLORER_VISUALIZATION = "native-world"
 VISER_VISUALIZATION = "points"
 SPARK_VISUALIZATION = "spark"
 MEDIA_VISUALIZATION = "media"
@@ -372,14 +371,6 @@ def model_visualization_profile(
     """
 
     resolved_spec = spec or interface_spec_for_entry(entry)
-    if "world-explorer" in {str(tag).strip().lower() for tag in entry.tags}:
-        return StudioModelVisualizationProfile(
-            mode=NATIVE_WORLD_EXPLORER_VISUALIZATION,
-            artifact_domain=ARTIFACT_DOMAIN_WORLD,
-            title="Native World Explorer",
-            reason="native world-explorer camera/session contract",
-            accepted_artifact_kinds=("state", "video", "image", "camera", "trajectory"),
-        )
     if resolved_spec.template_id == "interactive-world":
         return StudioModelVisualizationProfile(
             mode=INTERACTIVE_WORLD_VISUALIZATION,
@@ -457,7 +448,6 @@ __all__ = [
     "EMBODIED_VISUALIZATION",
     "INTERACTIVE_WORLD_VISUALIZATION",
     "MEDIA_VISUALIZATION",
-    "NATIVE_WORLD_EXPLORER_VISUALIZATION",
     "RERUN_VISUALIZATION",
     "SPARK_VISUALIZATION",
     "UNIFIED_VISUALIZATION",

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 CUSTOM_CSS = """
 :root {
   --wa-bg: #f3ecdf;

@@ -318,6 +318,14 @@ dev = [
     "pytest>=8",
     "ruff==0.12.7",
 ]
+test = [
+    "fastapi",
+    "numpy>=1.26,<3",
+    "pillow>=10",
+    "pytest>=8,<9",
+    "setuptools>=77",
+    "tomli>=2; python_version < '3.11'",
+]
 eval_core = [
     "numpy>=1.26,<3",
     "pytest>=8,<9",
@@ -475,6 +483,33 @@ transformers_low = [
 
 [tool.setuptools_scm]
 
+[tool.pytest.ini_options]
+# A CPU gate that runs in a public checkout with the test extra. Select other
+# suites explicitly; they can require model-specific or local-only resources.
+testpaths = [
+    "tests/core/test_process_logging.py",
+    "tests/runtime/test_device_pool.py",
+    "tests/runtime/test_local_checkpoint_cache.py",
+    "tests/runtime/test_jobs_store_persistence.py",
+    "tests/runtime/test_jobs_logging.py",
+    "tests/studio/test_conda_dispatch.py",
+    "tests/studio/test_inference_lifecycle.py",
+    "tests/studio/test_module_boundaries.py",
+    "tests/studio/test_workspace_app_subprocess_safety.py",
+    "tests/studio/test_execution_pipeline_cleanup.py",
+    "tests/studio/test_job_store_shutdown.py",
+    "tests/eval_core/test_packaging_license_gate.py",
+    "tests/test_worldfoundry_studio_pipeline_cache.py",
+    "tests/test_worldfoundry_studio_resident_workers.py",
+]
+addopts = "--import-mode=importlib"
+norecursedirs = [".*", "__pycache__", "build", "dist", "manual", "stream"]
+markers = [
+    "fast_eval_core: evaluation framework contracts",
+    "unit: focused unit tests",
+    "gpu: requires a CUDA device and model-specific dependencies",
+]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 120
@@ -495,8 +530,6 @@ extend-exclude = [
     "worldfoundry/representations",
     "worldfoundry/evaluation/tasks/execution/runners/*/runtime",
     "worldfoundry/evaluation/tasks/metrics/*/vendor",
-    # Apache-2.0 native GUI sources preserve upstream formatting.
-    "worldfoundry/studio/native/world_explorer",
     "worldfoundry/evaluation/tasks/execution/runners/*/runtime",
     "worldfoundry/evaluation/tasks/execution/runners/*/official",
     "worldfoundry/evaluation/tasks/metrics/*/vendor",
@@ -630,7 +663,7 @@ include-package-data = true
 "worldfoundry.base_models.three_dimensions.depth.unidepth" = ["LICENSE"]
 "worldfoundry.studio" = [
     "assets/**/*",
-    "native/world_explorer/**/*",
+    "ui/*.html",
 ]
 "worldfoundry.synthesis.visual_generation.lingbot_video" = [
     "default_negative_prompt*.json",
@@ -732,12 +765,6 @@ include-package-data = true
     "**/__pycache__/*",
     "**/*.pyc",
     "**/*.pyo",
-    "native/world_explorer/build/**/*",
-    "native/world_explorer/dependencies/fmt/**/*",
-    "native/world_explorer/dependencies/glfw/**/*",
-    "native/world_explorer/dependencies/imgui/**/*",
-    "native/world_explorer/dependencies/pybind11/**/*",
-    "native/world_explorer/dependencies/tinylogger/**/*",
 ]
 # Package excludes do not stop include-package-data from treating files below
 # excluded namespace packages as data of the nearest retained parent. Keep a

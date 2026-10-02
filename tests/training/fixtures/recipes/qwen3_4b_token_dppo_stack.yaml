@@ -1,0 +1,55 @@
+schema: worldfoundry-post-training
+execution_owner: worldfoundry-native
+run:
+  id: qwen3-4b-token-dppo-stack
+  output_dir: runs/qwen3-4b-token-dppo-stack
+model:
+  recipe: qwen3-4b
+  checkpoint: default
+tuning:
+  mode: full
+data:
+  manifest: data/post_training/qwen3-reasoning-prompts.jsonl
+  split: train
+  shuffle: true
+  shuffle_seed: 42
+  tail_policy: pad
+algorithm:
+  type: token-dppo
+  delta: 0.15
+  reduction: token-mean
+  horizon: 8192
+  updates_per_trajectory: 2
+  group_size: 8
+  old_log_prob_source: replay
+  advantage_epsilon: 0.00000001
+  advantage_clip_max: 5.0
+  advantage_normalization: group-population-variance
+  sampling_temperature: 1.0
+  replay_microbatch_size: 4
+  first_update_log_ratio_tolerance: 0.00001
+  reward_weights:
+    correctness: 1.0
+    format: 0.1
+optimizer:
+  type: adamw
+  learning_rate: 0.000001
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+runtime:
+  param_dtype: bfloat16
+  reduce_dtype: float32
+  activation_checkpoint: full
+  compile: false
+distributed:
+  backend: fsdp2
+  dp_replicate: 1
+  dp_shard: auto
+  cp: 1
+  tp: 1
+checkpoint:
+  save_every_steps: 50
+  async: true
+  export_every_steps: 50
+export:
+  format: distributed-checkpoint

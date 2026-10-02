@@ -9,8 +9,8 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from .catalog import find_entry
-from .execution import (
+from worldfoundry.studio.inference.catalog import find_entry
+from worldfoundry.studio.inference.execution import (
     TORCHRUN_DISTRIBUTED_ENV,
     TORCHRUN_LINGBOT_FAST_ENV,
     StudioManager,
@@ -22,7 +22,6 @@ from .execution import (
     ensure_torchrun_lingbot_fast_runtime,
     shutdown_torchrun_lingbot_fast_runtime,
 )
-
 
 SECRET_ENV_REF_KEY = "__worldfoundry_secret_env__"
 

@@ -4,7 +4,8 @@ import json
 from html import escape
 from pathlib import Path
 
-from ..execution import RunRecord
+from worldfoundry.studio.inference.execution import RunRecord
+
 from ..visualization.backends.viser import STUDIO_VISER
 from ..visualization.core.manifest import viewport_payload_from_metadata
 from .urls import file_url as _file_url

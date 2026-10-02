@@ -22,7 +22,6 @@ class Lyra2Pipeline(PipelineABC):
     """Lyra-2 pipeline for action-conditioned navigation video and optional 3D reconstruction."""
 
     MODEL_ID = "lyra-2"
-    EXPLORER_FRAME_STRIDE = 80
 
     def __init__(
         self,
@@ -138,7 +137,7 @@ class Lyra2Pipeline(PipelineABC):
                 **operator_condition,
             }
         if not interactions:
-            raise ValueError("Provide interactions or a World Explorer camera_path.")
+            raise ValueError("Provide interactions or a camera_path.")
         self.operator.get_interaction(interactions)
         try:
             operator_condition = self.operator.process_interaction(prompt=prompt)
@@ -283,38 +282,6 @@ class Lyra2Pipeline(PipelineABC):
         if reconstruct_3d or return_dict:
             return result
         return result["video"]
-
-    def world_explorer_capabilities(self) -> Dict[str, Any]:
-        """Advertise the model-neutral Studio exploration contract."""
-
-        return {
-            "camera_path": True,
-            "region_hint": True,
-            "revert": True,
-            "seed_image": True,
-            "seed_video": False,
-            "frame_stride": self.EXPLORER_FRAME_STRIDE,
-            "max_keyframes": 32,
-        }
-
-    def snapshot_world_explorer(self) -> Dict[str, Any]:
-        """Capture the lightweight continuation state needed for one-step undo."""
-
-        current_image = getattr(self.memory_module, "current_image", None)
-        return {
-            "current_image": current_image.copy() if hasattr(current_image, "copy") else current_image,
-        }
-
-    def restore_world_explorer(self, snapshot: Dict[str, Any]) -> None:
-        """Restore a continuation snapshot without reloading model weights."""
-
-        self.memory_module.manage(action="reset")
-        current_image = snapshot.get("current_image") if isinstance(snapshot, dict) else None
-        if current_image is not None:
-            self.memory_module.record(
-                current_image.copy() if hasattr(current_image, "copy") else current_image,
-                metadata={"mode": "world-explorer-revert"},
-            )
 
 
 class LyraPipeline(Lyra2Pipeline):

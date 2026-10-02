@@ -1,0 +1,60 @@
+schema: worldfoundry-post-training
+execution_owner: worldfoundry-native
+run:
+  id: qwen3-agentic-ray-cpu
+  output_dir: unused
+model:
+  recipe: qwen3-tiny-instruct
+  checkpoint: tiny-qwen
+  options:
+    enable_thinking: false
+    max_new_tokens: 3
+tuning:
+  mode: full
+data:
+  manifest: unused.jsonl
+  shuffle: false
+  tail_policy: uneven
+  options:
+    groups_per_batch: 1
+    max_turns: 2
+algorithm:
+  type: token-grpo
+  reward_weights:
+    correctness: 1.0
+    tool-success: 0.1
+  group_size: 2
+  old_log_prob_source: rollout
+  advantage_normalization: group-population-std
+  sampling_temperature: 1.0
+  replay_microbatch_size: 1
+  clip_range: 0.2
+  horizon: 3
+optimizer:
+  type: adamw
+  learning_rate: 0.01
+  weight_decay: 0.0
+runtime:
+  param_dtype: bfloat16
+  reduce_dtype: float32
+distributed:
+  backend: single
+rollout:
+  backend: ray
+  trainer_binding: actor
+  placement: colocate
+  trainer_devices: 1
+  rollout_devices: 1
+  weight_kind: full
+  weight_bucket_bytes: 32
+  pool:
+    num_devices: 1
+    devices_per_node: 1
+    workers_per_device: 2
+    cpus_per_worker: 0.25
+    accelerator_resource: CPU
+checkpoint:
+  save_every_steps: 1
+  async: false
+export:
+  format: safetensors

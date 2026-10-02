@@ -4,7 +4,6 @@ import os
 import sys
 from typing import Sequence
 
-
 _UI_DEPENDENCY_MODULES = {"gradio", "fastapi", "starlette", "uvicorn"}
 _FRONTEND_ENV_KEYS = (
     "WORLDFOUNDRY_STUDIO_FRONTEND",
@@ -40,15 +39,15 @@ def _requires_unified_frontend(argv: Sequence[str]) -> bool:
     return (_frontend_from_argv(argv) or _frontend_from_env()) == "unified"
 
 
-def _launch_native(argv: Sequence[str]) -> None:
-    from .native_app import main as native_main
+def _launch_standalone(argv: Sequence[str]) -> None:
+    from worldfoundry.studio.ui.launcher import main as standalone_main
 
-    native_main(argv)
+    standalone_main(argv)
 
 
 def _launch_unified(argv: Sequence[str]) -> None:
     try:
-        from .app import main as app_main
+        from worldfoundry.studio.ui.gradio_app import main as app_main
     except ModuleNotFoundError as exc:
         missing = exc.name or "optional UI dependency"
         if missing in _UI_DEPENDENCY_MODULES:
@@ -81,7 +80,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     _prepare_cuda_allocator()
     args = _argv(argv)
     if _help_requested(args) or not _requires_unified_frontend(args):
-        _launch_native(args)
+        _launch_standalone(args)
         return
     _launch_unified(args)
 

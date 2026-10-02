@@ -195,7 +195,7 @@ fi
 if ! "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
 import fastapi
 import uvicorn
-import worldfoundry.studio.workspace_app
+import worldfoundry.studio.serving.workspace
 PY
 then
   cat >&2 <<EOF
@@ -217,4 +217,4 @@ echo "WORLDFOUNDRY_CKPT_DIR=${WORLDFOUNDRY_CKPT_DIR}"
 echo "WORLDFOUNDRY_DATA_DIR=${WORLDFOUNDRY_DATA_DIR}"
 echo "HF_HOME=${HF_HOME:-<huggingface default>}"
 echo "HF_HUB_CACHE=${HF_HUB_CACHE:-<huggingface default>}"
-exec "$PYTHON_BIN" -m worldfoundry.studio.workspace_app --host "$HOST" --port "$PORT"
+exec "$PYTHON_BIN" -m worldfoundry.studio.serving.workspace --host "$HOST" --port "$PORT"

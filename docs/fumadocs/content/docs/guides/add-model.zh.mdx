@@ -45,7 +45,7 @@ Vendor 或自研推理实现跟现有树对齐。视频合成多半在 `synthesi
 
 Catalog 条目放在类名已经存在之后再写，避免 YAML 指向一个 import 不了的 target。记录 source URL、license、Hugging Face `repo_id`、本地 `checkpoint` 角色、tasks、`runtime_profile`，以及诚实的 `integration.status`。在 check report 出现之前用 `planned`；license、checkpoint、API key 或 GPU 类型缺了、跑不起来时用 `blocked`；只有必要检查通过、且 report 哈希仍对得上当前 manifest 时，才标 `integrated`。
 
-若官方 demo 有可对照的命令行，加一个小型 model-zoo check helper。在 `test/` 或 `test_stream/` 里为确定性部分写聚焦回归：请求整形、路径解析、「缺 checkpoint 就抛错」。不要把数小时的视频长跑当成合入门槛，除非那是展示这条 route 的唯一办法。
+若官方 demo 有可对照的命令行，加一个小型 model-zoo check helper。在 `tests/`（手动流式 demo 放在 `tests/stream/`） 里为确定性部分写聚焦回归：请求整形、路径解析、「缺 checkpoint 就抛错」。不要把数小时的视频长跑当成合入门槛，除非那是展示这条 route 的唯一办法。
 
 ## Catalog 状态是声明，证据才作数
 

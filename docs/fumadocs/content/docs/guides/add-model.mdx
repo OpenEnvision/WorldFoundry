@@ -45,7 +45,7 @@ Register the route. The simplest form is a `pipeline_target` on the catalog YAML
 
 Write or update the catalog entry last, after the class names exist, so the YAML cannot claim a target that does not import. Record source URLs, license, Hugging Face `repo_id`s, local `checkpoint` roles, tasks, `runtime_profile`, and an honest `integration.status`. Use `planned` until a check report exists. Use `blocked` when a missing license, checkpoint, API key, or GPU class prevents a run. Use `integrated` only after the required checks pass and the report hashes still match the current manifest.
 
-If the official demo has a published command line you can compare against, add a small model-zoo check helper. Add a focused regression under `test/` or `test_stream/` for the deterministic parts: request shaping, path resolution, and “missing checkpoint raises.” Do not gate the PR on a multi-hour video run unless that is the only way the route can be shown.
+If the official demo has a published command line you can compare against, add a small model-zoo check helper. Add a focused regression under `tests/` (manual streaming demos live in `tests/stream/`) for the deterministic parts: request shaping, path resolution, and “missing checkpoint raises.” Do not gate the PR on a multi-hour video run unless that is the only way the route can be shown.
 
 ## Catalog status is a claim, evidence is the proof
 

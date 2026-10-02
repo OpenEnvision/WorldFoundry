@@ -1,0 +1,37 @@
+{
+  "inputs": {
+    "constant_diffusion": {
+      "sample": [[0.25, -0.5], [0.75, 0.125]],
+      "velocity": [[0.75, 0.125], [-0.25, 0.5]],
+      "sigma": [1.0, 0.8],
+      "sigma_next": [0.75, 0.4],
+      "eta": 0.25,
+      "observed_next": [[0.1, -0.2], [0.3, 0.4]]
+    },
+    "window": {
+      "transition_count": 25,
+      "window_size": 4,
+      "iterations_per_window": 25,
+      "stride": 1,
+      "initial_index": 0,
+      "rollback": true,
+      "rollout_ids": [0, 24, 25, 525, 550]
+    }
+  },
+  "expected": {
+    "constant_diffusion": {
+      "mean": [[0.060546875, -0.52734375], [0.839062511920929, -0.07851563394069672]],
+      "scale": [[0.125], [0.15811388194561005]],
+      "log_prob": [-0.5788647532463074, -4.2701544761657715]
+    },
+    "window_indices": {
+      "rollout-0": [0, 1, 2, 3],
+      "rollout-24": [0, 1, 2, 3],
+      "rollout-25": [1, 2, 3, 4],
+      "rollout-525": [21, 22, 23, 24],
+      "rollout-550": [0, 1, 2, 3]
+    }
+  },
+  "atol": 0.0000001,
+  "rtol": 0.000001
+}

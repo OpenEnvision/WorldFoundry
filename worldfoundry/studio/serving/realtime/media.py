@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 
 from worldfoundry.core.acceleration.frame_prefetch import prefetch_to_numpy
-from worldfoundry.studio.execution import _normalize_frame_list, _to_uint8_rgb
+from worldfoundry.studio.inference.execution import _normalize_frame_list, _to_uint8_rgb
 
 MIN_OUTPUT_WIDTH = 160
 MIN_OUTPUT_HEIGHT = 90

@@ -1,0 +1,55 @@
+{
+  "inputs": {
+    "profile_recipe": "configs/post_training/wan_1p3b_dmd.yaml",
+    "guidance": {
+      "conditional": [[2.0, 4.0], [1.0, -1.0]],
+      "unconditional": [[1.0, 3.0], [0.0, -2.0]],
+      "scale": 3.5
+    },
+    "distribution": {
+      "generated": [[1.0, 3.0], [0.5, -0.5]],
+      "fake_score": [[2.0, 1.0], [1.5, 0.25]],
+      "normalization_epsilon": 0.0
+    },
+    "renoise": {
+      "clean": [[0.25, -0.5], [0.75, 0.125]],
+      "noise": [[1.0, -0.25], [-0.5, 0.5]],
+      "sigma": [0.757, 0.522]
+    },
+    "fake_score": {
+      "prediction": [[0.5, 0.1], [-0.4, 0.25]]
+    }
+  },
+  "expected": {
+    "profile": {
+      "student_timesteps": [1000.0, 757.0, 522.0],
+      "student_sigmas": [1.0, 0.757, 0.522],
+      "score_min_sigma": 0.02,
+      "score_max_sigma": 0.98,
+      "score_flow_shift": 8.0,
+      "teacher_guidance_scale": 3.5,
+      "generator_update_interval": 5,
+      "student_learning_rate": 0.000002,
+      "fake_score_learning_rate": 0.000002,
+      "student_weight_decay": 0.01,
+      "fake_score_weight_decay": 0.01,
+      "student_gradient_accumulation_steps": 8,
+      "fake_score_gradient_accumulation_steps": 8
+    },
+    "generator_update_cadence": [false, false, false, false, true, false, false, false, false, true],
+    "guided_real_score": [[5.5, 7.5], [4.5, 2.5]],
+    "distribution": {
+      "denominator": 4.0,
+      "gradient": [[-0.875, -1.625], [-0.75, -0.5625]],
+      "proxy_loss": 0.53564453125,
+      "proxy_gradient": [[-0.21875, -0.40625], [-0.1875, -0.140625]]
+    },
+    "renoised": [[0.8177500367164612, -0.31075000762939453], [0.09749996662139893, 0.32074999809265137]],
+    "fake_score": {
+      "target_velocity": [[0.75, 0.25], [-1.25, 0.375]],
+      "loss": 0.2057812511920929
+    }
+  },
+  "atol": 0.0000001,
+  "rtol": 0.000001
+}

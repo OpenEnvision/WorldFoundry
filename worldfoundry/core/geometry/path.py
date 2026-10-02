@@ -1,9 +1,7 @@
 """Model-neutral camera-path contracts for explorable world generation.
 
-The browser editor and model runtimes intentionally communicate through this
-small JSON-compatible schema.  A model opts into the Studio World Explorer by
-advertising :data:`WORLD_EXPLORER_TAG` and accepting a ``camera_path`` mapping,
-or by implementing an equivalent adapter at the pipeline boundary.
+Model runtimes accept this JSON-compatible ``camera_path`` schema to sample
+camera poses and captions without a viewer dependency.
 """
 
 from __future__ import annotations
@@ -12,9 +10,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-WORLD_EXPLORER_TAG = "world-explorer"
-WORLD_EXPLORER_SCHEMA_VERSION = 1
-WORLD_EXPLORER_INTERPOLATIONS = frozenset({"linear", "smooth"})
+CAMERA_PATH_SCHEMA_VERSION = 1
+CAMERA_PATH_INTERPOLATIONS = frozenset({"linear", "smooth"})
 
 
 class CameraPathError(ValueError):
@@ -25,7 +22,7 @@ def default_camera_path(*, fps: float = 16.0) -> dict[str, Any]:
     """Return a short forward camera path suitable for a new editor session."""
 
     return {
-        "schema_version": WORLD_EXPLORER_SCHEMA_VERSION,
+        "schema_version": CAMERA_PATH_SCHEMA_VERSION,
         "interpolation": "smooth",
         "loop": False,
         "fps": float(fps),
@@ -90,10 +87,10 @@ def normalize_camera_path(
         )
 
     interpolation = str(payload.get("interpolation") or "smooth").strip().lower()
-    if interpolation not in WORLD_EXPLORER_INTERPOLATIONS:
+    if interpolation not in CAMERA_PATH_INTERPOLATIONS:
         raise CameraPathError(
             "camera_path.interpolation must be one of "
-            + ", ".join(sorted(WORLD_EXPLORER_INTERPOLATIONS))
+            + ", ".join(sorted(CAMERA_PATH_INTERPOLATIONS))
             + "."
         )
     coordinate_space = str(payload.get("coordinate_space") or "world").strip().lower()
@@ -151,7 +148,7 @@ def normalize_camera_path(
         keyframe["t"] = (keyframe["t"] - first_t) / span
 
     normalized: dict[str, Any] = {
-        "schema_version": WORLD_EXPLORER_SCHEMA_VERSION,
+        "schema_version": CAMERA_PATH_SCHEMA_VERSION,
         "interpolation": interpolation,
         "loop": bool(payload.get("loop", False)),
         "fps": fps,
@@ -284,30 +281,11 @@ def sample_camera_path(
     }
 
 
-def explorer_capabilities_for_pipeline(pipeline: Any) -> dict[str, Any]:
-    """Return normalized optional capabilities advertised by a pipeline."""
-
-    raw = getattr(pipeline, "world_explorer_capabilities", None)
-    capabilities = raw() if callable(raw) else raw
-    payload = dict(capabilities) if isinstance(capabilities, Mapping) else {}
-    return {
-        "camera_path": bool(payload.get("camera_path", True)),
-        "region_hint": bool(payload.get("region_hint", True)),
-        "revert": bool(payload.get("revert", hasattr(pipeline, "restore_world_explorer"))),
-        "seed_image": bool(payload.get("seed_image", True)),
-        "seed_video": bool(payload.get("seed_video", False)),
-        "max_keyframes": int(payload.get("max_keyframes", 128)),
-        "frame_stride": payload.get("frame_stride"),
-    }
-
-
 __all__ = [
     "CameraPathError",
-    "WORLD_EXPLORER_INTERPOLATIONS",
-    "WORLD_EXPLORER_SCHEMA_VERSION",
-    "WORLD_EXPLORER_TAG",
+    "CAMERA_PATH_INTERPOLATIONS",
+    "CAMERA_PATH_SCHEMA_VERSION",
     "default_camera_path",
-    "explorer_capabilities_for_pipeline",
     "normalize_camera_path",
     "sample_camera_path",
 ]

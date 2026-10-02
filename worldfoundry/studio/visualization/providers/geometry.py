@@ -10,16 +10,12 @@ from worldfoundry.studio.visualization.core.scene import Layer, VisualizationSce
 
 GEOMETRY_KINDS = {"point_cloud", "mesh", "gaussian_splat", "camera", "trajectory", "depth"}
 CAMERA_SUFFIXES = {".json", ".yaml", ".yml"}
-SCENE3D_PLUGIN_PACKAGES = frozenset({"pixelsplat_full", "dvlt", "depth_anything_v3"})
 
 
 class GeometryProvider:
     provider_id = "geometry"
 
     def discover(self, source) -> VisualizationScene | None:
-        plugin_scene = _scene_for_plugin_package(source)
-        if plugin_scene is not None:
-            return plugin_scene
         layers = []
         for path in _source_paths(source):
             artifact = infer_visualization_artifact(path)
@@ -47,25 +43,3 @@ def _source_paths(source) -> list[Path]:
     if isinstance(source, Iterable):
         return [Path(item) for item in source]
     return []
-
-
-def _scene_for_plugin_package(source) -> VisualizationScene | None:
-    if not isinstance(source, (str, Path)):
-        return None
-    path = Path(source)
-    if not path.is_dir() or path.name not in SCENE3D_PLUGIN_PACKAGES:
-        return None
-    return VisualizationScene(
-        scene_id=f"scene3d-plugin/{path.name}",
-        title=path.name.replace("_", " ").title(),
-        layers=(
-            Layer(
-                layer_id=path.name,
-                kind="scene3d_plugin",
-                uri=path.as_posix(),
-                metadata={"package": path.name},
-            ),
-        ),
-        recommended_backend="points",
-        metadata={"plugin_package": path.name},
-    )

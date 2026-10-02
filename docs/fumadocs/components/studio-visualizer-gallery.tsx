@@ -53,7 +53,7 @@ const demos = [
     },
     port: '7868',
     artifacts: 'image, video, action_trace',
-    command: 'python -m worldfoundry.studio.app matrix-game-2 --frontend world --port 7868',
+    command: 'python -m worldfoundry.studio.cli matrix-game-2 --frontend world --port 7868',
   },
   {
     id: 'viser',
@@ -71,7 +71,7 @@ const demos = [
     },
     port: '18590',
     artifacts: 'ply, pcd, xyz, glb, gltf, obj, npz',
-    command: 'python -m worldfoundry.studio.app pi3 --frontend points --asset /path/to/scene.ply',
+    command: 'python -m worldfoundry.studio.cli pi3 --frontend points --asset /path/to/scene.ply',
   },
   {
     id: 'rerun',
@@ -89,7 +89,7 @@ const demos = [
     },
     port: '9876',
     artifacts: 'rrd',
-    command: 'python -m worldfoundry.studio.app vggt --frontend rerun --asset /path/to/recording.rrd',
+    command: 'python -m worldfoundry.studio.cli vggt --frontend rerun --asset /path/to/recording.rrd',
   },
   {
     id: 'spark',
@@ -108,7 +108,7 @@ const demos = [
     demoUrl: 'https://sparkjs.dev/examples/#hello-world',
     port: '8765',
     artifacts: 'splat, spz, ksplat, sog, splat-ply',
-    command: 'python -m worldfoundry.studio.app vggt --frontend spark --asset /path/to/scene.splat',
+    command: 'python -m worldfoundry.studio.cli vggt --frontend spark --asset /path/to/scene.splat',
   },
 ] satisfies StudioVisualizerDemo[];
 

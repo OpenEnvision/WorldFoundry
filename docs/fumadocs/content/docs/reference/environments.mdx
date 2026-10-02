@@ -33,6 +33,7 @@ WorldFoundry uses conda as the single supported environment path. The documented
     { name: <><code>video</code></>, description: "Broad video, media, data, and 3D runtime dependencies.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[video]</code></> }] },
     { name: <><code>vipe</code></>, description: "ViPE geometry/depth runtime and visualization stack.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[vipe]</code></> }] },
     { name: <><code>molmoact2</code></>, description: "MolmoAct2 model serving stack with its narrow Transformers contract.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[molmoact2]</code></> }] },
+    { name: <><code>molmobot_pi0</code></>, description: "Pinned MolmoBot Pi0 policy runtime.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[molmobot_pi0]</code></> }] },
     { name: <><code>metrics</code></>, description: "General evaluation metrics and dataset I/O.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[metrics]</code></> }] },
     { name: <><code>distribution_metrics</code></>, description: "Perceptual and distribution metric models.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[distribution_metrics]</code></> }] },
     { name: <><code>dvlt</code></>, description: "DVLT 3D/visualization runtime.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[dvlt]</code></> }] },
@@ -51,6 +52,7 @@ WorldFoundry uses conda as the single supported environment path. The documented
     { name: <><code>studio_geometry</code></>, description: "Geometry and Open3D Studio visualization.", reads: [{ label: "In all", value: "Yes" }, { label: "Install", value: <><code>.[studio_geometry]</code></> }] },
     { name: <><code>studio_plot</code></>, description: "Plotting and color utilities for Studio.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[studio_plot]</code></> }] },
     { name: <><code>dev</code></>, description: "Build, pre-commit, and repository-pinned lint tooling.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[dev]</code></> }] },
+    { name: <><code>test</code></>, description: "Public CPU inference and packaging tests; no Torch or model downloads required.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[test]</code></> }] },
     { name: <><code>eval_core</code></>, description: "Optional CPU evaluation dependencies.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[eval_core]</code></> }] },
     { name: <><code>all</code></>, description: "Curated general runtime bundle described above.", reads: [{ label: "Install", value: <><code>.[all]</code></> }] }
   ]} />
@@ -148,7 +150,7 @@ Start the Workspace after setup:
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 PYTHONPATH=. WORLDFOUNDRY_WORKSPACE_MAX_JOBS=8 \
-python -m worldfoundry.studio.workspace_app --host 127.0.0.1 --port 7870
+python -m worldfoundry.studio.serving.workspace --host 127.0.0.1 --port 7870
 ```
 
 Use explicit roots when datasets or checkpoints should live on shared storage:

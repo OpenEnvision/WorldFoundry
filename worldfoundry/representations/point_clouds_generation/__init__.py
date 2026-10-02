@@ -16,8 +16,6 @@ _EXPORTS = {
     "Lyra2Representation": ".lyra",
     "Pi3Representation": ".pi3",
     "Pi3XRepresentation": ".pi3",
-    "PixelSplatRepresentation": ".pixelsplat",
-    "Splatt3RRepresentation": ".splatt3r",
     "VGGTOmegaRepresentation": ".vggt",
     "VGGTRepresentation": ".vggt",
     "WorldFMRepresentation": ".worldfm",

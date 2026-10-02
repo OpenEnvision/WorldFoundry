@@ -1,0 +1,73 @@
+schema: worldfoundry-post-training
+execution_owner: worldfoundry-native
+run:
+  id: sana-sprint-scm-ladd-stack
+  output_dir: runs/sana-sprint-scm-ladd-stack
+model:
+  recipe: sana-sprint-1600m-1024px
+  checkpoint: default
+tuning:
+  mode: full
+data:
+  manifest: data/post_training/sana-sprint-latents.jsonl
+  cache: data/post_training/sana-sprint-cache
+  split: train
+  shuffle: true
+  shuffle_seed: 42
+  tail_policy: drop
+  options:
+    microbatch_size: 1
+algorithm:
+  type: scm-ladd
+  teacher_checkpoint: default
+  sigma_data: 0.5
+  generator_logit_mean: 0.2
+  generator_logit_std: 1.6
+  discriminator_logit_mean: -0.6
+  discriminator_logit_std: 1.0
+  teacher_guidance_scales: [4.0, 4.5, 5.0]
+  guidance_embedding_scale: 0.1
+  discriminator_head_block_ids: [2, 8, 14, 19]
+  tangent_warmup_steps: 4000
+  tangent_normalization_constant: 0.1
+  consistency_weight: 1.0
+  adversarial_weight: 0.5
+  max_time_probability: 0.5
+  largest_time_enabled: true
+  largest_time: 1.5708
+  misaligned_pairs: true
+  independent_real_fake_discriminator_times: true
+  adversarial_loss: hinge
+optimizer:
+  type: adamw
+  learning_rate: 0.000002
+  weight_decay: 0.0
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  max_grad_norm: 0.1
+  gradient_accumulation_steps: 2
+discriminator_optimizer:
+  type: adamw
+  learning_rate: 0.000002
+  weight_decay: 0.0
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  max_grad_norm: 0.1
+  gradient_accumulation_steps: 2
+runtime:
+  param_dtype: bfloat16
+  reduce_dtype: float32
+  activation_checkpoint: none
+  compile: false
+distributed:
+  backend: fsdp2
+  dp_replicate: 1
+  dp_shard: auto
+  cp: 1
+  tp: 1
+checkpoint:
+  save_every_steps: 50
+  async: true
+  export_every_steps: 50
+export:
+  format: distributed-checkpoint

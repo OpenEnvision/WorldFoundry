@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from worldfoundry.studio.vendor_assets import VENDOR_ASSET_INSTALL_COMMAND
+from worldfoundry.studio.ui.vendor_assets import VENDOR_ASSET_INSTALL_COMMAND
 
-from .assets import SPARK_MODULE_PATH, THREE_MODULE_PATH, local_module_url as _local_module_url
-
+from .assets import SPARK_MODULE_PATH, THREE_MODULE_PATH
+from .assets import local_module_url as local_module_url
 
 HEAD_HTML = """
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -1616,8 +1616,8 @@ HEAD_HTML = """
   window.setTimeout(requestSync, 320);
 })();
 </script>
-""".replace("__WA_THREE_MODULE_URL__", _local_module_url(THREE_MODULE_PATH)).replace(
-    "__WA_SPARK_MODULE_URL__", _local_module_url(SPARK_MODULE_PATH)
+""".replace("__WA_THREE_MODULE_URL__", local_module_url(THREE_MODULE_PATH)).replace(
+    "__WA_SPARK_MODULE_URL__", local_module_url(SPARK_MODULE_PATH)
 ).replace(
     "__WA_VENDOR_INSTALL_COMMAND__", VENDOR_ASSET_INSTALL_COMMAND
 )

@@ -35,23 +35,92 @@ from typing import Any
 # ──────────────────────────────────────────────────────────────────────────
 
 
+def process_identity(pid: int) -> dict[str, str | int] | None:
+    """Read a Linux process incarnation, including its boot and session identity."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        return {
+            "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+            "start_ticks": fields[19],
+            "pgid": int(fields[2]),
+            "session_id": int(fields[3]),
+        }
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def process_group_alive(pgid: int) -> bool:
+    """Return whether a dedicated POSIX group contains any non-zombie process."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    if sys.platform.startswith("linux"):
+        # A dead grandchild can remain a zombie until init reaps it. It no longer
+        # owns CUDA resources and must not make teardown wait indefinitely.
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+                if int(fields[2]) == pgid and fields[0] not in {"Z", "X"}:
+                    return True
+            except PermissionError:
+                try:
+                    if os.getpgid(int(entry.name)) == pgid:
+                        return True
+                except ProcessLookupError:
+                    pass
+                except PermissionError:
+                    return True
+            except (OSError, ValueError, IndexError):
+                continue
+        return False
+    return True
+
+
+def terminate_owned_process_group(pgid: int, *, grace_seconds: float = 3.0) -> None:
+    """Stop an owned session's entire group, even after its leader has exited."""
+    if pgid <= 1 or pgid == os.getpgrp():
+        raise ValueError("refusing to terminate the caller's process group")
+    for sig, wait_seconds in ((signal.SIGTERM, max(grace_seconds, 0.0)), (signal.SIGKILL, 2.0)):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + wait_seconds
+        while process_group_alive(pgid):
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(min(0.05, max(deadline - time.monotonic(), 0.0)))
+        else:
+            return
+    if process_group_alive(pgid):
+        raise TimeoutError(f"process group {pgid} still alive after SIGKILL")
+
+
 def terminate_process_group(process: subprocess.Popen[Any], *, grace_seconds: float = 3.0) -> None:
     """Terminate a process and all descendants in its dedicated process group.
 
     POSIX path sends ``SIGTERM`` to the group (``os.killpg``), waits
     *grace_seconds*, then ``SIGKILL``. Windows falls back to
     ``terminate`` / ``kill`` on the parent only. Already-exited
-    processes are a no-op. The child must have been started with
+    groups are a no-op. The child must have been started with
     ``start_new_session=True`` (see :func:`run_logged_subprocess`).
     """
 
+    if os.name == "posix":
+        terminate_owned_process_group(process.pid, grace_seconds=grace_seconds)
+        process.wait(timeout=2)
+        return
     if process.poll() is not None:
         return
     try:
-        if os.name == "posix":
-            os.killpg(process.pid, signal.SIGTERM)
-        else:
-            process.terminate()
+        process.terminate()
     except (OSError, ProcessLookupError):
         pass
     try:
@@ -60,10 +129,7 @@ def terminate_process_group(process: subprocess.Popen[Any], *, grace_seconds: fl
     except subprocess.TimeoutExpired:
         pass
     try:
-        if os.name == "posix":
-            os.killpg(process.pid, signal.SIGKILL)
-        else:
-            process.kill()
+        process.kill()
     except (OSError, ProcessLookupError):
         pass
     process.wait()
@@ -215,6 +281,12 @@ def run_logged_subprocess(
                 timeout_seconds=timeout,
             )
             raise subprocess.TimeoutExpired(command, timeout) from None
+        finally:
+            # The leader exiting does not imply its descendants have stopped.
+            if owns_process_group:
+                terminate_process_group(process)
+            elif process.poll() is None:
+                terminate_process_tree(process)
     write_jsonl_event(
         lifecycle_path,
         level="INFO" if returncode == 0 else "ERROR",
@@ -323,6 +395,9 @@ def run_torchrun_module(
 
 
 __all__ = [
+    "process_identity",
+    "process_group_alive",
+    "terminate_owned_process_group",
     "read_text_tail",
     "run_logged_subprocess",
     "run_torchrun_module",

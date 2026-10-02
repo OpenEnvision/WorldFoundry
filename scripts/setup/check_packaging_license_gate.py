@@ -42,15 +42,29 @@ PRIVATE_SOURCE_PATHS = (
     "configs/training", "configs/post_training",
     "docs/fumadocs/content/docs/guides/training.mdx",
     "docs/fumadocs/content/docs/guides/training.zh.mdx",
-    "worldfoundry/data/test_cases", "testcase", "test", "tests", "test_stream",
+    "worldfoundry/data/test_cases", "testcase", "test", "test_stream",
     "worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/train_evoke.py",
     "worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/evoke/dataset",
     "worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/evoke/utils/utils_evoke_post.py",
 )
 
 
+def public_test_file(path: str) -> bool:
+    """Allow first-party test sources/fixtures in Git and sdists only."""
+    parts = Path(path).parts
+    if not parts or parts[0] != "tests":
+        return False
+    if any(part in {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                    "tmp", "temp", "logs", "outputs"} or part.startswith(".env")
+           for part in parts):
+        return False
+    return Path(path).suffix.lower() in {".py", ".md", ".sh", ".yaml", ".yml", ".json", ".jsonl"}
+
+
 def private_file(path: str) -> bool:
     """Recognize private sources and local artifacts in source and package lists."""
+    if public_test_file(path):
+        return False
     parts = Path(path).parts
     if any(part in {"training", "training_commands", "tests", "test", "testing",
                     "testcase", "test_cases", "tmp", "__pycache__"} for part in parts):
@@ -213,7 +227,18 @@ def audit_wheel(wheel_path: Path, gated_paths: Sequence[str]) -> list[str]:
     prefixes = tuple(path.rstrip("/") + "/" for path in gated_paths)
     with zipfile.ZipFile(wheel_path) as wheel:
         return sorted(name for name in wheel.namelist()
-                      if name in gated_paths or name.startswith(prefixes) or private_file(name))
+                      if name in gated_paths or name.startswith(prefixes) or private_file(name)
+                      or name.startswith("tests/"))
+
+
+def audit_sdist(sdist_path: Path, gated_paths: Sequence[str]) -> list[str]:
+    """Check source artifacts while allowing the public first-party test suite."""
+    with tarfile.open(sdist_path, "r:gz") as archive:
+        names = [member.name.partition("/")[2] for member in archive.getmembers() if member.isfile()]
+    boundaries = [*gated_paths, *PRIVATE_SOURCE_PATHS]
+    return sorted(name for name in names if private_file(name) or any(
+        name == prefix or name.startswith(prefix + "/") for prefix in boundaries
+    ))
 
 
 def missing_required_wheel_packages(
@@ -255,9 +280,10 @@ def main(argv: list[str] | None = None) -> int:
     exclude_package_data = pyproject["tool"]["setuptools"].get("exclude-package-data", {})
 
     failures = 0
+    is_git_checkout = (REPO_ROOT / ".git").exists()
     # Git's index bounds this check: ignored local checkouts and build outputs are
     # permitted, but must never become part of a public commit.
-    if (REPO_ROOT / ".git").exists():
+    if is_git_checkout:
         tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=REPO_ROOT).decode().split("\0")
         source_leaks = [name for name in tracked if name and (REPO_ROOT / name).is_file() and private_file(name)]
         if source_leaks:
@@ -283,7 +309,9 @@ def main(argv: list[str] | None = None) -> int:
     if missing_boundaries:
         failures += 1
         _print_items("FAIL: public package exclusions missing:", missing_boundaries)
-    dead = dead_exclude_patterns(all_packages, exclude)
+    # Sdists have already pruned excluded source trees. Dead-rule checks need
+    # the full checkout; all private-source and artifact checks still apply.
+    dead = dead_exclude_patterns(all_packages, exclude) if is_git_checkout else []
     if dead:
         failures += 1
         _print_items(f"FAIL: {len(dead)} dead package exclude pattern(s):", dead)
@@ -320,12 +348,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_items("FAIL: first-party wrapper package(s) absent from wheel:", missing_from_wheel)
 
     if args.sdist is not None:
-        with tarfile.open(args.sdist, "r:gz") as archive:
-            names = [member.name.partition("/")[2] for member in archive.getmembers() if member.isfile()]
-        boundaries = [*gated_paths, *PRIVATE_SOURCE_PATHS]
-        source_leaks = sorted(name for name in names if private_file(name) or any(
-            name == prefix or name.startswith(prefix + "/") for prefix in boundaries
-        ))
+        source_leaks = audit_sdist(args.sdist, gated_paths)
         if source_leaks:
             failures += 1
             _print_items("FAIL: private or gated files found in source artifact:", source_leaks, limit=50)

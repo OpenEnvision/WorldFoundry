@@ -1,4 +1,4 @@
-.PHONY: help install-core install-dev docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
+.PHONY: help install-core install-dev test test-infer test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -8,6 +8,7 @@ WORLDFOUNDRY_EVAL ?= $(PYTHON) -m worldfoundry.cli
 PREFLIGHT_PROFILE ?= all
 PREFLIGHT_OUTPUT ?= tmp/preflight
 CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
+TEST_ARGS ?=
 RELEASE_HFD_ROOT ?= $(if $(WORLDFOUNDRY_HFD_ROOT),$(WORLDFOUNDRY_HFD_ROOT),$(HOME)/.cache/worldfoundry/checkpoints/hfd)
 CANONICAL_DIFFUSION_SOURCES ?= \
 	worldfoundry/base_models/diffusion_model/*.py \
@@ -33,6 +34,9 @@ help:
 		'WorldFoundry development targets:' \
 		'  make install-core      Install the editable core package.' \
 		'  make install-dev       Install lightweight development dependencies.' \
+		'  make test              Run the public CPU inference and packaging gate.' \
+		'  make test-infer        Alias for the public CPU gate.' \
+		'  make test-eval-core    Run the extended evaluation contract suite.' \
 		'  make docs-check        Verify checked-in generated documentation.' \
 		'  make docs-dev-fast     Start docs using existing generated output.' \
 		'  make docs-dev-ssd      Start docs with caches on local SSD.' \
@@ -49,6 +53,14 @@ install-core:
 
 install-dev:
 	$(PIP) install -e ".[dev]"
+
+test:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q $(TEST_ARGS)
+
+test-infer: test
+
+test-eval-core:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q tests/eval_core $(TEST_ARGS)
 
 docs-check:
 	npm --prefix docs/fumadocs run api:check

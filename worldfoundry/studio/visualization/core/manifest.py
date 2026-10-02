@@ -200,7 +200,7 @@ def _int_or_default(value: Any, default: int) -> int:
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
-from worldfoundry.studio.catalog import CatalogEntry
+from worldfoundry.studio.inference.catalog import CatalogEntry
 from worldfoundry.studio.visualization.providers.run_record import (
     first_embodied_trace_candidate,
     first_episode_metadata_candidate,

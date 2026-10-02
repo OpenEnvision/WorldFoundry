@@ -10,7 +10,6 @@ WorldFoundry Studio is a thin visual entrypoint around repo pipelines. The model
 Studio exposes multiple frontends:
 
 - **`world`** — Interactive world models. Standalone WebRTC console with a resident model runtime, reliable input-edge DataChannel, bounded in-memory frame queue, one persistent video track, immersive fullscreen, and a live runtime log. It does not render through Gradio or materialize an MP4 per control step.
-- **`native-world`** — CUDA/C++/ImGui world explorer (`worldfoundry/studio/native/world_explorer`). Aliases: `world-explorer`, `imgui`.
 - **`points`** — Viser point clouds / meshes. Starts native Viser directly instead of embedding it in the console shell.
 - **`embodied`** — Embodied simulators. **Planned.** URL bridge only: Studio registers an external simulator URL and tunnel hints; no in-tree embodied viewer yet.
 - **`spark`** — 3DGS. Starts the standalone Spark 3DGS viewer with repository-local Spark assets.
@@ -450,7 +449,7 @@ pip install 'worldfoundry[studio_realtime,rtx_postprocess]'
 
 export WORLDFOUNDRY_REALTIME_POSTPROCESS_PRESET=rtx-super-resolution
 export WORLDFOUNDRY_REALTIME_RTX_SCALE=1.5
-python -m worldfoundry.studio.app <model-id> --frontend world --device cuda:0
+python -m worldfoundry.studio.ui.gradio_app <model-id> --frontend world --device cuda:0
 ```
 
 The adapter validates the installed package, CUDA visibility, device index,
@@ -682,20 +681,20 @@ artifacts.
 
 ## Launch matrix
 
-- **LingBot realtime** — `python -m worldfoundry.studio.app lingbot-world --variant fast --frontend world --device cuda:1`. Resident runtime with continuous WebRTC video and DataChannel controls.
-- **LingBot camera** — `python -m worldfoundry.studio.app lingbot-world --variant base-camera --device cuda:1`. Slower, camera-centric profile.
-- **MatrixGame** — `python -m worldfoundry.studio.app matrix-game-2 --device cuda:1`. Interactive world navigation.
-- **WorldCam** — `python -m worldfoundry.studio.app worldcam --device cuda:1`. Camera-path generation and view control.
-- **Hosted APIs** — `python -m worldfoundry.studio.app <model> --backend api_init --endpoint <url>`. Endpoint stays explicit at launch.
-- **Viser point cloud** — `python -m worldfoundry.studio.app pi3 --frontend points --asset /path/to/scene.ply --port 18590`. Native Viser UI.
-- **Spark 3DGS** — `python -m worldfoundry.studio.app vggt --frontend spark --asset /path/to/scene.splat --port 8765`. Standalone Spark canvas.
-- **Embodied simulator** — `python -m worldfoundry.studio.app openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **Planned.** Registers an external simulator URL only; does not launch an in-tree viewer.
+- **LingBot realtime** — `python -m worldfoundry.studio.ui.gradio_app lingbot-world --variant fast --frontend world --device cuda:1`. Resident runtime with continuous WebRTC video and DataChannel controls.
+- **LingBot camera** — `python -m worldfoundry.studio.ui.gradio_app lingbot-world --variant base-camera --device cuda:1`. Slower, camera-centric profile.
+- **MatrixGame** — `python -m worldfoundry.studio.ui.gradio_app matrix-game-2 --device cuda:1`. Interactive world navigation.
+- **WorldCam** — `python -m worldfoundry.studio.ui.gradio_app worldcam --device cuda:1`. Camera-path generation and view control.
+- **Hosted APIs** — `python -m worldfoundry.studio.ui.gradio_app <model> --backend api_init --endpoint <url>`. Endpoint stays explicit at launch.
+- **Viser point cloud** — `python -m worldfoundry.studio.ui.gradio_app pi3 --frontend points --asset /path/to/scene.ply --port 18590`. Native Viser UI.
+- **Spark 3DGS** — `python -m worldfoundry.studio.ui.gradio_app vggt --frontend spark --asset /path/to/scene.splat --port 8765`. Standalone Spark canvas.
+- **Embodied simulator** — `python -m worldfoundry.studio.ui.gradio_app openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **Planned.** Registers an external simulator URL only; does not launch an in-tree viewer.
 
 Recommended local start:
 
 ```bash
 cd /path/to/WorldFoundry
-PYTHONPATH=. WORLDFOUNDRY_STUDIO_PORT=7868 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m worldfoundry.studio.app \
+PYTHONPATH=. WORLDFOUNDRY_STUDIO_PORT=7868 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m worldfoundry.studio.ui.gradio_app \
   lingbot-world \
   --variant fast \
   --model-ref /path/to/checkpoints/lingbot-world-fast \
@@ -921,7 +920,7 @@ fullscreen permission.
             <code>--frontend</code>
           </div>
         </div>
-        <p><code>auto</code>, <code>world</code>, <code>native-world</code> (CUDA/C++/ImGui explorer), <code>points</code>, <code>spark</code>, <code>embodied</code>, or <code>unified</code> (Gradio; requires <code>worldfoundry[ui]</code>). Aliases such as <code>viser</code>, <code>3dgs</code>, and <code>imgui</code> are accepted.</p>
+        <p><code>auto</code>, <code>world</code>, <code>points</code>, <code>spark</code>, <code>embodied</code>, or <code>unified</code> (Gradio; requires <code>worldfoundry[ui]</code>). Aliases such as <code>viser</code>, <code>3dgs</code> are accepted.</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -1170,3 +1169,90 @@ Only add public demo media after the matching official configuration has run
 through the in-tree Studio or Studio-compatible API path. Keep the run manifest,
 decoded media metadata, and visual QA record with the validation artifacts so
 the embedded video can be traced back to an actual release candidate run.
+
+## Code layout
+
+Each implementation has one canonical import path. There are no forwarding
+modules at the Studio root.
+
+| Location | Responsibility |
+| --- | --- |
+| `inference/catalog.py` | Discover pipelines and resolve model defaults and checkpoints. |
+| `inference/config.py` | Runtime environment and distributed process topology. |
+| `inference/execution.py` | Prepare inputs, load pipelines, execute, and persist raw run artifacts. |
+| `inference/dispatch.py` | GPU admission, managed subprocesses, resident workers, cancellation, and deadlines. |
+| `inference/paths.py`, `inference/variants.py` | Runtime paths and model variant selection. |
+| `serving/workspace.py`, `serving/jobs.py` | Workspace API and in-process UI job scheduling. |
+| `serving/` | Authentication, file serving, telemetry, and realtime transport. |
+| `ui/gradio_app.py`, `ui/launcher.py`, `ui/launch_config.py` | Frontend construction and browser launch options. |
+| `ui/workspace.html`, `ui/workspace.py` | Packaged Workspace page and its asset loader. |
+| `ui/` | Page fragments, assets, input trays, and model presentation. |
+| `visualization/` | Artifact discovery, viewer routing, geometry presentation, and browser backends. |
+| `cli.py` | Installed `worldfoundry-studio` command. |
+| `runtime_job.py` | Subprocess and resident inference worker entrypoint. |
+| `workspace_job.py` | CLI adapter for Workspace inference requests. |
+
+The inference modules do not import the frontend, serving, or visualization
+packages. `StudioManager` saves raw artifacts by default. Frontends explicitly
+install `visualization.studio.prepare_run_record` as the `record_processor`
+when they need viewer manifests or preview conversion.
+
+`studio/native` and its CUDA/C++/ImGui frontend have been removed. The standalone
+browser backends remain available through `worldfoundry-studio`.
+
+### Retained rendering helpers
+
+`visualization/plugins` contains only implementations with current callers:
+
+| Implementation | Caller |
+| --- | --- |
+| `perception/render.py` | `models visualize` CLI and Grounding DINO annotation. |
+| `perception/human_pose.py` | Wan Animate's `AAPoseMeta.draw_aapose` conditioning image. |
+| `scene3d/projection.py` | VIPE projection videos, SLAM overlays, and video writing. |
+| `scene3d/depth_anything_v3/export_vis.py` | Depth Anything 3 depth, feature, and Gaussian exports. |
+| `styles/colormaps.py` | Depth and normal rendering in `perception/render.py`. |
+
+The unused media and robotics helpers, pixelSplat training visualization,
+duplicate DVLT visualization, HED annotator, sky-segmentation/GLB export chain,
+and compatibility wrappers have been deleted. Geometry providers discover
+actual artifacts; a directory of Python source is not a renderable scene.
+
+`worldfoundry/representations` remains a model-adapter package: VGGT, Pi3,
+WorldFM, Lyra and other pipelines directly call its implementations. It is
+not a generic data-schema layer. The unused pixelSplat and Splatt3R marker
+classes have been removed; their actual pipeline runtimes are separate.
+
+### Inference lifecycle
+
+Managed CUDA runs acquire a device lease before launching. Explicit device
+selection and fallback to one-shot workers use the same admission policy.
+Resident workers retain their lease until their owned process group stops.
+On Linux, file locks coordinate cooperating WorldFoundry controllers on the
+same host; `WORLDFOUNDRY_GPU_LEASE_DIR` selects the shared lock directory
+(default: `/tmp/worldfoundry-gpu-leases-<uid>`). Controllers sharing GPUs must
+use the same directory and device identities. Unmanaged workloads are outside
+this admission policy.
+
+`WORLDFOUNDRY_STUDIO_INFERENCE_TIMEOUT` is one deadline for GPU queueing,
+worker allocation, request queueing, execution, and output draining. It defaults
+to the resident timeout setting (six hours when unset); `0` disables it.
+Cancellation and failure stop the owned process group before releasing its
+lease. A process that deliberately creates a different session is outside
+this process-group ownership contract. Hosted API calls use their provider's
+timeout and cancellation mechanisms.
+
+Weight pipelines can be cached. API clients are request-scoped so a reused
+pipeline cannot retain another request's credentials.
+
+Persistent command jobs use a separate supervisor and atomic completion
+receipts to recover their real exit status after the controller exits.
+Restored jobs require matching boot, process-start, session, and group identity
+before signalling a saved PID. Retention removes completed receipts together
+with terminal job metadata.
+
+### Checks
+
+`python -m pytest` runs the public CPU inference gate. Optional renderer and UI
+regressions live in `tests/studio_visualization` and `tests/studio`; install
+their dependencies before selecting those suites. No real weights or API
+credentials are needed by the default gate.

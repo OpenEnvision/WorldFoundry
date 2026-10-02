@@ -40,9 +40,9 @@ from worldfoundry.core.video.postprocess import (
     VideoSpec,
     frame_list_from_chunks,
 )
-from worldfoundry.studio.catalog import CatalogEntry
-from worldfoundry.studio.execution import IMAGE_EXTS, VIDEO_EXTS, PreparedInputs, StudioManager
-from worldfoundry.studio.launch_config import StudioLaunchConfig
+from worldfoundry.studio.inference.catalog import CatalogEntry
+from worldfoundry.studio.inference.execution import IMAGE_EXTS, VIDEO_EXTS, PreparedInputs, StudioManager
+from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 from worldfoundry.studio.serving import (
     bind_security_warning,
     path_allowed,

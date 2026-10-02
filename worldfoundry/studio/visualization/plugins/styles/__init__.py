@@ -1,8 +1,3 @@
-"""Migrated Studio visualization plugin group.
+"""Colour maps used by the perception renderer."""
 
-Concrete helpers live in submodules so optional visualization dependencies stay lazy.
-"""
-
-from __future__ import annotations
-
-__all__ = ["colorbar_utils", "colormaps", "scene_colormap"]
+__all__ = ["colormaps"]
