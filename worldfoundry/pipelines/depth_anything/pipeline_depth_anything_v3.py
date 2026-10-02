@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 import torch
 
-from ...operators.depth_anything_v3_operator import DepthAnything3Operator
-from ...representations.depth_generation.depth_anything.depth_anything_v3_representation import (
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.runtime_v3 import (
     DEFAULT_DEPTH_ANYTHING3_REPO,
     DepthAnything3Representation,
 )
+
+from ...operators.depth_anything_v3_operator import DepthAnything3Operator
+from ..pipeline_utils import PipelineABC
 
 
 class DepthAnything3Pipeline(PipelineABC):

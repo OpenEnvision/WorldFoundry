@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
 from typing import Any, Dict, Optional, Sequence
 
 import torch
 
-from ...synthesis.visual_generation.memory.stream import SceneStateMemory
-from ...operators.worldfm_operator import WorldFMOperator
-from ...representations.point_clouds_generation.worldfm.worldfm_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.worldfm.runtime import (
     DEFAULT_WORLDFM_MOGE2_REPO,
     WorldFMRepresentation,
 )
+
+from ...operators.worldfm_operator import WorldFMOperator
+from ...synthesis.visual_generation.memory.stream import SceneStateMemory
 from ...synthesis.visual_generation.worldfm.worldfm_synthesis import (
     DEFAULT_WORLDFM_REPO,
     WorldFMSynthesis,
 )
+from ..pipeline_utils import PipelineABC
 
 
 class WorldFMPipeline(PipelineABC):

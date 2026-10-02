@@ -9,12 +9,13 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 from PIL import Image
 
-from worldfoundry.core.io import artifact_root_path
-from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
-from ...operators.vggt_omega_operator import VGGTOmegaOperator
-from worldfoundry.representations.point_clouds_generation.vggt.vggt_omega_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt_omega.runtime import (
     VGGTOmegaRepresentation,
 )
+from worldfoundry.core.io import artifact_root_path
+
+from ...operators.vggt_omega_operator import VGGTOmegaOperator
+from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
 from ..pipeline_utils import PipelineABC
 
 
@@ -305,7 +306,9 @@ class VGGTOmegaPipeline(PipelineABC):
         if output_name is not None and not output_name.lower().endswith(".glb"):
             output_name = f"{Path(output_name).stem}.glb"
 
-        from .official_runtime import run_official_scene_export as _run_official_scene_export
+        from .official_runtime import (
+            run_official_scene_export as _run_official_scene_export,
+        )
 
         return _run_official_scene_export(
             input_source=image_path,

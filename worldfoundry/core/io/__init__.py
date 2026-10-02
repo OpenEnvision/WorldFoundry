@@ -39,6 +39,7 @@ _SUBMODULES = {
     "file_utils": "worldfoundry.core.io.file_utils",
     "hdf5_utils": "worldfoundry.core.io.hdf5_utils",
     "hf": "worldfoundry.core.io.hf",
+    "image": "worldfoundry.core.io.image",
     "integrity": "worldfoundry.core.io.integrity",
     "json_utils": "worldfoundry.core.io.json_utils",
     "manifests": "worldfoundry.core.io.manifests",
@@ -59,6 +60,8 @@ _SUBMODULES = {
 }
 
 _EXPORT_MODULES = {
+    "load_pil_image": "worldfoundry.core.io.image",
+    "materialize_image_input": "worldfoundry.core.io.image",
     "action_track_tensors": "worldfoundry.core.io.action_tracks",
     "audio_to_float32_channels": "worldfoundry.core.io.audio",
     "format_override_value": "worldfoundry.core.io.override_utils",

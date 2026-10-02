@@ -1,12 +1,11 @@
-import ast
 import argparse
+import ast
 import importlib
 import json
 import os
 from pathlib import Path
 
 import pytest
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -15,9 +14,9 @@ def test_worldfm_moge_reuses_base_model_directly():
     removed_runtime = (
         REPO_ROOT / "worldfoundry/representations/point_clouds_generation/worldfm/moge_official"
     )
-    moge_pano = REPO_ROOT / "worldfoundry/representations/point_clouds_generation/worldfm/moge_pano.py"
+    moge_pano = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/worldfm/moge_pano.py"
     representation = (
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/worldfm/worldfm_representation.py"
+        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/worldfm/runtime.py"
     )
     base_modules_path = REPO_ROOT / "worldfoundry/base_models/three_dimensions/depth/moge/model/modules.py"
     base_v1_path = REPO_ROOT / "worldfoundry/base_models/three_dimensions/depth/moge/model/v1.py"
@@ -302,7 +301,6 @@ def test_moge_imports_resolve_to_canonical_base_model():
     source_roots = [
         REPO_ROOT / "worldfoundry/base_models",
         REPO_ROOT / "worldfoundry/synthesis",
-        REPO_ROOT / "worldfoundry/representations",
     ]
     direct_external_imports = []
     canonical_imports = []
@@ -1431,9 +1429,9 @@ def test_lyra1_inference_configs_live_in_data_runtime_configs():
 
 def test_pi3_representations_use_base_model_sources():
     wrappers = [
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/pi3/pi3_representation.py",
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/pi3/pi3x_representation.py",
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/pi3/loger_representation.py",
+        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/pi3_inference/runtime.py",
+        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/pi3_inference/runtime_pi3x.py",
+        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/loger/runtime.py",
     ]
     for path in wrappers:
         text = path.read_text(encoding="utf-8")
@@ -1445,7 +1443,7 @@ def test_pi3_representations_use_base_model_sources():
 
 
 def test_infinite_vggt_representation_uses_base_model_source():
-    wrapper = REPO_ROOT / "worldfoundry/representations/point_clouds_generation/vggt/infinite_vggt_representation.py"
+    wrapper = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/infinite_vggt/runtime.py"
     text = wrapper.read_text(encoding="utf-8")
 
     assert "worldfoundry.base_models.three_dimensions.point_clouds.infinite_vggt" in text
@@ -1458,7 +1456,7 @@ def test_infinite_vggt_representation_uses_base_model_source():
 
 
 def test_cut3r_representation_uses_base_model_source():
-    wrapper = REPO_ROOT / "worldfoundry/representations/point_clouds_generation/cut3r/cut3r_representation.py"
+    wrapper = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/cut3r/runtime.py"
     text = wrapper.read_text(encoding="utf-8")
 
     assert "worldfoundry.base_models.three_dimensions.point_clouds.cut3r" in text
@@ -1473,7 +1471,7 @@ def test_cut3r_representation_uses_base_model_source():
 def test_hyworldmirror_2p0_runtime_uses_base_model_source():
     runtime = (
         REPO_ROOT
-        / "worldfoundry/representations/point_clouds_generation/hunyuan_world/hy_world_2p0/worldmirror_runtime.py"
+        / "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/runtime.py"
     )
     text = runtime.read_text(encoding="utf-8")
 
@@ -1489,11 +1487,11 @@ def test_hyworldmirror_2p0_runtime_uses_base_model_source():
 def test_lingbot_map_representation_uses_base_model_runtime():
     wrapper = (
         REPO_ROOT
-        / "worldfoundry/representations/point_clouds_generation/lingbot_map/lingbot_map_representation.py"
+        / "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/runtime.py"
     )
     text = wrapper.read_text(encoding="utf-8")
 
-    assert "base_models" in text
+    assert "Path(__file__).resolve().parent" in text
     assert not (
         REPO_ROOT / "worldfoundry/representations/point_clouds_generation/lingbot_map/lingbot_map_runtime"
     ).exists()
@@ -1505,7 +1503,7 @@ def test_lingbot_map_representation_uses_base_model_runtime():
 def test_flash_world_representation_uses_base_model_source():
     wrapper = (
         REPO_ROOT
-        / "worldfoundry/representations/point_clouds_generation/flash_world/flash_world_representation.py"
+        / "worldfoundry/base_models/three_dimensions/point_clouds/flash_world/runtime.py"
     )
     text = wrapper.read_text(encoding="utf-8")
 
@@ -1740,7 +1738,10 @@ def test_vmem_runtime_env_lives_under_synthesis():
 
 
 def test_vmem_runtime_root_ignores_external_source_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    from worldfoundry.synthesis.visual_generation.vmem.runtime_env import DEFAULT_VMEM_RUNTIME_ROOT, runtime_root
+    from worldfoundry.synthesis.visual_generation.vmem.runtime_env import (
+        DEFAULT_VMEM_RUNTIME_ROOT,
+        runtime_root,
+    )
 
     monkeypatch.delenv("VMEM_RUNTIME_ROOT", raising=False)
     monkeypatch.setenv("WORLDFOUNDRY_MODEL_SOURCE_DIR", str(tmp_path / "model_sources"))
@@ -2175,7 +2176,9 @@ def test_scope_examples_live_in_data_test_cases():
 
 
 def test_infinite_world_default_config_lives_in_data_runtime_configs(tmp_path: Path):
-    from worldfoundry.synthesis.visual_generation.infinite_world import InfiniteWorldSynthesis
+    from worldfoundry.synthesis.visual_generation.infinite_world import (
+        InfiniteWorldSynthesis,
+    )
     from worldfoundry.synthesis.visual_generation.infinite_world.infinite_world_runtime import (
         InfiniteWorldRuntime,
         default_config_path,
@@ -2870,10 +2873,16 @@ def test_hunyuan_world_runtime_defaults_live_in_data_runtime_configs():
         "worldplay.yaml",
     ]
 
-    from worldfoundry.synthesis.visual_generation.hunyuan_world import load_hunyuan_world_runtime_defaults
-    from worldfoundry.synthesis.visual_generation.hunyuan_world import generate_crop_size_list
-    from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_game_craft.config import parse_args as parse_game
-    from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager.config import parse_args as parse_voyager
+    from worldfoundry.synthesis.visual_generation.hunyuan_world import (
+        generate_crop_size_list,
+        load_hunyuan_world_runtime_defaults,
+    )
+    from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_game_craft.config import (
+        parse_args as parse_game,
+    )
+    from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager.config import (
+        parse_args as parse_voyager,
+    )
 
     assert load_hunyuan_world_runtime_defaults("game_craft")["infer_steps"] == 100
     assert parse_game(args=[]).infer_steps == 100
@@ -3306,10 +3315,14 @@ def test_pandora_runtime_init_does_not_import_gradio_app_helpers():
 
 
 def test_gr00t_policy_resolves_cosmos_reason2_from_local_hfd_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    from worldfoundry.synthesis.action_generation.gr00t.gr00t_runtime import install_aliases
+    from worldfoundry.synthesis.action_generation.gr00t.gr00t_runtime import (
+        install_aliases,
+    )
 
     install_aliases()
-    from worldfoundry.synthesis.action_generation.gr00t.gr00t_runtime.policy import gr00t_policy
+    from worldfoundry.synthesis.action_generation.gr00t.gr00t_runtime.policy import (
+        gr00t_policy,
+    )
 
     hfd_root = tmp_path / "hfd"
     cosmos_dir = hfd_root / "nvidia--Cosmos-Reason2-2B"
@@ -3583,8 +3596,8 @@ def test_geometric_priors_are_independent_model_catalog_entries():
     import yaml
 
     from worldfoundry.evaluation.models.catalog.schema import load_entries
-    from worldfoundry.evaluation.models.runtime import load_runtime_profile_manifest
     from worldfoundry.evaluation.models.runners.resolver import resolve_model_zoo_config
+    from worldfoundry.evaluation.models.runtime import load_runtime_profile_manifest
 
     catalog_root = REPO_ROOT / "worldfoundry/data/models/catalog/three_d_four_d"
     runtime_root = REPO_ROOT / "worldfoundry/data/models/runtime/profiles"
@@ -3628,7 +3641,9 @@ def test_geometric_priors_are_independent_model_catalog_entries():
 
 
 def test_three_d_four_d_external_repo_resolution_requires_explicit_root(monkeypatch, tmp_path: Path):
-    from worldfoundry.base_models.three_dimensions.three_d_four_d import runtime as runtime_module
+    from worldfoundry.base_models.three_dimensions.three_d_four_d import (
+        runtime as runtime_module,
+    )
     from worldfoundry.base_models.three_dimensions.three_d_four_d.runtime import (
         ThreeDFourDRuntimeSpec,
     )
@@ -3706,7 +3721,9 @@ def test_remaining_foundation_exact_duplicates_are_canonical_reexports_only() ->
 
 
 def test_giga_brain_variant_selector_resolves_0p1_checkpoint(tmp_path: Path) -> None:
-    from worldfoundry.synthesis.action_generation.giga_brain_0.runtime import select_giga_brain_0_paths
+    from worldfoundry.synthesis.action_generation.giga_brain_0.runtime import (
+        select_giga_brain_0_paths,
+    )
 
     base_dir = tmp_path / "open-gigaai--GigaBrain-0-3.5B-Base"
     base_0p1_dir = tmp_path / "open-gigaai--GigaBrain-0.1-3.5B-Base"
@@ -3744,7 +3761,9 @@ def test_giga_brain_variant_selector_resolves_0p1_checkpoint(tmp_path: Path) -> 
 
 
 def test_giga_brain_plan_records_compile_policy_override(tmp_path: Path) -> None:
-    from worldfoundry.synthesis.action_generation.giga_brain_0 import GigaBrain0Synthesis
+    from worldfoundry.synthesis.action_generation.giga_brain_0 import (
+        GigaBrain0Synthesis,
+    )
 
     norm_stats = tmp_path / "norm_stats.json"
     norm_stats.write_text('{"norm_stats": {"observation.state": {}, "action": {}}}', encoding="utf-8")

@@ -8,14 +8,16 @@ from typing import Any, Dict, Optional, Sequence, Union
 import torch
 from PIL import Image
 
-from ...operators.lyra_operator import LyraOperator
-from ...representations.point_clouds_generation.lyra.lyra2_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.lyra.runtime_v2 import (
     Lyra2Representation,
 )
+from worldfoundry.core.io import save_video_frames
+from worldfoundry.core.io.image import load_pil_image
+
+from ...operators.lyra_operator import LyraOperator
 from ...synthesis.visual_generation.lyra_2.synthesis import Lyra2Synthesis
 from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ..pipeline_utils import PipelineABC
-from .lyra_utils import load_pil_image, save_video_frames
 
 
 class Lyra2Pipeline(PipelineABC):

@@ -1122,7 +1122,7 @@ Studio 的实现各自只有一个 canonical import path，根目录仅保留 CL
 
 `visualization/plugins` 保留实际调用的实现：`perception/render.py` 用于 CLI 和 Grounding DINO；`perception/human_pose.py` 生成 Wan Animate conditioning；`scene3d/projection.py` 服务 VIPE；`scene3d/depth_anything_v3/export_vis.py` 服务 DA3 导出；`styles/colormaps.py` 提供 depth / normal 着色。未使用的 media、robotics、pixelSplat training 可视化、重复 DVLT、HED 和 sky-segmentation/GLB 链已删除。
 
-`worldfoundry/representations` 仍是模型 adapter 包。VGGT、Pi3、WorldFM、Lyra 等 pipeline 直接使用其实现，因此保留；无实现和调用的 pixelSplat / Splatt3R marker class 已删除。
+`worldfoundry/representations` 已删除。Depth Anything、VGGT、Pi3、WorldFM、Lyra 等几何 pipeline 直接从 `worldfoundry/base_models/three_dimensions` 对应模型目录导入 runtime；checkpoint 加载、预处理与几何后处理和模型代码放在一起。空基类、marker class 和旧路径转发模块不再保留。Artifact 展示仍由 Studio visualization 负责。
 
 ### 推理生命周期
 

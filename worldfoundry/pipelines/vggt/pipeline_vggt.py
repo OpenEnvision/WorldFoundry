@@ -1,27 +1,27 @@
 """Vggt visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
+import json
 import os
-from typing import List, Optional, Union, Dict, Any
+from typing import Any, Dict, List, Optional, Union
 
-import numpy as np
 import cv2
+import numpy as np
 import torch
 from PIL import Image
-import json
 
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.runtime import (
+    VGGTRepresentation,
+    _opencv_w2c_to_opengl_c2w,
+    _opencv_world_to_opengl,
+)
 from worldfoundry.core.io import artifact_root_path, write_video
 from worldfoundry.core.io.artifacts import depths_to_pil_images
 
-from ...operators.vggt_operator import VGGTOperator
-from ...representations.point_clouds_generation.vggt.vggt_representation import (
-    VGGTRepresentation,
-    _opencv_world_to_opengl,
-    _opencv_w2c_to_opengl_c2w,
-)
 from ...base_models.three_dimensions.point_clouds.ply_io import (
     write_point_cloud as storePly,
 )
+from ...operators.vggt_operator import VGGTOperator
+from ..pipeline_utils import PipelineABC
 
 
 def _default_output_dir(name: str = "vggt_output") -> str:
@@ -971,7 +971,9 @@ class VGGTPipeline(PipelineABC):
         if output_name is not None and not output_name.lower().endswith(".glb"):
             output_name = os.path.splitext(output_name)[0] + ".glb"
 
-        from .official_runtime import run_official_scene_export as _run_official_scene_export
+        from .official_runtime import (
+            run_official_scene_export as _run_official_scene_export,
+        )
 
         return _run_official_scene_export(
             input_source=image_path,

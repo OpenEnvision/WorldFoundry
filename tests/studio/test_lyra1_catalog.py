@@ -1,8 +1,10 @@
-from worldfoundry.runtime.inference_catalog import get_model_inference_spec
+from worldfoundry.core.io.image import load_pil_image
 from worldfoundry.pipelines.lyra.pipeline_lyra1 import Lyra1Pipeline
-from worldfoundry.pipelines.lyra.lyra_utils import load_pil_image
+from worldfoundry.runtime.inference_catalog import get_model_inference_spec
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.synthesis.visual_generation.lyra_1.worldfoundry_runtime import Lyra1Runtime
+from worldfoundry.synthesis.visual_generation.lyra_1.worldfoundry_runtime import (
+    Lyra1Runtime,
+)
 
 
 def test_lyra1_catalog_selects_the_configured_checkpoint_root(tmp_path, monkeypatch) -> None:

@@ -16,11 +16,13 @@ if __name__ != "__main__" and os.getenv("WORLDFOUNDRY_RUN_HEAVY_MODEL_TESTS", ""
 # from diffusers.utils import export_to_video
 import imageio
 from PIL import Image
-from worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_world_voyager import HunyuanWorldVoyagerPipeline
-from worldfoundry.representations.point_clouds_generation.hunyuan_world.hunyuan_world_voyager_representation import (
+
+from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_voyager.runtime import (
     DEFAULT_HUNYUAN_WORLD_VOYAGER_MOGE1_REPO,
 )
-
+from worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_world_voyager import (
+    HunyuanWorldVoyagerPipeline,
+)
 
 image_path = os.getenv(
     "HUNYUAN_WORLD_VOYAGER_IMAGE_PATH",

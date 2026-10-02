@@ -380,8 +380,9 @@ def test_gradio_patches_are_explicit_and_reversible() -> None:
 
 def test_gradio_patches_uninstall_restores_url_ok() -> None:
     pytest.importorskip("gradio")
-    from worldfoundry.studio.ui import gradio_runtime as grt
     import gradio.networking as gr_networking
+
+    from worldfoundry.studio.ui import gradio_runtime as grt
 
     grt.install_gradio_patches()
     assert getattr(gr_networking, "_worldfoundry_proxy_safe_url_ok", False)
@@ -418,7 +419,9 @@ def test_env_registry_documents_legacy_trainer_and_wm_aliases() -> None:
     assert "TRAINER_TORCH_PROFILER_DIR" in source
     assert "WM_AUTO_CUDA_VISIBLE_DEVICES" in source
 
-    from worldfoundry.core.env_registry import getenv_registered as core_getenv_registered
+    from worldfoundry.core.env_registry import (
+        getenv_registered as core_getenv_registered,
+    )
     from worldfoundry.runtime.env import getenv_registered as runtime_getenv_registered
 
     assert runtime_getenv_registered is core_getenv_registered
@@ -540,7 +543,7 @@ def test_scratch_directory_lives_under_cache_root(tmp_path, monkeypatch) -> None
 def test_xc17_callers_use_scratch_directory() -> None:
     files = [
         "worldfoundry/pipelines/lyra/pipeline_lyra1.py",
-        "worldfoundry/pipelines/lyra/lyra_utils.py",
+        "worldfoundry/base_models/three_dimensions/point_clouds/lyra/utils.py",
         "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_3.py",
         "worldfoundry/core/io/video.py",
         "worldfoundry/evaluation/models/runtime/profile_synthesis.py",

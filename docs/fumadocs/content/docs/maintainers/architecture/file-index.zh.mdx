@@ -106,15 +106,6 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>worldfoundry/representations</code>
-          </div>
-        </div>
-        <p>把模型输出转换为几何/世界 artifact：深度、点云、3DGS、panorama、geometry 资产。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>representations/base_representation.py:4</code> <code>BaseRepresentation</code></p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
             <code>worldfoundry/evaluation</code>
           </div>
         </div>
@@ -128,7 +119,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>复用同一 catalog/runtime 契约的交互式预览壳。仅展示层胶水。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>studio/cli.py:78</code> <code>main()</code>；<code>studio/execution.py</code>、<code>studio/catalog.py</code>；<a href="/zh/docs/maintainers/architecture/studio-internals">Studio 内部</a></p>
+        <p className="pi-kv-read"><span>首读</span> <code>studio/cli.py:78</code> <code>main()</code>；<code>studio/inference/execution.py</code>、<code>studio/inference/catalog.py</code>；<a href="/zh/docs/maintainers/architecture/studio-internals">Studio 内部</a></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -145,7 +136,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
 
 ## 各条如何衔接
 
-一次 run 是顺着这份清单向下流动，而不是随机横向引用。用户输入经 `cli` 或 `mcp` 进入；`runtime` 与 `data` 准备环境并声明可运行项；`core` 与 `base_models` 提供共享推理原语；`pipelines` 加 `operators` 加 `synthesis` 把归一化 request 变成 `GenerationResult`；需要时 `representations` 产出几何 artifact；`evaluation` 消费 artifact 产出 scorecard；`studio` 通过 UI 壳预览同一 artifact。`training` 在这条脊线旁边：它产出 checkpoint，不给 checkpoint 打分。
+一次 run 是顺着这份清单向下流动，而不是随机横向引用。用户输入经 `cli` 或 `mcp` 进入；`runtime` 与 `data` 准备环境并声明可运行项；`core` 与 `base_models` 提供共享推理原语；`pipelines` 加 `operators` 加 `synthesis` 把归一化 request 变成 `GenerationResult`；需要时 `base_models/three_dimensions` 运行几何模型并产出几何 artifact；`evaluation` 消费 artifact 产出 scorecard；`studio` 通过 UI 壳预览同一 artifact。`training` 在这条脊线旁边：它产出 checkpoint，不给 checkpoint 打分。
 
 <Callout type="info">
   一个文件所在的包应当在你读代码之前就回答“这一类改动归谁”。如果不确定某修复属于哪一层，从 [架构](/zh/docs/maintainers/architecture) 起步，选择与你要改的层匹配的子页。

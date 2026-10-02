@@ -4,20 +4,21 @@ Input image(s), output 3D reconstruction (depth, normal, point cloud,
 gaussians). Loads operators and the WorldMirror representation model.
 """
 
-from ..pipeline_utils import PipelineABC
 import logging
-import torch
-import numpy as np
 import os
 import time
 from pathlib import Path
-from PIL import Image
-from typing import Optional, Any, Dict, List
+from typing import Any, Dict, List, Optional
+
 import cv2
+import numpy as np
+import torch
+from PIL import Image
 
 from worldfoundry.core.io import artifact_root_path
 from worldfoundry.core.io.paths import checkpoint_root_path
 
+from ..pipeline_utils import PipelineABC
 
 _OUTPUT_FILE_SUFFIXES = {".mp4", ".mov", ".webm", ".ply", ".zip"}
 
@@ -80,7 +81,7 @@ class HunyuanMirrorPipeline(PipelineABC):
         
         # Load representation model
         logger.info("Loading HunyuanWorld-Mirror model from %s", actual_model_path)
-        from ...representations.point_clouds_generation.hunyuan_world.hunyuan_world_mirror_representation import (
+        from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.runtime import (
             HunyuanWorldMirrorRepresentation,
         )
 
@@ -242,7 +243,11 @@ class HunyuanMirrorPipeline(PipelineABC):
         if apply_sky_mask:
             logger.info("Computing sky masks...")
             import onnxruntime
-            from worldfoundry.core.io.artifacts import download_file_from_url, segment_sky
+
+            from worldfoundry.core.io.artifacts import (
+                download_file_from_url,
+                segment_sky,
+            )
 
             # Keep the auxiliary weight under the framework checkpoint root
             # instead of the process CWD (avoids re-downloads and CWD pollution).

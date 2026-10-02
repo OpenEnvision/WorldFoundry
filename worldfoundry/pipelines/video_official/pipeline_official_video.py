@@ -6,11 +6,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping
 
 from worldfoundry.core.io import artifact_root_path
+from worldfoundry.core.io.image import load_pil_image, materialize_image_input
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
-from worldfoundry.pipelines.lyra.lyra_utils import load_pil_image, materialize_image_input
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
 from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
-from worldfoundry.synthesis.visual_generation.official_video_runtime import OfficialVideoRuntime
+from worldfoundry.synthesis.visual_generation.official_video_runtime import (
+    OfficialVideoRuntime,
+)
 
 if TYPE_CHECKING:
     from worldfoundry.core.contracts import PipelineInvocation

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.pipelines.lyra.lyra_utils import load_pil_image
-from worldfoundry.pipelines.video_official.pipeline_official_video import OfficialVideoPipeline
+from worldfoundry.core.io.image import load_pil_image
+from worldfoundry.pipelines.video_official.pipeline_official_video import (
+    OfficialVideoPipeline,
+)
 
 
 class HeliosPipeline(OfficialVideoPipeline):

@@ -6,7 +6,12 @@ import json
 from pathlib import Path
 
 from worldfoundry.core.io import resolve_data_path
-from worldfoundry.runtime.official_inference import InferencePlan, OfficialInferenceRuntime, local_path, positive_int
+from worldfoundry.runtime.official_inference import (
+    InferencePlan,
+    OfficialInferenceRuntime,
+    local_path,
+    positive_int,
+)
 
 
 class AlayaWorldV11Runtime(OfficialInferenceRuntime):
@@ -78,7 +83,7 @@ class AlayaWorldV11Runtime(OfficialInferenceRuntime):
         rounds = positive_int(request.get("rounds", 5), "rounds")
         output = local_path(output_dir)
         output.mkdir(parents=True, exist_ok=True)
-        from worldfoundry.pipelines.lyra.lyra_utils import load_pil_image, materialize_image_input
+        from worldfoundry.core.io.image import load_pil_image, materialize_image_input
 
         image = materialize_image_input(load_pil_image(request["images"]), str(output), filename="input.png")
         payload = {

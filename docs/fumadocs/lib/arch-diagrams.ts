@@ -232,7 +232,7 @@ const MODEL_RUNTIME: ArchDiagramSpec = {
     },
     representation: {
       role: { en: 'Geometry', zh: '几何' },
-      title: 'BaseRepresentation',
+      title: '3D model runtime',
       detail: {
         en: 'depth / point cloud / 3DGS / scene',
         zh: '深度 / 点云 / 3DGS / scene',
@@ -846,8 +846,8 @@ const RUNTIME_ASSEMBLY: ArchDiagramSpec = {
     },
     representation: {
       role: { en: 'Geometry', zh: '几何' },
-      title: 'BaseRepresentation',
-      file: 'representations/base_representation.py:4',
+      title: '3D model runtime',
+      file: 'base_models/three_dimensions/',
       optional: true,
       detail: {
         en: 'depth, point cloud, 3DGS, panorama, geometry',

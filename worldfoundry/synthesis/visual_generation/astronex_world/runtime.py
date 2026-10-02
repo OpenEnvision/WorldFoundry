@@ -7,7 +7,12 @@ import re
 from pathlib import Path
 
 from worldfoundry.core.io import resolve_data_path
-from worldfoundry.runtime.official_inference import InferencePlan, OfficialInferenceRuntime, local_path, positive_int
+from worldfoundry.runtime.official_inference import (
+    InferencePlan,
+    OfficialInferenceRuntime,
+    local_path,
+    positive_int,
+)
 
 
 class AstronexWorldRuntime(OfficialInferenceRuntime):
@@ -160,7 +165,10 @@ class AstronexWorldRuntime(OfficialInferenceRuntime):
         )
         command.extend(("--gpu", visible))
         if reference:
-            from worldfoundry.pipelines.lyra.lyra_utils import load_pil_image, materialize_image_input
+            from worldfoundry.core.io.image import (
+                load_pil_image,
+                materialize_image_input,
+            )
 
             image_path = materialize_image_input(load_pil_image(image), str(output), filename="input.png")
             command.extend(("--image", str(image_path)))

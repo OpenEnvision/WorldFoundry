@@ -5,7 +5,6 @@ from pathlib import Path
 import numpy as np
 import torchvision.io
 
-from worldfoundry.core.io import video as video_io
 from worldfoundry.core.io import (
     VIDEO_EXTENSIONS,
     coerce_video_frames,
@@ -15,7 +14,7 @@ from worldfoundry.core.io import (
     save_video_frames,
     video_tensor_to_uint8_frames,
 )
-
+from worldfoundry.core.io import video as video_io
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -45,7 +44,7 @@ def test_local_video_helpers_are_shared_runtime_api() -> None:
     ):
         assert callable(helper)
 
-    lyra_text = (REPO_ROOT / "worldfoundry/pipelines/lyra/lyra_utils.py").read_text(encoding="utf-8")
+    lyra_text = (REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/lyra/runtime_v2.py").read_text(encoding="utf-8")
     inspatio_synthesis_text = (
         REPO_ROOT / "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_synthesis.py"
     ).read_text(encoding="utf-8")

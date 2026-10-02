@@ -3,15 +3,18 @@ input image and interaction signal output rendering video
 load operators, representations, and rendering model
 """
 import logging
-import torch
-import numpy as np
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Optional
+
+import numpy as np
+import torch
 from PIL import Image
-from typing import Optional, Any, TYPE_CHECKING
-from ..pipeline_utils import PipelineABC
+
 from worldfoundry.core.io import artifact_root_path
 from worldfoundry.runtime.env import resolve_ckpt_dir
+
+from ..pipeline_utils import PipelineABC
 
 DEFAULT_HUNYUAN_WORLD_VOYAGER_MOGE1_REPO = "Ruicheng/moge-vitl"
 
@@ -24,11 +27,14 @@ def _default_output_dir(name: str = "hunyuan_world_voyager") -> str:
 
 
 if TYPE_CHECKING:
-    from ...operators.hunyuan_world_voyager_operator import HunyuanWorldVoyagerOperator
-    from ...representations.point_clouds_generation.hunyuan_world.hunyuan_world_voyager_representation import (
+    from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_voyager.runtime import (
         HunyuanWorldVoyagerRepresentation,
     )
-    from ...synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager_synthesis import HunyuanWorldVoyagerSynthesis
+
+    from ...operators.hunyuan_world_voyager_operator import HunyuanWorldVoyagerOperator
+    from ...synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager_synthesis import (
+        HunyuanWorldVoyagerSynthesis,
+    )
 
 
 class HunyuanWorldVoyagerPipeline(PipelineABC):
@@ -100,7 +106,7 @@ class HunyuanWorldVoyagerPipeline(PipelineABC):
         represent_model = None
         if not skip_representation_model:
             logger.info("Loading representation model from %s", represent_model_path)
-            from ...representations.point_clouds_generation.hunyuan_world.hunyuan_world_voyager_representation import (
+            from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_voyager.runtime import (
                 HunyuanWorldVoyagerRepresentation,
             )
 
@@ -115,7 +121,9 @@ class HunyuanWorldVoyagerPipeline(PipelineABC):
             )
 
         logger.info("Loading rendering model from %s", model_path)
-        from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager.config import parse_args
+        from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager.config import (
+            parse_args,
+        )
 
         rendering_args = parse_args(argv=[])
         rendering_args.model_base = model_path
@@ -123,8 +131,12 @@ class HunyuanWorldVoyagerPipeline(PipelineABC):
             "hunyuan_world_voyager/represent_render"
         )
 
-        from ...synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager_synthesis import HunyuanWorldVoyagerSynthesis
-        from ...operators.hunyuan_world_voyager_operator import HunyuanWorldVoyagerOperator
+        from ...operators.hunyuan_world_voyager_operator import (
+            HunyuanWorldVoyagerOperator,
+        )
+        from ...synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager_synthesis import (
+            HunyuanWorldVoyagerSynthesis,
+        )
 
         rendering_model = HunyuanWorldVoyagerSynthesis.from_pretrained(
             model_path, 
@@ -388,7 +400,9 @@ class HunyuanWorldVoyagerPipeline(PipelineABC):
         # Only save on the main process in distributed settings
         output_video = None
         if 'LOCAL_RANK' not in os.environ or int(os.environ['LOCAL_RANK']) == 0:
-            from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager.utils.file_utils import video_output
+            from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_world_voyager.utils.file_utils import (
+                video_output,
+            )
 
             sample = samples[0].unsqueeze(0)
             output_video = video_output(sample, fps=24)

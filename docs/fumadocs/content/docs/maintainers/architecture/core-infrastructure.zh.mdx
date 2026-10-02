@@ -156,7 +156,7 @@ description: worldfoundry/core 共享层 —— 加载、attention、分布式�
 
 ## 依赖规则
 
-`core` 可依赖 PyTorch、`diffusers` 的 model/operator 原语与窄范围第三方库。它不得 import `worldfoundry.pipelines`、`worldfoundry.synthesis`、`worldfoundry.operators`、`worldfoundry.representations`、`worldfoundry.base_models` 的 family 包，或 `worldfoundry.evaluation`。依赖边是从 family 包指向 `core`，绝不反向。
+`core` 可依赖 PyTorch、`diffusers` 的 model/operator 原语与窄范围第三方库。它不得 import `worldfoundry.pipelines`、`worldfoundry.synthesis`、`worldfoundry.operators`、`worldfoundry.base_models` 的 family 包，或 `worldfoundry.evaluation`。依赖边是从 family 包指向 `core`，绝不反向。
 
 这让 family 包保持精简：一个模型目录只含 checkpoint 兼容的张量算子与契约适配器，而不是第二份 offload manager、分布式 bootstrap、kernel registry 或量化系统。当你发现自己要在 family 包里加这些东西时，先把它移到 `core` 再 import。
 

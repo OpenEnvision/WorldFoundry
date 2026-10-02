@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 
 import torch
 
-from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
-from ...operators.lyra1_operator import Lyra1Operator
-from ...representations.point_clouds_generation.lyra.lyra1_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.lyra.runtime_v1 import (
     Lyra1Representation,
 )
-from ...synthesis.visual_generation.lyra_1.synthesis import Lyra1Synthesis
+from worldfoundry.base_models.three_dimensions.point_clouds.lyra.utils import (
+    resolve_lyra1_repo_root,
+)
 from worldfoundry.core.io.paths import scratch_directory
+
+from ...operators.lyra1_operator import Lyra1Operator
+from ...synthesis.visual_generation.lyra_1.synthesis import Lyra1Synthesis
+from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
+from ..pipeline_utils import PipelineABC
+from .checkpoints import prepare_lyra1_checkpoint_root
 
 
 class Lyra1Pipeline(PipelineABC):
@@ -85,6 +90,10 @@ class Lyra1Pipeline(PipelineABC):
         if load_representation:
             representation_model = Lyra1Representation.from_pretrained(
                 pretrained_model_path=repo_root,
+                checkpoint_dir=prepare_lyra1_checkpoint_root(
+                    checkpoint_dir=required_components.get("checkpoint_dir") or synthesis_model.checkpoint_dir,
+                    repo_root=resolve_lyra1_repo_root(repo_root),
+                ),
                 device=device,
                 static_ckpt_path=required_components.get("static_ckpt_path"),
                 dynamic_ckpt_path=required_components.get("dynamic_ckpt_path"),

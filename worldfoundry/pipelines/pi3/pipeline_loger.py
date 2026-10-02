@@ -3,20 +3,23 @@
 Note: "loger" in this filename refers to the LoGeR model, not a logging utility.
 """
 
-from ..pipeline_utils import PipelineABC
-import os
 import json
 import logging
 import math
-from typing import List, Optional, Union, Dict, Any
+import os
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from PIL import Image
 
-from ...operators.pi3_operator import Pi3Operator
-from ...representations.point_clouds_generation.pi3.loger_representation import LoGeRRepresentation
+from worldfoundry.base_models.three_dimensions.point_clouds.loger.runtime import (
+    LoGeRRepresentation,
+)
 from worldfoundry.core.io import artifact_root_path
 from worldfoundry.core.io.artifacts import render_point_cloud
+
+from ...operators.pi3_operator import Pi3Operator
+from ..pipeline_utils import PipelineABC
 
 logger = logging.getLogger(__name__)
 

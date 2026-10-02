@@ -19,7 +19,7 @@ A WorldFoundry model is a stack of five surfaces. The pipeline is the public ent
 
 The operator lives under `worldfoundry/operators/`. Every runnable method needs one, even when the first version is thin. Its job is to validate the request, load media, parse camera or action controls, and shape interaction state so the pipeline sees a stable, typed input. If you skip the operator and stuff that logic into the pipeline, the next benchmark or Studio form will have nowhere clean to attach.
 
-Backend-specific inference code — the vendor `inference.py`, the transformer block, the tokenizer wrapper — belongs in `worldfoundry/synthesis/`, `worldfoundry/representations/`, or `worldfoundry/base_models/`, following the layout already used by that family. Those packages are runtime primitives. They are not a place for training loops, dataset builders, dataloaders, augmentation pipelines, or Lightning callbacks.
+Backend-specific inference code — the vendor `inference.py`, the transformer block, the tokenizer wrapper — belongs in `worldfoundry/synthesis/`, `worldfoundry/base_models/`, following the layout already used by that family. Those packages are runtime primitives. They are not a place for training loops, dataset builders, dataloaders, augmentation pipelines, or Lightning callbacks.
 
 The evaluation binding is how CLI, TUI, and the generic benchmark runner find the method. Resolution always goes through catalog `pipeline_target` or `pipeline_binding`, then through `worldfoundry/evaluation/models/pipelines/bindings.py`. That file is the only place that should normalize route strings. Do not add a second parser in catalog loading, in the resolver, or in a check helper.
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -10,11 +9,14 @@ from typing import Any, Dict, Optional
 import numpy as np
 from PIL import Image
 
+from worldfoundry.base_models.three_dimensions.point_clouds.lingbot_map.runtime import (
+    LingBotMapRepresentation,
+)
 from worldfoundry.core.io import artifact_root_path
 from worldfoundry.core.io.artifacts import depths_to_pil_images
 
 from ...operators.lingbot_map_operator import LingBotMapOperator
-from ...representations.point_clouds_generation.lingbot_map import LingBotMapRepresentation
+from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
 from ..pipeline_utils import PipelineABC
 
 

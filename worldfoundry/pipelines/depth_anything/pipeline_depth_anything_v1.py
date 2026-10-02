@@ -1,23 +1,23 @@
 """Depth Anything V1 visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
 import logging
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, List, Optional, Union, Dict
+from typing import Any, Dict, List, Optional, Union
 
 import cv2
 import numpy as np
 import torch
 from tqdm import tqdm
 
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.runtime_v1 import (
+    DepthAnything1Representation,
+)
 from worldfoundry.core.io import artifact_root_path, read_video, write_video
 
 from ...operators.depth_anything_operator import DepthAnythingOperator
-from ...representations.depth_generation.depth_anything.depth_anything_v1_representation import (
-    DepthAnything1Representation,
-)
+from ..pipeline_utils import PipelineABC
 
 logger = logging.getLogger(__name__)
 

@@ -1,13 +1,14 @@
 """Infinite Vggt visual generation pipeline module."""
 
 from ..pipeline_utils import PipelineABC
+
 """
 InfiniteVGGT pipeline: operators + representation / reasoning / synthesis.
 Output is saveable (PIL.Image, video frame list); pipeline does not save — user saves in test.
 """
 
 from pathlib import Path
-from typing import List, Optional, Union, Dict, Any, Generator, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Union
 
 if TYPE_CHECKING:
     import torch
@@ -15,6 +16,9 @@ if TYPE_CHECKING:
 import numpy as np
 from PIL import Image
 
+from worldfoundry.base_models.three_dimensions.point_clouds.infinite_vggt.runtime import (
+    InfiniteVGGTRepresentation,
+)
 from worldfoundry.core.io import artifact_root_path, write_text_file
 from worldfoundry.core.io.artifacts import (
     depth_to_colormap_pil,
@@ -22,9 +26,6 @@ from worldfoundry.core.io.artifacts import (
 )
 
 from ...operators.infinite_vggt_operator import InfiniteVGGTOperator
-from ...representations.point_clouds_generation.vggt.infinite_vggt_representation import (
-    InfiniteVGGTRepresentation,
-)
 
 
 def _default_output_dir(name: str = "infinite_vggt_output") -> str:

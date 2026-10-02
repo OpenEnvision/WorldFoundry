@@ -1,13 +1,16 @@
 """Cut3R visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
 import logging
 import os
-from typing import Optional, List, Union, Dict, Any, Generator
-import numpy as np
-from PIL import Image
-import torch
+from typing import Any, Dict, Generator, List, Optional, Union
 
+import numpy as np
+import torch
+from PIL import Image
+
+from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.runtime import (
+    CUT3RRepresentation,
+)
 from worldfoundry.core.io import artifact_root_path, write_video
 from worldfoundry.core.io.artifacts import (
     COLORMAP_VIRIDIS,
@@ -16,13 +19,11 @@ from worldfoundry.core.io.artifacts import (
     squeeze_depth_to_2d,
 )
 
-from ...operators.cut3r_operator import CUT3ROperator
-from ...representations.point_clouds_generation.cut3r.cut3r_representation import (
-    CUT3RRepresentation,
-)
 from ...base_models.three_dimensions.point_clouds.ply_io import (
     write_point_cloud as storePly,
 )
+from ...operators.cut3r_operator import CUT3ROperator
+from ..pipeline_utils import PipelineABC
 
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ WorldFoundry 里的模型是五层叠在一起的。Pipeline 是公开入口：�
 
 Operator 放在 `worldfoundry/operators/`。每个 runnable method 都要有，哪怕第一版很薄。它负责校验请求、加载媒体、解析 camera / action、整理 interaction state，让 pipeline 只看见稳定、有类型的输入。若跳过 operator、把这些逻辑塞进 pipeline，后面的 benchmark 或 Studio 表单就没有干净的挂载点。
 
-Backend 相关的推理实现——官方 `inference.py`、transformer block、tokenizer 封装——按现有布局放进 `worldfoundry/synthesis/`、`worldfoundry/representations/` 或 `worldfoundry/base_models/`。这些包是 runtime primitive，不是训练循环、dataset builder、dataloader、augmentation pipeline 或 Lightning callback 的落点。
+Backend 相关的推理实现——官方 `inference.py`、transformer block、tokenizer 封装——按现有布局放进 `worldfoundry/synthesis/`、`worldfoundry/base_models/`。这些包是 runtime primitive，不是训练循环、dataset builder、dataloader、augmentation pipeline 或 Lightning callback 的落点。
 
 Evaluation binding 决定 CLI、TUI 和通用 benchmark runner 如何找到该方法。解析路径永远是 catalog 上的 `pipeline_target` 或 `pipeline_binding`，再经过 `worldfoundry/evaluation/models/pipelines/bindings.py`。Route 字符串的归一化只应出现在这个文件里，不要在 catalog 加载、resolver 或 check helper 里再写一套 parser。
 

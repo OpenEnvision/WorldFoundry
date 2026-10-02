@@ -1,17 +1,20 @@
 """Flash World visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
-from typing import Optional, List, Union, Dict, Any
+import base64
 import importlib.util
 import os
 import shutil
-import base64
 import tempfile
 import warnings
-import torch
+from typing import Any, Dict, List, Optional, Union
+
 import numpy as np
+import torch
 from PIL import Image
+
 from worldfoundry.core.io import load_json, write_video
+
+from ..pipeline_utils import PipelineABC
 
 
 def _flash_world_operator_cls():
@@ -23,7 +26,7 @@ def _flash_world_operator_cls():
 
 def _flash_world_representation_cls():
     """Flash world representation cls helper function."""
-    from ...representations.point_clouds_generation.flash_world.flash_world_representation import (
+    from worldfoundry.base_models.three_dimensions.point_clouds.flash_world.runtime import (
         FlashWorldRepresentation,
     )
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "worldfoundry"
 
@@ -18,7 +17,6 @@ LAYER_ORDER = {
     "studio": 4,
     "operators": 4,
     "memories": 4,
-    "representations": 4,
     "cli": 5,
     "mcp": 5,
 }

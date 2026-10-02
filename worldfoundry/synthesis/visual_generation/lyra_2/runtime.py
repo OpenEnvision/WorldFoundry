@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
 from worldfoundry.core.io.paths import checkpoint_root_candidates
-from worldfoundry.synthesis.visual_generation.lyra_2 import SOURCE_PACKAGE_ROOT as LYRA2_SOURCE_PACKAGE_ROOT
+from worldfoundry.synthesis.visual_generation.lyra_2 import (
+    SOURCE_PACKAGE_ROOT as LYRA2_SOURCE_PACKAGE_ROOT,
+)
 
 DEFAULT_DA3_MODEL_NAME = "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
 DEFAULT_WEIGHT_DTYPE = "bfloat16"
@@ -350,7 +352,9 @@ class Lyra2Runtime:
         """
         import torch
 
-        from worldfoundry.pipelines.lyra.lyra_utils import working_directory
+        from worldfoundry.base_models.three_dimensions.point_clouds.lyra.utils import (
+            working_directory,
+        )
 
         if not str(self.device).startswith("cuda"):
             raise ValueError("Lyra-2 runtime loading requires a CUDA device.")
@@ -386,7 +390,9 @@ class Lyra2Runtime:
         )
         self._install_checkpoint_aliases(checkpoint_root)
 
-        from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.inference.depth_utils import load_da3_model
+        from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.inference.depth_utils import (
+            load_da3_model,
+        )
         from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.utils.model_loader import (
             load_model_from_checkpoint,
         )
@@ -483,7 +489,9 @@ class Lyra2Runtime:
             offload_when_prompt: Whether to use the offloaded embedding helper.
         """
         self._install_runtime_aliases()
-        from worldfoundry.pipelines.lyra.lyra_utils import working_directory
+        from worldfoundry.base_models.three_dimensions.point_clouds.lyra.utils import (
+            working_directory,
+        )
 
         desired_device = self.model.tensor_kwargs.get("device", self.device)
         desired_dtype = self.model.tensor_kwargs.get("dtype", self.weight_dtype)
@@ -680,7 +688,8 @@ class Lyra2Runtime:
         import numpy as np
         import torch
 
-        from worldfoundry.pipelines.lyra.lyra_utils import load_pil_image, video_tensor_to_uint8_frames
+        from worldfoundry.core.io import video_tensor_to_uint8_frames
+        from worldfoundry.core.io.image import load_pil_image
 
         self._install_runtime_aliases()
         with torch.no_grad() if hasattr(torch, "no_grad") else contextlib.nullcontext():

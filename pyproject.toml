@@ -527,7 +527,6 @@ extend-exclude = [
     "apps",
     "worldfoundry/base_models",
     "worldfoundry/synthesis",
-    "worldfoundry/representations",
     "worldfoundry/evaluation/tasks/execution/runners/*/runtime",
     "worldfoundry/evaluation/tasks/metrics/*/vendor",
     "worldfoundry/evaluation/tasks/execution/runners/*/runtime",

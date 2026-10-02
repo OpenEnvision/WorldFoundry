@@ -1,13 +1,13 @@
 import os
+
 import torch
 
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.runtime_v3 import (
+    DEFAULT_DEPTH_ANYTHING3_SMALL_REPO,
+)
 from worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3 import (
     DepthAnything3Pipeline,
 )
-from worldfoundry.representations.depth_generation.depth_anything.depth_anything_v3_representation import (
-    DEFAULT_DEPTH_ANYTHING3_SMALL_REPO,
-)
-
 
 DATA_PATH = os.environ.get(
     "DEPTH_ANYTHING3_DATA_PATH",

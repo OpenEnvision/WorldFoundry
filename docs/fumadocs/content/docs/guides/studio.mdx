@@ -1217,10 +1217,12 @@ duplicate DVLT visualization, HED annotator, sky-segmentation/GLB export chain,
 and compatibility wrappers have been deleted. Geometry providers discover
 actual artifacts; a directory of Python source is not a renderable scene.
 
-`worldfoundry/representations` remains a model-adapter package: VGGT, Pi3,
-WorldFM, Lyra and other pipelines directly call its implementations. It is
-not a generic data-schema layer. The unused pixelSplat and Splatt3R marker
-classes have been removed; their actual pipeline runtimes are separate.
+`worldfoundry/representations` has been removed. Depth Anything, VGGT, Pi3,
+WorldFM, Lyra and the other geometry pipelines now import their runtime from
+the corresponding family in `worldfoundry/base_models/three_dimensions`.
+Checkpoint loading, preprocessing and geometry postprocessing live beside
+the model code. The empty base class, marker classes and old-path forwarding
+modules are gone. Studio visualization still owns artifact display.
 
 ### Inference lifecycle
 

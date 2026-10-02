@@ -1,13 +1,15 @@
 import os
 from pathlib import Path
 
-import torch
 import numpy as np
+import torch
 from PIL import Image
-from .utils.general_utils import pano_unit_rays
-from worldfoundry.representations.depth_generation.depth_anything.depth_anything_v2_representation import (
+
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.runtime_v2 import (
     DepthAnything2Representation,
 )
+
+from .utils.general_utils import pano_unit_rays
 
 MAX_DISTANCE = 20.0  # Scale the relative depth prior so max distance = 20 meters
 

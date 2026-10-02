@@ -27,11 +27,11 @@ Binding 解析应统一走 `worldfoundry/evaluation/models/pipelines/bindings.py
 
 ## 基础抽象
 
-五个基类定义组装面：`PipelineABC`（load/process/stream 入口）、`BaseOperator`（仅输入与交互整形）、`BaseSynthesis`（本地 native runtime 或 hosted API）、`BaseRepresentation`（几何/世界 artifact 转换）、`BaseMemory`（为流式或多轮控制保留前序状态）。`NativeDiffusionPipeline` 和 `NativeDiffusionRunner` 在 `BaseSynthesis` 边界下承担本地 diffusion 执行。各基类定义在哪个文件、各自拥有什么，见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly) 的基类表；它们依赖的共享原语见 [核心基础设施](/zh/docs/maintainers/architecture/core-infrastructure)。
+四个基类定义组装面：`PipelineABC`（load/process/stream 入口）、`BaseOperator`（仅输入与交互整形）、`BaseSynthesis`（本地 native runtime 或 hosted API）、`BaseMemory`（为流式或多轮控制保留前序状态）。`NativeDiffusionPipeline` 和 `NativeDiffusionRunner` 在 `BaseSynthesis` 边界下承担本地 diffusion 执行。各基类定义在哪个文件、各自拥有什么，见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly) 的基类表；它们依赖的共享原语见 [核心基础设施](/zh/docs/maintainers/architecture/core-infrastructure)。
 
 ## 目录职责
 
-判断一个模型修复应该落在哪一层时，可以先问“这次失败发生在输入、推理、几何后处理，还是状态管理”，再映射到归属包：输入 → `operators/`，原生推理与 hosted API → `synthesis/`，3D/4D artifact → `representations/`，流式或多轮状态 → `core/memory` 加 `synthesis/*/memory`。这些包的目录级布局（含各 family 的 `synthesis.py` 以及 CameraCtrl/MotionCtrl 的位置）见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly)。仅有 profile shell 的类不算集成完成。
+判断一个模型修复应该落在哪一层时，可以先问“这次失败发生在输入、推理、几何后处理，还是状态管理”，再映射到归属包：输入 → `operators/`，原生推理与 hosted API → `synthesis/`，3D/4D 推理与 artifact → `base_models/three_dimensions/`，流式或多轮状态 → `core/memory` 加 `synthesis/*/memory`。这些包的目录级布局（含各 family 的 `synthesis.py` 以及 CameraCtrl/MotionCtrl 的位置）见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly)。仅有 profile shell 的类不算集成完成。
 
 静态推理预设在 `worldfoundry/data/models/`：`catalog/` 是元数据，`bindings/` 是 pipeline 入口，`runtime/profiles/` 是执行要求，`runtime/environments/` 是依赖规格，`runtime/configs/<model>/` 是 YAML/JSON 预设和示例输入。不要依赖工作目录，用包数据路径解析：
 
@@ -75,4 +75,4 @@ Evaluation runner 不会直接 import pipeline 文件，除非 catalog 中的 mo
 
 ## 模型族索引
 
-各类模型修复应落在哪个包（`pipelines/`、`operators/`、`synthesis/`、`representations/`、`core/memory`）的目录级指引见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly)。对声明了可运行 runner 的模型，记录 public class 行为与 public 方法；未声明或已归档的 wrapper 只保留简短索引，不展开实现细节。
+各类模型修复应落在哪个包（`pipelines/`、`operators/`、`synthesis/`、`base_models/three_dimensions/`、`core/memory`）的目录级指引见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly)。对声明了可运行 runner 的模型，记录 public class 行为与 public 方法；未声明或已归档的 wrapper 只保留简短索引，不展开实现细节。

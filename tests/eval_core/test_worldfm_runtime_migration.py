@@ -6,12 +6,15 @@ import pytest
 # imageio dependency at import time; skip in environments without it.
 pytest.importorskip("imageio")
 
-from worldfoundry.representations.point_clouds_generation.worldfm.panogen import ensure_hy3dworld
-from worldfoundry.representations.point_clouds_generation.worldfm.worldfm_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.worldfm.panogen import (
+    ensure_hy3dworld,
+)
+from worldfoundry.base_models.three_dimensions.point_clouds.worldfm.runtime import (
     WorldFMRepresentation,
 )
-from worldfoundry.synthesis.visual_generation.worldfm.worldfm_synthesis import WorldFMSynthesis
-
+from worldfoundry.synthesis.visual_generation.worldfm.worldfm_synthesis import (
+    WorldFMSynthesis,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SYNTHESIS_ROOT = REPO_ROOT / "worldfoundry/synthesis/visual_generation/worldfm"
@@ -37,7 +40,7 @@ def test_worldfm_synthesis_missing_assets_fail_fast() -> None:
 
 
 def test_worldfm_panogen_does_not_resolve_external_hunyuanworld_checkouts() -> None:
-    source = (REPO_ROOT / "worldfoundry/representations/point_clouds_generation/worldfm/panogen.py").read_text(
+    source = (REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/worldfm/panogen.py").read_text(
         encoding="utf-8"
     )
 

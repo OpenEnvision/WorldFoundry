@@ -1,6 +1,6 @@
 ---
 title: Runtime assembly
-description: The base-class contracts and directory roles for pipelines, operators, synthesis, representations, and base_models — how a model call is assembled before it reaches a GenerationResult.
+description: The base-class contracts and directory roles for pipelines, operators, synthesis, and base_models — how a model call is assembled before it reaches a GenerationResult.
 ---
 
 ## What this page is for
@@ -49,15 +49,6 @@ Every runnable method needs both a pipeline and an operator. Operators may be th
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>BaseRepresentation</code>
-          </div>
-        </div>
-        <p>Converts model outputs into geometric or world artifacts: <code>from_pretrained</code>, <code>api_init</code>, <code>get_representation</code>.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>representations/base_representation.py:4</code></p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
             <code>ActionModelSynthesis</code>
           </div>
         </div>
@@ -92,19 +83,15 @@ In-tree runtime implementation only. External repos or checkpoints remain metada
 
 CameraCtrl and MotionCtrl do not share one synthesis package; they live in their own `synthesis.py` files, while shared camera-control YAML lives under `data/models/runtime/configs/camera_control`.
 
-### `worldfoundry/representations/`
-- `representations/depth_generation/**` — depth benchmark logic.
-- `representations/point_clouds_generation/**` — point cloud, 3DGS, panoramic, and geometry asset builders (for example `worldfm/`, `vggt/`, `cut3r/`, `lyra/`, `pixelsplat/`, `lingbot_map/`, `hunyuan_world/`).
-
 ### `worldfoundry/base_models/`
 Four inference-only packages; no training, datasets, dataloaders, callbacks, losses, augmentation-only modules, or experiment scripts.
 - `diffusion_model` — the single canonical diffusion kernel and the only diffusion package boundary. See [Native diffusion](/docs/maintainers/architecture/native-diffusion).
 - `llm_mllm_core` — language/multimodal-language inference.
 - `perception_core` — perception inference.
-- `three_dimensions` — 3D inference transforms and geometry helpers required for inference.
+- `three_dimensions` — 3D model code, checkpoint loading, depth/point-cloud inference, and geometry postprocessing. Each family owns its runtime beside its model implementation (`depth/depth_anything/runtime_v*.py`, `point_clouds/<family>/runtime.py`). Pipelines import these modules directly; there is no separate representation layer or marker base class.
 
 ## How to decide where a change belongs
 
-Ask where the failure happens. Inputs malformed before model execution → `operators/`. Native inference, checkpoint calls, hosted APIs, subprocess bridges → `synthesis/`. 3D/4D artifacts or visualization → `representations/`. Streaming or multi-turn state → `core/memory` plus the relevant `synthesis/*/memory`. Public load path, input signature, or output artifact contract → `pipelines/`. A reusable primitive that helps more than one family → `core`, never the family package.
+Ask where the failure happens. Inputs malformed before model execution → `operators/`. Native inference, checkpoint calls, hosted APIs, subprocess bridges → `synthesis/`. 3D/4D inference and geometric artifacts → the matching family in `base_models/three_dimensions/`; artifact display → `studio/visualization/`. Streaming or multi-turn state → `core/memory` plus the relevant `synthesis/*/memory`. Public load path, input signature, or output artifact contract → `pipelines/`. A reusable primitive that helps more than one family → `core`, never the family package.
 
 For the directory map of every package, see [Codebase map](/docs/maintainers/architecture/file-index). For the full run flow past this assembly, see [Workflow](/docs/maintainers/architecture/workflow).

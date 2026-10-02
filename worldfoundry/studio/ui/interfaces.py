@@ -185,7 +185,9 @@ def _in_tree_source_candidates(entry: CatalogEntry) -> tuple[Path, ...]:
         REPO_ROOT / "worldfoundry" / "pipelines",
         REPO_ROOT / "worldfoundry" / "synthesis" / "visual_generation",
         REPO_ROOT / "worldfoundry" / "synthesis" / "action_generation",
-        REPO_ROOT / "worldfoundry" / "representations" / "point_clouds_generation",
+        REPO_ROOT / "worldfoundry" / "base_models" / "three_dimensions" / "depth",
+        REPO_ROOT / "worldfoundry" / "base_models" / "three_dimensions" / "point_clouds",
+        REPO_ROOT / "worldfoundry" / "base_models" / "three_dimensions" / "general_3d",
     )
     candidates: list[Path] = []
     for root in roots:

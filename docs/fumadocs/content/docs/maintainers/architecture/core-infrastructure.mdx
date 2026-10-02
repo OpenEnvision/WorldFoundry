@@ -156,7 +156,7 @@ This is the layer to read when you are about to copy a utility into a model dire
 
 ## Dependency rule
 
-`core` may depend on PyTorch, `diffusers` model/operator primitives, and narrow third-party libraries. It must not import `worldfoundry.pipelines`, `worldfoundry.synthesis`, `worldfoundry.operators`, `worldfoundry.representations`, `worldfoundry.base_models` family packages, or `worldfoundry.evaluation`. The edge points *out of* family packages *into* `core`, never the reverse.
+`core` may depend on PyTorch, `diffusers` model/operator primitives, and narrow third-party libraries. It must not import `worldfoundry.pipelines`, `worldfoundry.synthesis`, `worldfoundry.operators`, `worldfoundry.base_models` family packages, or `worldfoundry.evaluation`. The edge points *out of* family packages *into* `core`, never the reverse.
 
 This keeps family packages thin: a model directory contains checkpoint-compatible tensor math and contract adapters, not a second copy of an offload manager, a distributed bootstrap, a kernel registry, or a quantization system. When you find yourself adding one of those to a family package, move it to `core` first and import it from there.
 

@@ -5,12 +5,12 @@ from types import SimpleNamespace
 
 import torch
 
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.runtime_v1 import (
+    DepthAnything1Representation,
+)
 from worldfoundry.cli.model_run import load_model_run_schema
 from worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v1 import (
     DepthAnything1Pipeline,
-)
-from worldfoundry.representations.depth_generation.depth_anything.depth_anything_v1_representation import (
-    DepthAnything1Representation,
 )
 
 
