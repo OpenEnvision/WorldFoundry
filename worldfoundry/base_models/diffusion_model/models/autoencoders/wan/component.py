@@ -426,6 +426,9 @@ class WanVideoDecoder:
         channels_last_3d_requested: bool = False,
         channels_last_3d_effective: int = 0,
         conv3d_count: int = 0,
+        channels_last_requested: bool = False,
+        channels_last_effective: int = 0,
+        conv2d_count: int = 0,
     ) -> None:
         self.vae = vae
         self.device = device
@@ -469,6 +472,9 @@ class WanVideoDecoder:
         self.channels_last_3d_requested = bool(channels_last_3d_requested)
         self.channels_last_3d_effective = int(channels_last_3d_effective)
         self.conv3d_count = int(conv3d_count)
+        self.channels_last_requested = bool(channels_last_requested)
+        self.channels_last_effective = int(channels_last_effective)
+        self.conv2d_count = int(conv2d_count)
         self._decode_calls = 0
         self._dense_decode_calls = 0
         self._spatial_tiled_decode_calls = 0
@@ -686,6 +692,7 @@ class WanVideoDecoder:
         requested = {
             "vae_weight_dtype": str(self.weight_dtype_requested),
             "vae_channels_last_3d": self.channels_last_3d_requested,
+            "vae_channels_last": self.channels_last_requested,
             "vae_decode_autocast": str(autocast_dtype) if autocast_dtype else False,
             "vae_spatial_tiling": self.tiled,
             "vae_tile_size": self.tile_size,
@@ -715,6 +722,9 @@ class WanVideoDecoder:
             ),
             "vae_channels_last_3d_conv3d": self.channels_last_3d_effective,
             "vae_conv3d_count": self.conv3d_count,
+            "vae_channels_last": "enabled" if self.channels_last_requested else "disabled",
+            "vae_channels_last_conv2d": self.channels_last_effective,
+            "vae_conv2d_count": self.conv2d_count,
             "vae_decode": decode_effective,
             "vae_decode_autocast": str(autocast_dtype) if autocast_dtype else "disabled",
             "vae_decode_autocast_context": (
@@ -742,6 +752,8 @@ class WanVideoDecoder:
                 "window_id": self._decode_window,
                 "vae_channels_last_3d_conv3d": self.channels_last_3d_effective,
                 "vae_conv3d_count": self.conv3d_count,
+                "vae_channels_last_conv2d": self.channels_last_effective,
+                "vae_conv2d_count": self.conv2d_count,
                 "vae_decode_autocast_context": (
                     "elided-resident-dtype"
                     if autocast_elided
@@ -799,6 +811,9 @@ def _load_wan_video_decoder(
     requested_offload = policy.offload.mode.value
     weight_dtype = _resolve_vae_weight_dtype(policy)
     channels_last_3d = _resolve_vae_channels_last_3d(policy)
+    channels_last = policy.options.get("vae_channels_last", False)
+    if not isinstance(channels_last, bool):
+        raise TypeError("vae_channels_last must be a bool")
     vae_policy = replace(policy, dtype=weight_dtype)
     vae_offload_effective = (
         "resident" if policy.offload.mode is OffloadMode.NONE else requested_offload
@@ -833,23 +848,11 @@ def _load_wan_video_decoder(
     if not isinstance(vae, module_class):
         raise TypeError(f"expected {module_class.__name__}, got {type(vae).__name__}")
     vae.decode_autocast_dtype = _resolve_vae_decode_autocast(policy)
-    channels_last_effective = 0
-    conv3d_count = sum(
-        isinstance(child, torch.nn.Conv3d) for child in vae.modules()
-    )
-    if channels_last_3d:
-        channels_last_effective, conv3d_count = (
-            _convert_conv3d_weights_channels_last_3d(vae)
-        )
-        if conv3d_count == 0:
-            raise RuntimeError(
-                "vae_channels_last_3d was requested but the Wan VAE has no Conv3d weights"
-            )
-        if channels_last_effective != conv3d_count:
-            raise RuntimeError(
-                "vae_channels_last_3d conversion was incomplete: "
-                f"effective={channels_last_effective}, total={conv3d_count}"
-            )
+    from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
+
+    layout_report = convert_convolution_weight_layouts(vae, conv2d=channels_last, conv3d=channels_last_3d)
+    channels_last_effective = layout_report.conv3d_converted
+    conv3d_count = layout_report.conv3d_total
     if len(tile_size) != 2 or len(tile_stride) != 2:
         raise ValueError("Wan VAE tile_size and tile_stride must contain two values")
     return WanVideoDecoder(
@@ -867,6 +870,9 @@ def _load_wan_video_decoder(
         channels_last_3d_requested=channels_last_3d,
         channels_last_3d_effective=channels_last_effective,
         conv3d_count=conv3d_count,
+        channels_last_requested=channels_last,
+        channels_last_effective=layout_report.conv2d_converted,
+        conv2d_count=layout_report.conv2d_total,
     )
 
 

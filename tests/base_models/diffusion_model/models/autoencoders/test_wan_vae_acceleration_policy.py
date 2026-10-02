@@ -462,6 +462,30 @@ def test_channels_last_3d_option_requires_a_bool() -> None:
         )
 
 
+def test_mixed_conv_layout_policy_is_applied_and_reported(monkeypatch):
+    class MixedVAE(_FakeConvVAE):
+        def __init__(self):
+            super().__init__()
+            self.conv2d = torch.nn.Conv2d(4, 4, 3)
+
+    def load(self, spec, checkpoint, policy):
+        return MixedVAE().to(dtype=policy.dtype)
+
+    monkeypatch.setattr(wan_component.NativeModuleLoader, "load", load)
+    decoder = wan_component._load_wan_video_decoder(
+        CheckpointSpec(source="unused.safetensors"),
+        RuntimePolicy(device="cpu", options={"vae_channels_last": True, "vae_channels_last_3d": True}),
+        module_class=MixedVAE,
+    )
+    assert decoder.vae.conv2d.weight.is_contiguous(memory_format=torch.channels_last)
+    assert decoder.vae.conv3d.weight.is_contiguous(memory_format=torch.channels_last_3d)
+    report = decoder.runtime_optimization_report()
+    assert report["requested"]["vae_channels_last"] is True
+    assert report["effective"]["vae_channels_last_conv2d"] == 1
+    assert report["effective"]["vae_conv2d_count"] == 1
+    assert report["runtime"]["vae_channels_last_conv2d"] == 1
+
+
 def test_parallel_decode_rejects_an_uninitialized_process_group(monkeypatch) -> None:
     import torch.distributed as dist
 
