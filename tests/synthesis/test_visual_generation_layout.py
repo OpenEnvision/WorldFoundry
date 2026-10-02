@@ -132,6 +132,25 @@ def test_solarwm_keeps_both_registered_runtime_routes():
     assert worldfoundry_runtime.OFFICIAL_ENTRYPOINT == VISUAL_ROOT / "solarwm/infer.py"
 
 
+def test_egowm_has_usable_released_action_normalization_statistics():
+    from worldfoundry.synthesis.visual_generation.egowm.infer import _load_25dof_stats, _normalize
+
+    for stats in _load_25dof_stats().values():
+        assert len(stats["min"]) == len(stats["max"]) == 25
+        assert _normalize(stats["min"], stats) == [-1.0] * 25
+        assert _normalize(stats["max"], stats) == [1.0] * 25
+
+
+def test_vid2world_default_config_can_find_its_bundled_split_and_indices():
+    config_path = REPO_ROOT / "worldfoundry/data/models/runtime/configs/vid2world/game/config_csgo_test.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    params = config["data"]["params"]["validation"]["params"]
+    root = VISUAL_ROOT / "vid2world"
+    split = root / params["val_file_list_path"]
+    assert split.is_file() and split.read_text(encoding="utf-8").strip()
+    assert (root / params["val_start_idx_path"]).is_file()
+
+
 def test_removed_model_container_has_no_compatibility_package():
     assert not (VISUAL_ROOT / "world_model").exists()
     assert importlib.util.find_spec(f"{MODULE_ROOT}.world_model") is None

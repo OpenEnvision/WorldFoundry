@@ -31,6 +31,11 @@ MANIFEST_PATH = REPO_ROOT / "MANIFEST.in"
 LICENSE_GATE_MARKER = "License-gated upstream runtimes"
 NOTICE_NAME = "THIRD-PARTY-NOTICES"
 NATIVE_LICENSE_LINK = "thirdparty/fastvideo-kernel/LICENSE"
+REQUIRED_RUNTIME_RESOURCES = (
+    "worldfoundry/synthesis/visual_generation/dino_wm/datasets/UPSTREAM.md",
+    "worldfoundry/synthesis/visual_generation/egowm/nav_25dof_stats.json",
+    "worldfoundry/synthesis/visual_generation/vid2world/csgo_utils/test_split.txt",
+)
 LICENSE_TEXT_BEGIN = b"----- BEGIN RETAINED LICENSE TEXT -----\n"
 LICENSE_TEXT_END = b"\n----- END RETAINED LICENSE TEXT -----\n"
 
@@ -331,6 +336,26 @@ def missing_core_sources(artifact_path: Path, *, repo_root: Path = REPO_ROOT) ->
     return sorted(required - entries)
 
 
+def audit_runtime_resources(artifact_path: Path, *, repo_root: Path = REPO_ROOT) -> list[str]:
+    """Retain the exact normalization, split and provenance files used by models."""
+    if artifact_path.suffix == ".whl":
+        with zipfile.ZipFile(artifact_path) as archive:
+            entries = {name: archive.read(name) for name in archive.namelist()
+                       if name in REQUIRED_RUNTIME_RESOURCES}
+    else:
+        with tarfile.open(artifact_path, "r:gz") as archive:
+            entries = {member.name.partition("/")[2]: archive.extractfile(member).read()
+                       for member in archive.getmembers()
+                       if member.isfile() and member.name.partition("/")[2] in REQUIRED_RUNTIME_RESOURCES}
+    errors = []
+    for name in REQUIRED_RUNTIME_RESOURCES:
+        if name not in entries:
+            errors.append(f"{artifact_path.name}: missing runtime resource {name}")
+        elif entries[name] != (repo_root / name).read_bytes():
+            errors.append(f"{artifact_path.name}: changed runtime resource {name}")
+    return errors
+
+
 def _print_items(header: str, items: Sequence[str], *, limit: int | None = None) -> None:
     print(header)
     visible = items if limit is None else items[:limit]
@@ -449,6 +474,10 @@ def main(argv: list[str] | None = None) -> int:
         if bundle_errors:
             failures += 1
             _print_items("FAIL: distribution omitted or changed license terms:", bundle_errors)
+        resource_errors = audit_runtime_resources(artifact_path)
+        if resource_errors:
+            failures += 1
+            _print_items("FAIL: distribution omitted or changed model runtime resources:", resource_errors)
         missing = missing_core_sources(artifact_path)
         if missing:
             failures += 1

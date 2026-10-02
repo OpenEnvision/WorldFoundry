@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import re
 import tarfile
 import zipfile
@@ -10,8 +11,10 @@ from pathlib import Path
 import pytest
 
 from scripts.setup.check_packaging_license_gate import (
+    REQUIRED_RUNTIME_RESOURCES,
     REQUIRED_WHEEL_PACKAGES,
     audit_license_bundle,
+    audit_runtime_resources,
     audit_sdist,
     audit_wheel,
     dead_exclude_patterns,
@@ -227,6 +230,33 @@ def test_distribution_requires_exact_central_license_bundle(
                 member.size = len(contents)
                 archive.addfile(member, io.BytesIO(contents))
     assert bool(audit_license_bundle(artifact, expected)) == (contents != expected)
+
+
+@pytest.mark.parametrize("format_name", ["wheel", "sdist"])
+@pytest.mark.parametrize("damage", ["none", "missing", "changed"])
+def test_model_runtime_resource_gate_detects_missing_or_changed_statistics(
+    tmp_path: Path, format_name: str, damage: str,
+) -> None:
+    payloads = {name: (REPO_ROOT / name).read_bytes() for name in REQUIRED_RUNTIME_RESOURCES}
+    statistics = next(name for name in payloads if name.endswith("nav_25dof_stats.json"))
+    if damage == "missing":
+        payloads.pop(statistics)
+    elif damage == "changed":
+        changed = json.loads(payloads[statistics])
+        changed["state_stats"]["min"][0] += 0.01
+        payloads[statistics] = json.dumps(changed).encode()
+    artifact = tmp_path / ("worldfoundry.whl" if format_name == "wheel" else "worldfoundry.tar.gz")
+    if format_name == "wheel":
+        with zipfile.ZipFile(artifact, "w") as archive:
+            for name, data in payloads.items():
+                archive.writestr(name, data)
+    else:
+        with tarfile.open(artifact, "w:gz") as archive:
+            for name, data in payloads.items():
+                member = tarfile.TarInfo("worldfoundry-0.0.0/" + name)
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+    assert bool(audit_runtime_resources(artifact)) == (damage != "none")
 
 
 def test_native_build_license_is_a_link_to_the_single_bundle(tmp_path: Path) -> None:

@@ -1,5 +1,8 @@
 include .pre-commit-config.yaml
 include THIRD-PARTY-NOTICES
+include worldfoundry/synthesis/visual_generation/dino_wm/datasets/UPSTREAM.md
+include worldfoundry/synthesis/visual_generation/egowm/nav_25dof_stats.json
+include worldfoundry/synthesis/visual_generation/vid2world/csgo_utils/test_split.txt
 include worldfoundry/base_models/three_dimensions/depth/vigeo/PROVENANCE.md
 recursive-include requirements *.txt *.md
 include worldfoundry/data/benchmarks/*.yaml
