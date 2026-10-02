@@ -224,6 +224,9 @@ def test_running_status_is_written_before_expensive_work(replay_host, monkeypatc
         {"env": {"INVALID=KEY": "value"}},
         {"source_ref": "--help"},
         {"gpu_holder": {"script": "relative", "start_args": []}},
+        {"case_environments": {"a": {"python": "relative"}}},
+        {"case_environments": {"a": {"env": {"BAD=KEY": "value"}}}},
+        {"case_environments": {"a": {"unknown": "value"}}},
     ],
 )
 def test_unsafe_profiles_are_rejected(replay_host, change):
@@ -302,3 +305,62 @@ def test_no_inference_plan_never_probes_gpu(replay_host, tmp_path, monkeypatch):
     suite.write_json(plan_file, plan)
     monkeypatch.setattr(suite, "acquire_gpu", lambda *args: pytest.fail("no inference changes must not acquire GPU"))
     assert suite.run_suite(replay_host, plan=plan_file)["status"] == "no_inference_changes"
+
+
+@pytest.mark.parametrize("field", ["cudnn", "packages"])
+def test_preflight_rejects_changed_runtime_before_loading_weights(replay_host, tmp_path, monkeypatch, field):
+    manifest = Path(replay_host["reference"]) / "a/manifest.json"
+    data = json.loads(manifest.read_text())
+    data["runtime"] = {field: "accepted"}
+    suite.write_json(manifest, data)
+    suite.write_json(tmp_path / "recipes.json", {"a": {}})
+    monkeypatch.setattr(suite, "process_helpers", lambda source: None)
+
+    def fake_probe(*args, **kwargs):
+        suite.write_json(tmp_path / "cuda-preflight-metadata.json", {field: "different"})
+        return 0
+
+    monkeypatch.setattr(suite, "run_child", fake_probe)
+    with pytest.raises(RuntimeError, match="environment differs.*" + field):
+        suite.probe_cuda(replay_host, {}, tmp_path)
+
+
+def test_each_case_uses_its_accepted_environment_and_groups_preflight(replay_host, tmp_path, monkeypatch):
+    no_gpu(monkeypatch)
+    replay_host["env"] = {"COMMON_ENV": "shared", "CASE_ENV": "default"}
+    other_python = str(tmp_path / "other-model-env/bin/python")
+    replay_host["case_environments"] = {"b": {"python": other_python, "env": {"CASE_ENV": "special"}}}
+    probes, children = [], []
+
+    def probe(profile, env, root, **kwargs):
+        probes.append((profile["python"], kwargs["case_ids"], env["CASE_ENV"]))
+
+    def child(command, env, *args, **kwargs):
+        children.append((command[0], env["CASE_ENV"], env["COMMON_ENV"]))
+        return 0
+
+    monkeypatch.setattr(suite, "probe_cuda", probe)
+    monkeypatch.setattr(suite, "run_child", child)
+    report = suite.run_suite(replay_host)
+    assert report["status"] == "passed"
+    assert probes == [(sys.executable, ["a"], "default"), (other_python, ["b"], "special")]
+    assert children == [(sys.executable, "default", "shared"), (other_python, "special", "shared")]
+    assert replay_host["env"]["CASE_ENV"] == "default"
+
+
+def test_misspelled_case_environment_cannot_be_silently_ignored(replay_host, monkeypatch):
+    events, _ = no_gpu(monkeypatch)
+    replay_host["case_environments"] = {"misspelled-model": {"python": sys.executable}}
+    report = suite.run_suite(replay_host)
+    assert report["status"] == "failed"
+    assert "unknown case id" in report["error"]
+    assert "stop" not in events
+
+
+def test_preflight_only_is_never_successful_inference_evidence(replay_host, monkeypatch):
+    events, _ = no_gpu(monkeypatch)
+    monkeypatch.setattr(suite, "run_child", lambda *args, **kwargs: pytest.fail("preflight-only must not load weights"))
+    report = suite.run_suite(replay_host, preflight_only=True)
+    assert report["status"] == "preflight_passed"
+    assert report["mode"] == "preflight" and report["cases"] == {}
+    assert "stop" not in events

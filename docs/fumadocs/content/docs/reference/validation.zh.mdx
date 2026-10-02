@@ -148,8 +148,14 @@ python3 tests/manual/geometry_regression_schedule.py import-reference \
 
 可选的 `gpu_holder` 配置指定原有 `gg` 脚本的绝对 `script`、字符串列表 `start_args`、包括 `GG_PYTHON` 的 `env`，以及可选的日志就绪标记 `ready_patterns`。回放期间停止该脚本；成功、失败、超时或中断后，以独立 session 恢复。若推理子进程无法清理或 GPU 租约无法释放，执行器报告失败，并推迟占卡脚本恢复，直到残留资源清理完成。
 
+将必要的 `LD_LIBRARY_PATH`、`CUDA_HOME` 等运行变量保存在私有 profile 的 `env` 中。cron 任务保留已准备的工具 PATH。CUDA 预检查会在加载权重和停止占卡脚本前，逐项检查 Python、Torch、CUDA、cuDNN、GPU 和包版本是否与全部选中基准一致；环境变化直接失败，不放宽比较条件。
+
+在不同 Python/Torch 环境中验收的模型使用私有 `case_environments` 覆盖，例如 `"case_environments": {"flashworld": {"python": "/absolute/path/to/flashworld-env/bin/python"}, "worldfm": {"python": "/absolute/path/to/worldfm-env/bin/python"}}`。每个覆盖还可以提供 `env`，叠加到默认环境之上。每种选中环境分别进行预检查，案例使用各自配置的解释器运行；未知案例 ID 会被拒绝。
+
 ```bash
 # 先用一个案例验证执行器，再开启每日完整短矩阵。
+python3 tests/manual/geometry_regression_suite.py \
+  --profile ~/.config/worldfoundry/geometry-regression.json --preflight-only
 python3 tests/manual/geometry_regression_suite.py \
   --profile ~/.config/worldfoundry/geometry-regression.json --case-id pi3x
 python3 tests/manual/geometry_regression_schedule.py install \
@@ -164,6 +170,8 @@ python3 tests/manual/geometry_regression_schedule.py remove \
 安装保留其他 cron 条目，时区为 `Asia/Shanghai`。控制脚本来自已提交版本；控制脚本变化后需要重新安装。每次运行从指定的本地已提交 ref 生成隔离快照，不自动 pull/reset，也不执行工作区未提交代码。案例各自使用独立模型进程，共用主机上的物理 GPU 租约锁，有单案例和整套超时，并接受严格数值和导入源码审计。每日运行完整短矩阵；按需执行时可传 `--plan` 使用受影响案例计划。
 
 `latest.json` 在开始时记录 `running`，结束时记录最终结果；`runs/` 保存日志、源码版本和比较报告。默认保留最近七次运行目录，更早的简要报告归档到 `history/`。已验收基准必须位于可清理的运行目录之外，执行器不会重新生成或覆盖它。profile、本地 assets、权重和数值证据不进入 Git。
+
+`--preflight-only` 检查全部选中案例的 assets 和环境，不加载模型权重；其 `preflight_passed` 状态不能当作数值推理通过的证据。
 
 短案例覆盖的是已声明输入和能力。Lyra-2 案例仍关闭 3D 重建；接受新 backend、更新集成状态或发布时，仍需要完整 demo 和质量 benchmark。
 

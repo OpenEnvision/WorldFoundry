@@ -59,6 +59,19 @@ def validate_profile(profile: dict) -> dict:
     if len({int(t) for t in tokens}) != len(tokens):
         raise ValueError("CUDA indices must be unique")
     validate_env(profile.get("env", {}))
+    overrides = profile.get("case_environments", {})
+    if not isinstance(overrides, dict):
+        raise ValueError("case_environments must map case ids to python/env overrides")
+    for name, override in overrides.items():
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", name) or not isinstance(override, dict):
+            raise ValueError("Invalid case environment override")
+        if set(override) - {"python", "env"}:
+            raise ValueError("Case environment overrides only support python and env")
+        if "python" in override and (
+            not isinstance(override["python"], str) or not Path(override["python"]).is_absolute()
+        ):
+            raise ValueError("Case environment python must be absolute")
+        validate_env(override.get("env", {}))
     profile.setdefault("source_ref", "HEAD")
     if not isinstance(profile["source_ref"], str) or not profile["source_ref"] or profile["source_ref"].startswith("-"):
         raise ValueError("Invalid source_ref")
@@ -94,6 +107,26 @@ def validate_env(env: dict) -> None:
 
 def read_profile(path: Path) -> dict:
     return validate_profile(json.loads(path.read_text()))
+
+
+def case_configuration(profile: dict, name: str) -> dict:
+    override = profile.get("case_environments", {}).get(name, {})
+    return {
+        **profile,
+        "python": override.get("python", profile["python"]),
+        "env": {**profile.get("env", {}), **override.get("env", {})},
+    }
+
+
+def child_environment(profile: dict) -> dict:
+    return {
+        **os.environ,
+        **profile.get("env", {}),
+        "CUDA_VISIBLE_DEVICES": profile["cuda_visible_devices"],
+        "PYTHONPATH": "",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+    }
 
 
 def reference_index(profile: dict) -> dict:
@@ -246,20 +279,49 @@ def run_child(command: list[str], env: dict, cwd: Path, log: Path, timeout: floa
                 raise TeardownError("Replay descendants still own GPU resources after teardown")
 
 
-def probe_cuda(profile: dict, env: dict, run_root: Path, lease=None) -> None:
-    code = "import torch; assert torch.cuda.is_available(), 'GPU regression requires CUDA'; torch.cuda.init()"
+def probe_cuda(profile: dict, env: dict, run_root: Path, lease=None, *, case_ids=None, label="cuda-preflight") -> None:
+    metadata_path = run_root / (label + "-metadata.json")
+    replay_path = str(Path(__file__).with_name("geometry_regression.py"))
+    code = (
+        "import importlib.util,json,pathlib,torch; "
+        # Tensor runtimes import setuptools through torch's extension helpers.
+        # Mirror its vendor-path activation before enumerating distributions.
+        "import setuptools; "
+        "assert torch.cuda.is_available(), 'GPU regression requires CUDA'; torch.cuda.init(); "
+        f"spec=importlib.util.spec_from_file_location('preflight_replay', {replay_path!r}); "
+        "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+        f"pathlib.Path({str(metadata_path)!r}).write_text(json.dumps(module.runtime_metadata(torch)))"
+    )
     helpers = process_helpers(run_root / "source")
     result = run_child(
         [profile["python"], "-c", code],
         env,
         run_root,
-        run_root / "cuda-preflight.log",
+        run_root / (label + ".log"),
         60,
         helpers=helpers,
         lease=lease,
     )
     if result:
-        raise RuntimeError("GPU preflight failed; see cuda-preflight.log")
+        raise RuntimeError(f"GPU preflight failed; see {label}.log")
+    actual = json.loads(metadata_path.read_text())
+    recipes = json.loads((run_root / "recipes.json").read_text())
+    for name in list(recipes) if case_ids is None else case_ids:
+        expected = json.loads((Path(profile["reference"]) / name / "manifest.json").read_text())["runtime"]
+        # Algorithm flags and seeds are set individually by run_case. These
+        # environment fields must already match before spending time on weights.
+        differences = [
+            field
+            for field in ("python", "torch", "cuda", "cudnn", "gpu", "packages")
+            if actual.get(field) != expected.get(field)
+        ]
+        if differences:
+            raise RuntimeError(
+                f"GPU replay environment differs from accepted reference for {name}: "
+                + ", ".join(differences)
+                + "; see "
+                + metadata_path.name
+            )
 
 
 def acquire_gpu(profile: dict, env: dict, source: Path):
@@ -396,7 +458,9 @@ def prune_runs(state: Path, retain: int, current: Path) -> list[str]:
     return removed
 
 
-def run_suite(profile: dict, *, plan: Path | None = None, case_ids: list[str] | None = None) -> dict:
+def run_suite(
+    profile: dict, *, plan: Path | None = None, case_ids: list[str] | None = None, preflight_only: bool = False
+) -> dict:
     profile = validate_profile(profile)
     state = Path(profile["state_root"])
     state.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -411,6 +475,7 @@ def run_suite(profile: dict, *, plan: Path | None = None, case_ids: list[str] | 
             "run_root": str(root),
             "cases": {},
             "started_at": datetime.now(timezone.utc).isoformat(),
+            "mode": "preflight" if preflight_only else "replay",
         }
         write_json(root / "report.json", report)
         write_json(state / "latest.json", report)
@@ -423,6 +488,8 @@ def run_suite(profile: dict, *, plan: Path | None = None, case_ids: list[str] | 
             source = root / "source"
             matrix, dependencies = source / profile["matrix"], source / profile["dependencies"]
             cases, _ = impact.load_definitions(matrix, dependencies)
+            if set(profile.get("case_environments", {})) - set(cases):
+                raise ValueError("Case environment override has an unknown case id")
             selected = list(cases) if case_ids is None else list(dict.fromkeys(case_ids))
             if plan is not None:
                 if case_ids is not None:
@@ -438,23 +505,33 @@ def run_suite(profile: dict, *, plan: Path | None = None, case_ids: list[str] | 
             if any(name not in cases for name in selected):
                 raise ValueError("Selected case is not declared in the current matrix")
             report["selected_cases"] = selected
-            env = {
-                **os.environ,
-                **profile.get("env", {}),
-                "CUDA_VISIBLE_DEVICES": profile["cuda_visible_devices"],
-                "PYTHONPATH": "",
-                "HF_HUB_OFFLINE": "1",
-                "TRANSFORMERS_OFFLINE": "1",
-            }
+            env = child_environment(profile)
+            configurations = {name: case_configuration(profile, name) for name in selected}
             recipes = {}
             index = reference_index(profile)
             for name in selected:
                 verify_reference(Path(profile["reference"]) / name, name, index)
-                recipes[name] = materialize_case(cases[name], Path(profile["reference"]) / name, env)
+                recipes[name] = materialize_case(
+                    cases[name], Path(profile["reference"]) / name, child_environment(configurations[name])
+                )
             write_json(root / "recipes.json", recipes)
             helpers = process_helpers(source)
             lease = acquire_gpu(profile, env, source)
-            probe_cuda(profile, env, root, lease=lease)
+            groups = {}
+            for name, configuration in configurations.items():
+                key = (configuration["python"], json.dumps(configuration["env"], sort_keys=True))
+                groups.setdefault(key, []).append(name)
+            report["environments"] = []
+            for index, names in enumerate(groups.values()):
+                configuration = configurations[names[0]]
+                label = "cuda-preflight" if index == 0 else f"cuda-preflight-{index}"
+                report["environments"].append({"python": configuration["python"], "cases": names, "preflight": label})
+                probe_cuda(
+                    configuration, child_environment(configuration), root, lease=lease, case_ids=names, label=label
+                )
+            if preflight_only:
+                report["status"] = "preflight_passed"
+                return report
             holder.stop()
             for name in selected:
                 remaining = profile["suite_timeout_seconds"] - (time.monotonic() - started)
@@ -462,7 +539,7 @@ def run_suite(profile: dict, *, plan: Path | None = None, case_ids: list[str] | 
                     raise TimeoutError("Whole GPU suite exceeded its time budget")
                 candidate = root / "candidate" / name
                 command = [
-                    profile["python"],
+                    configurations[name]["python"],
                     str(Path(__file__).with_name("geometry_regression.py")),
                     "run",
                     "--case",
@@ -477,7 +554,7 @@ def run_suite(profile: dict, *, plan: Path | None = None, case_ids: list[str] | 
                 try:
                     exit_code = run_child(
                         command,
-                        env,
+                        child_environment(configurations[name]),
                         source,
                         root / f"{name}.log",
                         min(remaining, profile["case_timeout_seconds"]),
@@ -539,17 +616,22 @@ def main() -> int:
     parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--case-id", action="append")
+    parser.add_argument(
+        "--preflight-only", action="store_true", help="Check assets and accepted environments without model inference"
+    )
     args = parser.parse_args()
     try:
         with interruption_cleanup():
-            report = run_suite(read_profile(args.profile), plan=args.plan, case_ids=args.case_id)
+            report = run_suite(
+                read_profile(args.profile), plan=args.plan, case_ids=args.case_id, preflight_only=args.preflight_only
+            )
     except (Exception, KeyboardInterrupt) as exc:
         report = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
     print(
         json.dumps({key: report[key] for key in ("status", "run_root", "elapsed_seconds", "error") if key in report}),
         flush=True,
     )
-    return 0 if report["status"] in {"passed", "no_inference_changes"} else 1
+    return 0 if report["status"] in {"passed", "no_inference_changes", "preflight_passed"} else 1
 
 
 if __name__ == "__main__":

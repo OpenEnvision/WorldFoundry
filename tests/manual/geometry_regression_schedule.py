@@ -170,10 +170,12 @@ def install(profile_path: Path, *, hour: int = 3, minute: int = 0) -> dict:
         source = Path(temporary) / "source"
         revision = suite.snapshot_source(profile, source)["source_revision"]
         cases, _ = suite.impact.load_definitions(source / profile["matrix"], source / profile["dependencies"])
+        if set(profile.get("case_environments", {})) - set(cases):
+            raise ValueError("Case environment override has an unknown case id")
         for name, case in cases.items():
             root = Path(profile["reference"]) / name
             suite.verify_reference(root, name, index)
-            suite.materialize_case(case, root, {**os.environ, **profile.get("env", {})})
+            suite.materialize_case(case, root, suite.child_environment(suite.case_configuration(profile, name)))
     controller = state / "controllers" / revision
     controller.mkdir(parents=True, exist_ok=True, mode=0o700)
     hashes = {}
