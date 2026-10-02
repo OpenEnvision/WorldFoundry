@@ -1,12 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Explicit raw-E4M3 cuDNN Frontend SDPA, adapted from NVIDIA FlashDreams.
+"""Explicit raw-E4M3 cuDNN Frontend SDPA.
 
-Plan construction and CUDA child-graph insertion follow FlashDreams commit
-91c906b69992f63fb19907a25cd805fb783d314a, accelerated/multi_head_attention/
-cudnn/native_fp8.py. Callers provide E4M3 inputs and their explicit dequantization
-scales; outputs are dequantized to BF16. Callers own input quantization and model
-quality validation. BF16/default attention is unchanged.
+Source attribution is recorded in THIRD-PARTY-NOTICES. Callers provide E4M3
+inputs and their explicit dequantization scales; outputs are dequantized to
+BF16. Callers own input quantization and model quality validation.
+BF16/default attention is unchanged.
 """
 
 from __future__ import annotations

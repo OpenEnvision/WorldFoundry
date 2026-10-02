@@ -358,7 +358,13 @@ class _RefinerTransformer(torch.nn.Module):
             self.moves.append(torch.device(raw_device))
         return super().to(*args, **kwargs)
 
-    def forward(self, **kwargs: object) -> tuple[torch.Tensor]:
+    def forward(
+        self,
+        *,
+        video_self_attention_mask: torch.Tensor,
+        **kwargs: object,
+    ) -> tuple[torch.Tensor]:
+        kwargs["video_self_attention_mask"] = video_self_attention_mask
         self.kwargs = kwargs
         hidden = kwargs["hidden_states"]
         assert isinstance(hidden, torch.Tensor)

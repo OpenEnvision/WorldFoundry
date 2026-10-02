@@ -1,5 +1,6 @@
 .PHONY: help install-core install-dev test test-infer test-infer-tensors test-infer-contracts test-infer-cuda-contracts test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
 .PHONY: test-infer-video-tensors plan-inference replay-inference coverage-inference verify-inference
+.PHONY: test-mg2-checkpoint-contracts test-mg2-trajectory-contracts
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -11,8 +12,27 @@ PREFLIGHT_OUTPUT ?= tmp/preflight
 CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
 VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
-FLASHDREAMS_CPU_CONTRACTS = tests/base_models/test_flashdreams_sana_wm_streaming.py tests/base_models/test_flashdreams_fastvideo_causal_wan.py tests/base_models/diffusion_model/test_causal_attention_padding.py tests/runtime/test_inference_benchmark_correctness.py
-INFER_TENSOR_CONTRACTS = tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py $(VIDEO_TENSOR_CONTRACTS) $(FLASHDREAMS_CPU_CONTRACTS)
+STREAMING_CPU_CONTRACTS = \
+	tests/base_models/test_flashdreams_sana_wm_streaming.py \
+	tests/base_models/test_flashdreams_fastvideo_causal_wan.py \
+	tests/base_models/diffusion_model/test_causal_attention_padding.py \
+	tests/base_models/diffusion_model/test_causal_cache_positions.py \
+	tests/base_models/diffusion_model/optimizations/test_causal_qkv_fusion.py \
+	tests/base_models/diffusion_model/models/autoencoders/test_wan_vae_acceleration_policy.py \
+	tests/core/acceleration/test_fused_fp8_ffn.py \
+	tests/core/acceleration/test_convolution_layout.py \
+	tests/core/attention/test_native_cudnn_fp8.py \
+	tests/core/attention/test_triton_tma.py \
+	tests/core/test_streaming_step_control.py \
+	tests/synthesis/test_matrix_game_2_optimizations.py \
+	tests/synthesis/test_matrix_game_2_decode_overlap.py \
+	tests/synthesis/test_matrix_game_2_realtime.py \
+	tests/studio_visualization/test_realtime_nvenc.py \
+	tests/studio_visualization/test_realtime_presentation.py \
+	tests/studio_visualization/test_realtime_shutdown_ownership.py \
+	tests/studio_visualization/test_world_realtime.py \
+	tests/runtime/test_inference_benchmark_correctness.py
+INFER_TENSOR_CONTRACTS = tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py $(VIDEO_TENSOR_CONTRACTS) $(STREAMING_CPU_CONTRACTS)
 # Select numerical CUDA nodes explicitly: older CUDA tests do not all carry the gpu marker.
 INFER_CUDA_CONTRACTS = \
 	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_host_pixels_wait_for_producer_and_preserve_frame_order \
@@ -24,8 +44,30 @@ INFER_CUDA_CONTRACTS = \
 	tests/core/attention/test_kv_arena.py::test_cuda_graph_replay_reads_updated_current_segment \
 	tests/core/attention/test_gqa_storage.py::test_efficient_cuda_gqa_matches_math \
 	tests/runtime/test_inference_benchmark_correctness.py::test_denoise_benchmark_checks_every_step_before_timing \
-	tests/runtime/test_inference_benchmark_correctness.py::test_full_stack_actual_fp8_cache_or_graph_execution
+	tests/runtime/test_inference_benchmark_correctness.py::test_full_stack_actual_fp8_cache_or_graph_execution \
+	tests/core/execution/test_cuda_nvenc_transport.py \
+	tests/core/execution/test_cuda_nvenc_generation.py \
+	tests/studio_visualization/test_realtime_nvenc.py::test_abgr_conversion_channel_order_and_alpha \
+	tests/core/acceleration/test_fused_fp8_ffn.py::test_fused_gelu_quantization_matches_materialized_activation \
+	tests/core/acceleration/test_fused_fp8_ffn.py::test_fused_ffn_real_fp8_graph_and_policy_fallback \
+	tests/core/acceleration/test_fused_fp8_ffn.py::test_fused_ffn_empty_input_and_invalid_activation \
+	tests/core/acceleration/test_fused_fp8_ffn.py::test_fused_ffn_inductor_preserves_real_fp8_math \
+	tests/core/acceleration/test_convolution_layout.py::test_mixed_layout_inductor_preserves_decode_pixels \
+	'tests/base_models/diffusion_model/test_causal_cache_positions.py::test_self_attention_host_positions_match_legacy_cache_through_rewrites_and_rollover[cuda]' \
+	tests/synthesis/test_matrix_game_2_optimizations.py::test_nondefault_stream_returns_correct_results_without_device_sync \
+	tests/synthesis/test_matrix_game_2_decode_overlap.py::test_decode_overlap_joins_the_nondefault_caller_and_preserves_recurrent_cache_and_lifetimes \
+	tests/synthesis/test_matrix_game_2_decode_overlap.py::test_reset_drains_and_releases_only_the_owned_decode_stream \
+	tests/synthesis/test_matrix_game_2_decode_overlap.py::test_failed_overlap_drains_enqueued_decode_and_invalidates_the_session \
+	tests/synthesis/test_matrix_game_2_decode_overlap.py::test_overlap_profile_measures_each_stream_and_the_joined_wall_time \
+	tests/core/attention/test_native_cudnn_fp8_cuda.py \
+	tests/core/attention/test_triton_tma_cuda.py \
+	tests/core/attention/test_block_kv_cuda_graph.py
 INFER_CUDA_REPORT ?= tmp/inference-cuda-contracts.xml
+MG2_CHECKPOINT_ROOT ?=
+MG2_CHECKPOINT_REPORT ?= tmp/mg2-checkpoint-contracts.json
+MG2_CHECKPOINT_JUNIT ?= tmp/mg2-checkpoint-contracts.xml
+MG2_TRAJECTORY_REPORT ?= tmp/mg2-trajectory-contracts.json
+MG2_TRAJECTORY_JUNIT ?= tmp/mg2-trajectory-contracts.xml
 GEOMETRY_MATRIX ?= tests/manual/geometry_regression_cases.json
 GEOMETRY_REFERENCE ?=
 GEOMETRY_CANDIDATE ?=
@@ -70,7 +112,9 @@ help:
 		'  make test-infer-tensors  Test small checkpoint, geometry and execution tensors with CPU Torch and safetensors.' \
 		'  make test-infer-video-tensors  Check real small video operators, sampler math and resident request isolation with CPU Torch and einops.' \
 		'  make test-infer-contracts  Test checkpoint, geometry, serializer and execution contracts in a model environment.' \
-		'  make test-infer-cuda-contracts  Run real CUDA graph, cache, attention, kernel and transfer checks; rejects empty/skipped suites and requires CUDA Torch and Triton.' \
+		'  make test-infer-cuda-contracts  Run CUDA/FP8 graph, cache, attention and transport checks on SM90+; requires Torch, Triton, nvidia-cudnn-frontend and cuda-bindings; rejects skips.' \
+		'  make test-mg2-checkpoint-contracts  Validate real MG2 block/cache, FP8 FFN and streaming VAE pixels using MG2_CHECKPOINT_ROOT; no generation quality or speed certification.' \
+		'  make test-mg2-trajectory-contracts  Require bitwise parity of full MG2 denoise/refresh, rolling caches and 45 decoded frames for packed/split QKV and decode overlap.' \
 		'  make test-geometry     Audit real 3D replays against accepted references; requires GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE.' \
 		'  make plan-geometry     Select affected short 3D cases from GEOMETRY_BASE to HEAD without GPU/weights.' \
 		'  make replay-geometry   Replay selected or all cases using a private GEOMETRY_PROFILE; optional GEOMETRY_REPLAY_PLAN.' \
@@ -127,13 +171,29 @@ verify-inference:
 test-infer-contracts:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(INFER_TENSOR_CONTRACTS) tests/pipelines/test_geometry_result_exports.py $(TEST_ARGS)
 
-# Run manually in a prepared CUDA/Triton environment; hosted CI has no GPU runner.
+# Run manually on SM90+ with CUDA Torch, Triton, nvidia-cudnn-frontend and
+# cuda-bindings installed; hosted CI has no GPU runner.
 # An unavailable GPU, empty selection or skipped contract must fail this gate.
 test-infer-cuda-contracts:
 	$(PYTHON) -c 'import sys, torch; torch.cuda.is_available() or sys.exit("CUDA contract tests require an available GPU")'
 	mkdir -p "$(dir $(INFER_CUDA_REPORT))"
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(INFER_CUDA_REPORT)" $(INFER_CUDA_CONTRACTS) $(TEST_ARGS)
 	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); cases or sys.exit("CUDA gate executed no tests"); rejected = [case.get("name", "unknown") for case in cases if any(case.find(tag) is not None for tag in ("skipped", "failure", "error"))]; rejected and sys.exit("CUDA gate requires every selected test to pass: " + ", ".join(rejected)); print(f"CUDA gate: {len(cases)} tests passed without skips")' "$(INFER_CUDA_REPORT)"
+
+# Local checkpoint evidence is opt-in and independent of the public small-tensor gate.
+test-mg2-checkpoint-contracts:
+	@test -n "$(MG2_CHECKPOINT_ROOT)" || { printf '%s\n' 'Set MG2_CHECKPOINT_ROOT to existing local Matrix-Game-2.0 weights.' >&2; exit 2; }
+	$(PYTHON) -c 'import torch; assert torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9, "Checkpoint FP8 contracts require an SM90+ CUDA device"'
+	mkdir -p "$(dir $(MG2_CHECKPOINT_JUNIT))"
+	WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_CHECKPOINT_REPORT="$(MG2_CHECKPOINT_REPORT)" PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(MG2_CHECKPOINT_JUNIT)" tests/synthesis/test_matrix_game_2_checkpoint_optimizations.py $(TEST_ARGS)
+	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); assert len(cases) == 3 and all(all(case.find(tag) is None for tag in ("skipped", "failure", "error")) for case in cases), "Every checkpoint operator contract must execute and pass"; print("Checkpoint gate: 3 operator contracts passed without skips")' "$(MG2_CHECKPOINT_JUNIT)"
+
+test-mg2-trajectory-contracts:
+	@test -n "$(MG2_CHECKPOINT_ROOT)" || { printf '%s\n' 'Set MG2_CHECKPOINT_ROOT to existing local Matrix-Game-2.0 weights.' >&2; exit 2; }
+	$(PYTHON) -c 'import torch; assert torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9, "Full trajectory contracts require an SM90+ CUDA device"'
+	mkdir -p "$(dir $(MG2_TRAJECTORY_JUNIT))"
+	WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_TRAJECTORY_REPORT="$(MG2_TRAJECTORY_REPORT)" PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(MG2_TRAJECTORY_JUNIT)" tests/synthesis/test_matrix_game_2_checkpoint_trajectory.py $(TEST_ARGS)
+	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); assert len(cases) == 2 and all(all(case.find(tag) is None for tag in ("skipped", "failure", "error")) for case in cases), "Both full-checkpoint trajectories must execute and pass"; print("Trajectory gate: 2 bitwise contracts passed without skips")' "$(MG2_TRAJECTORY_JUNIT)"
 
 test-geometry:
 	@test -n "$(GEOMETRY_REFERENCE)" -a -n "$(GEOMETRY_CANDIDATE)" || { printf '%s\n' 'Set GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE to completed real-checkpoint run directories.' >&2; exit 2; }

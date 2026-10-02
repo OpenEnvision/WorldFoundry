@@ -408,6 +408,87 @@ video quality were outside this validation.
 [Raw measurements and per-round samples](/measurements/kv-arena-2026-09-18.json)
 preserve all ten cases.
 
+## FlashDreams review and correctness gates
+
+The 2026-10-03 review uses NVIDIA FlashDreams commit
+`91c906b69992f63fb19907a25cd805fb783d314a`. WorldFoundry already provides
+low-precision GEMMs, QKV fusion, fused normalization/RoPE, compilation,
+CUDA Graphs, streaming/tiling VAEs, asynchronous offload, and distributed
+attention. The additions address specific gaps in execution and correctness:
+
+| Addition | Public surface and verified boundary |
+| --- | --- |
+| Fused GELU and FP8 activation quantization | `QuantizationPolicy.options["fuse_fp8_ffn"] = True`; matching Linear/GELU/Linear blocks, dense fallback, real FP8, Inductor and graph replay |
+| Mixed VAE convolution layouts | `vae_channels_last=True` for Conv2d and `vae_channels_last_3d=True` for Conv3d, applied before compilation; weight identity, pixels and recurrent caches checked |
+| MG2 causal optimizations | QKV fusion, managed cache positions, original FP16 decoder weights, and optional `overlap_vae_decode=True`; [model-specific contracts](/docs/guides/supported-models/matrix-game-2) |
+| Dense TMA attention | Explicit core dispatcher `backend="triton_tma"` or `NativeAttention(backend="triton_tma")`; SM90+, FP16/BF16, no masks, GQA or backward; default backend selection is unchanged |
+| Native cuDNN FP8 attention | `native_cudnn_fp8_sdpa` consumes already quantized E4M3 Q/K/V and explicit positive host descales, returning dequantized BF16; the shared model loader does not implicitly quantize BF16 attention inputs |
+| CUDA frame transport to NVENC | `WORLDFOUNDRY_REALTIME_NVENC=1`; only supported uint8 RGB CUDA frames with the identity postprocessor retain device storage; producer events, packing, lifetime, codec negotiation and cleanup tested |
+| Distributed step admission | `streaming_step_control(owner)` borrows a separate, bounded Gloo control group; real two-rank stop/reset/failure tests; production Studio generators are not yet wired to this primitive |
+
+These additions are opt-in. TMA is not uniformly faster across shapes. Native
+FP8 attention and FFNs have approximation budgets; operator parity alone does
+not establish generated-video quality. NVENC's actual H.264 encoding still
+requires a supported GPU and PyNvVideoCodec; H100 transport tests verify CUDA
+pixels and SDK contracts, because H100 has no NVENC engine.
+
+Benchmarks check every denoising output before timing: shape, finite values,
+pointwise error, relative L2 and RMSE. A CUDA Graph result requires actual
+capture/replay receipts; a dense fallback cannot count as acceleration.
+Changing weights or precision policy invalidates captured graphs. Numerical
+tests cover zero-padding boundaries, cache rewrites/rollover, previous-output
+ownership, nondefault streams, cancellation, and failed-session cleanup.
+
+```bash
+# CPU contracts also run in hosted CI, without model checkpoints.
+make test-infer-tensors PYTHON=python3
+
+# Prepared SM90+ environment: CUDA Torch, Triton >=3.5, nvidia-cudnn-frontend,
+# cuda-bindings, safetensors, einops and OmegaConf. Every selected case must
+# execute and pass; unavailable CUDA and skipped cases fail this gate.
+make test-infer-cuda-contracts PYTHON=python3
+
+# Optional production-weight operator evidence; no downloads.
+make test-mg2-checkpoint-contracts PYTHON=python3 \
+  MG2_CHECKPOINT_ROOT=/checkpoints/Matrix-Game-2.0
+
+# Full 30-layer model, original schedule/resolution; two exact trajectories.
+make test-mg2-trajectory-contracts PYTHON=python3 \
+  MG2_CHECKPOINT_ROOT=/checkpoints/Matrix-Game-2.0
+```
+
+The checkpoint gate records full checkpoint, source, tensor and input hashes.
+It exercises one production MG2 action block over eight cache writes, a real
+1536→8960→1536 FFN at three amplitudes, and three consecutive streaming VAE
+decodes. Initial H100 results: QKV outputs were bitwise equal, fused FP8 matched
+the existing FP8 path, FP8 versus BF16 FFN relative L2 was 2.17%–3.01%, and VAE
+layout changes differed by at most one RGB byte. The gate bounds these operators;
+it does not certify public-prompt generation quality or throughput.
+[Checkpoint hashes, acceptance budgets and per-step measurements](/measurements/flashdreams-mg2-2026-10-03.json)
+retain the numerical evidence with portable source and checkpoint filenames.
+
+The separate full-model trajectory gate requires bitwise equality for packed
+and split QKV, managed cache positions, and decoder overlap against independent
+legacy-cache/dense trajectories. It preserves the original warped schedule,
+352×640 resolution, six-frame window and all 30 layers. Four blocks yield 45 RGB
+frames and exercise two rolling boundaries. Every denoise/clean-refresh input,
+flow, x0, final latent, generator cache, recurrent VAE cache and decoded pixel
+must match exactly. [Recorded short-trajectory evidence](/measurements/mg2-trajectory-2026-10-03.json)
+uses seeded image latents and visual embeddings; it excludes FP8, public-prompt
+quality, long-horizon stability and performance.
+
+Two upstream techniques require further model-specific work. Its native FP8
+LightVAE is a calibrated OmniDreams encoder with 11 downsample blocks and
+24/48/96 feature widths; neither MG2's full Wan2.1 FP16 decoder nor the existing
+Wan2.2 48-latent-channel LightVAE is a compatible substitute. A matching model,
+calibrated export and video-quality validation are required. MG2 full steady-state
+CUDA Graph execution also remains rejected: absolute RoPE, growing action
+windows and Python cache rollover must first be made replay-safe. The generic
+graph runner and fixed-cache primitives do not by themselves remove these model
+constraints.
+Real CUDA Graph tests replay the fixed, full-window cache tensor body 18 times
+per geometry; filling, Python position updates and rolling preparation stay eager.
+
 ## Migration checks for other models
 
 The 2026-09-18 audit follows actual attention/cache paths. A cache may hold keys

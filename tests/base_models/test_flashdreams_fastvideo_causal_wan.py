@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import torch
+from PIL import Image
 
 from worldfoundry.base_models.diffusion_model.components import (
     ComponentBuildContext,
@@ -338,7 +341,11 @@ def test_fastvideo_recipe_registry_pipeline_and_pinned_files() -> None:
     assert "text-to-video" not in recipe.capabilities
 
 
-def test_fastvideo_causal_i2v_preserves_source_aspect_ratio(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fastvideo_causal_i2v_preserves_source_aspect_ratio(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    source_path = tmp_path / "source.png"
+    Image.new("RGB", (1280, 704), color=(31, 63, 127)).save(source_path)
     observed: dict[str, object] = {}
 
     def capture(self: object, **kwargs: object) -> dict[str, object]:
@@ -350,14 +357,14 @@ def test_fastvideo_causal_i2v_preserves_source_aspect_ratio(monkeypatch: pytest.
     pipeline = object.__new__(FastVideoCausalWanPipeline)
     pipeline(
         prompt="room",
-        image_path="testcase/012_abandoned-room.png",
+        image_path=str(source_path),
         width=832,
         height=480,
     )
     assert (observed["width"], observed["height"]) == (848, 464)
     assert observed["images"].size == (848, 464)
     assert "image_path" not in observed
-    pipeline(prompt="room", images=["testcase/012_abandoned-room.png"])
+    pipeline(prompt="room", images=[str(source_path)])
     assert (observed["width"], observed["height"]) == (848, 464)
     with pytest.raises(ValueError, match="too small"):
         _best_output_size(1, 4096, 256)

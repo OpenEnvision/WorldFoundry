@@ -15,11 +15,9 @@
 
 """Explicit dense TMA FlashAttention2 for projected CUDA FP16/BF16 tensors.
 
-Adapted from NVIDIA FlashDreams commit 91c906b69992f63fb19907a25cd805fb783d314a,
-flashdreams/flashdreams/accelerated/multi_head_attention/triton/
-flash_attention_2_tma_kernel.py, Apache-2.0. The FP8 branch is deliberately
-excluded; scaled FP8 uses the distinct native cuDNN provider. This primitive
-accepts token-major [B,L,H,D] tensors and supports no mask, GQA, or backward.
+Source attribution is recorded in THIRD-PARTY-NOTICES. Scaled FP8 uses the
+distinct native cuDNN provider. This primitive accepts token-major [B,L,H,D]
+tensors and supports no mask, GQA, or backward.
 """
 
 from __future__ import annotations

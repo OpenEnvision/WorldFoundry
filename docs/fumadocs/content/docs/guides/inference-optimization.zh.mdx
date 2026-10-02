@@ -387,6 +387,78 @@ RoPE 更新、空历史、块长变化、会话隔离、训练回退、缓存清
 完整模型的 CUDA Graph、外部 FlashAttention 3 和预训练视频质量未在这次验证中覆盖。
 [原始测量与每轮样本](/measurements/kv-arena-2026-09-18.json)保留了全部十组结果。
 
+## FlashDreams review 与正确性门禁
+
+2026-10-03 的 review 固定在 NVIDIA FlashDreams commit
+`91c906b69992f63fb19907a25cd805fb783d314a`。WorldFoundry 已有低精度 GEMM、
+QKV 融合、融合 norm/RoPE、compile、CUDA Graph、VAE streaming/tiling、异步
+offload 和分布式 attention。本轮补齐的是具体执行和正确性缺口：
+
+| 新增项 | 使用方式与验证范围 |
+| --- | --- |
+| 融合 GELU 与 FP8 激活量化 | `QuantizationPolicy.options["fuse_fp8_ffn"] = True`；匹配 Linear/GELU/Linear，验证 dense 回退、真实 FP8、Inductor 与 graph replay |
+| 混合 VAE 卷积布局 | `vae_channels_last=True` 转换 Conv2d，`vae_channels_last_3d=True` 转换 Conv3d；在编译前执行，检查参数身份、像素和循环缓存 |
+| MG2 因果路径优化 | QKV 融合、主机管理缓存位置、保留原始 FP16 解码权重，以及可选 `overlap_vae_decode=True`；见[模型专属契约](/zh/docs/guides/supported-models/matrix-game-2) |
+| Dense TMA attention | 显式使用 core dispatcher 的 `backend="triton_tma"` 或 `NativeAttention(backend="triton_tma")`；SM90+、FP16/BF16，不支持 mask、GQA 和 backward；默认后端选择不变 |
+| 原生 cuDNN FP8 attention | `native_cudnn_fp8_sdpa` 接收已经量化的 E4M3 Q/K/V 和明确的正值主机 descale，返回反量化 BF16；统一模型加载器不会隐式量化 BF16 attention 输入 |
+| CUDA 帧直传 NVENC | `WORLDFOUNDRY_REALTIME_NVENC=1`；只有 identity 后处理下合格的 uint8 RGB CUDA 帧保留设备存储，验证 producer event、打包、生命周期、codec 协商和清理 |
+| 分布式 step admission | `streaming_step_control(owner)` 借用独立、有限超时的 Gloo control group；真实双 rank 验证 stop/reset/failure；生产 Studio generator 尚未接入 |
+
+这些能力均需显式启用。TMA 并非所有 shape 都更快。原生 FP8 attention 与 FFN
+有数值误差预算，算子通过不等于生成视频质量已经认证。实际 NVENC H.264 编码
+仍需支持编码的 GPU 和 PyNvVideoCodec；H100 没有 NVENC engine，因此本轮验证
+CUDA 像素传输和 SDK 契约，未验证真实硬件编码。
+
+Benchmark 在计时前逐个检查 denoise 输出的 shape、有限值、逐元素误差、relative
+L2 和 RMSE。CUDA Graph 必须有真实 capture/replay receipt，dense 回退不能算作
+加速。替换权重或精度策略会清除旧 capture。数值回归覆盖零 padding 边界、缓存
+重写/rollover、历史输出所有权、非默认 stream、取消和失败 session 清理。
+
+```bash
+# 无需模型权重的 CPU 契约也在 hosted CI 运行。
+make test-infer-tensors PYTHON=python3
+
+# 准备 SM90+、CUDA Torch、Triton >=3.5、nvidia-cudnn-frontend、cuda-bindings、
+# safetensors、einops 和 OmegaConf。每个选中的测试必须执行并通过；
+# 没有 CUDA 或存在 skipped 测试时，门禁失败。
+make test-infer-cuda-contracts PYTHON=python3
+
+# 可选的真实权重算子证据；不下载 checkpoint。
+make test-mg2-checkpoint-contracts PYTHON=python3 \
+  MG2_CHECKPOINT_ROOT=/checkpoints/Matrix-Game-2.0
+
+# 完整 30 层模型，保留原始 schedule 和分辨率，两条精确轨迹。
+make test-mg2-trajectory-contracts PYTHON=python3 \
+  MG2_CHECKPOINT_ROOT=/checkpoints/Matrix-Game-2.0
+```
+
+Checkpoint 门禁记录完整权重文件、源码、tensor 和输入 hash。它运行一个真实
+MG2 action block 的 8 次缓存写入、真实 1536→8960→1536 FFN 的 3 档输入幅度，
+以及 3 次连续 streaming VAE 解码。首次 H100 测试中，QKV 输出逐位一致；融合
+FP8 与已有 FP8 路径一致；FP8 相对 BF16 FFN 的 relative L2 为 2.17%–3.01%；
+VAE 布局变化最多相差 1 个 RGB byte。门禁约束这些算子，尚未认证公共 prompt
+生成质量或吞吐。
+[权重 hash、误差预算和逐步测量](/measurements/flashdreams-mg2-2026-10-03.json)
+保留完整数值证据，文件路径已转换为可移植的源码和 checkpoint 文件名。
+
+独立的完整模型轨迹门禁要求 packed/split QKV、主机缓存位置和解码重叠，与独立
+legacy cache/dense 基线逐位相同。原始 warped schedule、352×640 分辨率、6 帧
+window 和全部 30 层保持不变。4 个 block 产生 45 帧 RGB，覆盖两次滚动边界。
+每次 denoise/clean refresh 的 input、flow、x0、最终 latent、generator cache、
+循环 VAE cache 和解码像素都必须零误差。[短轨迹证据](/measurements/mg2-trajectory-2026-10-03.json)
+使用固定 seed 的图像 latent 和视觉 embedding；不涵盖 FP8、公共 prompt 质量、
+长程稳定性或性能。
+
+上游的两项技术仍需模型专属工作。其原生 FP8 LightVAE 是经过校准的 OmniDreams
+encoder，固定 11 个 downsample block 和 24/48/96 特征宽度；MG2 的完整 Wan2.1
+FP16 decoder 和已有 Wan2.2 的 48 latent 通道 LightVAE 都无法替代它。接入需要
+匹配模型、校准导出和视频质量验证。MG2 完整 steady-state CUDA Graph 也仍被
+拒绝：必须先改造绝对位置 RoPE、增长的 action window 和 Python 缓存 rollover，
+确保 replay 正确。通用 graph runner 与固定缓存 primitive 本身没有消除这些
+模型约束。
+真实 CUDA Graph 测试对每种几何的满窗口缓存 tensor 区域 replay 18 次；填充、
+Python 位置更新和滚动准备仍在 eager 执行。
+
 ## 其他模型的迁移检查
 
 2026-09-18 的代码检查按实际 attention/cache 路径判断适用性。同名的 KV cache
