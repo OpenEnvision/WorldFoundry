@@ -115,6 +115,50 @@ python -m pip install -e ".[eval_core]"
 
 The separate first command is intentional: Python package metadata cannot select a CPU-specific wheel index, while pointing the whole extra at the PyTorch index would hide packages such as pytest and NumPy.
 
+## Numerical regression for 3D models
+
+The CPU gate and mocks do not prove that inference with real weights remains correct. After changing loading, preprocessing, inference, camera conversion, or export code, replay an accepted case in separate processes using `tests/manual/geometry_regression.py`. The matrix in `tests/manual/geometry_regression_cases.json` covers Depth Anything, Pi3/Pi3X, VGGT, CUT3R, LoGeR, LingBotMap, Hunyuan Mirror, HY-WorldMirror 2.0, FlashWorld, and WorldFM. Its additional Lyra-2 case validates video generation and camera trajectories only, with 3D reconstruction disabled. Prepare the model environment and local assets separately.
+
+```bash
+git worktree add --detach /tmp/worldfoundry-3d-reference <validated-revision>
+export WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT=/absolute/path/to/checkpoints
+export WORLDFOUNDRY_REGRESSION_INPUT_IMAGE=/absolute/path/to/accepted-image.png
+# The multiview cases use frame-0.png, frame-16.png, and frame-32.png.
+export WORLDFOUNDRY_REGRESSION_INPUT_ROOT=/absolute/path/to/accepted-sequence
+export CUDA_VISIBLE_DEVICES=0
+
+# Run all three commands in the same model-specific Python environment.
+python tests/manual/geometry_regression.py run \
+  --case tests/manual/geometry_regression_cases.json --case-id pi3x \
+  --source-root /tmp/worldfoundry-3d-reference --output-dir tmp/3d-replay/reference/pi3x
+python tests/manual/geometry_regression.py run \
+  --case tests/manual/geometry_regression_cases.json --case-id pi3x \
+  --source-root . --output-dir tmp/3d-replay/candidate/pi3x
+python tests/manual/geometry_regression.py compare \
+  --reference tmp/3d-replay/reference/pi3x --candidate tmp/3d-replay/candidate/pi3x \
+  --report tmp/3d-replay/comparison.json
+```
+
+After replaying every affected case, audit coverage and check that the evidence still matches the current source:
+
+```bash
+make test-geometry PYTHON=/path/to/model-env/bin/python \
+  GEOMETRY_REFERENCE=tmp/3d-replay/reference \
+  GEOMETRY_CANDIDATE=tmp/3d-replay/candidate
+```
+
+Each root must contain a run directory named for every matrix case ID. Missing cases, changed case parameters, and changed imported-source hashes fail the gate. `GEOMETRY_MATRIX` can select the affected case matrix; use the complete matrix for changes to shared inference components. This audits completed real inference evidence and does not replace the replay commands.
+
+Each run records input and checkpoint SHA-256 hashes, case parameters and seed, dependency versions, CUDA/precision settings, hashes of imported source files, and raw numerical outputs. Comparison requires identical inputs, weights, parameters, and environments. It checks output fields, shapes, dtypes, finite values, and elementwise values for depth, points, confidence, masks, and cameras. Cases with `save` also compare exported PLY values, images, and NumPy artifacts. Missing assets, failed inference, empty outputs, NaNs, missing fields, and modified evidence fail. Reference directories are never overwritten automatically.
+
+Comparison is exact by default. Cases can set `deterministic: true` to require deterministic Torch algorithms and configure cuBLAS before CUDA initialization; unsupported deterministic operations fail. The Hunyuan Mirror and WorldFM cases use this setting. WorldFM also pins the inference seed after model loading; a seed set only before loading can be affected by initialization. Its panorama uses `WORLDFOUNDRY_REGRESSION_PANORAMA`, and Lyra-2 uses `WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE`.
+
+For nondeterministic GPU operations, repeat the reference run first, measure its variation, and justify explicit floating-point `--atol` / `--rtol` settings. Boolean masks and integers remain exact. The matrix audit remains exact and does not inherit tolerances from a separate comparison report. Do not widen tolerances or replace an accepted reference with failing output to hide regressions.
+
+Additional cases declare `target` (`module:Class`), `load`, `call`, `assets`, and `required_outputs`. `${OUTPUT_DIR}` resolves to the run directory; use environment variables for other paths. `extra_calls` can capture raw depth, and `capture_modules` can capture raw forward outputs when a pipeline only returns artifact paths. Generative cases must also pin prompts, trajectories, sampling steps, and precision, and review rendered output quality.
+
+Validation applies to specific code, weights, inputs, and environments. Changes to shared components require replays of every affected model and variant; unexecuted cases remain uncovered. GitHub CI runs the public CPU gate; real inference must run separately on a GPU host with local weights and pass `make test-geometry` before accepting an inference change. Numerical parity protects accepted cases against regression, but cannot prove correctness for arbitrary inputs or replace benchmarks with ground-truth depth and calibrated cameras. Accept a reference using official results, quality metrics, and human review before using it as a regression baseline.
+
 ## Release gate
 
 From a lightweight editable checkout, install the declared gate dependencies

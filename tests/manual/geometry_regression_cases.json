@@ -1,0 +1,813 @@
+{
+  "cut3r": {
+    "id": "cut3r",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.cut3r.pipeline_cut3r:CUT3RPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/liguang0115--cut3r",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/liguang0115--cut3r",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "da3-large-1.1": {
+    "id": "da3-large-1.1",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3:DepthAnything3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3-LARGE-1.1",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ],
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export",
+      "export_format": "mini_npz"
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3-LARGE-1.1",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": false,
+    "required_outputs": [
+      "result.depth"
+    ]
+  },
+  "da3metric-large": {
+    "id": "da3metric-large",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3:DepthAnything3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3METRIC-LARGE",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ],
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export",
+      "export_format": "mini_npz"
+    },
+    "required_outputs": [
+      "result.depth"
+    ],
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3METRIC-LARGE",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "da3nested-giant-large-1.1": {
+    "id": "da3nested-giant-large-1.1",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3:DepthAnything3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ],
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export",
+      "export_format": "mini_npz"
+    },
+    "required_outputs": [
+      "result.depth"
+    ],
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "depth-anything-v1-base": {
+    "id": "depth-anything-v1-base",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v1:DepthAnything1Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-base-hf",
+      "device": "cuda",
+      "encoder": "vitb"
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-base-hf",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "save": true,
+    "extra_calls": {
+      "raw_depth": {
+        "method": "process",
+        "call": {
+          "input_image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "return_visualization": false
+        }
+      }
+    },
+    "required_outputs": [
+      "raw_depth"
+    ]
+  },
+  "depth-anything-v1-large": {
+    "id": "depth-anything-v1-large",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v1:DepthAnything1Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-large-hf",
+      "device": "cuda",
+      "encoder": "vitl"
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-large-hf",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "save": true,
+    "extra_calls": {
+      "raw_depth": {
+        "method": "process",
+        "call": {
+          "input_image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "return_visualization": false
+        }
+      }
+    },
+    "required_outputs": [
+      "raw_depth"
+    ]
+  },
+  "depth-anything-v1-small": {
+    "id": "depth-anything-v1-small",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v1:DepthAnything1Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-small-hf",
+      "device": "cuda",
+      "encoder": "vits"
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-small-hf",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "save": true,
+    "extra_calls": {
+      "raw_depth": {
+        "method": "process",
+        "call": {
+          "input_image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "return_visualization": false
+        }
+      }
+    },
+    "required_outputs": [
+      "raw_depth"
+    ]
+  },
+  "depth-anything-v2-large": {
+    "id": "depth-anything-v2-large",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v2:DepthAnything2Pipeline",
+    "load": {
+      "pretrained_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth",
+      "device": "cuda"
+    },
+    "call": {
+      "data_path": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "extra_calls": {
+      "raw_depth": {
+        "method": "process",
+        "call": {
+          "input_image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "return_visualization": false
+        }
+      }
+    },
+    "required_outputs": [
+      "raw_depth"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    }
+  },
+  "hunyuan-mirror": {
+    "id": "hunyuan-mirror",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_mirror:HunyuanMirrorPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/tencent--HunyuanWorld-Mirror",
+      "device": "cuda",
+      "local_files_only": true
+    },
+    "method": "process_images",
+    "call": {
+      "image_paths": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.predictions"
+    ],
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/tencent--HunyuanWorld-Mirror",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "deterministic": true
+  },
+  "infinite-vggt": {
+    "id": "infinite-vggt",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.infinite_vggt.pipeline_infinite_vggt:InfiniteVGGTPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lch01--StreamVGGT/checkpoints.pth",
+      "device": "cuda"
+    },
+    "call": {
+      "data_path": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.depth_map",
+      "result.point_map",
+      "result.extrinsic"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lch01--StreamVGGT/checkpoints.pth",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "lingbot-map-windowed": {
+    "id": "lingbot-map-windowed",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.lingbot_map.pipeline_lingbot_map:LingBotMapPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/robbyant--lingbot-map",
+      "device": "cuda",
+      "mode": "windowed",
+      "checkpoint_name": "lingbot-map.pt"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/robbyant--lingbot-map",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": true,
+    "required_outputs": [
+      "result.numpy_data"
+    ]
+  },
+  "loger": {
+    "id": "loger",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.pi3.pipeline_loger:LoGeRPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Junyi42--LoGeR/LoGeR",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.numpy_data"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Junyi42--LoGeR/LoGeR",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "pi3-original": {
+    "id": "pi3-original",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.pi3.pipeline_pi3:Pi3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi3",
+      "device": "cuda",
+      "mode": "pi3"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi3",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": true,
+    "required_outputs": [
+      "result.numpy_data"
+    ]
+  },
+  "pi3x": {
+    "id": "pi3x",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.pi3.pipeline_pi3:Pi3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi3X",
+      "mode": "pi3x",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.numpy_data.points",
+      "result.numpy_data.camera_poses",
+      "result.numpy_data.depth_map",
+      "result.numpy_data.masks"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi3X",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "vggt-omega-alignment": {
+    "id": "vggt-omega-alignment",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.vggt_omega.pipeline_vggt_omega:VGGTOmegaPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-Omega",
+      "device": "cuda",
+      "enable_alignment": true
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-Omega",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": true,
+    "required_outputs": [
+      "result.numpy_data"
+    ]
+  },
+  "vggt-omega": {
+    "id": "vggt-omega",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.vggt_omega.pipeline_vggt_omega:VGGTOmegaPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-Omega",
+      "device": "cuda",
+      "enable_alignment": false
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-Omega",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": true,
+    "required_outputs": [
+      "result.numpy_data"
+    ]
+  },
+  "vggt": {
+    "id": "vggt",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.vggt.pipeline_vggt:VGGTPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-1B",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.numpy_data"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-1B",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "hyworldmirror-2": {
+    "id": "hyworldmirror-2",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hy_world_2p0:HYWorld2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/tencent--HY-World-2.0",
+      "device": "cuda"
+    },
+    "call": {
+      "input_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}",
+      "output_path": "${OUTPUT_DIR}/export",
+      "target_size": 518,
+      "apply_sky_mask": false,
+      "save_colmap": false,
+      "save_rendered": false
+    },
+    "capture_modules": [
+      "runtime_pipeline.model"
+    ],
+    "required_outputs": [
+      "forward.runtime_pipeline.model"
+    ],
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/tencent--HY-World-2.0/HY-WorldMirror-2.0",
+      "input_dir": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}"
+    }
+  },
+  "flashworld": {
+    "id": "flashworld",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.flash_world.pipeline_flash_world:FlashWorldPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/imlixinyang--FlashWorld",
+      "required_components": {
+        "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan2.2-TI2V-5B-Diffusers"
+      },
+      "device": "cuda",
+      "offload_t5": true,
+      "offload_vae": false,
+      "offload_transformer_during_vae": false
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A dusty abandoned room with wooden floor and sunlight through the window.",
+      "interactions": [
+        "forward"
+      ],
+      "num_frames": 16,
+      "image_height": 480,
+      "image_width": 704,
+      "return_video": true,
+      "fps": 15
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/imlixinyang--FlashWorld",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan2.2-TI2V-5B-Diffusers",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "result.scene_params",
+      "result.ref_w2c",
+      "result.T_norm"
+    ]
+  },
+  "worldfm": {
+    "id": "worldfm",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.worldfm.pipeline_worldfm:WorldFMPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/worldfm",
+      "required_components": {
+        "moge_pretrained": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/moge-2-vitl-normal/model.pt",
+        "vae_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/worldfm/vae",
+        "step": 2
+      },
+      "device": "cuda"
+    },
+    "call": {
+      "panorama_path": "${WORLDFOUNDRY_REGRESSION_PANORAMA}",
+      "interactions": [
+        [
+          [1.0, 0, 0.0, 0],
+          [0, 1, 0, 0],
+          [-0.0, 0, 1.0, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9999756307053947, 0, 0.0069812602979615525, 0],
+          [0, 1, 0, 0],
+          [-0.0069812602979615525, 0, 0.9999756307053947, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9999025240093042, 0, 0.013962180339145272, 0],
+          [0, 1, 0, 0],
+          [-0.013962180339145272, 0, 0.9999025240093042, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9997806834748455, 0, 0.02094241988335696, 0],
+          [0, 1, 0, 0],
+          [-0.02094241988335696, 0, 0.9997806834748455, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9996101150403544, 0, 0.02792163872356888, 0],
+          [0, 1, 0, 0],
+          [-0.02792163872356888, 0, 0.9996101150403544, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9993908270190958, 0, 0.03489949670250097, 0],
+          [0, 1, 0, 0],
+          [-0.03489949670250097, 0, 0.9993908270190958, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9991228300988584, 0, 0.04187565372919963, 0],
+          [0, 1, 0, 0],
+          [-0.04187565372919963, 0, 0.9991228300988584, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9988061373414341, 0, 0.048849769795613264, 0],
+          [0, 1, 0, 0],
+          [-0.048849769795613264, 0, 0.9988061373414341, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.998440764181981, 0, 0.0558215049931638, 0],
+          [0, 1, 0, 0],
+          [-0.0558215049931638, 0, 0.998440764181981, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9980267284282716, 0, 0.06279051952931337, 0],
+          [0, 1, 0, 0],
+          [-0.06279051952931337, 0, 0.9980267284282716, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9975640502598242, 0, 0.0697564737441253, 0],
+          [0, 1, 0, 0],
+          [-0.0697564737441253, 0, 0.9975640502598242, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9970527522269202, 0, 0.07671902812681865, 0],
+          [0, 1, 0, 0],
+          [-0.07671902812681865, 0, 0.9970527522269202, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9964928592495044, 0, 0.0836778433323155, 0],
+          [0, 1, 0, 0],
+          [-0.0836778433323155, 0, 0.9964928592495044, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9958843986159703, 0, 0.09063258019778016, 0],
+          [0, 1, 0, 0],
+          [-0.09063258019778016, 0, 0.9958843986159703, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9952273999818312, 0, 0.09758289975914948, 0],
+          [0, 1, 0, 0],
+          [-0.09758289975914948, 0, 0.9952273999818312, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9945218953682733, 0, 0.10452846326765347, 0],
+          [0, 1, 0, 0],
+          [-0.10452846326765347, 0, 0.9945218953682733, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9937679191605964, 0, 0.11146893220632548, 0],
+          [0, 1, 0, 0],
+          [-0.11146893220632548, 0, 0.9937679191605964, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9929655081065369, 0, 0.11840396830650096, 0],
+          [0, 1, 0, 0],
+          [-0.11840396830650096, 0, 0.9929655081065369, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9921147013144779, 0, 0.12533323356430426, 0],
+          [0, 1, 0, 0],
+          [-0.12533323356430426, 0, 0.9921147013144779, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9912155402515417, 0, 0.13225639025712246, 0],
+          [0, 1, 0, 0],
+          [-0.13225639025712246, 0, 0.9912155402515417, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9902680687415704, 0, 0.13917310096006544, 0],
+          [0, 1, 0, 0],
+          [-0.13917310096006544, 0, 0.9902680687415704, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9892723329629883, 0, 0.14608302856241162, 0],
+          [0, 1, 0, 0],
+          [-0.14608302856241162, 0, 0.9892723329629883, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9882283814465528, 0, 0.15298583628403808, 0],
+          [0, 1, 0, 0],
+          [-0.15298583628403808, 0, 0.9882283814465528, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9871362650729879, 0, 0.15988118769183488, 0],
+          [0, 1, 0, 0],
+          [-0.15988118769183488, 0, 0.9871362650729879, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9859960370705049, 0, 0.16676874671610228, 0],
+          [0, 1, 0, 0],
+          [-0.16676874671610228, 0, 0.9859960370705049, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.984807753012208, 0, 0.17364817766693033, 0],
+          [0, 1, 0, 0],
+          [-0.17364817766693033, 0, 0.984807753012208, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9835714708133859, 0, 0.18051914525055998, 0],
+          [0, 1, 0, 0],
+          [-0.18051914525055998, 0, 0.9835714708133859, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9822872507286887, 0, 0.18738131458572463, 0],
+          [0, 1, 0, 0],
+          [-0.18738131458572463, 0, 0.9822872507286887, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9809551553491915, 0, 0.19423435121997198, 0],
+          [0, 1, 0, 0],
+          [-0.19423435121997198, 0, 0.9809551553491915, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9795752495993441, 0, 0.2010779211459647, 0],
+          [0, 1, 0, 0],
+          [-0.2010779211459647, 0, 0.9795752495993441, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9781476007338057, 0, 0.20791169081775934, 0],
+          [0, 1, 0, 0],
+          [-0.20791169081775934, 0, 0.9781476007338057, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9766722783341679, 0, 0.2147353271670632, 0],
+          [0, 1, 0, 0],
+          [-0.2147353271670632, 0, 0.9766722783341679, 0],
+          [0, 0, 0, 1]
+        ],
+        [
+          [0.9751493543055633, 0, 0.2215484976194673, 0],
+          [0, 1, 0, 0],
+          [-0.2215484976194673, 0, 0.9751493543055633, 0],
+          [0, 0, 0, 1]
+        ]
+      ],
+      "K": [
+        [618.0386719675123, 0, 256],
+        [0, 618.0386719675123, 256],
+        [0, 0, 1]
+      ],
+      "scene_name": "royal-esplanade",
+      "fps": 16,
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export",
+      "seed": 42
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/worldfm",
+      "moge": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/moge-2-vitl-normal/model.pt",
+      "input": "${WORLDFOUNDRY_REGRESSION_PANORAMA}"
+    },
+    "required_outputs": [
+      "result.scene_context"
+    ],
+    "deterministic": true
+  },
+  "lyra2-forward": {
+    "id": "lyra2-forward",
+    "seed": 42,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lyra-2.0",
+      "load_runtime": true,
+      "offload": true,
+      "offload_when_prompt": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE}",
+      "interactions": [
+        "forward"
+      ],
+      "prompt": "A small turquoise toy on a red table in a room with a painted wall.",
+      "fps": 16,
+      "resolution": [480, 832],
+      "seed": 42,
+      "reconstruct_3d": false,
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export"
+    },
+    "target": "worldfoundry.pipelines.lyra.pipeline_lyra2:Lyra2Pipeline",
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lyra-2.0",
+      "input": "${WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "result.video_tensor",
+      "result.camera_w2c",
+      "result.zoom_factors"
+    ],
+    "scope": "Video generation and camera trajectory only; reconstruct_3d=false does not validate Lyra-2 reconstruction."
+  }
+}

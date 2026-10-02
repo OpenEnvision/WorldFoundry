@@ -489,6 +489,7 @@ transformers_low = [
 testpaths = [
     "tests/core/test_process_logging.py",
     "tests/runtime/test_device_pool.py",
+    "tests/runtime/test_geometry_regression.py",
     "tests/runtime/test_local_checkpoint_cache.py",
     "tests/runtime/test_jobs_store_persistence.py",
     "tests/runtime/test_jobs_logging.py",

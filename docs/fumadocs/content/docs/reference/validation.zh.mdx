@@ -68,6 +68,51 @@ python -m pip install -e ".[eval_core]"
 
 拆成两条命令是有意为之：Python package metadata 不能指定 CPU 专用 wheel index；如果把整个 extra 都指向 PyTorch index，pytest、NumPy 等包反而可能不可见。
 
+## 3D 模型数值回归
+
+CPU 门禁和 mock 测试不能证明真实权重的推理结果保持正确。修改模型加载、预处理、推理、相机转换或导出代码时，使用 `tests/manual/geometry_regression.py` 在两个独立进程中复跑同一个已验收案例。`tests/manual/geometry_regression_cases.json` 提供 Depth Anything、Pi3/Pi3X、VGGT、CUT3R、LoGeR、LingBotMap、Hunyuan Mirror、HY-WorldMirror 2.0、FlashWorld 和 WorldFM 的固定案例。额外的 Lyra-2 案例只验证视频生成和相机轨迹，关闭了 3D 重建；模型环境和本地 assets 需要另行准备。
+
+```bash
+# 使用先前已验收的代码版本；不要在正在工作的目录中 reset。
+git worktree add --detach /tmp/worldfoundry-3d-reference <validated-revision>
+export WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT=/absolute/path/to/checkpoints
+export WORLDFOUNDRY_REGRESSION_INPUT_IMAGE=/absolute/path/to/accepted-image.png
+# 多视角案例使用固定的 frame-0.png、frame-16.png、frame-32.png。
+export WORLDFOUNDRY_REGRESSION_INPUT_ROOT=/absolute/path/to/accepted-sequence
+export CUDA_VISIBLE_DEVICES=0
+
+# 用同一个模型专用 Python 环境执行三条命令。
+python tests/manual/geometry_regression.py run \
+  --case tests/manual/geometry_regression_cases.json --case-id pi3x \
+  --source-root /tmp/worldfoundry-3d-reference --output-dir tmp/3d-replay/reference/pi3x
+python tests/manual/geometry_regression.py run \
+  --case tests/manual/geometry_regression_cases.json --case-id pi3x \
+  --source-root . --output-dir tmp/3d-replay/candidate/pi3x
+python tests/manual/geometry_regression.py compare \
+  --reference tmp/3d-replay/reference/pi3x --candidate tmp/3d-replay/candidate/pi3x \
+  --report tmp/3d-replay/comparison.json
+```
+
+完成全部受影响案例后，用矩阵门禁检查覆盖率和证据是否仍匹配当前源码：
+
+```bash
+make test-geometry PYTHON=/path/to/model-env/bin/python \
+  GEOMETRY_REFERENCE=tmp/3d-replay/reference \
+  GEOMETRY_CANDIDATE=tmp/3d-replay/candidate
+```
+
+这个门禁要求根目录下存在每个矩阵 case id 的运行子目录。缺少任何案例、案例参数改变或实际导入的源码哈希改变都会失败。可用 `GEOMETRY_MATRIX` 指定本次影响范围的案例矩阵；共享推理组件改动时使用完整矩阵。它检查已经完成的真实推理证据，不代替前面的推理命令。
+
+每次运行保存输入和权重的 SHA-256、案例参数和 seed、依赖版本、CUDA/精度设置、实际导入源码的哈希，以及原始数值输出。比较时要求输入、权重、参数和环境一致，并检查深度、点云、置信度、mask、相机参数的字段、shape、dtype、有限值和逐项数值。设置 `save` 的案例还比较保存后的 PLY 数值、图像和 NumPy 产物。缺少 assets、推理失败、空输出、NaN、丢失字段或被修改的证据都会失败，不能记为通过。参考目录不会被自动覆盖。
+
+默认要求完全一致。案例可以设置 `deterministic: true`，要求 Torch 使用确定性算法，并在 CUDA 初始化前配置 cuBLAS；不支持确定性执行的算子会失败。Hunyuan Mirror 和 WorldFM 案例使用这一设置。WorldFM 还在模型加载后固定推理 seed，避免仅在加载前设置 seed 时受到模型初始化影响。其全景输入使用 `WORLDFOUNDRY_REGRESSION_PANORAMA`，Lyra-2 使用 `WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE`。
+
+存在 GPU 非确定性时，先在参考版本上重复运行，测量同版本的数值波动，再为浮点输出选择有依据的 `--atol` / `--rtol`；布尔 mask 和整数输出仍要求完全一致。矩阵门禁始终严格比较，不会继承单独 comparison 报告的容差。不要通过扩大容差或用失败产物更新 reference 来消除失败。
+
+新增模型案例使用 `target`（`module:Class`）、`load`、`call`、`assets` 和 `required_outputs`。`${OUTPUT_DIR}` 指向本次运行目录；其他路径使用环境变量。`extra_calls` 可以补充原始深度，`capture_modules` 可以捕获只返回产物路径的模型的原始 forward 输出。生成式模型还应固定 prompt、轨迹、采样步数和精度，并对渲染结果做质量验收。
+
+已验证状态只适用于具体代码、权重、输入和运行环境。共享组件改变后，复跑所有受影响的模型及 variant；没有复跑的模型保留为未覆盖。GitHub CI 运行公开 CPU 门禁；真实推理需要在有本地权重的 GPU 主机上单独运行，并在接受推理改动前通过 `make test-geometry`。数值一致证明已验收案例没有发生回归，不能证明任意输入都没有 bug，也不能替代带真实深度和相机标定的质量 benchmark。先用官方结果、质量指标和人工检查验收 reference，再将它作为回归基线。
+
 ## 发布门禁
 
 轻量 editable checkout 在运行 core 门禁前，先安装声明的测试依赖：

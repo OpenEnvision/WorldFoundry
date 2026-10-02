@@ -1,4 +1,4 @@
-.PHONY: help install-core install-dev test test-infer test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
+.PHONY: help install-core install-dev test test-infer test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -9,6 +9,10 @@ PREFLIGHT_PROFILE ?= all
 PREFLIGHT_OUTPUT ?= tmp/preflight
 CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
+GEOMETRY_MATRIX ?= tests/manual/geometry_regression_cases.json
+GEOMETRY_REFERENCE ?=
+GEOMETRY_CANDIDATE ?=
+GEOMETRY_REPORT ?= tmp/3d-regression-gate.json
 RELEASE_HFD_ROOT ?= $(if $(WORLDFOUNDRY_HFD_ROOT),$(WORLDFOUNDRY_HFD_ROOT),$(HOME)/.cache/worldfoundry/checkpoints/hfd)
 CANONICAL_DIFFUSION_SOURCES ?= \
 	worldfoundry/base_models/diffusion_model/*.py \
@@ -36,6 +40,7 @@ help:
 		'  make install-dev       Install lightweight development dependencies.' \
 		'  make test              Run the public CPU inference and packaging gate.' \
 		'  make test-infer        Alias for the public CPU gate.' \
+		'  make test-geometry     Audit real 3D replays against accepted references; requires GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE.' \
 		'  make test-eval-core    Run the extended evaluation contract suite.' \
 		'  make docs-check        Verify checked-in generated documentation.' \
 		'  make docs-dev-fast     Start docs using existing generated output.' \
@@ -58,6 +63,10 @@ test:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q $(TEST_ARGS)
 
 test-infer: test
+
+test-geometry:
+	@test -n "$(GEOMETRY_REFERENCE)" -a -n "$(GEOMETRY_CANDIDATE)" || { printf '%s\n' 'Set GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE to completed real-checkpoint run directories.' >&2; exit 2; }
+	$(PYTHON) tests/manual/geometry_regression.py audit --matrix "$(GEOMETRY_MATRIX)" --reference "$(GEOMETRY_REFERENCE)" --candidate "$(GEOMETRY_CANDIDATE)" --source-root "$(CURDIR)" --report "$(GEOMETRY_REPORT)"
 
 test-eval-core:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q tests/eval_core $(TEST_ARGS)
