@@ -1,4 +1,4 @@
-.PHONY: help install-core install-dev test test-infer test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
+.PHONY: help install-core install-dev test test-infer test-infer-tensors test-infer-contracts test-infer-cuda-contracts test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -9,6 +9,7 @@ PREFLIGHT_PROFILE ?= all
 PREFLIGHT_OUTPUT ?= tmp/preflight
 CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
+INFER_TENSOR_CONTRACTS = tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py
 GEOMETRY_MATRIX ?= tests/manual/geometry_regression_cases.json
 GEOMETRY_REFERENCE ?=
 GEOMETRY_CANDIDATE ?=
@@ -40,6 +41,9 @@ help:
 		'  make install-dev       Install lightweight development dependencies.' \
 		'  make test              Run the public CPU inference and packaging gate.' \
 		'  make test-infer        Alias for the public CPU gate.' \
+		'  make test-infer-tensors  Test small checkpoint, geometry and execution tensors with CPU Torch and safetensors.' \
+		'  make test-infer-contracts  Test checkpoint, geometry, serializer and execution contracts in a model environment.' \
+		'  make test-infer-cuda-contracts  Test real CUDA transfers and failed callbacks; requires an available GPU.' \
 		'  make test-geometry     Audit real 3D replays against accepted references; requires GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE.' \
 		'  make test-eval-core    Run the extended evaluation contract suite.' \
 		'  make docs-check        Verify checked-in generated documentation.' \
@@ -63,6 +67,19 @@ test:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q $(TEST_ARGS)
 
 test-infer: test
+
+# This suite needs CPU Torch and safetensors, with no model or renderer dependencies.
+test-infer-tensors:
+	CUDA_VISIBLE_DEVICES='' PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(INFER_TENSOR_CONTRACTS) $(TEST_ARGS)
+
+# Run inside the 3D model environment; tensor and serializer tests need its dependencies.
+test-infer-contracts:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(INFER_TENSOR_CONTRACTS) tests/pipelines/test_geometry_result_exports.py $(TEST_ARGS)
+
+# An unavailable GPU must fail this gate instead of reporting a skipped suite as success.
+test-infer-cuda-contracts:
+	$(PYTHON) -c 'import torch; assert torch.cuda.is_available(), "CUDA contract tests require an available GPU"'
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m gpu tests/core/execution/test_cuda_frame_transfer.py $(TEST_ARGS)
 
 test-geometry:
 	@test -n "$(GEOMETRY_REFERENCE)" -a -n "$(GEOMETRY_CANDIDATE)" || { printf '%s\n' 'Set GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE to completed real-checkpoint run directories.' >&2; exit 2; }

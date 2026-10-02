@@ -56,6 +56,47 @@ WORLDFOUNDRY_DOCKER_EXTRAS=test,eval_core tests/run_tests_docker.sh make:test-ev
 
 新增确定性回归放在对应模块目录，小型文本 fixture 放在该 suite 内。导入时直接执行推理的脚本放入 `manual/` 或 `stream/`。checkpoint 路径使用环境变量，资源不可用时跳过真实权重测试；缓存、日志、输出、凭据和 weights 不进入 Git 或源码发行物。
 
+## 推理契约与 CUDA 快速检查
+
+仅安装公开测试依赖、CPU Torch 和 safetensors，即可运行张量测试，不需要 checkpoint、渲染器或 GPU：
+
+```bash
+python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e ".[test]" "safetensors>=0.4"
+make test-infer-tensors
+```
+
+在已准备的 3D 模型环境中继续运行结果导出和 CUDA 测试。结果导出会导入该环境的模型和渲染依赖，包括 plyfile 和 gsplat：
+
+```bash
+make test-infer-contracts PYTHON=/path/to/model-env/bin/python
+make test-infer-cuda-contracts PYTHON=/path/to/model-env/bin/python
+```
+
+第一个目标使用小张量和已知几何，不加载模型权重，覆盖 checkpoint 往返与 meta 参数赋值、加载失败前的原子校验、键重命名冲突、相机坐标约定、带 mask 的 PLY 和原始数组导出、跨进程结果序列化、异常恢复和并发提交。CUDA 目标检查 producer event 的先后顺序、pinned-memory 拷贝、失败 fallback，以及回调报错后已入队工作的同步。CUDA 不可用时该目标直接失败，不能用整个 suite 都被 skip 来表示通过。
+
+设置下文的 checkpoint 和输入目录后，还可以运行短的真实 Pi3X 测试，比较复用模型和新加载模型，覆盖换输入、失败请求和重复推理：
+
+```bash
+python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
+```
+
+这是请求状态隔离检查，不代表结果质量已经验收。模型行为发生变化时仍需运行固定权重的数值回归门禁。
+
+## 持续优化时如何验证
+
+| 改动 | 每次修改的检查 | 更广的证据 |
+| --- | --- | --- |
+| import、目录归属、配置和打包 | 公开 CPU 门禁与发行物检查 | 执行路径改变时，复跑受影响模型的短案例 |
+| attention、kernel、graph、offload | 参考实现与加速实现对比，覆盖 shape、精度、layout、device 和连续请求 | 每类受影响组件的代表性真实权重案例 |
+| 单个模型的加载、预处理和输出转换 | 推理契约与该模型的短基准回放 | 提升集成状态前运行完整 demo 和 benchmark |
+| 量化、裁剪和近似 attention | 显式启用，测量数值误差并约束任务质量 | 代表性数据和硬件，默认启用前跑质量 benchmark |
+| 涉及共享推理组件的发布 | 完整已验收短案例矩阵 | 较低频率或发布前运行完整 demo 和质量 benchmark |
+
+用最近一次成功回放的 `source_hashes` 辅助判断影响范围，再结合显式组件/能力声明和静态依赖。动态记录只覆盖实际执行的路径，无法覆盖未执行分支或动态选择的 backend；依赖关系无法确认时保留为未覆盖，并扩大对应组件的测试。保留参考实现供差分测试和 fallback 使用。精确优化与有损优化分开：后者必须明确数值和任务质量阈值，不能静默放宽容差或重新生成基准。
+
+GitHub CI 在 PR、`main` 和 `release/**` 的 push，以及手动触发时，自动运行公开 CPU、CPU Torch 张量和打包门禁。结果导出、CUDA 契约、真实权重回放和更广的模型 benchmark 依赖已准备的模型环境，不会由 hosted CPU workflow 自动执行。自动选择受影响模型和定时 GPU 回归尚未实现。
+
 ## 准备可选 CPU eval-core 测试环境
 
 先从 PyTorch 官方 CPU wheel index 安装 Torch/Torchvision，再从正常 package index 安装已声明的测试 extra：

@@ -83,6 +83,71 @@ environment variables. Real-weight MiniMax H3 tests use
 `MINIMAX_H3_CKPT_DIR`, defaulting to
 `~/.cache/worldfoundry/checkpoints/minimax-h3-components`.
 
+### Fast inference contracts and CUDA checks
+
+The tensor suite needs only the public test dependencies, CPU Torch and
+safetensors. It runs without checkpoints, renderers or a GPU:
+
+```bash
+python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e ".[test]" "safetensors>=0.4"
+make test-infer-tensors
+```
+
+In a prepared 3D model environment, also run the result serializers and CUDA
+contracts. The serializer imports use that environment's model and rendering
+dependencies, including plyfile and gsplat:
+
+```bash
+make test-infer-contracts PYTHON=/path/to/model-env/bin/python
+make test-infer-cuda-contracts PYTHON=/path/to/model-env/bin/python
+```
+
+The first target uses small tensors and synthetic geometry without model weights.
+It covers real checkpoint round trips and meta-device assignment, rejection before
+partial mutation, remap collisions, camera conventions, masked PLY and array
+exports, fresh-process result serialization, request recovery, and concurrent
+submission. The CUDA target checks producer-event ordering, pinned-memory copies,
+fallbacks, and draining queued work after a callback fails. It fails when CUDA is
+unavailable rather than reporting a wholly skipped GPU suite as success.
+
+After setting the regression checkpoint and input roots described below, a short
+real Pi3X test checks a reused model against a fresh model, with changed inputs,
+an intervening failed request, and exact repeatability:
+
+```bash
+python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
+```
+
+This is a state-isolation check, not an accepted-output quality baseline. The
+fixed-weight numerical replay gate remains necessary for changed model behavior.
+
+### Validation while optimizing
+
+| Change | Checks on every change | Broader evidence |
+| --- | --- | --- |
+| Imports, ownership, configuration, packaging | Public CPU gate and built-distribution audit | Short affected-model replay for changed execution paths |
+| Attention, kernels, graphs, offload | Reference-versus-optimized tensor tests over shapes, precision, layouts, devices and repeated requests | Representative real-weight cases using each affected component |
+| A model's loading, preprocessing or output conversion | Inference contracts and that model's short accepted-output replay | Full demo and benchmark before promoting integration status |
+| Quantization, pruning or approximate attention | Explicit opt-in, measured numeric error and task-level quality limits | Representative datasets and hardware; benchmark before enabling by default |
+| Release affecting shared inference components | Complete accepted short-case matrix | Full demos and quality benchmarks at lower frequency or before release |
+
+Use the latest successful replay's `source_hashes` to help identify affected
+cases, together with explicit component/capability declarations and static
+dependencies. Runtime traces only cover paths that ran: they do not cover an
+unexecuted branch or a dynamically selected backend. Treat an unresolved impact
+as uncovered and expand the affected component's tests. Keep the reference
+implementation available for differential tests and safe fallback. Separate exact
+optimizations from approximations; specify numeric and task-quality limits for
+the latter and never silently widen tolerances or regenerate accepted references.
+
+GitHub CI runs the public CPU, CPU Torch tensor and packaging gates on pull
+requests, pushes to `main` and `release/**`, and manual dispatch. Result
+serializers, CUDA contracts, real-weight replays and broader model benchmarks
+require the prepared model environment; they are not automatically executed by
+the hosted CPU workflow. Automatic affected-model selection and scheduled GPU
+replays are not implemented yet.
+
 ### Docker helper
 
 ```bash

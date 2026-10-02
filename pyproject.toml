@@ -488,6 +488,7 @@ transformers_low = [
 # suites explicitly; they can require model-specific or local-only resources.
 testpaths = [
     "tests/core/test_core_module_boundaries.py",
+    "tests/core/execution/test_overlap_lifecycle.py",
     "tests/core/test_process_logging.py",
     "tests/runtime/test_device_pool.py",
     "tests/runtime/test_geometry_regression.py",

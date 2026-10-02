@@ -41,7 +41,8 @@ def remap_checkpoint_keys(state_dict: dict[str, Tensor], mapping: dict[str, str]
 
     Each key is matched against ``mapping`` in insertion order; the first
     matching pattern is applied with ``re.sub``. Keys without a match pass
-    through unchanged.
+    through unchanged. Colliding destination keys raise instead of silently
+    replacing a tensor from the released checkpoint.
 
     Args:
         state_dict: Source state dict.
@@ -56,15 +57,19 @@ def remap_checkpoint_keys(state_dict: dict[str, Tensor], mapping: dict[str, str]
       >>> remapped = remap_checkpoint_keys(state_dict, mapping)
     """
     new_state_dict = {}
+    origins = {}
     for k, v in state_dict.items():
-        matched = False
+        target = k
         for old_key, new_key in mapping.items():
             if re.match(old_key, k):
-                new_state_dict[re.sub(old_key, new_key, k)] = v
-                matched = True
+                target = re.sub(old_key, new_key, k)
                 break
-        if not matched:
-            new_state_dict[k] = v
+        if target in new_state_dict:
+            raise ValueError(
+                f"Checkpoint key remap collision at {target!r}: {origins[target]!r} and {k!r}"
+            )
+        new_state_dict[target] = v
+        origins[target] = k
     return new_state_dict
 
 

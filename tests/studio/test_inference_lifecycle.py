@@ -112,11 +112,17 @@ def test_resident_gpu_queue_uses_the_request_deadline(tmp_path, monkeypatch):
 def test_one_shot_failures_stop_descendants_before_releasing_gpu(tmp_path, monkeypatch, failure):
     pool = CudaDeviceLeasePool(("0",), lock_dir=tmp_path / "locks")
     monkeypatch.setattr(dispatch, "_automatic_gpu_pool", lambda: pool)
-    monkeypatch.setenv(dispatch.INFERENCE_TIMEOUT_ENV, "0.2" if failure == "timeout" else "5")
+    monkeypatch.setenv(dispatch.INFERENCE_TIMEOUT_ENV, "20")
     monkeypatch.setattr(dispatch, "_run_manager_payload_in_resident_conda", lambda **_: None)
     real_popen = subprocess.Popen
     processes = []
     ready = tmp_path / "descendant-ready"
+    if failure == "timeout":
+        real_monotonic = time.monotonic
+        # Expire the request only once the SIGTERM-ignoring descendant exists.
+        # Keep time advancing so teardown's grace-period clocks still work.
+        monkeypatch.setattr(dispatch.time, "monotonic",
+                            lambda: real_monotonic() + (60 if ready.exists() else 0))
     child_script = (
         "import signal,time; from pathlib import Path; "
         "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
@@ -149,12 +155,25 @@ def test_one_shot_failures_stop_descendants_before_releasing_gpu(tmp_path, monke
     options["log_callback"] = log
     options["cancel_requested"] = cancelled.is_set
     if failure == "select":
-        monkeypatch.setattr(dispatch.select, "select",
-                            lambda *_: (_ for _ in ()).throw(ValueError("select failed")))
+        real_select = dispatch.select.select
+
+        def fail_after_descendant_starts(*args):
+            if ready.exists():
+                raise ValueError("select failed")
+            return real_select(*args)
+
+        monkeypatch.setattr(dispatch.select, "select", fail_after_descendant_starts)
+    expected_error, message = {
+        "callback": (ValueError, "observer failed"),
+        "select": (ValueError, "select failed"),
+        "timeout": (TimeoutError, "inference request timed out"),
+        "cancel": (RuntimeError, "inference dispatch cancelled"),
+    }[failure]
     try:
-        with pytest.raises((ValueError, RuntimeError, TimeoutError)):
+        with pytest.raises(expected_error, match=message):
             dispatch.run_manager_payload_in_conda(**options)
         assert len(processes) == 1
+        assert ready.exists()
         assert not process_group_alive(processes[0].pid)
         assert pool.available_count == 1
         with CudaDeviceLeasePool(("0",), lock_dir=tmp_path / "locks").acquire(deadline=time.monotonic() + 1):

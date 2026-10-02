@@ -151,3 +151,68 @@ def test_matrix_gate_rejects_missing_cases_changed_cases_and_stale_code(tmp_path
     report = replay.audit_matrix(matrix, reference, candidate, source, [])
     assert report["status"] == "failed"
     assert "stale" in report["cases"][case["id"]]["error"]
+
+
+@pytest.mark.parametrize("extension", ["npy", "npz", "png", "json"])
+@pytest.mark.parametrize("changed", [False, True])
+def test_export_values_are_compared_even_when_in_memory_outputs_match(tmp_path, extension, changed):
+    """A serializer regression must fail independently of the model's raw arrays."""
+    reference = write_run(tmp_path / "reference", {"depth": np.ones(2)})
+    candidate = write_run(tmp_path / "candidate", {"depth": np.ones(2)})
+    for root, pixel in [(reference, 19), (candidate, 20 if changed else 19)]:
+        path = root / f"artifact.{extension}"
+        value = np.full((2, 3), pixel, dtype=np.uint8)
+        if extension == "npy":
+            np.save(path, value)
+        elif extension == "npz":
+            np.savez(path, confidence=value)
+        elif extension == "png":
+            from PIL import Image
+
+            Image.fromarray(value).save(path)
+        else:
+            path.write_text(json.dumps({"intrinsics": value.tolist()}))
+        manifest = json.loads((root / "manifest.json").read_text())
+        manifest["exported_files"] = [str(path)]
+        (root / "manifest.json").write_text(json.dumps(manifest))
+    report = replay.compare_runs(reference, candidate, atol=10)
+    # Integer pixels and camera IDs must remain exact despite float tolerance.
+    assert report["status"] == ("failed" if changed else "passed")
+    exported = [result for key, result in report["outputs"].items() if key.startswith("export.")]
+    assert exported and all(result["passed"] is (not changed) for result in exported)
+
+
+def test_export_manifest_cannot_silently_drop_an_artifact(tmp_path):
+    reference = write_run(tmp_path / "reference", {"depth": np.ones(2)})
+    candidate = write_run(tmp_path / "candidate", {"depth": np.ones(2)})
+    path = reference / "camera.npy"
+    np.save(path, np.eye(4))
+    metadata = json.loads((reference / "manifest.json").read_text())
+    metadata["exported_files"] = [str(path)]
+    (reference / "manifest.json").write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="artifact names differ"):
+        replay.compare_runs(reference, candidate)
+
+
+@pytest.mark.parametrize("path", ["../model.py", "/outside/model.py"])
+def test_matrix_gate_rejects_source_hashes_outside_the_checkout(tmp_path, path):
+    reference = tmp_path / "reference"
+    candidate = tmp_path / "candidate"
+    source = tmp_path / "source"
+    for root in [reference, candidate, source]:
+        root.mkdir()
+    case = {"id": "fixed-multiview", "seed": 42}
+    for root in [reference, candidate]:
+        write_run(root / case["id"], {"depth": np.ones(2)}, source_hashes={path: "invalid"})
+    matrix = tmp_path / "matrix.json"
+    matrix.write_text(json.dumps({case["id"]: case}))
+    report = replay.audit_matrix(matrix, reference, candidate, source, [])
+    assert report["status"] == "failed"
+    assert "Invalid imported-source path" in report["cases"][case["id"]]["error"]
+
+
+def test_empty_matrix_cannot_produce_a_successful_release_gate(tmp_path):
+    matrix = tmp_path / "matrix.json"
+    matrix.write_text("{}")
+    with pytest.raises(ValueError, match="matrix is empty"):
+        replay.audit_matrix(matrix, tmp_path / "reference", tmp_path / "candidate", tmp_path, [])

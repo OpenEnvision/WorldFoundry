@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import threading
-import time
 import os
 import subprocess
 import sys
+import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -162,9 +162,15 @@ def test_controller_exit_does_not_release_a_workers_gpu_lock(tmp_path):
 def test_surviving_descendants_block_gpu_reallocation_after_both_owners_die(tmp_path):
     # Nested vendor launches may close inherited lease FDs. Ownership metadata
     # must still block allocation after the controller and worker leader die.
+    ready = tmp_path / "descendant-ready"
+    child_script = (
+        "import os,time; from pathlib import Path; "
+        f"ready=Path({str(ready)!r}); pending=ready.with_suffix('.pending'); "
+        "pending.write_text(str(os.getpid())); pending.replace(ready); time.sleep(120)"
+    )
     parent_script = (
         "import subprocess,sys,time; "
-        "subprocess.Popen([sys.executable,'-c','import time; time.sleep(120)']); "
+        f"subprocess.Popen([sys.executable,'-c',{child_script!r}]); "
         "time.sleep(120)"
     )
     script = (
@@ -173,7 +179,7 @@ def test_surviving_descendants_block_gpu_reallocation_after_both_owners_die(tmp_
         "pool=CudaDeviceLeasePool(('0',),lock_dir=Path(sys.argv[1])); lease=pool.acquire(); "
         f"worker=subprocess.Popen([sys.executable,'-c',{parent_script!r}],"
         "start_new_session=True,pass_fds=lease.file_descriptors,stdout=subprocess.DEVNULL); "
-        "lease.process_group_id=worker.pid; time.sleep(0.15); "
+        "lease.process_group_id=worker.pid; "
         "print(worker.pid,flush=True); os._exit(0)"
     )
     controller = subprocess.Popen([sys.executable, "-c", script, str(tmp_path)], stdout=subprocess.PIPE, text=True)
@@ -184,6 +190,11 @@ def test_surviving_descendants_block_gpu_reallocation_after_both_owners_die(tmp_
     try:
         import signal
 
+        deadline = time.monotonic() + 20
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists(), "descendant did not start before killing its worker leader"
+        assert os.getpgid(int(ready.read_text())) == pid
         os.kill(pid, signal.SIGKILL)
         with pytest.raises(TimeoutError):
             pool.acquire(deadline=time.monotonic() + 0.15)

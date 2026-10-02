@@ -29,7 +29,6 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from typing import Any
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Sync stand-in — same API so realtime loops do not special-case "no overlap"
 # ──────────────────────────────────────────────────────────────────────────
@@ -111,13 +110,23 @@ class HostThreadOverlap:
                 raise RuntimeError(f"{self.name} already has pending overlap work.")
             self._error = None
             self._done.clear()
-            self._thread = threading.Thread(
-                target=self._run,
-                args=(work,),
-                name=name or self.name,
-                daemon=self._daemon,
-            )
-            self._thread.start()
+            self._thread = None
+            try:
+                self._thread = threading.Thread(
+                    target=self._run,
+                    args=(work,),
+                    name=name or self.name,
+                    daemon=self._daemon,
+                )
+                self._thread.start()
+            except BaseException as exc:
+                self._error = exc
+                # A launch failure must not strand the completion event. If a
+                # thread did start before the failure, it still owns completion.
+                if self._thread is None or self._thread.ident is None:
+                    self._thread = None
+                    self._done.set()
+                raise
 
     def wait(self, *, timeout_s: float | None = None, raise_error: bool = False) -> bool:
         """Block until the worker finishes or ``timeout_s`` elapses (``None`` = forever)."""
@@ -195,6 +204,10 @@ class CudaStreamOverlap:
                 event.record(self._stream)
         except BaseException as exc:
             self._error = exc
+            # A callback can enqueue GPU work before raising. Drain that work
+            # before the caller releases or reuses this request's buffers.
+            self._stream.synchronize()
+            self._event = None
             raise
         self._event = event
 
