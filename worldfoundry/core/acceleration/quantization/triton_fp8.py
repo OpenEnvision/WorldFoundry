@@ -32,6 +32,7 @@ configure_persistent_compile_cache(namespace="fp8-triton")
 
 import triton  # noqa: E402
 import triton.language as tl  # noqa: E402
+from triton.language.extra import libdevice  # noqa: E402
 
 _FP8_TL_DTYPE = {
     torch.float8_e4m3fn: tl.float8e4nv,
@@ -51,6 +52,7 @@ def _quantize_rowwise_fp8_kernel(
     output_row_stride,
     BLOCK_SIZE: tl.constexpr,
     FP8_DTYPE: tl.constexpr,
+    ACTIVATION: tl.constexpr = "identity",
 ):
     """One program per row: amax, scale, clamp, hardware FP8 store."""
     row = tl.program_id(0)
@@ -58,6 +60,15 @@ def _quantize_rowwise_fp8_kernel(
     mask = col_offsets < n_cols
     in_ptrs = input_ptr + row * input_row_stride + col_offsets
     values = tl.load(in_ptrs, mask=mask, other=0.0).to(tl.float32)
+    if ACTIVATION == "gelu_tanh":
+        inner = 0.7978845608028654 * (values + 0.044715 * values * values * values)
+        values = 0.5 * values * (1.0 + libdevice.tanh(inner))
+    elif ACTIVATION == "gelu":
+        values = 0.5 * values * (1.0 + libdevice.erf(values * 0.7071067811865476))
+    if ACTIVATION != "identity":
+        # Preserve nn.GELU's output rounding before the following Linear's
+        # row quantization; there is no materialized activation in HBM.
+        values = values.to(input_ptr.dtype.element_ty).to(tl.float32)
     amax = tl.max(tl.abs(values), axis=0)
     scale = tl.maximum(amax / fp8_max, tiny)
     quantized = values / scale
@@ -75,6 +86,8 @@ def _quantize_rowwise_fp8_kernel(
 def quantize_rowwise_fp8_triton(
     value: torch.Tensor,
     dtype: torch.dtype = torch.float8_e4m3fn,
+    *,
+    activation: str = "identity",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Row-wise FP8 quantization of a 2D ``[rows, K]`` tensor.
 
@@ -84,13 +97,17 @@ def quantize_rowwise_fp8_triton(
 
     if dtype not in _FP8_TL_DTYPE:
         raise ValueError(f"unsupported FP8 dtype: {dtype}")
+    if activation not in {"identity", "gelu", "gelu_tanh"}:
+        raise ValueError(f"unsupported fused activation: {activation}")
+    if value.device.type != "cuda" or value.dtype not in {torch.float16, torch.bfloat16, torch.float32}:
+        raise ValueError("Triton FP8 quantization requires floating-point CUDA input")
     if value.ndim != 2:
         raise ValueError("row-wise FP8 quantization expects a 2D [rows, K] tensor")
     source = value if value.is_contiguous() else value.contiguous()
     rows, cols = source.shape
     output = torch.empty_like(source, dtype=dtype)
     scale = torch.empty((rows, 1), dtype=torch.float32, device=source.device)
-    if rows == 0:
+    if rows == 0 or cols == 0:
         return output, scale
     block_size = triton.next_power_of_2(cols)
     num_warps = 4 if block_size <= 2048 else (8 if block_size <= 8192 else 16)
@@ -105,6 +122,7 @@ def quantize_rowwise_fp8_triton(
         output.stride(0),
         BLOCK_SIZE=block_size,
         FP8_DTYPE=_FP8_TL_DTYPE[dtype],
+        ACTIVATION=activation,
         num_warps=num_warps,
     )
     return output, scale

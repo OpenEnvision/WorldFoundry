@@ -334,5 +334,22 @@ class InferenceCUDAGraphRunner:
             "lifetime": dict(self.stats),
         }
 
+    def invalidate(self) -> None:
+        """Drain and discard captures after weights or execution policy change.
+
+        Request telemetry resets retain graphs. Model replacement, LoRA
+        installation and toggling low-precision execution require this explicit
+        invalidation: replay cannot reevaluate Python policy or cache decisions.
+        Call between requests, with no concurrent calls to this runner.
+        """
+        devices = {
+            tensor.device for captured in self._graphs.values()
+            for tensor in captured.static_inputs if tensor.is_cuda
+        }
+        for device in devices:
+            torch.cuda.synchronize(device)
+        self._graphs.clear()
+        self._disabled_keys.clear()
+
 
 __all__ = ["InferenceCUDAGraphRunner"]

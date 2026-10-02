@@ -189,6 +189,8 @@ def apply_quantization_policy(model: "nn.Module", policy: QuantizationPolicy) ->
     """
 
     mode = QuantizationMode(policy.mode)
+    if _option(policy, "fuse_fp8_ffn", False) and mode is not QuantizationMode.FP8:
+        raise ValueError("fuse_fp8_ffn requires FP8 quantization")
     if mode == QuantizationMode.NONE:
         return QuantizationReport(requested_mode=mode.value, applied=False, reason="policy mode is none")
 
@@ -197,6 +199,7 @@ def apply_quantization_policy(model: "nn.Module", policy: QuantizationPolicy) ->
     min_features = int(_option(policy, "min_features", 1024))
     keep_dense_default = mode in {QuantizationMode.FP8, QuantizationMode.NVFP4}
     keep_dense = bool(_option(policy, "keep_dense_fallback", keep_dense_default))
+    fused_fp8_ffn = 0
     if mode is QuantizationMode.FP8:
         from worldfoundry.core.acceleration.quantization.linear import replace_linear_with_float8
 
@@ -212,6 +215,10 @@ def apply_quantization_policy(model: "nn.Module", policy: QuantizationPolicy) ->
         )
         storage = f"fp8-{scaling}"
         execution = "fp8-wrapper-installed (runtime-pending)"
+        if bool(_option(policy, "fuse_fp8_ffn", False)):
+            from worldfoundry.core.acceleration.quantization.fused_ffn import fuse_fp8_gelu_feed_forwards
+
+            fused_fp8_ffn = fuse_fp8_gelu_feed_forwards(model)
     elif mode is QuantizationMode.NVFP4:
         from worldfoundry.core.acceleration.quantization.nvfp4 import replace_linear_with_nvfp4
 
@@ -298,6 +305,8 @@ def apply_quantization_policy(model: "nn.Module", policy: QuantizationPolicy) ->
             "storage": storage,
             "execution": execution,
             "dense_fallback_retained": keep_dense,
+            "fused_fp8_ffn_blocks": fused_fp8_ffn,
+            "fuse_fp8_ffn_requested": bool(_option(policy, "fuse_fp8_ffn", False)),
         },
     )
 
@@ -360,6 +369,11 @@ class AppliedOptimizations:
     def record_quantization(self, report: QuantizationReport) -> None:
         """Record weight transform; ``applied`` means a wrapper exists, not a kernel ran."""
         self.requested["quantization"] = report.requested_mode
+        if report.extra.get("fuse_fp8_ffn_requested"):
+            self.requested["fuse_fp8_ffn"] = True
+            self.effective["fused_fp8_ffn_blocks"] = report.extra["fused_fp8_ffn_blocks"]
+            if not report.extra["fused_fp8_ffn_blocks"]:
+                self.fallbacks.append("fuse_fp8_ffn: no eligible Linear/GELU/Linear patterns matched")
         if report.applied:
             # Replacing a module proves that a wrapper/packed representation
             # exists, not that a hardware low-precision kernel has executed.

@@ -126,6 +126,9 @@ def test_full_stack_actual_fp8_cache_or_graph_execution(monkeypatch, graph):
     # Exercise real scaled-mm even for the tiny correctness fixture; this
     # deliberately bypasses the performance threshold, not numerical gates.
     monkeypatch.setenv("WORLDFOUNDRY_FP8_MIN_GEMM_FLOP", "0")
+    from worldfoundry.core.acceleration.quantization.linear import _fp8_min_gemm_work
+
+    monkeypatch.setattr(_fp8_min_gemm_work, "_cached", None, raising=False)
     monkeypatch.setitem(
         full_stack._PROFILES,
         "tiny",

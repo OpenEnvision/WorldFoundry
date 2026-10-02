@@ -17,6 +17,29 @@ pytestmark = [
 ]
 
 
+@torch.inference_mode()
+def test_invalidation_recaptures_changed_weight_storage_and_python_policy():
+    weight = torch.ones(8, device="cuda")
+    policy = {"scale": 2.0}
+
+    def transform(value):
+        return value * weight * policy["scale"]
+
+    runner = InferenceCUDAGraphRunner(transform, warmup=1)
+    value = torch.arange(8, device="cuda", dtype=torch.float32)
+    old = runner(value)
+    torch.testing.assert_close(old, value * 2, rtol=0, atol=0)
+    weight = torch.full((8,), 3.0, device="cuda")
+    policy["scale"] = 0.5
+    runner.invalidate()
+    assert runner.report()["graphs"] == runner.report()["disabled_signatures"] == 0
+    actual = runner(value + 1)
+    torch.testing.assert_close(actual, (value + 1) * 1.5, rtol=0, atol=0)
+    torch.testing.assert_close(old, value * 2, rtol=0, atol=0)
+    assert runner.report()["capture"] == 2
+    assert runner.report()["eager"] == runner.report()["capture_failed"] == 0
+
+
 @pytest.fixture
 def cuda_device() -> Iterator[torch.device]:
     device = torch.device("cuda", torch.cuda.current_device())

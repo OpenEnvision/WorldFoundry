@@ -400,17 +400,27 @@ class Float8Linear(nn.Module):
             input_fp8, input_scale = _quantize_rowwise_fp8(flattened, self.fp8_dtype)
         else:
             input_fp8, input_scale = _quantize_tensorwise_fp8(flattened, self.fp8_dtype)
+        return self._forward_quantized(input_fp8, input_scale, original_shape, input.dtype)
+
+    def _forward_quantized(
+        self,
+        input_fp8: torch.Tensor,
+        input_scale: torch.Tensor,
+        original_shape: tuple[int, ...],
+        output_dtype: torch.dtype,
+    ) -> torch.Tensor:
+        """Shared GEMM for eligible forward and fused GELU/row quantization."""
         # A contiguous [N, K] weight transposes to the column-major [K, N]
         # layout required by torch._scaled_mm/cuBLASLt without another copy.
         weight_mat = self.weight_fp8.t()
-        bias = None if self.bias is None else self.bias.to(dtype=input.dtype)
+        bias = None if self.bias is None else self.bias.to(dtype=output_dtype)
         output = torch._scaled_mm(
             input_fp8,
             weight_mat,
             input_scale,
             self.weight_scale,
             bias=bias,
-            out_dtype=input.dtype,
+            out_dtype=output_dtype,
             use_fast_accum=self.use_fast_accum,
         )
         if isinstance(output, tuple):
