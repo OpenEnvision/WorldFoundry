@@ -13,18 +13,15 @@ Studio 现在有多前端入口：
 - **`points`** — Viser 点云 / mesh。直接启动原生 Viser，不嵌回游戏机界面。
 - **`embodied`** — 具身智能仿真器。**计划中。** 目前只是 URL bridge：Studio 登记外部 simulator URL 并给出 tunnel 提示，还没有仓内 embodied viewer。
 - **`spark`** — 3DGS。启动独立 Spark 3DGS viewer，复用项目内置 Spark frontend，并允许通过 `WORLDFOUNDRY_MODEL_DIR` / `WORLDFOUNDRY_ARTIFACT_DIR` 暴露本地资产。
-- **`unified`** — Gradio 壳。需要 `worldfoundry[ui]`；Workspace 会隐藏该 visualizer 模式。
+- **`media`** — 视频、图片与音频产物预览。
+- **`rerun`** — Rerun recording 与时间线查看。
 - **`auto`** — 默认。按模型类型自动路由：交互世界 -> `world`，3D scene -> `spark`，点云/深度 -> `points`，具身策略 -> `embodied`。
 
 ## 可视化内容
 
-- **Preview Video** — 最新生成或 streamed video。
-- **Preview Image** — Still-image outputs 和 imported reference frames。
-- **3D World** — 导出时显示 Gaussian splat、point cloud 或 spatial outputs。
-- **Gallery** — 最近 shots 和 preview artifacts。
-- **Artifacts** — 用于检查和下载的 raw output artifacts。
-
-默认情况下，Studio 会隐藏大多数高级面板。使用 `--show-aux-panels` 显示 history、notes、catalog、3DGS import 和低层 runtime controls。
+- **World 控制台** — 实时画面、键盘和摇杆、沉浸式全屏与运行日志。
+- **几何查看器** — Spark 查看 Gaussian splat，Viser 查看点云和 mesh。
+- **Workspace** — 任务状态、媒体预览、产物下载与可视化前端启动。
 
 ## Workspace 模式
 
@@ -431,7 +428,7 @@ pip install 'worldfoundry[studio_realtime,rtx_postprocess]'
 
 export WORLDFOUNDRY_REALTIME_POSTPROCESS_PRESET=rtx-super-resolution
 export WORLDFOUNDRY_REALTIME_RTX_SCALE=1.5
-python -m worldfoundry.studio.ui.gradio_app <model-id> --frontend world --device cuda:0
+python -m worldfoundry.studio.cli <model-id> --frontend world --device cuda:0
 ```
 
 服务启动前，adapter 会检查 package、CUDA 可见性、device index、Turing 或更新
@@ -633,20 +630,20 @@ Gallery 提供最近 inference outputs 和 preview artifacts 的紧凑视觉检�
 
 ## 启动矩阵
 
-- **LingBot realtime** — `python -m worldfoundry.studio.ui.gradio_app lingbot-world --variant fast --frontend world --device cuda:1`. 常驻 runtime、持续 WebRTC 视频和 DataChannel 控制。
-- **LingBot camera** — `python -m worldfoundry.studio.ui.gradio_app lingbot-world --variant base-camera --device cuda:1`. 更慢，偏 camera-centric profile。
-- **MatrixGame** — `python -m worldfoundry.studio.ui.gradio_app matrix-game-2 --device cuda:1`. 交互式 world navigation。
-- **WorldCam** — `python -m worldfoundry.studio.ui.gradio_app worldcam --device cuda:1`. Camera-path generation 和 view control。
-- **Hosted APIs** — `python -m worldfoundry.studio.ui.gradio_app <model> --backend api_init --endpoint <url>`. Endpoint 在启动时显式固定。
-- **Viser 点云** — `python -m worldfoundry.studio.ui.gradio_app pi3 --frontend points --asset /path/to/scene.ply --port 18590`. 原生 Viser UI。
-- **Spark 3DGS** — `python -m worldfoundry.studio.ui.gradio_app vggt --frontend spark --asset /path/to/scene.splat --port 8765`. 独立 Spark canvas，不进入游戏机 shell。
-- **Embodied simulator** — `python -m worldfoundry.studio.ui.gradio_app openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **计划中。** 仅登记外部 simulator URL，不会启动仓内 viewer。
+- **LingBot realtime** — `python -m worldfoundry.studio.cli lingbot-world --variant fast --frontend world --device cuda:1`. 常驻 runtime、持续 WebRTC 视频和 DataChannel 控制。
+- **LingBot camera** — `python -m worldfoundry.studio.cli lingbot-world --variant base-camera --device cuda:1`. 更慢，偏 camera-centric profile。
+- **MatrixGame** — `python -m worldfoundry.studio.cli matrix-game-2 --device cuda:1`. 交互式 world navigation。
+- **WorldCam** — `python -m worldfoundry.studio.cli worldcam --device cuda:1`. Camera-path generation 和 view control。
+- **Hosted APIs** — 在 Workspace 推理任务或 `worldfoundry run <model>` 中配置 provider 凭据与 endpoint，再用 `media` 前端查看导出的产物。
+- **Viser 点云** — `python -m worldfoundry.studio.cli pi3 --frontend points --asset /path/to/scene.ply --port 18590`. 原生 Viser UI。
+- **Spark 3DGS** — `python -m worldfoundry.studio.cli vggt --frontend spark --asset /path/to/scene.splat --port 8765`. 独立 Spark canvas，不进入游戏机 shell。
+- **Embodied simulator** — `python -m worldfoundry.studio.cli openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **计划中。** 仅登记外部 simulator URL，不会启动仓内 viewer。
 
 推荐本地启动：
 
 ```bash
 cd /path/to/WorldFoundry
-PYTHONPATH=. WORLDFOUNDRY_STUDIO_PORT=7868 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m worldfoundry.studio.ui.gradio_app \
+PYTHONPATH=. WORLDFOUNDRY_STUDIO_PORT=7868 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m worldfoundry.studio.cli \
   lingbot-world \
   --variant fast \
   --model-ref /path/to/checkpoints/lingbot-world-fast \
@@ -687,7 +684,7 @@ ICE 超时会明确报错，不会让页面永久停留在连接中。
 - **Stream** — seed input -> 启动一个持续会话 -> 按键边沿与生成帧连续流动。交互式世界模型和 continuation。
 - **Prompt-scheduled segments** — 输入 prompt，可选一张 image，然后 `START`；当前 segment 完成后修改 prompt 并按 `Enter`。在原生 segment 边界接收新 prompt 的模型。
 - **Queued controlled segments** — 选择初始 image、dense control video、sparse control video 和 prompt -> `RUN`；每次 `EXTEND` 前选择新的控制视频。每个 segment 都有显式控制输入的长时程模型。
-- **Spatial preview** — 运行或导出 3D asset -> 打开 `3D World`。Gaussian splat、point cloud 或 scene outputs。
+- **Spatial preview** — 运行或导出 3D asset -> 从 Workspace Visualizers 打开 Spark 查看 Gaussian splat，或打开 Viser 查看点云和 mesh。
 
 键盘/实时控制：
 
@@ -840,18 +837,10 @@ Workspace 的 visualizer iframe 已经授予 fullscreen 权限。
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>--show-aux-panels</code>
-          </div>
-        </div>
-        <p>显示 history、notes、catalog 和 side panels。</p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
             <code>--frontend</code>
           </div>
         </div>
-        <p><code>auto</code>、<code>world</code>、<code>points</code>、<code>spark</code>、<code>embodied</code>，或 <code>unified</code>（Gradio，需要 <code>worldfoundry[ui]</code>）。也接受 <code>viser</code>、<code>3dgs</code> 等别名。</p>
+        <p><code>auto</code>、<code>world</code>、<code>points</code>、<code>spark</code>、<code>embodied</code>、<code>media</code> 或 <code>rerun</code>。也接受 <code>viser</code>、<code>3dgs</code> 等别名。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -995,14 +984,6 @@ Workspace 的 visualizer iframe 已经授予 fullscreen 权限。
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>WORLDFOUNDRY_STUDIO_SHOW_AUX_PANELS</code>
-          </div>
-        </div>
-        <p>显示高级面板。</p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
             <code>WORLDFOUNDRY_STUDIO_FRONTEND</code>
           </div>
         </div>
@@ -1113,7 +1094,7 @@ Studio 的实现各自只有一个 canonical import path，根目录仅保留 CL
 | `inference/paths.py`、`inference/variants.py` | 运行路径和模型变体选择 |
 | `serving/workspace.py`、`serving/jobs.py` | Workspace API 与 UI 任务调度 |
 | `serving/` | 认证、文件服务、遥测和 realtime transport |
-| `ui/` | Gradio 构建、浏览器启动选项、输入组件与模型展示 |
+| `ui/` | 浏览器启动选项、模型接口、共享浏览器资源与 Workspace 页面 |
 | `ui/workspace.html`、`ui/workspace.py` | 打包的 Workspace 页面和资源加载器 |
 | `visualization/` | artifact 发现、viewer 路由与 geometry 展示 |
 | `cli.py`、`runtime_job.py`、`workspace_job.py` | 安装命令与子进程入口 |

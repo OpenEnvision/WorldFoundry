@@ -680,7 +680,7 @@ class TestFrontendsConstants:
     def test_frontend_mode_strings(self):
         from worldfoundry.studio.visualization.backends.frontends import (
             WORLD_FRONTEND, POINTS_FRONTEND, EMBODIED_FRONTEND,
-            SPARK_FRONTEND, MEDIA_FRONTEND, RERUN_FRONTEND, UNIFIED_FRONTEND,
+            SPARK_FRONTEND, MEDIA_FRONTEND, RERUN_FRONTEND,
         )
         assert WORLD_FRONTEND == "world"
         assert POINTS_FRONTEND == "points"
@@ -688,7 +688,6 @@ class TestFrontendsConstants:
         assert SPARK_FRONTEND == "spark"
         assert MEDIA_FRONTEND == "media"
         assert RERUN_FRONTEND == "rerun"
-        assert UNIFIED_FRONTEND == "unified"
 
     def test_default_rerun_command_assigns_distinct_data_ports(self):
         from worldfoundry.studio.visualization.backends.frontends import _default_rerun_command_template
@@ -752,15 +751,12 @@ class TestFrontendsConstants:
         assert "embodied" in STUDIO_VISUALIZATIONS.modes
         assert "rerun" in STUDIO_VISUALIZATIONS.modes
         assert "media" in STUDIO_VISUALIZATIONS.modes
-        assert "unified" in STUDIO_VISUALIZATIONS.modes
 
     def test_native_frontends(self):
         from worldfoundry.studio.visualization.backends.frontends import NATIVE_FRONTENDS
         assert isinstance(NATIVE_FRONTENDS, frozenset)
         assert "world" in NATIVE_FRONTENDS
         assert "points" in NATIVE_FRONTENDS
-        # Unified is not native.
-        assert "unified" not in NATIVE_FRONTENDS
 
     def test_default_frontend_ports(self):
         from worldfoundry.studio.visualization.backends.frontends import DEFAULT_FRONTEND_PORTS
@@ -771,7 +767,6 @@ class TestFrontendsConstants:
         assert DEFAULT_FRONTEND_PORTS["embodied"] == 18610
         assert DEFAULT_FRONTEND_PORTS["rerun"] == 9876
         assert DEFAULT_FRONTEND_PORTS["media"] == 18720
-        assert DEFAULT_FRONTEND_PORTS["unified"] == 7868
 
 
 # ---------------------------------------------------------------------------
@@ -859,18 +854,6 @@ class TestFrontendsRegistryBackendInstances:
         assert "image" in backend.capabilities.layer_kinds
         assert backend.capabilities.score == 60
 
-    def test_unified_backend(self):
-        from worldfoundry.studio.visualization.backends.frontends import STUDIO_VISUALIZATIONS
-        backend = STUDIO_VISUALIZATIONS.backend_for("unified")
-        assert backend.mode == "unified"
-        assert backend.title == "Unified Gradio Studio"
-        assert backend.default_port == 7868
-        assert backend.native is False
-        assert backend.aliases == ()
-        assert backend.serve is None
-        # match lambda always returns False.
-        assert backend.match(None, None) is False
-
 
 # ---------------------------------------------------------------------------
 # 8.  frontends.py — Functions
@@ -906,15 +889,6 @@ class TestFrontendsFunctions:
             result = host_for_frontend(lc)
             assert result == "10.0.0.5"
 
-    def test_host_for_frontend_gradio_env(self):
-        from worldfoundry.studio.visualization.backends.frontends import host_for_frontend
-        from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
-        lc = StudioLaunchConfig(model_id="test-model")
-        with patch.dict(os.environ, {"GRADIO_SERVER_NAME": "my-host"}, clear=False):
-            # Remove Worldevals host env to fall through to Gradio.
-            os.environ.pop("WORLDFOUNDRY_STUDIO_HOST", None)
-            result = host_for_frontend(lc)
-            assert result == "my-host"
 
     def test_host_for_frontend_blank_host_falls_to_default(self):
         from worldfoundry.studio.visualization.backends.frontends import host_for_frontend
@@ -2232,7 +2206,7 @@ class TestRegistryModeConstants:
             INTERACTIVE_WORLD_VISUALIZATION, VISER_VISUALIZATION,
             SPARK_VISUALIZATION, MEDIA_VISUALIZATION,
             RERUN_VISUALIZATION, EMBODIED_VISUALIZATION,
-            UNIFIED_VISUALIZATION, AUTO_VISUALIZATION,
+            AUTO_VISUALIZATION,
         )
         assert INTERACTIVE_WORLD_VISUALIZATION == "world"
         assert VISER_VISUALIZATION == "points"
@@ -2240,7 +2214,6 @@ class TestRegistryModeConstants:
         assert MEDIA_VISUALIZATION == "media"
         assert RERUN_VISUALIZATION == "rerun"
         assert EMBODIED_VISUALIZATION == "embodied"
-        assert UNIFIED_VISUALIZATION == "unified"
         assert AUTO_VISUALIZATION == "auto"
 
     def test_artifact_domain_strings(self):
@@ -2290,7 +2263,6 @@ class TestRegistryAllExports:
             "StudioVisualizationLaunch",
             "StudioVisualizationRegistry",
             "StudioVisualizationRequest",
-            "UNIFIED_VISUALIZATION",
             "VISER_VISUALIZATION",
             "VisualizationBackend",
             "VisualizationProvider",
@@ -2980,12 +2952,12 @@ class TestCrossModuleIntegration:
     def test_frontends_constants_match_core_registry(self):
         from worldfoundry.studio.visualization.backends.frontends import (
             WORLD_FRONTEND, POINTS_FRONTEND, EMBODIED_FRONTEND,
-            SPARK_FRONTEND, MEDIA_FRONTEND, RERUN_FRONTEND, UNIFIED_FRONTEND,
+            SPARK_FRONTEND, MEDIA_FRONTEND, RERUN_FRONTEND,
         )
         from worldfoundry.studio.visualization.core.registry import (
             INTERACTIVE_WORLD_VISUALIZATION, VISER_VISUALIZATION,
             EMBODIED_VISUALIZATION, SPARK_VISUALIZATION,
-            MEDIA_VISUALIZATION, RERUN_VISUALIZATION, UNIFIED_VISUALIZATION,
+            MEDIA_VISUALIZATION, RERUN_VISUALIZATION,
         )
         assert WORLD_FRONTEND == INTERACTIVE_WORLD_VISUALIZATION
         assert POINTS_FRONTEND == VISER_VISUALIZATION
@@ -2993,7 +2965,6 @@ class TestCrossModuleIntegration:
         assert SPARK_FRONTEND == SPARK_VISUALIZATION
         assert MEDIA_FRONTEND == MEDIA_VISUALIZATION
         assert RERUN_FRONTEND == RERUN_VISUALIZATION
-        assert UNIFIED_FRONTEND == UNIFIED_VISUALIZATION
 
 
 # ---------------------------------------------------------------------------

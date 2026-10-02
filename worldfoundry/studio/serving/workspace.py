@@ -232,7 +232,6 @@ MEDIA_VISUALIZER_EXTS = {
 }
 SPARK_VISUALIZER_EXTS = {".spz", ".splat", ".ksplat", ".sog"}
 GEOMETRY_VISUALIZER_EXTS = {".ply", ".pcd", ".xyz", ".glb", ".gltf", ".obj"}
-WORKSPACE_HIDDEN_VISUALIZER_MODES = {"unified"}
 VISUALIZER_LABELS = {
     "points": "Open in Viser",
     "spark": "Open in Spark",
@@ -319,7 +318,6 @@ DEFAULT_VISUALIZER_MODELS = {
     "rerun": "vggt-omega",
     "media": "vggt-omega",
     "embodied": "openvla",
-    "unified": "matrix-game-2",
 }
 POINTS_VISUALIZER_PARAM_ENV = {
     "max_points": "WORLDFOUNDRY_STUDIO_VISER_MAX_POINTS",
@@ -571,7 +569,7 @@ def _wait_for_visualizer(url: str, *, timeout: float = 35.0) -> bool:
 def _visualizer_startup_timeout(mode: str) -> float:
     if mode == "world":
         return 120.0
-    if mode in {"unified", "rerun", "points"}:
+    if mode in {"rerun", "points"}:
         return 60.0
     return 45.0
 
@@ -690,11 +688,10 @@ def _visualizer_launch_command(mode: str, payload: VisualizerLaunchRequest, host
         raise HTTPException(status_code=400, detail=f"{mode} requires a simulator URL")
     if mode in {"embodied", "rerun"} and external_url:
         return [], model_id, asset_path
-    module = "worldfoundry.studio.cli" if mode == "unified" else "worldfoundry.studio.ui.launcher"
     cmd = [
         _workspace_child_python(),
         "-m",
-        module,
+        "worldfoundry.studio.ui.launcher",
         model_id,
         "--frontend",
         mode,
@@ -759,8 +756,6 @@ def _launch_visualizer(mode: str, payload: VisualizerLaunchRequest) -> dict[str,
 def _launch_visualizer_locked(mode: str, payload: VisualizerLaunchRequest) -> dict[str, Any]:
     if mode not in STUDIO_VISUALIZATIONS.modes:
         raise HTTPException(status_code=404, detail=f"unknown visualizer: {mode}")
-    if mode in WORKSPACE_HIDDEN_VISUALIZER_MODES:
-        raise HTTPException(status_code=410, detail=f"{mode} is not exposed in the Workspace visualizers.")
     requested_model_id = (payload.model_id or DEFAULT_VISUALIZER_MODELS.get(mode) or "").strip()
     requested_asset_path = (payload.asset_path or "").strip()
     if requested_asset_path:
@@ -3083,8 +3078,6 @@ def create_app(auth_token: str = "") -> FastAPI:
     def list_visualizers() -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for mode in sorted(STUDIO_VISUALIZATIONS.modes):
-            if mode in WORKSPACE_HIDDEN_VISUALIZER_MODES:
-                continue
             _cleanup_finished_visualizer(mode)
             backend = STUDIO_VISUALIZATIONS.backend_for(mode)
             running = VISUALIZER_MANAGED.get(mode)

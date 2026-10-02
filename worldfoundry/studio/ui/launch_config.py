@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
@@ -26,7 +25,6 @@ from worldfoundry.studio.visualization.core.registry import (
     MEDIA_VISUALIZATION,
     RERUN_VISUALIZATION,
     SPARK_VISUALIZATION,
-    UNIFIED_VISUALIZATION,
     VISER_VISUALIZATION,
 )
 
@@ -55,7 +53,6 @@ CLI_FRONTEND_CHOICES = frozenset(
         "3dgs",
         "splat",
         "gaussian-splat",
-        UNIFIED_VISUALIZATION,
     }
 )
 
@@ -68,7 +65,6 @@ class StudioLaunchConfig:
     device: str = "cuda"
     backend: str = "auto"
     endpoint: str = ""
-    show_aux_panels: bool = False
     frontend: str = "auto"
     asset_path: str = ""
     simulator_url: str = ""
@@ -76,7 +72,7 @@ class StudioLaunchConfig:
     port: int | None = None
 
 
-def build_launch_argument_parser(prog: str = "worldfoundry.studio.ui.gradio_app") -> argparse.ArgumentParser:
+def build_launch_argument_parser(prog: str = "worldfoundry-studio") -> argparse.ArgumentParser:
     from worldfoundry.cli.help import WorldFoundryArgumentParser
 
     parser = WorldFoundryArgumentParser(
@@ -122,18 +118,13 @@ def build_launch_argument_parser(prog: str = "worldfoundry.studio.ui.gradio_app"
         help="Endpoint override for hosted or API-backed models.",
     )
     parser.add_argument(
-        "--show-aux-panels",
-        action="store_true",
-        help="Expose the optional history, notes, and catalog side panels.",
-    )
-    parser.add_argument(
         "--frontend",
         choices=sorted(CLI_FRONTEND_CHOICES),
         help=(
             "Frontend surface to launch. "
             "`world` is the game-console shell, "
             "`points` is native Viser, `spark` is a standalone 3DGS viewer, "
-            "`embodied` preserves an external simulator UI, `unified` is the Gradio shell, "
+            "`embodied` preserves an external simulator UI, "
             "and `auto` routes by model type."
         ),
     )
@@ -292,7 +283,6 @@ def parse_launch_config(
         str(args.port)
         if args.port is not None
         else env_first("WORLDFOUNDRY_STUDIO_PORT")
-        or os.getenv("GRADIO_SERVER_PORT")
         or ""
     ).strip()
     try:
@@ -319,11 +309,6 @@ def parse_launch_config(
         ).strip()
         or entry.default_endpoint
         or "",
-        show_aux_panels=bool(
-            args.show_aux_panels
-            or env_first("WORLDFOUNDRY_STUDIO_SHOW_AUX_PANELS").strip().lower()
-            in {"1", "true", "yes", "on"}
-        ),
         frontend=frontend,
         asset_path=(
             args.asset_path
@@ -336,7 +321,6 @@ def parse_launch_config(
         host=(
             args.host
             or env_first("WORLDFOUNDRY_STUDIO_HOST")
-            or os.getenv("GRADIO_SERVER_NAME")
             or ""
         ).strip(),
         port=port,

@@ -236,49 +236,6 @@ def test_workspace_app_loop_vars_do_not_shadow_dataclasses_field() -> None:
     assert shadowed == []
 
 
-def test_gradio_patches_are_explicit_and_reversible() -> None:
-    source = (REPO_ROOT / "worldfoundry/studio/ui/gradio_runtime.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    assert "def install_gradio_patches" in source
-    assert "def uninstall_gradio_patches" in source
-    top_calls = [
-        node.value.func.id
-        for node in tree.body
-        if isinstance(node, ast.Expr)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Name)
-    ]
-    assert "install_gradio_patches" not in top_calls
-    assert not any(name.startswith("_install_") for name in top_calls)
-    app_source = (REPO_ROOT / "worldfoundry/studio/ui/gradio_app.py").read_text(encoding="utf-8")
-    app_tree = ast.parse(app_source)
-    build_demo = next(
-        node for node in app_tree.body if isinstance(node, ast.FunctionDef) and node.name == "build_demo"
-    )
-    first_statement = build_demo.body[0]
-    assert isinstance(first_statement, ast.Expr)
-    assert isinstance(first_statement.value, ast.Call)
-    assert isinstance(first_statement.value.func, ast.Name)
-    assert first_statement.value.func.id == "install_gradio_patches"
-
-
-def test_gradio_patches_uninstall_restores_url_ok() -> None:
-    pytest.importorskip("gradio")
-    import gradio.networking as gr_networking
-
-    from worldfoundry.studio.ui import gradio_runtime as grt
-
-    grt.install_gradio_patches()
-    assert getattr(gr_networking, "_worldfoundry_proxy_safe_url_ok", False)
-    patched = gr_networking.url_ok
-    try:
-        grt.uninstall_gradio_patches()
-        assert not getattr(gr_networking, "_worldfoundry_proxy_safe_url_ok", False)
-        assert gr_networking.url_ok is not patched
-    finally:
-        grt.install_gradio_patches()
-
-
 def test_torchrun_control_group_create_and_shutdown_use_lifecycle_state() -> None:
     source = (REPO_ROOT / "worldfoundry/studio/inference/execution.py").read_text(encoding="utf-8")
     assert source.count("with _TORCHRUN_CONTROL_GROUP_CONDITION:") >= 3

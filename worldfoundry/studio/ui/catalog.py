@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 
 from worldfoundry.evaluation.utils import REPO_ROOT
 from worldfoundry.runtime.inference_catalog import ASSET_GATED_WORLD_RUNTIME_MODEL_IDS
-from worldfoundry.studio.inference.catalog import CatalogEntry, catalog_stats, discover_catalog, filter_catalog
+from worldfoundry.studio.inference.catalog import CatalogEntry, discover_catalog
 
 CATALOG_RUNTIME_COMPLETENESS_CHECKS_ENV = "WORLDFOUNDRY_STUDIO_CHECK_RUNTIME_COMPLETENESS"
 
@@ -183,31 +183,3 @@ def _studio_catalog(entries: Sequence[CatalogEntry] | None = None) -> tuple[Cata
         )
     )
     return tuple(studio_entries)
-
-
-def _filter_studio_catalog(
-    search: str = "",
-    category: str = "All",
-    entries: Sequence[CatalogEntry] | None = None,
-) -> tuple[CatalogEntry, ...]:
-    """Apply search/category filters on top of the sorted Studio catalog.
-
-    Args:
-        search: Free-text filter forwarded to ``filter_catalog``.
-        category: Category pill filter or ``All``.
-        entries: Optional catalog rows passed through ``_studio_catalog`` first.
-    """
-    active_entries = _studio_catalog(entries)
-    return filter_catalog(search=search, category=category, entries=active_entries)
-
-
-def _studio_stats(entries: Sequence[CatalogEntry] | None = None) -> dict[str, int]:
-    """Aggregate counts for atlas metrics plus remote/API rows.
-
-    Args:
-        entries: Optional catalog slice; defaults to the full sorted Studio catalog.
-    """
-    active_entries = _studio_catalog(entries)
-    stats = catalog_stats(active_entries)
-    stats["remote"] = sum(1 for entry in active_entries if entry.category == "Remote API")
-    return stats

@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,7 +22,7 @@ def test_studio_cli_entrypoint_import_is_lightweight() -> None:
     assert callable(cli.main)
 
 
-def test_native_studio_entrypoint_parses_without_gradio_stack() -> None:
+def test_studio_entrypoint_parses_world_realtime_session() -> None:
     from worldfoundry.studio.ui.launcher import parse_launch_config
 
     config = parse_launch_config(["lingbot-world", "--frontend", "world", "--variant", "fast", "--device", "cuda:0"])
@@ -32,7 +33,7 @@ def test_native_studio_entrypoint_parses_without_gradio_stack() -> None:
     assert config.device == "cuda:0"
 
 
-def test_studio_cli_help_uses_gradio_free_native_parser() -> None:
+def test_studio_cli_help_uses_standalone_parser() -> None:
     code = """
 import sys
 from worldfoundry.studio import cli
@@ -42,7 +43,6 @@ except SystemExit as exc:
     exit_code = int(exc.code or 0)
 else:
     exit_code = 0
-print("APP_IMPORTED=" + str("worldfoundry.studio.ui.gradio_app" in sys.modules))
 print("GRADIO_IMPORTED=" + str("gradio" in sys.modules))
 raise SystemExit(exit_code)
 """
@@ -57,11 +57,10 @@ raise SystemExit(exit_code)
 
     assert result.returncode == 0
     assert "Launch a WorldFoundry Studio frontend" in result.stdout
-    assert "APP_IMPORTED=False" in result.stdout
     assert "GRADIO_IMPORTED=False" in result.stdout
 
 
-def test_studio_cli_native_frontend_routes_without_importing_gradio_app(monkeypatch) -> None:
+def test_studio_cli_routes_to_standalone_launcher(monkeypatch) -> None:
     from worldfoundry.studio import cli
     from worldfoundry.studio.ui import launcher as native_app
 
@@ -71,3 +70,25 @@ def test_studio_cli_native_frontend_routes_without_importing_gradio_app(monkeypa
     cli.main(["lingbot-world", "--frontend", "world"])
 
     assert recorded == [["lingbot-world", "--frontend", "world"]]
+
+
+@pytest.mark.parametrize("frontend_arg", [["--frontend", "unified"], ["--frontend=unified"]])
+def test_studio_cli_rejects_removed_frontend(frontend_arg, capsys) -> None:
+    from worldfoundry.studio import cli
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["lingbot-world", *frontend_arg])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice: 'unified'" in capsys.readouterr().err
+
+
+def test_studio_cli_rejects_removed_frontend_from_environment(monkeypatch, capsys) -> None:
+    from worldfoundry.studio import cli
+
+    monkeypatch.setenv("WORLDFOUNDRY_STUDIO_FRONTEND", "unified")
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["lingbot-world"])
+
+    assert exc_info.value.code == 2
+    assert "Unsupported frontend `unified`" in capsys.readouterr().err

@@ -900,8 +900,8 @@ const STUDIO: ArchDiagramSpec = {
     zh: 'Studio 执行路径',
   },
   caption: {
-    en: 'Inference stays in studio/execution.py. app.py is layout and callbacks only.',
-    zh: '推理语义留在 studio/execution.py。app.py 只负责布局与回调。',
+    en: 'Shared inference lives in studio/inference/execution.py; standalone frontends own presentation.',
+    zh: '共享推理位于 studio/inference/execution.py；独立前端负责展示。',
   },
   nodes: {
     args: {
@@ -911,16 +911,16 @@ const STUDIO: ArchDiagramSpec = {
         en: 'Parse worldfoundry-studio flags into a launch config',
         zh: '把 worldfoundry-studio 的 flags 收成启动配置',
       },
-      file: 'studio/app.py',
+      file: 'studio/ui/launch_config.py',
     },
     config: {
-      role: { en: 'Shell', zh: '界面壳' },
-      title: 'StudioLaunchConfig',
+      role: { en: 'Frontend', zh: '前端' },
+      title: { en: 'Frontend routing', zh: '前端路由' },
       detail: {
-        en: 'Gradio layout, callbacks, and launch defaults — no inference',
-        zh: 'Gradio 布局、回调与启动默认值，不含推理',
+        en: 'Route model or artifact metadata to a standalone browser frontend',
+        zh: '根据模型或 artifact 元数据选择独立浏览器前端',
       },
-      file: 'studio/app.py',
+      file: 'studio/ui/launcher.py',
     },
     catalog: {
       role: { en: 'Discovery', zh: '发现' },
@@ -929,7 +929,7 @@ const STUDIO: ArchDiagramSpec = {
         en: 'AST-scan pipeline modules without importing CUDA stacks',
         zh: '用 AST 扫描 pipeline 模块，不 import CUDA 栈',
       },
-      file: 'studio/catalog.py',
+      file: 'studio/inference/catalog.py',
     },
     manager: {
       role: { en: 'Orchestration', zh: '编排' },
@@ -938,7 +938,7 @@ const STUDIO: ArchDiagramSpec = {
         en: 'Import the pipeline, pick a driver, stage inputs, write RunRecord',
         zh: '导入 pipeline、选择 driver、准备输入、写出 RunRecord',
       },
-      file: 'studio/execution.py',
+      file: 'studio/inference/execution.py',
     },
     inputs: {
       role: { en: 'Prepare', zh: '准备' },
@@ -947,7 +947,7 @@ const STUDIO: ArchDiagramSpec = {
         en: 'Stage prompts, media, interactions, and runtime kwargs',
         zh: '落盘 prompt、媒体、interaction 与 runtime kwargs',
       },
-      file: 'studio/execution.py',
+      file: 'studio/inference/execution.py',
     },
     driver: {
       role: { en: 'Dispatch', zh: '调度' },
@@ -956,7 +956,7 @@ const STUDIO: ArchDiagramSpec = {
         en: 'Base driver, or a 3DGS / point-cloud / WorldFM specialist',
         zh: '默认 driver，或 3DGS / 点云 / WorldFM 专用实现',
       },
-      file: 'studio/execution.py',
+      file: 'studio/inference/execution.py',
     },
     run: {
       role: { en: 'Execute', zh: '执行' },
@@ -965,16 +965,16 @@ const STUDIO: ArchDiagramSpec = {
         en: 'Invoke the driver, then write files and a RunRecord',
         zh: '调用 driver，再写出文件与 RunRecord',
       },
-      file: 'studio/execution.py',
+      file: 'studio/inference/execution.py',
     },
     preview: {
       role: { en: 'Preview', zh: '预览' },
       title: { en: 'Preview assets', zh: '预览资源' },
       detail: {
-        en: 'Rank video, image, and splat for Gradio or Workspace',
-        zh: '为 Gradio 或 Workspace 挑选视频、图像与 splat',
+        en: 'Rank video, image, and splat for Studio viewers and Workspace',
+        zh: '为 Studio viewer 和 Workspace 挑选视频、图像与 splat',
       },
-      file: 'studio/execution.py',
+      file: 'studio/inference/execution.py',
     },
   },
   steps: [

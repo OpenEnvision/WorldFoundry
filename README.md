@@ -307,7 +307,7 @@ bash scripts/workspace/run_workspace.sh
 
 Configure jobs in **Create Job**; optional shared defaults can use `WORLDFOUNDRY_STUDIO_SETTINGS_FILE`. Expensive runtime checks and preview builders are opt-in via `WORLDFOUNDRY_STUDIO_*` — see the [Studio guide](https://openenvision.github.io/WorldFoundry/docs/guides/studio).
 
-Use the **Visualizers** tab as the browser entrypoint for local preview services (World / Gradio, Spark, Viser, Rerun, Embodied bridge). On a remote machine, forward port `7870` plus any viewer ports you launch.
+Use the **Visualizers** tab as the browser entrypoint for local preview services (World realtime, Spark, Viser, Rerun, Embodied bridge). On a remote machine, forward port `7870` plus any viewer ports you launch.
 
 For a single-model Studio process:
 

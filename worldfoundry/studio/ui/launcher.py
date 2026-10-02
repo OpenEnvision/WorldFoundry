@@ -1,4 +1,4 @@
-"""Gradio-free launcher for standalone WorldFoundry Studio browser frontends."""
+"""Launcher for standalone WorldFoundry Studio browser frontends."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 from worldfoundry.studio.ui.launch_config import parse_launch_config as _parse_launch_config_core
 from worldfoundry.studio.visualization.backends.frontends import (
     NATIVE_FRONTENDS,
-    UNIFIED_FRONTEND,
     resolve_frontend_mode,
     serve_native_frontend,
 )
@@ -30,14 +29,12 @@ def parse_launch_config(argv: Sequence[str] | None = None) -> StudioLaunchConfig
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """Launch a standalone Studio browser frontend without importing Gradio."""
+    """Launch a standalone Studio browser frontend."""
 
     os.environ.setdefault("WORLDFOUNDRY_STUDIO_SKIP_RUNTIME_PROFILES", "1")
     launch_config = parse_launch_config(argv)
     entry = find_entry(launch_config.model_id)
     frontend_mode = resolve_frontend_mode(entry, launch_config.frontend, launch_config.asset_path or None)
-    if frontend_mode == UNIFIED_FRONTEND:
-        raise SystemExit("The `unified` frontend requires Gradio. Install `worldfoundry[ui]` or use --frontend world.")
     if frontend_mode not in NATIVE_FRONTENDS:
         raise SystemExit(f"Unsupported standalone Studio browser frontend: {frontend_mode}")
     serve_native_frontend(entry, launch_config, frontend_mode)

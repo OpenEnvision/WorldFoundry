@@ -3,11 +3,11 @@ title: Studio internals
 description: How Studio discovers models, drives pipelines, materializes runs, and keeps UI separate from execution.
 ---
 
-Studio is a catalog-driven shell over the same pipeline and artifact contracts used by CLI inference and evaluation. It does not own model weights, scoring logic, or benchmark manifests. Its job is to discover runnable entries, prepare inputs, invoke the right runtime driver, write a `RunRecord`, and pick preview assets for the UI. The same execution core can serve Gradio (`app.py`), Workspace jobs, conda child processes, and torchrun workers; only the presentation layer changes.
+Studio is a catalog-driven shell over the same pipeline and artifact contracts used by CLI inference and evaluation. It does not own model weights, scoring logic, or benchmark manifests. Its job is to discover runnable entries, prepare inputs, invoke the right runtime driver, write a `RunRecord`, and pick preview assets for the UI. The same execution core serves the `world` realtime frontend, Workspace jobs, conda child processes, and torchrun workers.
 
 <ArchDiagram id="studio" />
 
-Keep inference semantics in `studio/execution.py` and catalog discovery in `studio/catalog.py`. `studio/app.py` should stay thin: layout, callbacks, and Gradio component updates. If a change must also work from `runtime_job.py` or `workspace_app.py` without Gradio, it belongs in execution, not in the UI file.
+Keep inference semantics in `studio/inference/execution.py` and catalog discovery in `studio/inference/catalog.py`. `studio/ui/launcher.py` routes standalone frontends, and `studio/ui/launch_config.py` parses launch options. Page layout, fullscreen, and keyboard controls live in `studio/visualization/backends/world.py` and `world_realtime_client.py`; inference semantics belong in the shared execution core.
 
 ## Files
 
@@ -18,7 +18,7 @@ Keep inference semantics in `studio/execution.py` and catalog discovery in `stud
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/catalog.py</code>
+            <code>studio/inference/catalog.py</code>
           </div>
         </div>
         <p>Discovers model entries from pipeline files, canonical runtime entries, and overrides.</p>
@@ -27,7 +27,7 @@ Keep inference semantics in `studio/execution.py` and catalog discovery in `stud
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/execution.py</code>
+            <code>studio/inference/execution.py</code>
           </div>
         </div>
         <p>Prepares inputs, loads pipeline classes, chooses runtime driver strategy, writes run records, exports previews.</p>
@@ -36,20 +36,20 @@ Keep inference semantics in `studio/execution.py` and catalog discovery in `stud
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/app.py</code>
+            <code>studio/ui/launcher.py</code>
           </div>
         </div>
-        <p>Gradio UI, launch config, preset handling, callbacks, run buttons, recent-run loading.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>StudioLaunchConfig</code>, <code>parse_launch_config()</code>, <code>build_demo()</code>, <code>main()</code>.</p>
+        <p>Standalone frontend launch and routing; shared options are parsed by `ui/launch_config.py`.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>StudioLaunchConfig</code>, <code>parse_launch_config()</code>, <code>main()</code>.</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/theme.py</code>
+            <code>studio/visualization/backends/world.py</code>
           </div>
         </div>
-        <p>Theme constants and UI styling hooks.</p>
-        <p className="pi-kv-read"><span>First file</span> Used only by the app shell.</p>
+        <p>Realtime page layout, styles, fullscreen controls, and browser script wiring.</p>
+        <p className="pi-kv-read"><span>First file</span> Browser controls are implemented by `world_realtime_client.py`.</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -143,12 +143,13 @@ Blank previews usually mean the pipeline wrote files outside expected keys, retu
 
 ## UI file boundaries
 
-Treat `app.py` as presentation glue. Launch flags that only affect Gradio stay there; values that change non-UI execution belong in `StudioLaunchConfig` consumption inside execution. HTML status blocks and tray cards stay in the UI. Button handlers may call `StudioManager`, but they should not load pipelines, stage files, or invent artifact layouts themselves. Presets that are purely demo defaults can live in the UI; presets that must match evaluation or Workspace contracts should be shared data, not Gradio-only strings.
+Standalone browser frontends own launch and presentation. Shared inference modules own model loading, normalized inputs, runtime drivers, and artifact contracts; page and transport handlers call `StudioManager`.
 
-- **Launch parsing** — Keep in `app.py`: CLI flags, default UI selections, gradio launch parameters. Move to `execution.py` if: The value affects non-UI execution.
-- **HTML helpers** — Keep in `app.py`: Header, tray, cards, status blocks, summaries. Move to `execution.py` if: The same output is needed by tests or CLI.
-- **Callback glue** — Keep in `app.py`: Button handlers and component updates. Move to `execution.py` if: It loads models, touches files, or transforms artifacts.
-- **Presets** — Keep in `app.py`: UI-specific prompt/interactions defaults. Move to `execution.py` if: Preset semantics must be shared with evaluation.
+- **Launch parsing** — `ui/launch_config.py` parses CLI flags and environment defaults into `StudioLaunchConfig`.
+- **Frontend routing** — `ui/launcher.py` and `visualization/backends/frontends.py` select `world`, Viser, Spark, or another frontend from model or artifact metadata.
+- **Browser UI** — `visualization/backends/world.py` and `world_realtime_client.py` own layout, fullscreen, keyboard, and joystick controls.
+- **Realtime transport** — `visualization/backends/world_realtime.py` owns resident sessions, calls `StudioManager.run_realtime()`, and transports frames and controls over WebRTC/WebSocket.
+- **Shared execution** — `inference/execution.py` owns models and drivers; realtime interaction transports frames in memory without exporting an MP4 for each control event.
 
 ## Realtime serving boundaries
 
@@ -175,10 +176,10 @@ drops from those traces.
 
 ## Debug path
 
-Most Studio bugs are contract mismatches, not Gradio bugs. A missing model is almost always catalog discovery, aliases, or a hidden id. Wrong device or variant usually means launch config and `PipelineContext` overrides. Inputs that never reach the model fail in `prepare_inputs()` or driver kwargs binding. Streaming failures often mean `init`/`stream` was called without memory state or without a prior reconstruction for two-stage drivers. Recent-run reload failures mean the manifest or artifact paths drifted after `materialize_run()`.
+Most Studio bugs originate in catalog, input, runtime, or artifact contract mismatches. A missing model is almost always catalog discovery, aliases, or a hidden id. Wrong device or variant usually means launch config and `PipelineContext` overrides. Inputs that never reach the model fail in `prepare_inputs()` or driver kwargs binding. Streaming failures often mean `init`/`stream` was called without memory state or without a prior reconstruction for two-stage drivers. Recent-run reload failures mean the manifest or artifact paths drifted after `materialize_run()`.
 
 - **Model missing from UI** — `discover_catalog()` output, `CatalogEntry.aliases`, category filter, pipeline file naming.
-- **Wrong variant/device** — `StudioLaunchConfig`, `_variant_payload()`, `_apply_variant_runtime_overrides()`, `PipelineContext`.
+- **Wrong variant/device** — `StudioLaunchConfig`, `resolve_cli_variant_id()`, `PipelineContext`.
 - **Input not reaching model** — `prepare_inputs()`, `PreparedInputs`, driver `run_fresh()` kwargs.
 - **Preview blank** — `collect_artifact_paths()`, `pick_preview_assets()`, conversion helpers, generated file extension.
 - **Streaming broken** — `BaseRuntimeDriver.run_init()`, `BaseRuntimeDriver.run_continue()`, pipeline `stream()`, memory state.

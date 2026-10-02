@@ -3,11 +3,11 @@ title: Studio 内部
 description: Studio 如何发现模型、驱动 pipeline、落盘 run，以及如何把 UI 与执行层分开。
 ---
 
-Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，供 CLI 推理与评测共用。它不拥有模型权重、打分逻辑或 benchmark manifest；职责是发现可运行条目、准备输入、调用正确的 runtime driver、写出 `RunRecord`，并为 UI 挑选 preview assets。同一套执行核心可服务 Gradio（`app.py`）、Workspace job、conda 子进程与 torchrun worker，变化的只是展示层。
+Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，供 CLI 推理与评测共用。它不拥有模型权重、打分逻辑或 benchmark manifest；职责是发现可运行条目、准备输入、调用正确的 runtime driver、写出 `RunRecord`，并为 UI 挑选 preview assets。同一套执行核心服务 `world` 实时交互页面、Workspace job、conda 子进程与 torchrun worker。
 
 <ArchDiagram id="studio" locale="zh" />
 
-推理语义放在 `studio/execution.py`，catalog 发现放在 `studio/catalog.py`。`studio/app.py` 应保持轻薄：布局、回调与 Gradio 组件更新。若改动也必须在没有 Gradio 的 `runtime_job.py` 或 `workspace_app.py` 中生效，就应落在 execution，而不是 UI 文件。
+推理语义放在 `studio/inference/execution.py`，catalog 发现放在 `studio/inference/catalog.py`。`studio/ui/launcher.py` 负责独立前端路由，启动参数由 `studio/ui/launch_config.py` 解析。页面、全屏与键盘交互位于 `studio/visualization/backends/world.py` 和 `world_realtime_client.py`；推理语义应由共享 execution 核心处理。
 
 ## 文件
 
@@ -18,7 +18,7 @@ Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，�
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/catalog.py</code>
+            <code>studio/inference/catalog.py</code>
           </div>
         </div>
         <p>从 pipeline files、canonical runtime entries 和 overrides 发现模型条目。</p>
@@ -27,7 +27,7 @@ Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，�
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/execution.py</code>
+            <code>studio/inference/execution.py</code>
           </div>
         </div>
         <p>准备输入、加载 pipeline classes、选择 runtime driver strategy、写 run records、导出 previews。</p>
@@ -36,20 +36,20 @@ Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，�
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/app.py</code>
+            <code>studio/ui/launcher.py</code>
           </div>
         </div>
-        <p>Gradio UI、launch config、preset handling、callbacks、run buttons、recent-run loading。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>StudioLaunchConfig</code>、<code>parse_launch_config()</code>、<code>build_demo()</code>、<code>main()</code>。</p>
+        <p>独立前端启动与路由；共享启动参数由 <code>ui/launch_config.py</code> 解析。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>StudioLaunchConfig</code>、<code>parse_launch_config()</code>、<code>main()</code>。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/theme.py</code>
+            <code>studio/visualization/backends/world.py</code>
           </div>
         </div>
-        <p>Theme constants 和 UI styling hooks。</p>
-        <p className="pi-kv-read"><span>首读</span> 只服务 app shell。</p>
+        <p>实时交互页面的布局、样式、全屏入口与浏览器脚本。</p>
+        <p className="pi-kv-read"><span>首读</span> 浏览器脚本由 <code>world_realtime_client.py</code> 提供。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -143,12 +143,13 @@ Preview 空白通常意味着 pipeline 把文件写到了预期 key 之外、返
 
 ## UI 文件边界
 
-把 `app.py` 当作展示胶水。只影响 Gradio 的 launch flags 留在 UI；会改变非 UI 执行的值应进入 execution 对 `StudioLaunchConfig` 的消费。HTML status 与 tray cards 留在 UI。按钮回调可以调用 `StudioManager`，但不应自己加载 pipeline、staging 文件或发明 artifact 布局。纯 demo 默认值可以放在 UI；必须与评测或 Workspace 契约一致的 preset 应是共享数据，而不是 Gradio 专用字符串。
+启动与展示通过独立浏览器前端提供。模型加载、输入归一化、runtime driver 与 artifact 契约由共享推理模块负责，页面与传输层调用 `StudioManager`。
 
-- **Launch parsing** — 留在 `app.py`：CLI flags、default UI selections、gradio launch parameters。如果满足则移到 `execution.py`：这个值影响非 UI execution。
-- **HTML helpers** — 留在 `app.py`：Header、tray、cards、status blocks、summaries。如果满足则移到 `execution.py`：同样输出需要被 tests 或 CLI 使用。
-- **Callback glue** — 留在 `app.py`：Button handlers 和 component updates。如果满足则移到 `execution.py`：它加载模型、触碰文件或转换 artifacts。
-- **Presets** — 留在 `app.py`：UI-specific prompt/interactions defaults。如果满足则移到 `execution.py`：Preset 语义需要和 evaluation 共享。
+- **启动参数** — `ui/launch_config.py` 解析 CLI flags 与环境默认值，返回 `StudioLaunchConfig`。
+- **前端路由** — `ui/launcher.py` 与 `visualization/backends/frontends.py` 根据模型或 artifact 启动 `world`、Viser、Spark 等前端。
+- **浏览器交互** — `visualization/backends/world.py` 与 `world_realtime_client.py` 负责页面、全屏、键盘和摇杆。
+- **实时传输** — `visualization/backends/world_realtime.py` 维护常驻会话，调用 `StudioManager.run_realtime()` 并通过 WebRTC/WebSocket 传输帧和控制。
+- **共享推理** — `inference/execution.py` 负责模型与 driver；实时交互直接传输内存中的帧，每次按键无需导出 MP4。
 
 ## 实时服务边界
 
@@ -171,10 +172,10 @@ p50/p90、吞吐、队列深度和掉帧做门禁。
 
 ## 调试路径
 
-多数 Studio bug 是契约错位，而不是 Gradio 本身。缺模型几乎总是 catalog discovery、aliases 或隐藏 id。device / variant 错通常来自 launch config 与 `PipelineContext` overrides。输入到不了模型，问题在 `prepare_inputs()` 或 driver kwargs 绑定。Streaming 失败常见于没有 memory state 就调用 `init`/`stream`，或 two-stage driver 尚无先验重建。Recent run 无法 reload，说明 `materialize_run()` 之后 manifest 或 artifact 路径漂移了。
+多数 Studio bug 来自 catalog、输入、runtime 或 artifact 契约错位。缺模型几乎总是 catalog discovery、aliases 或隐藏 id。device / variant 错通常来自 launch config 与 `PipelineContext` overrides。输入到不了模型，问题在 `prepare_inputs()` 或 driver kwargs 绑定。Streaming 失败常见于没有 memory state 就调用 `init`/`stream`，或 two-stage driver 尚无先验重建。Recent run 无法 reload，说明 `materialize_run()` 之后 manifest 或 artifact 路径漂移了。
 
 - **UI 里缺模型** — `discover_catalog()` output、`CatalogEntry.aliases`、category filter、pipeline file naming。
-- **Variant/device 错** — `StudioLaunchConfig`、`_variant_payload()`、`_apply_variant_runtime_overrides()`、`PipelineContext`。
+- **Variant/device 错** — `StudioLaunchConfig`、`resolve_cli_variant_id()`、`PipelineContext`。
 - **输入没到模型** — `prepare_inputs()`、`PreparedInputs`、driver `run_fresh()` kwargs。
 - **Preview 空白** — `collect_artifact_paths()`、`pick_preview_assets()`、conversion helpers、generated file extension。
 - **Streaming 坏了** — `BaseRuntimeDriver.run_init()`、`BaseRuntimeDriver.run_continue()`、pipeline `stream()`、memory state。

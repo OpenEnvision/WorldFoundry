@@ -38,7 +38,6 @@ from worldfoundry.studio.visualization.core.registry import (
     MEDIA_VISUALIZATION,
     RERUN_VISUALIZATION,
     SPARK_VISUALIZATION,
-    UNIFIED_VISUALIZATION,
     VISER_VISUALIZATION,
     BackendCapabilities,
     RenderPlan,
@@ -150,7 +149,6 @@ def _make_launch_config(**overrides: Any) -> StudioLaunchConfig:
         device="cuda",
         backend="auto",
         endpoint="",
-        show_aux_panels=False,
         frontend="auto",
         asset_path="",
         simulator_url="",
@@ -186,8 +184,6 @@ class TestRegistryConstants:
     def test_embodied_visualization(self):
         assert EMBODIED_VISUALIZATION == "embodied"
 
-    def test_unified_visualization(self):
-        assert UNIFIED_VISUALIZATION == "unified"
 
     def test_auto_visualization(self):
         assert AUTO_VISUALIZATION == "auto"
@@ -233,7 +229,6 @@ class TestRegistryExports:
             "MEDIA_VISUALIZATION",
             "RERUN_VISUALIZATION",
             "SPARK_VISUALIZATION",
-            "UNIFIED_VISUALIZATION",
             "VISER_VISUALIZATION",
             "StudioVisualizationArtifact",
             "StudioVisualizationBackend",
@@ -1611,9 +1606,9 @@ class TestStudioVisualizationRegistry:
     def test_native_modes(self):
         reg = StudioVisualizationRegistry()
         reg.register(self._make_backend("world", native=True))
-        reg.register(self._make_backend("gradio-unified", native=False))
+        reg.register(self._make_backend("embedded-ui", native=False))
         assert reg.native_modes == frozenset({"world"})
-        assert reg.modes == frozenset({"world", "gradio-unified"})
+        assert reg.modes == frozenset({"world", "embedded-ui"})
 
     def test_resolve_mode_explicit(self):
         reg = StudioVisualizationRegistry()

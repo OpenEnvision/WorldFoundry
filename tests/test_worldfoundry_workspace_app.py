@@ -60,6 +60,23 @@ def test_workspace_auth_token_is_only_sent_to_same_origin_http_urls() -> None:
     assert 'headers.set("Authorization", `Bearer ${studioAuthToken}`)' in WORKSPACE_HTML
 
 
+def test_workspace_rejects_removed_visualizer(monkeypatch) -> None:
+    monkeypatch.setattr(
+        workspace_app.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("a removed visualizer must not start a process"),
+    )
+
+    with TestClient(create_app()) as client:
+        visualizers = client.get("/api/visualizers").json()
+        assert "world" in {row["mode"] for row in visualizers}
+        assert "unified" not in {row["mode"] for row in visualizers}
+        response = client.post("/api/visualizers/unified/launch", json={"model_id": "lingbot-world"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "unknown visualizer: unified"
+
+
 def test_workspace_catalog_models_expose_official_links() -> None:
     client = TestClient(create_app())
     models = {row["id"]: row for row in client.get("/api/models").json()}

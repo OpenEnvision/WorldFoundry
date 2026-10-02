@@ -9,22 +9,19 @@ WorldFoundry Studio is a thin visual entrypoint around repo pipelines. The model
 
 Studio exposes multiple frontends:
 
-- **`world`** — Interactive world models. Standalone WebRTC console with a resident model runtime, reliable input-edge DataChannel, bounded in-memory frame queue, one persistent video track, immersive fullscreen, and a live runtime log. It does not render through Gradio or materialize an MP4 per control step.
+- **`world`** — Interactive world models. Standalone WebRTC console with a resident model runtime, reliable input-edge DataChannel, bounded in-memory frame queue, one persistent video track, immersive fullscreen, and a live runtime log. Decoded frames stream in memory without materializing an MP4 per control step.
 - **`points`** — Viser point clouds / meshes. Starts native Viser directly instead of embedding it in the console shell.
 - **`embodied`** — Embodied simulators. **Planned.** URL bridge only: Studio registers an external simulator URL and tunnel hints; no in-tree embodied viewer yet.
 - **`spark`** — 3DGS. Starts the standalone Spark 3DGS viewer with repository-local Spark assets.
-- **`unified`** — Gradio shell. Requires `worldfoundry[ui]`; Workspace hides this visualizer mode.
+- **`media`** — Video, image, and audio artifact preview.
+- **`rerun`** — Rerun recordings and timeline inspection.
 - **`auto`** — Default. Routes interactive worlds to `world`, 3D scenes to `spark`, point/depth workflows to `points`, and embodied policies to `embodied`.
 
 ## What it shows
 
-- **Preview Video** — Latest generated or streamed video.
-- **Preview Image** — Still-image outputs and imported reference frames.
-- **3D World** — Gaussian splat, point cloud, or spatial outputs when exported.
-- **Gallery** — Recent shots and preview artifacts.
-- **Artifacts** — Raw output artifacts for inspection and download.
-
-By default, Studio hides most advanced panels. Use `--show-aux-panels` for history, notes, catalog, 3DGS import, and low-level runtime controls.
+- **World console** — Live video, keyboard and joystick controls, immersive fullscreen, and runtime logs.
+- **Geometry viewers** — Gaussian splats in Spark; point clouds and meshes in Viser.
+- **Workspace** — Job status, preview media, artifact downloads, and viewer launch controls.
 
 ## Workspace mode
 
@@ -449,7 +446,7 @@ pip install 'worldfoundry[studio_realtime,rtx_postprocess]'
 
 export WORLDFOUNDRY_REALTIME_POSTPROCESS_PRESET=rtx-super-resolution
 export WORLDFOUNDRY_REALTIME_RTX_SCALE=1.5
-python -m worldfoundry.studio.ui.gradio_app <model-id> --frontend world --device cuda:0
+python -m worldfoundry.studio.cli <model-id> --frontend world --device cuda:0
 ```
 
 The adapter validates the installed package, CUDA visibility, device index,
@@ -681,20 +678,20 @@ artifacts.
 
 ## Launch matrix
 
-- **LingBot realtime** — `python -m worldfoundry.studio.ui.gradio_app lingbot-world --variant fast --frontend world --device cuda:1`. Resident runtime with continuous WebRTC video and DataChannel controls.
-- **LingBot camera** — `python -m worldfoundry.studio.ui.gradio_app lingbot-world --variant base-camera --device cuda:1`. Slower, camera-centric profile.
-- **MatrixGame** — `python -m worldfoundry.studio.ui.gradio_app matrix-game-2 --device cuda:1`. Interactive world navigation.
-- **WorldCam** — `python -m worldfoundry.studio.ui.gradio_app worldcam --device cuda:1`. Camera-path generation and view control.
-- **Hosted APIs** — `python -m worldfoundry.studio.ui.gradio_app <model> --backend api_init --endpoint <url>`. Endpoint stays explicit at launch.
-- **Viser point cloud** — `python -m worldfoundry.studio.ui.gradio_app pi3 --frontend points --asset /path/to/scene.ply --port 18590`. Native Viser UI.
-- **Spark 3DGS** — `python -m worldfoundry.studio.ui.gradio_app vggt --frontend spark --asset /path/to/scene.splat --port 8765`. Standalone Spark canvas.
-- **Embodied simulator** — `python -m worldfoundry.studio.ui.gradio_app openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **Planned.** Registers an external simulator URL only; does not launch an in-tree viewer.
+- **LingBot realtime** — `python -m worldfoundry.studio.cli lingbot-world --variant fast --frontend world --device cuda:1`. Resident runtime with continuous WebRTC video and DataChannel controls.
+- **LingBot camera** — `python -m worldfoundry.studio.cli lingbot-world --variant base-camera --device cuda:1`. Slower, camera-centric profile.
+- **MatrixGame** — `python -m worldfoundry.studio.cli matrix-game-2 --device cuda:1`. Interactive world navigation.
+- **WorldCam** — `python -m worldfoundry.studio.cli worldcam --device cuda:1`. Camera-path generation and view control.
+- **Hosted APIs** — Configure provider credentials and endpoint settings in Workspace inference jobs or `worldfoundry run <model>`, then preview exported artifacts with the `media` frontend.
+- **Viser point cloud** — `python -m worldfoundry.studio.cli pi3 --frontend points --asset /path/to/scene.ply --port 18590`. Native Viser UI.
+- **Spark 3DGS** — `python -m worldfoundry.studio.cli vggt --frontend spark --asset /path/to/scene.splat --port 8765`. Standalone Spark canvas.
+- **Embodied simulator** — `python -m worldfoundry.studio.cli openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **Planned.** Registers an external simulator URL only; does not launch an in-tree viewer.
 
 Recommended local start:
 
 ```bash
 cd /path/to/WorldFoundry
-PYTHONPATH=. WORLDFOUNDRY_STUDIO_PORT=7868 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m worldfoundry.studio.ui.gradio_app \
+PYTHONPATH=. WORLDFOUNDRY_STUDIO_PORT=7868 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m worldfoundry.studio.cli \
   lingbot-world \
   --variant fast \
   --model-ref /path/to/checkpoints/lingbot-world-fast \
@@ -738,7 +735,7 @@ instead of leaving the page indefinitely in a connecting state.
 - **Stream** — Seed input -> start one persistent session -> send key edges while frames continue. Interactive world models and continuation.
 - **Prompt-scheduled segments** — Enter a prompt, optionally select an image, then `START`; edit the prompt and press `Enter` after the current segment. Models that accept a new prompt at native segment boundaries.
 - **Queued controlled segments** — Select an initial image, dense control video, sparse control video, and prompt -> `RUN`; select new controls before each `EXTEND`. Long-form models with explicit per-segment control inputs.
-- **Spatial preview** — Run or export 3D asset -> open `3D World`. Gaussian splat, point cloud, or scene outputs.
+- **Spatial preview** — Run or export a 3D asset -> open Spark for Gaussian splats or Viser for point clouds and meshes through Workspace Visualizers.
 
 Keyboard/live controls:
 
@@ -909,18 +906,10 @@ fullscreen permission.
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>--show-aux-panels</code>
-          </div>
-        </div>
-        <p>Expose history, notes, catalog, and side panels.</p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
             <code>--frontend</code>
           </div>
         </div>
-        <p><code>auto</code>, <code>world</code>, <code>points</code>, <code>spark</code>, <code>embodied</code>, or <code>unified</code> (Gradio; requires <code>worldfoundry[ui]</code>). Aliases such as <code>viser</code>, <code>3dgs</code> are accepted.</p>
+        <p><code>auto</code>, <code>world</code>, <code>points</code>, <code>spark</code>, <code>embodied</code>, <code>media</code>, or <code>rerun</code>. Aliases such as <code>viser</code>, <code>3dgs</code> are accepted.</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -1064,14 +1053,6 @@ fullscreen permission.
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>WORLDFOUNDRY_STUDIO_SHOW_AUX_PANELS</code>
-          </div>
-        </div>
-        <p>Show advanced panels.</p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
             <code>WORLDFOUNDRY_STUDIO_FRONTEND</code>
           </div>
         </div>
@@ -1184,9 +1165,9 @@ modules at the Studio root.
 | `inference/paths.py`, `inference/variants.py` | Runtime paths and model variant selection. |
 | `serving/workspace.py`, `serving/jobs.py` | Workspace API and in-process UI job scheduling. |
 | `serving/` | Authentication, file serving, telemetry, and realtime transport. |
-| `ui/gradio_app.py`, `ui/launcher.py`, `ui/launch_config.py` | Frontend construction and browser launch options. |
+| `ui/launcher.py`, `ui/launch_config.py` | Standalone frontend routing and browser launch options. |
 | `ui/workspace.html`, `ui/workspace.py` | Packaged Workspace page and its asset loader. |
-| `ui/` | Page fragments, assets, input trays, and model presentation. |
+| `ui/` | Browser launch options, model interfaces, shared browser assets, and the Workspace page. |
 | `visualization/` | Artifact discovery, viewer routing, geometry presentation, and browser backends. |
 | `cli.py` | Installed `worldfoundry-studio` command. |
 | `runtime_job.py` | Subprocess and resident inference worker entrypoint. |

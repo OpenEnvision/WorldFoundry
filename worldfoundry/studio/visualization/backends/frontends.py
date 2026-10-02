@@ -1,8 +1,7 @@
 """Standalone Studio frontend launchers.
 
 Interactive world models, geometry viewers, simulator-heavy workflows, and 3DGS
-assets can each launch a purpose-built browser surface. The Gradio surface is
-available through the explicit ``unified`` frontend mode.
+assets can each launch a purpose-built browser surface.
 """
 
 from __future__ import annotations
@@ -58,7 +57,6 @@ from worldfoundry.studio.visualization.core.registry import (
     MEDIA_VISUALIZATION,
     RERUN_VISUALIZATION,
     SPARK_VISUALIZATION,
-    UNIFIED_VISUALIZATION,
     VISER_VISUALIZATION,
     BackendCapabilities,
     StudioVisualizationBackend,
@@ -73,7 +71,6 @@ EMBODIED_FRONTEND = EMBODIED_VISUALIZATION
 SPARK_FRONTEND = SPARK_VISUALIZATION
 MEDIA_FRONTEND = MEDIA_VISUALIZATION
 RERUN_FRONTEND = RERUN_VISUALIZATION
-UNIFIED_FRONTEND = UNIFIED_VISUALIZATION
 
 
 def _profile_mode(mode: str):
@@ -175,13 +172,6 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
             serve=_media_backend,
             capabilities=BackendCapabilities(frozenset({"image", "video", "audio", "optical_flow"}), score=60),
         ),
-        StudioVisualizationBackend(
-            mode=UNIFIED_FRONTEND,
-            title="Unified Gradio Studio",
-            default_port=7868,
-            native=False,
-            match=lambda entry, spec: False,
-        ),
     )
 )
 
@@ -208,7 +198,7 @@ def resolve_frontend_mode(
 
 
 def serve_native_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig, mode: str) -> None:
-    """Launch a non-Gradio Studio frontend and block until interrupted."""
+    """Launch a standalone Studio frontend and block until interrupted."""
     STUDIO_VISUALIZATIONS.serve(entry=entry, launch_config=launch_config, mode=mode)
 
 
@@ -218,7 +208,6 @@ def host_for_frontend(launch_config: StudioLaunchConfig) -> str:
     return (
         launch_config.host
         or env_first("WORLDFOUNDRY_STUDIO_HOST")
-        or os.getenv("GRADIO_SERVER_NAME")
         or "127.0.0.1"
     ).strip() or "127.0.0.1"
 

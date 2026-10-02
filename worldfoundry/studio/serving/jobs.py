@@ -2,7 +2,7 @@
 
 Studio submits heavyweight inference/evaluation work as background jobs. This
 module defines the job record (``StudioJob``), a thread-pool-backed store
-(``StudioJobStore``), and Gradio-facing formatters for job tables and detail
+(``StudioJobStore``), and UI formatters for job tables and detail
 panels.
 
 The workspace app configures the worker count so users can run independent
@@ -129,7 +129,7 @@ def _result_indicates_failure(result: Any) -> tuple[bool, str | None]:
 
 
 class StudioJobStore:
-    """In-process job runner for the unified Studio UI.
+    """In-process job runner for the Studio Workspace.
 
     The store intentionally runs one job at a time by default so the UI cannot
     accidentally launch several heavyweight GPU pipelines in parallel.
@@ -339,7 +339,7 @@ def format_elapsed(job: StudioJob) -> str:
 
 
 def format_job_choices(jobs: Sequence[StudioJob]) -> list[tuple[str, str]]:
-    """Build Gradio dropdown choices mapping label -> job_id."""
+    """Build dropdown choices mapping label -> job_id."""
     return [
         (f"{job.title} · {job.status} · {job.job_id}", job.job_id)
         for job in jobs

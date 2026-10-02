@@ -8,7 +8,6 @@ import pytest
 
 from worldfoundry.studio.ui import vendor_assets as vendor_assets
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_COMMAND = "python -m worldfoundry.studio.ui.vendor_assets"
 
@@ -270,16 +269,11 @@ def test_standalone_spark_frontend_checks_assets_before_binding(monkeypatch) -> 
         frontends.serve_spark_frontend(object(), object())
 
 
-def test_gradio_runtime_and_catalog_explain_deferred_provisioning() -> None:
-    from worldfoundry.studio.ui.head import HEAD_HTML
-
+def test_catalog_and_frontends_explain_deferred_provisioning() -> None:
     interfaces_source = (REPO_ROOT / "worldfoundry/studio/ui/interfaces.py").read_text(encoding="utf-8")
     frontends_source = (REPO_ROOT / "worldfoundry/studio/visualization/backends/frontends.py").read_text(
         encoding="utf-8"
     )
-    assert INSTALL_COMMAND in HEAD_HTML
-    assert "runtimePromise = null;" in HEAD_HTML
-    assert "then refresh this page" in HEAD_HTML
     assert "Install pinned browser modules" in interfaces_source
     assert "max-age=31536000" not in frontends_source
 

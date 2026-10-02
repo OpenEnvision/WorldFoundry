@@ -46,11 +46,9 @@ def test_data_gpu_probe_dependencies_are_packaged() -> None:
         assert "h5py" in optional[extra]
 
 
-def test_ui_extra_covers_realtime_dependencies_and_pins_gradio_5() -> None:
+def test_ui_extra_covers_realtime_dependencies() -> None:
     optional = _optional_dependencies()
 
-    assert "gradio>=5.50,<6" in optional["ui"]
-    assert "gradio>=5.50,<6" in optional["all"]
     assert _requirement_names(optional["studio_realtime"]) <= _requirement_names(optional["ui"])
 
 
