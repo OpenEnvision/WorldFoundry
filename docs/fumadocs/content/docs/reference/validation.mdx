@@ -85,12 +85,12 @@ environment variables. Real-weight MiniMax H3 tests use
 
 ### Fast inference contracts and CUDA checks
 
-The tensor suite needs only the public test dependencies, CPU Torch and
-safetensors. It runs without checkpoints, renderers or a GPU:
+The tensor suite needs only the public test dependencies, CPU Torch,
+safetensors and einops. It runs without checkpoints, renderers or a GPU:
 
 ```bash
 python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -e ".[test]" "safetensors>=0.4"
+python -m pip install -e ".[test]" "safetensors>=0.4" "einops>=0.7,<0.9"
 make test-infer-tensors
 ```
 
@@ -121,6 +121,78 @@ python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
 
 This is a state-isolation check, not an accepted-output quality baseline. The
 fixed-weight numerical replay gate remains necessary for changed model behavior.
+
+### Video generation and world models
+
+`make test-infer-tensors` includes the video component numerical contracts;
+`make test-infer-video-tensors` selects just this part. Real small Wan networks
+compare fused QKV and static cross-KV caches against the original network over
+different batches, temporal/spatial shapes, noncontiguous layouts and A/B/A
+requests. Causal VAE convolution compares chunked execution against independent
+full-sequence convolution and checks that future frames cannot affect earlier
+outputs. Sampling and CFG use analytic endpoints, with UniPC history reset,
+failure cleanup and global RNG isolation. Explicit zero or negative dimensions,
+frame counts, steps and fps fail before inference; only `None` selects defaults.
+
+LTX's timestep-conditioned VAE also injects noise during decoding. Video,
+audio/video and request-based tensor decoders use a local generator on the
+latent device, seeded from the request. Small real VAE tests cover tiled and
+untiled decoding, A/B/A seeds, global RNG isolation and exact agreement with
+the original VAE given the same random state. Untiled tensor decoding calls
+the decoder directly. The former uncontrolled LTX RGB output is stochastic;
+accepting a seeded reference requires separately recording this behavior fix
+and proving latent and controlled-decoder parity, rather than silently
+replacing a failed reference.
+
+The existing `tests/manual/geometry_regression_cases.json` now includes geometry,
+video and world-model cases. Legacy script names and `GEOMETRY_*` commands remain
+available; `plan-inference`, `replay-inference` and `verify-inference` expose the
+broader scope. New short cases declare Wan 2.1 1.3B, Wan 2.2 TI2V 5B, LTX 0.9.8
+I2V, CogVideoX 2B, Cosmos Predict 2.5 2B, Matrix Game 2 and DreamX World 5B AR.
+LTX retains its native two-pass ten-step recipe. These cases compare available
+latents, raw frames, decoded RGB exports and fps; they check changed conditions,
+A/B/A requests, expected failures, causal continuation, reset and replay. They
+protect these concrete inputs and state transitions, not full-demo quality.
+
+Video cases can replace `call` with `sequence`. Each step specifies a unique
+`name`, `method` (default `__call__`), `call` and selected `outputs`. Use
+`outputs: []` for session configuration or reset. `expect_error` requires an
+exact qualified exception type and message pattern; unrelated errors fail.
+Returned CPU buffers are copied immediately, preserving earlier responses.
+`comparisons` specifies exact `equal` or `different` relationships within one
+run. `array_contracts` checks shape, dtype, ranges or exact `values`, including
+the requested fps numerator/denominator. `export_artifacts` selects MP4s inside
+the run directory for full decode and comparison. Reference/candidate audits
+still require exact numerical equality.
+
+```bash
+make coverage-inference PYTHON=python3
+make plan-inference PYTHON=python3 INFERENCE_BASE=<comparison-commit>
+make replay-inference PYTHON=/path/to/prepared-env/bin/python \
+  INFERENCE_PROFILE=/private/path/inference-regression.json
+make verify-inference PYTHON=python3 \
+  INFERENCE_PROFILE=/private/path/inference-regression.json \
+  INFERENCE_REPORT=/private/path/completed-run/report.json
+```
+
+Coverage inventories catalogued native video/world bindings and registered
+variants of their pipeline classes. A shared class, family, alias or historical
+`verified` label does not assign a case to another model ID. `case_defined`
+means a recipe exists; it does not imply accepted references or successful GPU
+inference. CI publishes existing gaps. Releases requiring complete coverage
+can invoke the coverage script with `--require-complete`; gaps return exit 2.
+
+`verify-inference` checks that a trusted GPU-host report matches this commit,
+source tree, matrix, dependency declarations and pinned reference index, that
+all affected cases executed, and that every numerical field is exact.
+It requires a `--base` commit-diff plan and recomputes the changed paths;
+manually listed or omitted paths cannot bypass the affected-case gate.
+Preflight, stale commits, omitted cases, relaxed tolerances and failed runs
+cannot pass. Public CPU and tensor gates must pass separately. Enforcing this
+on PR merges additionally requires a configured trusted GPU runner and a
+required branch-protection check. Hosted planning and daily cron alone do not
+enforce a GPU check before each merge. Uncovered models and unexecuted variants
+remain gaps.
 
 ### Validation while optimizing
 
@@ -297,7 +369,7 @@ python -m pip install -e ".[eval_core]"
 
 The separate first command is intentional: Python package metadata cannot select a CPU-specific wheel index, while pointing the whole extra at the PyTorch index would hide packages such as pytest and NumPy.
 
-## Numerical regression for 3D models
+## Numerical regression for geometry, video and world models
 
 The CPU gate and mocks do not prove that inference with real weights remains correct. After changing loading, preprocessing, inference, camera conversion, or export code, replay an accepted case in separate processes using `tests/manual/geometry_regression.py`. The matrix in `tests/manual/geometry_regression_cases.json` covers Depth Anything, Pi3/Pi3X, VGGT, CUT3R, LoGeR, LingBotMap, Hunyuan Mirror, HY-WorldMirror 2.0, FlashWorld, and WorldFM. Its additional Lyra-2 case validates video generation and camera trajectories only, with 3D reconstruction disabled. Prepare the model environment and local assets separately.
 

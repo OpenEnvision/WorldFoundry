@@ -58,11 +58,11 @@ WORLDFOUNDRY_DOCKER_EXTRAS=test,eval_core tests/run_tests_docker.sh make:test-ev
 
 ## 推理契约与 CUDA 快速检查
 
-仅安装公开测试依赖、CPU Torch 和 safetensors，即可运行张量测试，不需要 checkpoint、渲染器或 GPU：
+仅安装公开测试依赖、CPU Torch、safetensors 和 einops，即可运行张量测试，不需要 checkpoint、渲染器或 GPU：
 
 ```bash
 python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -e ".[test]" "safetensors>=0.4"
+python -m pip install -e ".[test]" "safetensors>=0.4" "einops>=0.7,<0.9"
 make test-infer-tensors
 ```
 
@@ -82,6 +82,32 @@ python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
 ```
 
 这是请求状态隔离检查，不代表结果质量已经验收。模型行为发生变化时仍需运行固定权重的数值回归门禁。
+
+### Video generation 与 world model
+
+LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音视频和带请求的张量解码现在使用 latent 所在设备上的独立 generator，seed 来自当前请求。真实小型 VAE 测试覆盖分块与不分块解码、A/B/A seed、全局随机状态隔离，以及与原 VAE 在相同随机状态下的精确一致性。不分块的张量解码直接调用 decoder。旧 LTX RGB 受未固定的全局随机状态影响；建立确定性 reference 时必须记录这一行为修复，并独立证明 latent 与受控解码的一致性，不能静默替换失败基准。
+
+`make test-infer-tensors` 同时运行视频共享组件的数值测试；只运行这一部分可用 `make test-infer-video-tensors`。它用小型真实 Wan 网络比较融合 QKV、静态 cross-KV 缓存与原始网络，覆盖不同 batch、时间/空间 shape、非连续 layout、换 prompt 和重复请求。VAE 因果卷积与独立全序列卷积对比，并检查未来帧不会改变过去输出。采样与 CFG 使用已知解析结果，检查 UniPC 的状态重置、失败请求清理及全局 RNG 隔离。显式传入零或负数的尺寸、帧数、步数和 fps 必须在模型推理前失败，只有 `None` 使用默认值。
+
+同一个 `tests/manual/geometry_regression_cases.json` 现在包含几何、视频和世界模型案例。原有脚本和 `GEOMETRY_*` 名称继续可用；`plan-inference`、`replay-inference` 和 `verify-inference` 是覆盖更广的入口。新增短案例分别声明 Wan 2.1 1.3B、Wan 2.2 TI2V 5B、LTX 0.9.8 I2V、CogVideoX 2B、Cosmos Predict 2.5 2B、Matrix Game 2 和 DreamX World 5B AR。LTX 保留原生两阶段十步配方，其他采样参数也由案例显式固定。这些短案例比较 latent、原始帧、导出的 RGB 像素和 fps，检查换条件后输出变化、A/B/A 请求、失败恢复，以及因果块的延续、reset 与重放。它们验证具体输入下的集成和请求隔离，不验证完整 demo 的生成质量。
+
+视频案例可以用 `sequence` 替代单次 `call`。每一步包含唯一 `name`、`method`（默认 `__call__`）、`call` 和需要记录的 `outputs`。`outputs: []` 用于只配置或重置会话；`expect_error` 必须指定精确异常类型与消息模式，其他异常仍会失败。返回的 CPU buffer 会立即复制，后续请求不能覆盖前一次证据。`comparisons` 的 `equal` / `different` 是单次运行内的约束；`array_contracts` 声明 shape、dtype、数值范围或精确 `values`，例如 fps 的分子/分母。`export_artifacts` 声明本次运行目录内需要完整解码并比较的 MP4。参考与候选仍要求数值完全一致。
+
+```bash
+make coverage-inference PYTHON=python3
+make plan-inference PYTHON=python3 INFERENCE_BASE=<comparison-commit>
+make replay-inference PYTHON=/path/to/prepared-env/bin/python \
+  INFERENCE_PROFILE=/private/path/inference-regression.json
+make verify-inference PYTHON=python3 \
+  INFERENCE_PROFILE=/private/path/inference-regression.json \
+  INFERENCE_REPORT=/private/path/completed-run/report.json
+```
+
+覆盖报告按 catalog 的 native binding 和同一 pipeline class 下注册的 variant 列出缺口。相同 class、模型家族、alias 或历史 `verified` 状态都不会自动给另一个 model ID 分配案例。`case_defined` 只表示有测试配方；报告不会将其提升成 reference 已验收或 GPU 已通过。CI 发布这一报告，未覆盖的旧模型仍保持可见；需要完整覆盖的发布可直接运行 coverage 脚本并添加 `--require-complete`，存在缺口时退出码为 2。
+
+`verify-inference` 检查可信 GPU 主机生成的报告与当前 commit、源码 tree、案例矩阵、依赖声明和固定 reference index 一致，选中案例全部执行，且所有数值字段完全一致。预检查、过期 commit、少跑案例、放宽容差和失败结果不能通过。公开 CPU 与张量门禁仍必须分别通过。要阻止不合格 PR 合并，需要在已配置的可信 GPU runner 上执行受影响回放，并将其检查设置为分支保护的 required check；当前 hosted CI 的计划报告和每日 cron 并不自动提供这一合并约束。覆盖缺口或尚未执行的 variant 不能承诺修改后不会报错。
+
+验证门禁要求使用 `--base` 生成的 commit diff 计划，并重新计算实际变更路径。手工列举或遗漏变更文件的计划无法绕过受影响案例检查。
 
 ## 持续优化时如何验证
 
@@ -187,7 +213,7 @@ python -m pip install -e ".[eval_core]"
 
 拆成两条命令是有意为之：Python package metadata 不能指定 CPU 专用 wheel index；如果把整个 extra 都指向 PyTorch index，pytest、NumPy 等包反而可能不可见。
 
-## 3D 模型数值回归
+## 几何、视频和世界模型的数值回归
 
 CPU 门禁和 mock 测试不能证明真实权重的推理结果保持正确。修改模型加载、预处理、推理、相机转换或导出代码时，使用 `tests/manual/geometry_regression.py` 在两个独立进程中复跑同一个已验收案例。`tests/manual/geometry_regression_cases.json` 提供 Depth Anything、Pi3/Pi3X、VGGT、CUT3R、LoGeR、LingBotMap、Hunyuan Mirror、HY-WorldMirror 2.0、FlashWorld 和 WorldFM 的固定案例。额外的 Lyra-2 案例只验证视频生成和相机轨迹，关闭了 3D 重建；模型环境和本地 assets 需要另行准备。
 

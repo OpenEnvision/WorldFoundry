@@ -127,6 +127,41 @@
     ],
     "worldfm-diffusion": [
       "worldfoundry/synthesis/visual_generation/worldfm/**"
+    ],
+    "wan-video": [
+      "worldfoundry/pipelines/wan/**",
+      "worldfoundry/pipelines/native_diffusion*.py",
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/operators/runtime_video_operator.py",
+      "worldfoundry/synthesis/visual_generation/memory/video.py"
+    ],
+    "ltx-video": [
+      "worldfoundry/pipelines/ltx_video/**",
+      "worldfoundry/synthesis/visual_generation/ltx_video/**",
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/synthesis/visual_generation/runtime_video*",
+      "worldfoundry/operators/runtime_video_operator.py"
+    ],
+    "cogvideox": [
+      "worldfoundry/pipelines/cogvideox/**",
+      "worldfoundry/synthesis/visual_generation/cogvideox/**",
+      "worldfoundry/synthesis/visual_generation/runtime_video*",
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/operators/runtime_video_operator.py"
+    ],
+    "cosmos25": [
+      "worldfoundry/pipelines/cosmos/pipeline_cosmos_predict2p5.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "matrix-game2": [
+      "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_2.py",
+      "worldfoundry/synthesis/visual_generation/matrix_game/**",
+      "worldfoundry/operators/matrix_game_2_operator.py"
+    ],
+    "dreamx-world": [
+      "worldfoundry/pipelines/dreamx_world/**",
+      "worldfoundry/synthesis/visual_generation/dreamx_world/**",
+      "worldfoundry/base_models/diffusion_model/**"
     ]
   },
   "cases": {
@@ -208,6 +243,29 @@
       "pi3",
       "depth-anything-v3",
       "gaussian-rendering"
+    ],
+    "wan21-t2v-1p3b-short": [
+      "wan-video"
+    ],
+    "wan22-ti2v-5b-short": [
+      "wan-video"
+    ],
+    "ltx-video-098-i2v-short": [
+      "ltx-video"
+    ],
+    "cogvideox-2b-t2v-short": [
+      "cogvideox"
+    ],
+    "cosmos-predict25-2b-short": [
+      "cosmos25"
+    ],
+    "matrix-game2-controls-short": [
+      "matrix-game2"
+    ],
+    "dreamx-world5b-ar-short": [
+      "dreamx-world",
+      "wan-diffusion"
     ]
-  }
+  },
+  "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered."
 }

@@ -280,10 +280,14 @@ def test_real_failed_preflight_has_log_and_never_stops_holder(replay_host, monke
         lambda *args: SimpleNamespace(release=lambda: events.append("release"), file_descriptors=()),
     )
     monkeypatch.setattr(suite.GpuHolder, "stop", lambda self: events.append("stop"))
+    # Force the CUDA probe to fail on GPU hosts as well as CPU-only CI. A real
+    # visible GPU otherwise reaches the unrelated accepted-environment guard.
+    replay_host["cuda_visible_devices"] = "999999"
     report = suite.run_suite(replay_host, case_ids=["a"])
     assert report["status"] == "failed"
     assert "preflight failed" in report["error"]
-    assert "torch" in (Path(report["run_root"]) / "cuda-preflight.log").read_text()
+    log = (Path(report["run_root"]) / "cuda-preflight.log").read_text()
+    assert "GPU regression requires CUDA" in log or "No module named 'torch'" in log
     assert events == ["release"]
 
 

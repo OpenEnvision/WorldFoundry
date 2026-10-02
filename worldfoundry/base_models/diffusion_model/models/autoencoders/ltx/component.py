@@ -252,6 +252,7 @@ class LTXMediaDecoder(MultiModalLatentDecoder):
                 self.video.decoder.decode_video(
                     video_latent.to(dtype=self.compute_dtype),
                     self.tiling,
+                    generator=torch.Generator(device=video_latent.device).manual_seed(request.sampling.seed),
                 )
             )
             if not chunks:
@@ -332,7 +333,10 @@ class LTXVideoMediaDecoder(MultiModalLatentDecoder):
         video_shape = VideoLatentShape.from_pixel_shape(pixels)
         video_latent = VideoLatentPatchifier(1).unpatchify(states["video"].latent, video_shape)
         video_latent = self._tone_map(video_latent)
-        chunks = list(self.video.decoder.decode_video(video_latent, self.tiling))
+        # The timestep-conditioned VAE injects noise too. Keep it request-local
+        # so reusing a pipeline or unrelated global RNG draws cannot change RGB.
+        generator = torch.Generator(device=video_latent.device).manual_seed(request.sampling.seed)
+        chunks = list(self.video.decoder.decode_video(video_latent, self.tiling, generator=generator))
         if not chunks:
             raise RuntimeError("LTX-Video decoder returned no chunks")
         video = torch.cat(chunks, dim=0)
@@ -416,7 +420,11 @@ class LTXTensorVideoCodec:
             return latents
         device, dtype = self._input_target(self.decoder)
         latents = latents.to(device=device, dtype=dtype)
-        chunks = list(self.decoder.decoder.tiled_decode(latents, self.tiling))
+        generator = None if request is None else torch.Generator(device=latents.device).manual_seed(request.sampling.seed)
+        chunks = (
+            [self.decoder.decoder(latents, generator=generator)] if self.tiling is None
+            else list(self.decoder.decoder.tiled_decode(latents, self.tiling, generator=generator))
+        )
         if not chunks:
             raise RuntimeError("LTX tensor decoder returned no chunks")
         video = torch.cat(chunks, dim=2)

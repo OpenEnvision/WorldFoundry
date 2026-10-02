@@ -1,4 +1,4 @@
-"""Replay a pinned, local 3D inference case and compare its numerical outputs.
+"""Replay pinned local geometry/video/world inference and compare numerical outputs.
 
 Run each revision in a separate process, using the same model environment. See
 the validation guide for the case schema and commands. Nothing updates a
@@ -15,6 +15,7 @@ import json
 import os
 import platform
 import random
+import re
 import subprocess
 import sys
 import time
@@ -109,6 +110,95 @@ def validate_arrays(arrays: dict, required: list[str]) -> None:
             raise ValueError(f"Empty or non-finite output: {key}")
 
 
+def validate_contracts(arrays: dict, contracts: dict, comparisons: list[dict]) -> None:
+    """Check geometry and request isolation independently of the reference run."""
+    for key, contract in contracts.items():
+        if key not in arrays:
+            raise ValueError(f"Missing contracted output: {key}")
+        value = arrays[key]
+        if set(contract) - {"shape", "dtype", "min", "max", "values"}:
+            raise ValueError(f"Unknown array contract option: {key}")
+        if "shape" in contract and list(value.shape) != contract["shape"]:
+            raise ValueError(f"Contracted output shape changed: {key}: {value.shape}")
+        if "dtype" in contract and str(value.dtype) != contract["dtype"]:
+            raise ValueError(f"Contracted output dtype changed: {key}: {value.dtype}")
+        for bound in ("min", "max"):
+            if bound in contract and not np.isfinite(contract[bound]):
+                raise ValueError(f"Non-finite contract bound: {key}")
+        if "min" in contract and np.any(value < contract["min"]):
+            raise ValueError(f"Output below contracted range: {key}")
+        if "max" in contract and np.any(value > contract["max"]):
+            raise ValueError(f"Output above contracted range: {key}")
+        if "values" in contract and not np.array_equal(value, np.asarray(contract["values"])):
+            raise ValueError(f"Contracted output values changed: {key}")
+    for comparison in comparisons:
+        if set(comparison) != {"left", "right", "relation"}:
+            raise ValueError("Output comparisons need left/right/relation")
+        left, right = comparison["left"], comparison["right"]
+        if left not in arrays or right not in arrays:
+            raise ValueError(f"Missing comparison outputs: {left}, {right}")
+        a, b = arrays[left], arrays[right]
+        if a.shape != b.shape or a.dtype != b.dtype:
+            raise ValueError(f"Comparison shape or dtype differs: {left}, {right}")
+        relation = comparison["relation"]
+        if relation not in {"equal", "different"}:
+            raise ValueError(f"Unsupported output relation: {relation}")
+        if np.array_equal(a, b) != (relation == "equal"):
+            raise ValueError(f"Output relation {relation} failed: {left}, {right}")
+
+
+def run_sequence(pipeline, sequence: list[dict], arrays: dict) -> list[dict]:
+    """Exercise one resident model, including failures, reset and A/B/A requests."""
+    if not isinstance(sequence, list) or not sequence:
+        raise ValueError("A request sequence must be nonempty")
+    names, events = set(), []
+    for step in sequence:
+        name = step.get("name", "")
+        if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]*", name) or name in names:
+            raise ValueError(f"Invalid or duplicate sequence name: {name!r}")
+        names.add(name)
+        if set(step) - {"name", "method", "call", "outputs", "expect_error"}:
+            raise ValueError(f"Unknown request sequence option: {name}")
+        expected = step.get("expect_error")
+        if expected is not None and (
+            not isinstance(expected, dict)
+            or set(expected) != {"type", "match"}
+            or not isinstance(expected["match"], str)
+            or not re.fullmatch(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+", expected["type"])
+        ):
+            raise ValueError(f"Expected errors need qualified type and message pattern: {name}")
+        method_name = step.get("method", "__call__")
+        # Resolve method errors outside the expected-inference-error boundary.
+        method = getattr(pipeline, method_name)
+        try:
+            result = method(**step.get("call", {}))
+        except Exception as exc:
+            actual = f"{type(exc).__module__}.{type(exc).__qualname__}"
+            if expected is None or actual != expected["type"] or not re.search(expected["match"], str(exc)):
+                raise
+            events.append({"name": name, "status": "expected_error", "type": actual})
+            continue
+        if expected is not None:
+            raise ValueError(f"Expected inference failure did not occur: {name}")
+        step_arrays = {}
+        outputs = step.get("outputs")
+        if outputs is None:
+            collect_arrays(result, step_arrays, name)
+        else:
+            if not isinstance(outputs, list) or len(set(outputs)) != len(outputs):
+                raise ValueError(f"Invalid output selection: {name}")
+            for path in outputs:
+                selected = result
+                for attribute in path.split("."):
+                    selected = selected[attribute] if isinstance(selected, dict) else getattr(selected, attribute)
+                collect_arrays(selected, step_arrays, name + "." + path)
+        # Some resident runtimes return views of reusable CPU buffers. Preserve
+        # each response now so later requests cannot rewrite the earlier evidence.
+        arrays.update({key: value.copy() for key, value in step_arrays.items()})
+        events.append({"name": name, "status": "passed"})
+    return events
+
+
 def exported_arrays(root: Path, files: list[str]) -> dict:
     arrays = {}
     for file in files:
@@ -135,6 +225,19 @@ def exported_arrays(root: Path, files: list[str]) -> dict:
                 collect_arrays(np.asarray(image), arrays, key)
         elif path.suffix == ".json":
             collect_arrays(json.loads(path.read_text()), arrays, key)
+        elif path.suffix.lower() in {".mp4", ".webm", ".mov", ".mkv"}:
+            import av
+
+            with av.open(str(path)) as container:
+                stream = container.streams.video[0]
+                rate = stream.average_rate
+                if rate is None or rate <= 0:
+                    raise ValueError(f"Video has no positive frame rate: {path}")
+                frames = [frame.to_ndarray(format="rgb24") for frame in container.decode(stream)]
+                if not frames:
+                    raise ValueError(f"Video has no decodable frames: {path}")
+                collect_arrays(np.stack(frames), arrays, key + ".frames")
+                collect_arrays(np.array([rate.numerator, rate.denominator], dtype=np.int64), arrays, key + ".fps")
     return arrays
 
 
@@ -206,16 +309,28 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
                 collect_arrays(prediction, arrays, key)
 
             model.register_forward_hook(capture)
-        method = getattr(pipeline, resolved.get("method", "__call__"))
-        result = method(**resolved["call"])
-        collect_arrays(result, arrays)
-        for name, extra in resolved.get("extra_calls", {}).items():
-            collect_arrays(getattr(pipeline, extra["method"])(**extra["call"]), arrays, name)
+        if "sequence" in resolved:
+            if {"call", "method", "extra_calls", "save"} & set(resolved):
+                raise ValueError("A request sequence cannot also declare call/method/extra_calls/save")
+            manifest["sequence_events"] = run_sequence(pipeline, resolved["sequence"], arrays)
+        else:
+            method = getattr(pipeline, resolved.get("method", "__call__"))
+            result = method(**resolved["call"])
+            collect_arrays(result, arrays)
+            for name, extra in resolved.get("extra_calls", {}).items():
+                collect_arrays(getattr(pipeline, extra["method"])(**extra["call"]), arrays, name)
         if resolved.get("save", False):
             files = result.save(str(output_dir / "export"))
             if not files or any(not Path(path).is_file() or not Path(path).stat().st_size for path in files):
                 raise ValueError("Inference exported missing or empty artifacts")
             manifest["exported_files"] = files
+        for pattern in resolved.get("export_artifacts", []):
+            if Path(pattern).is_absolute() or ".." in Path(pattern).parts:
+                raise ValueError(f"Export pattern escapes evidence directory: {pattern}")
+            files = sorted(output_dir.glob(pattern))
+            if not files or any(not p.is_file() or p.is_symlink() for p in files):
+                raise ValueError(f"Missing exported artifacts: {pattern}")
+            manifest.setdefault("exported_files", []).extend(str(p) for p in files)
         # Some pipelines return a path to raw predictions instead of arrays.
         for pattern in resolved.get("output_arrays", []):
             matches = sorted(output_dir.glob(pattern))
@@ -232,6 +347,9 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
                 else:
                     raise ValueError(f"Unsupported numerical artifact: {path}")
         validate_arrays(arrays, resolved["required_outputs"])
+        exports = exported_arrays(output_dir, manifest.get("exported_files", []))
+        validate_arrays({**arrays, **exports}, resolved["required_outputs"])
+        validate_contracts({**arrays, **exports}, resolved.get("array_contracts", {}), resolved.get("comparisons", []))
         np.savez_compressed(output_dir / "arrays.npz", **arrays)
         sources = {}
         for imported in list(sys.modules.values()):

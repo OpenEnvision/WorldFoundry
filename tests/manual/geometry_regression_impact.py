@@ -1,4 +1,4 @@
-"""Select short 3D replays without importing models or requiring weights/GPU."""
+"""Select short inference replays without importing models or requiring weights/GPU."""
 
 from __future__ import annotations
 
@@ -222,7 +222,9 @@ def select_cases(
         "uncovered_paths": uncovered,
         "graph_errors": graph_errors,
         "required_checks": ["public-cpu", "inference-tensors", *(["real-weight-replays"] if selected else [])],
-        "coverage_scope": "Declared short 3D cases; a plan is not successful inference evidence.",
+        "coverage_scope": policy.get(
+            "coverage_scope", "Declared short 3D cases; a plan is not successful inference evidence."
+        ),
     }
 
 

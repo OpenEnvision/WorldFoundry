@@ -23,7 +23,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Plan affected 3D replays without weights or GPU
+      - name: Plan affected 3D, video and world-model replays without weights or GPU
         env:
           IMPACT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
@@ -38,6 +38,19 @@ jobs:
         with:
           name: geometry-impact
           path: tmp/geometry-impact.json
+          if-no-files-found: error
+      - name: Install declaration reader
+        if: always()
+        run: python -m pip install "PyYAML>=6"
+      - name: Report video/world model and variant coverage gaps
+        if: always()
+        run: python tests/manual/inference_regression_coverage.py --output tmp/inference-coverage.json
+      - name: Publish coverage definitions and gaps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inference-coverage
+          path: tmp/inference-coverage.json
           if-no-files-found: error
 
   cpu-tests:
@@ -69,7 +82,7 @@ jobs:
       - name: Install CPU Torch and tensor test dependencies
         run: |
           python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install -e ".[test]" "safetensors>=0.4"
+          python -m pip install -e ".[test]" "safetensors>=0.4" "einops>=0.7,<0.9"
       - name: Run fast inference tensor contracts without model weights
         run: make test-infer-tensors
 

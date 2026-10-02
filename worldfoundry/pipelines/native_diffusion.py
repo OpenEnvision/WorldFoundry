@@ -514,7 +514,9 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             raise TypeError(f"unsupported {self.model_id} inference options: {sorted(options)}")
 
         processed = self.process(prompt=prompt, images=images, video=video)
-        actual_fps = int(fps or self.DEFAULT_FPS)
+        actual_fps = int(self.DEFAULT_FPS if fps is None else fps)
+        if actual_fps <= 0:
+            raise ValueError("fps must be positive")
         request_inputs.update({"fps": actual_fps, "return_latent": output_type == "latent"})
         if self.ACCEPTS_IMAGES:
             request_inputs["images"] = processed["images"]
@@ -528,11 +530,13 @@ class NativeVisualDiffusionPipeline(PipelineABC):
                 negative_prompt=(
                     self.DEFAULT_NEGATIVE_PROMPT if negative_prompt is None else negative_prompt
                 ),
-                height=int(height or self.DEFAULT_HEIGHT),
-                width=int(width or self.DEFAULT_WIDTH),
-                num_frames=int(num_frames or self.DEFAULT_NUM_FRAMES),
+                height=int(self.DEFAULT_HEIGHT if height is None else height),
+                width=int(self.DEFAULT_WIDTH if width is None else width),
+                num_frames=int(self.DEFAULT_NUM_FRAMES if num_frames is None else num_frames),
                 sampling=SamplingConfig(
-                    num_inference_steps=int(num_inference_steps or self.DEFAULT_NUM_INFERENCE_STEPS),
+                    num_inference_steps=int(
+                        self.DEFAULT_NUM_INFERENCE_STEPS if num_inference_steps is None else num_inference_steps
+                    ),
                     guidance_scale=float(
                         guidance_scale if guidance_scale is not None else self.DEFAULT_GUIDANCE_SCALE
                     ),

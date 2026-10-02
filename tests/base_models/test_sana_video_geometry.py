@@ -143,7 +143,7 @@ def test_sana_world_camera_actions_fall_back_to_interactions_when_default_is_non
         return torch.eye(4).repeat(num_frames, 1, 1)
 
     monkeypatch.setattr(
-        "worldfoundry.core.geometry.trajectory.rollout_wasd_camera_actions",
+        "worldfoundry.core.geometry.trajectory.rollout_sana_wm_camera_actions",
         rollout,
     )
     request = DiffusionRequest(
@@ -174,10 +174,10 @@ def test_ltx_tensor_codec_crops_padded_decode_to_requested_pixels() -> None:
             super().__init__()
             self.anchor = torch.nn.Parameter(torch.zeros(()))
 
-    class FakeDecoderBody:
-        def tiled_decode(self, latents: torch.Tensor, tiling):
-            del latents, tiling
-            yield torch.zeros(1, 3, 9, 64, 64)
+    class FakeDecoderBody(torch.nn.Module):
+        def forward(self, latents: torch.Tensor, *, generator=None):
+            del latents, generator
+            return torch.zeros(1, 3, 9, 64, 64)
 
     class FakeDecoder(torch.nn.Module):
         def __init__(self) -> None:
@@ -283,14 +283,15 @@ def test_ltx_tensor_codec_uses_explicit_compute_target_for_wrapped_modules() -> 
             super().__init__()
             self.anchor = torch.nn.Parameter(torch.zeros((), dtype=torch.float32))
 
-    class FakeDecoderBody:
+    class FakeDecoderBody(torch.nn.Module):
         def __init__(self) -> None:
+            super().__init__()
             self.received: torch.Tensor | None = None
 
-        def tiled_decode(self, latents: torch.Tensor, tiling):
-            del tiling
+        def forward(self, latents: torch.Tensor, *, generator=None):
+            del generator
             self.received = latents
-            yield torch.zeros(1, 3, 9, 32, 32, dtype=latents.dtype, device=latents.device)
+            return torch.zeros(1, 3, 9, 32, 32, dtype=latents.dtype, device=latents.device)
 
     class FakeDecoder(torch.nn.Module):
         def __init__(self) -> None:

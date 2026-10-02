@@ -1,4 +1,5 @@
 .PHONY: help install-core install-dev test test-infer test-infer-tensors test-infer-contracts test-infer-cuda-contracts test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
+.PHONY: test-infer-video-tensors plan-inference replay-inference coverage-inference verify-inference
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -9,7 +10,8 @@ PREFLIGHT_PROFILE ?= all
 PREFLIGHT_OUTPUT ?= tmp/preflight
 CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
-INFER_TENSOR_CONTRACTS = tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py
+VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
+INFER_TENSOR_CONTRACTS = tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py $(VIDEO_TENSOR_CONTRACTS)
 GEOMETRY_MATRIX ?= tests/manual/geometry_regression_cases.json
 GEOMETRY_REFERENCE ?=
 GEOMETRY_CANDIDATE ?=
@@ -18,6 +20,12 @@ GEOMETRY_BASE ?=
 GEOMETRY_DEPENDENCIES ?= tests/manual/geometry_regression_dependencies.json
 GEOMETRY_PLAN ?= tmp/3d-regression-plan.json
 GEOMETRY_PROFILE ?=
+INFERENCE_BASE ?= $(GEOMETRY_BASE)
+INFERENCE_PLAN ?= tmp/inference-regression-plan.json
+INFERENCE_PROFILE ?= $(GEOMETRY_PROFILE)
+INFERENCE_REPORT ?=
+INFERENCE_COVERAGE ?= tmp/inference-regression-coverage.json
+INFERENCE_GATE_OUTPUT ?= tmp/inference-regression-gate.json
 RELEASE_HFD_ROOT ?= $(if $(WORLDFOUNDRY_HFD_ROOT),$(WORLDFOUNDRY_HFD_ROOT),$(HOME)/.cache/worldfoundry/checkpoints/hfd)
 CANONICAL_DIFFUSION_SOURCES ?= \
 	worldfoundry/base_models/diffusion_model/*.py \
@@ -46,11 +54,16 @@ help:
 		'  make test              Run the public CPU inference and packaging gate.' \
 		'  make test-infer        Alias for the public CPU gate.' \
 		'  make test-infer-tensors  Test small checkpoint, geometry and execution tensors with CPU Torch and safetensors.' \
+		'  make test-infer-video-tensors  Check real small video operators, sampler math and resident request isolation with CPU Torch and einops.' \
 		'  make test-infer-contracts  Test checkpoint, geometry, serializer and execution contracts in a model environment.' \
 		'  make test-infer-cuda-contracts  Test real CUDA transfers and failed callbacks; requires an available GPU.' \
 		'  make test-geometry     Audit real 3D replays against accepted references; requires GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE.' \
 		'  make plan-geometry     Select affected short 3D cases from GEOMETRY_BASE to HEAD without GPU/weights.' \
 		'  make replay-geometry   Replay selected or all cases using a private GEOMETRY_PROFILE; optional GEOMETRY_REPLAY_PLAN.' \
+		'  make plan-inference    Select affected 3D/video/world cases using INFERENCE_BASE.' \
+		'  make replay-inference  Replay affected cases using INFERENCE_PROFILE and INFERENCE_PLAN.' \
+		'  make coverage-inference  List short-case definitions and missing video/world variants.' \
+		'  make verify-inference  Verify exact committed GPU evidence using INFERENCE_PLAN, INFERENCE_REPORT and INFERENCE_PROFILE.' \
 		'  make test-eval-core    Run the extended evaluation contract suite.' \
 		'  make docs-check        Verify checked-in generated documentation.' \
 		'  make docs-dev-fast     Start docs using existing generated output.' \
@@ -74,9 +87,27 @@ test:
 
 test-infer: test
 
-# This suite needs CPU Torch and safetensors, with no model or renderer dependencies.
+# This suite needs CPU Torch, safetensors and einops, with no weights or renderer.
 test-infer-tensors:
-	CUDA_VISIBLE_DEVICES='' PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(INFER_TENSOR_CONTRACTS) $(TEST_ARGS)
+	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(INFER_TENSOR_CONTRACTS) $(TEST_ARGS)
+
+test-infer-video-tensors:
+	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(VIDEO_TENSOR_CONTRACTS) $(TEST_ARGS)
+
+plan-inference:
+	@test -n "$(INFERENCE_BASE)" || (echo 'Set INFERENCE_BASE to the comparison commit.'; exit 2)
+	$(PYTHON) tests/manual/geometry_regression_impact.py --matrix "$(GEOMETRY_MATRIX)" --dependencies "$(GEOMETRY_DEPENDENCIES)" --base "$(INFERENCE_BASE)" --output "$(INFERENCE_PLAN)"
+
+replay-inference:
+	@test -n "$(INFERENCE_PROFILE)" || (echo 'Set INFERENCE_PROFILE to a private prepared model-host profile.'; exit 2)
+	$(PYTHON) tests/manual/geometry_regression_suite.py --profile "$(INFERENCE_PROFILE)" --plan "$(INFERENCE_PLAN)"
+
+coverage-inference:
+	$(PYTHON) tests/manual/inference_regression_coverage.py --matrix "$(GEOMETRY_MATRIX)" --output "$(INFERENCE_COVERAGE)"
+
+verify-inference:
+	@test -n "$(INFERENCE_PROFILE)" -a -n "$(INFERENCE_REPORT)" || (echo 'Set INFERENCE_PROFILE and INFERENCE_REPORT.'; exit 2)
+	$(PYTHON) tests/manual/inference_regression_gate.py --plan "$(INFERENCE_PLAN)" --report "$(INFERENCE_REPORT)" --profile "$(INFERENCE_PROFILE)" --output "$(INFERENCE_GATE_OUTPUT)"
 
 # Run inside the 3D model environment; tensor and serializer tests need its dependencies.
 test-infer-contracts:

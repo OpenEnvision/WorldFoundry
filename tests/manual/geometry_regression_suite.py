@@ -1,4 +1,4 @@
-"""Run selected or scheduled 3D cases from a committed, isolated source snapshot."""
+"""Run short inference cases from a committed, isolated source snapshot."""
 
 from __future__ import annotations
 
@@ -488,6 +488,12 @@ def run_suite(
             source = root / "source"
             matrix, dependencies = source / profile["matrix"], source / profile["dependencies"]
             cases, _ = impact.load_definitions(matrix, dependencies)
+            report.update(
+                schema_version=1,
+                matrix_sha256=impact.digest(matrix),
+                dependencies_sha256=impact.digest(dependencies),
+                reference_index_sha256=profile["reference_index_sha256"],
+            )
             if set(profile.get("case_environments", {})) - set(cases):
                 raise ValueError("Case environment override has an unknown case id")
             selected = list(cases) if case_ids is None else list(dict.fromkeys(case_ids))

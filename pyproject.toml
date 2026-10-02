@@ -491,6 +491,8 @@ testpaths = [
     "tests/runtime/test_geometry_regression_impact.py",
     "tests/runtime/test_geometry_regression_suite.py",
     "tests/runtime/test_geometry_regression_schedule.py",
+    "tests/runtime/test_video_regression.py",
+    "tests/runtime/test_inference_regression_gate.py",
     "tests/runtime/test_local_checkpoint_cache.py",
     "tests/runtime/test_jobs_store_persistence.py",
     "tests/runtime/test_jobs_logging.py",

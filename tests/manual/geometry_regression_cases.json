@@ -557,208 +557,880 @@
       "panorama_path": "${WORLDFOUNDRY_REGRESSION_PANORAMA}",
       "interactions": [
         [
-          [1.0, 0, 0.0, 0],
-          [0, 1, 0, 0],
-          [-0.0, 0, 1.0, 0],
-          [0, 0, 0, 1]
+          [
+            1.0,
+            0,
+            0.0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0,
+            0,
+            1.0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9999756307053947, 0, 0.0069812602979615525, 0],
-          [0, 1, 0, 0],
-          [-0.0069812602979615525, 0, 0.9999756307053947, 0],
-          [0, 0, 0, 1]
+          [
+            0.9999756307053947,
+            0,
+            0.0069812602979615525,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0069812602979615525,
+            0,
+            0.9999756307053947,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9999025240093042, 0, 0.013962180339145272, 0],
-          [0, 1, 0, 0],
-          [-0.013962180339145272, 0, 0.9999025240093042, 0],
-          [0, 0, 0, 1]
+          [
+            0.9999025240093042,
+            0,
+            0.013962180339145272,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.013962180339145272,
+            0,
+            0.9999025240093042,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9997806834748455, 0, 0.02094241988335696, 0],
-          [0, 1, 0, 0],
-          [-0.02094241988335696, 0, 0.9997806834748455, 0],
-          [0, 0, 0, 1]
+          [
+            0.9997806834748455,
+            0,
+            0.02094241988335696,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.02094241988335696,
+            0,
+            0.9997806834748455,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9996101150403544, 0, 0.02792163872356888, 0],
-          [0, 1, 0, 0],
-          [-0.02792163872356888, 0, 0.9996101150403544, 0],
-          [0, 0, 0, 1]
+          [
+            0.9996101150403544,
+            0,
+            0.02792163872356888,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.02792163872356888,
+            0,
+            0.9996101150403544,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9993908270190958, 0, 0.03489949670250097, 0],
-          [0, 1, 0, 0],
-          [-0.03489949670250097, 0, 0.9993908270190958, 0],
-          [0, 0, 0, 1]
+          [
+            0.9993908270190958,
+            0,
+            0.03489949670250097,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.03489949670250097,
+            0,
+            0.9993908270190958,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9991228300988584, 0, 0.04187565372919963, 0],
-          [0, 1, 0, 0],
-          [-0.04187565372919963, 0, 0.9991228300988584, 0],
-          [0, 0, 0, 1]
+          [
+            0.9991228300988584,
+            0,
+            0.04187565372919963,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.04187565372919963,
+            0,
+            0.9991228300988584,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9988061373414341, 0, 0.048849769795613264, 0],
-          [0, 1, 0, 0],
-          [-0.048849769795613264, 0, 0.9988061373414341, 0],
-          [0, 0, 0, 1]
+          [
+            0.9988061373414341,
+            0,
+            0.048849769795613264,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.048849769795613264,
+            0,
+            0.9988061373414341,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.998440764181981, 0, 0.0558215049931638, 0],
-          [0, 1, 0, 0],
-          [-0.0558215049931638, 0, 0.998440764181981, 0],
-          [0, 0, 0, 1]
+          [
+            0.998440764181981,
+            0,
+            0.0558215049931638,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0558215049931638,
+            0,
+            0.998440764181981,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9980267284282716, 0, 0.06279051952931337, 0],
-          [0, 1, 0, 0],
-          [-0.06279051952931337, 0, 0.9980267284282716, 0],
-          [0, 0, 0, 1]
+          [
+            0.9980267284282716,
+            0,
+            0.06279051952931337,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.06279051952931337,
+            0,
+            0.9980267284282716,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9975640502598242, 0, 0.0697564737441253, 0],
-          [0, 1, 0, 0],
-          [-0.0697564737441253, 0, 0.9975640502598242, 0],
-          [0, 0, 0, 1]
+          [
+            0.9975640502598242,
+            0,
+            0.0697564737441253,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0697564737441253,
+            0,
+            0.9975640502598242,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9970527522269202, 0, 0.07671902812681865, 0],
-          [0, 1, 0, 0],
-          [-0.07671902812681865, 0, 0.9970527522269202, 0],
-          [0, 0, 0, 1]
+          [
+            0.9970527522269202,
+            0,
+            0.07671902812681865,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.07671902812681865,
+            0,
+            0.9970527522269202,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9964928592495044, 0, 0.0836778433323155, 0],
-          [0, 1, 0, 0],
-          [-0.0836778433323155, 0, 0.9964928592495044, 0],
-          [0, 0, 0, 1]
+          [
+            0.9964928592495044,
+            0,
+            0.0836778433323155,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0836778433323155,
+            0,
+            0.9964928592495044,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9958843986159703, 0, 0.09063258019778016, 0],
-          [0, 1, 0, 0],
-          [-0.09063258019778016, 0, 0.9958843986159703, 0],
-          [0, 0, 0, 1]
+          [
+            0.9958843986159703,
+            0,
+            0.09063258019778016,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.09063258019778016,
+            0,
+            0.9958843986159703,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9952273999818312, 0, 0.09758289975914948, 0],
-          [0, 1, 0, 0],
-          [-0.09758289975914948, 0, 0.9952273999818312, 0],
-          [0, 0, 0, 1]
+          [
+            0.9952273999818312,
+            0,
+            0.09758289975914948,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.09758289975914948,
+            0,
+            0.9952273999818312,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9945218953682733, 0, 0.10452846326765347, 0],
-          [0, 1, 0, 0],
-          [-0.10452846326765347, 0, 0.9945218953682733, 0],
-          [0, 0, 0, 1]
+          [
+            0.9945218953682733,
+            0,
+            0.10452846326765347,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.10452846326765347,
+            0,
+            0.9945218953682733,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9937679191605964, 0, 0.11146893220632548, 0],
-          [0, 1, 0, 0],
-          [-0.11146893220632548, 0, 0.9937679191605964, 0],
-          [0, 0, 0, 1]
+          [
+            0.9937679191605964,
+            0,
+            0.11146893220632548,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.11146893220632548,
+            0,
+            0.9937679191605964,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9929655081065369, 0, 0.11840396830650096, 0],
-          [0, 1, 0, 0],
-          [-0.11840396830650096, 0, 0.9929655081065369, 0],
-          [0, 0, 0, 1]
+          [
+            0.9929655081065369,
+            0,
+            0.11840396830650096,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.11840396830650096,
+            0,
+            0.9929655081065369,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9921147013144779, 0, 0.12533323356430426, 0],
-          [0, 1, 0, 0],
-          [-0.12533323356430426, 0, 0.9921147013144779, 0],
-          [0, 0, 0, 1]
+          [
+            0.9921147013144779,
+            0,
+            0.12533323356430426,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.12533323356430426,
+            0,
+            0.9921147013144779,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9912155402515417, 0, 0.13225639025712246, 0],
-          [0, 1, 0, 0],
-          [-0.13225639025712246, 0, 0.9912155402515417, 0],
-          [0, 0, 0, 1]
+          [
+            0.9912155402515417,
+            0,
+            0.13225639025712246,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.13225639025712246,
+            0,
+            0.9912155402515417,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9902680687415704, 0, 0.13917310096006544, 0],
-          [0, 1, 0, 0],
-          [-0.13917310096006544, 0, 0.9902680687415704, 0],
-          [0, 0, 0, 1]
+          [
+            0.9902680687415704,
+            0,
+            0.13917310096006544,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.13917310096006544,
+            0,
+            0.9902680687415704,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9892723329629883, 0, 0.14608302856241162, 0],
-          [0, 1, 0, 0],
-          [-0.14608302856241162, 0, 0.9892723329629883, 0],
-          [0, 0, 0, 1]
+          [
+            0.9892723329629883,
+            0,
+            0.14608302856241162,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.14608302856241162,
+            0,
+            0.9892723329629883,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9882283814465528, 0, 0.15298583628403808, 0],
-          [0, 1, 0, 0],
-          [-0.15298583628403808, 0, 0.9882283814465528, 0],
-          [0, 0, 0, 1]
+          [
+            0.9882283814465528,
+            0,
+            0.15298583628403808,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.15298583628403808,
+            0,
+            0.9882283814465528,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9871362650729879, 0, 0.15988118769183488, 0],
-          [0, 1, 0, 0],
-          [-0.15988118769183488, 0, 0.9871362650729879, 0],
-          [0, 0, 0, 1]
+          [
+            0.9871362650729879,
+            0,
+            0.15988118769183488,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.15988118769183488,
+            0,
+            0.9871362650729879,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9859960370705049, 0, 0.16676874671610228, 0],
-          [0, 1, 0, 0],
-          [-0.16676874671610228, 0, 0.9859960370705049, 0],
-          [0, 0, 0, 1]
+          [
+            0.9859960370705049,
+            0,
+            0.16676874671610228,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.16676874671610228,
+            0,
+            0.9859960370705049,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.984807753012208, 0, 0.17364817766693033, 0],
-          [0, 1, 0, 0],
-          [-0.17364817766693033, 0, 0.984807753012208, 0],
-          [0, 0, 0, 1]
+          [
+            0.984807753012208,
+            0,
+            0.17364817766693033,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.17364817766693033,
+            0,
+            0.984807753012208,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9835714708133859, 0, 0.18051914525055998, 0],
-          [0, 1, 0, 0],
-          [-0.18051914525055998, 0, 0.9835714708133859, 0],
-          [0, 0, 0, 1]
+          [
+            0.9835714708133859,
+            0,
+            0.18051914525055998,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.18051914525055998,
+            0,
+            0.9835714708133859,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9822872507286887, 0, 0.18738131458572463, 0],
-          [0, 1, 0, 0],
-          [-0.18738131458572463, 0, 0.9822872507286887, 0],
-          [0, 0, 0, 1]
+          [
+            0.9822872507286887,
+            0,
+            0.18738131458572463,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.18738131458572463,
+            0,
+            0.9822872507286887,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9809551553491915, 0, 0.19423435121997198, 0],
-          [0, 1, 0, 0],
-          [-0.19423435121997198, 0, 0.9809551553491915, 0],
-          [0, 0, 0, 1]
+          [
+            0.9809551553491915,
+            0,
+            0.19423435121997198,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.19423435121997198,
+            0,
+            0.9809551553491915,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9795752495993441, 0, 0.2010779211459647, 0],
-          [0, 1, 0, 0],
-          [-0.2010779211459647, 0, 0.9795752495993441, 0],
-          [0, 0, 0, 1]
+          [
+            0.9795752495993441,
+            0,
+            0.2010779211459647,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.2010779211459647,
+            0,
+            0.9795752495993441,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9781476007338057, 0, 0.20791169081775934, 0],
-          [0, 1, 0, 0],
-          [-0.20791169081775934, 0, 0.9781476007338057, 0],
-          [0, 0, 0, 1]
+          [
+            0.9781476007338057,
+            0,
+            0.20791169081775934,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.20791169081775934,
+            0,
+            0.9781476007338057,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9766722783341679, 0, 0.2147353271670632, 0],
-          [0, 1, 0, 0],
-          [-0.2147353271670632, 0, 0.9766722783341679, 0],
-          [0, 0, 0, 1]
+          [
+            0.9766722783341679,
+            0,
+            0.2147353271670632,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.2147353271670632,
+            0,
+            0.9766722783341679,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ],
         [
-          [0.9751493543055633, 0, 0.2215484976194673, 0],
-          [0, 1, 0, 0],
-          [-0.2215484976194673, 0, 0.9751493543055633, 0],
-          [0, 0, 0, 1]
+          [
+            0.9751493543055633,
+            0,
+            0.2215484976194673,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.2215484976194673,
+            0,
+            0.9751493543055633,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
         ]
       ],
       "K": [
-        [618.0386719675123, 0, 256],
-        [0, 618.0386719675123, 256],
-        [0, 0, 1]
+        [
+          618.0386719675123,
+          0,
+          256
+        ],
+        [
+          0,
+          618.0386719675123,
+          256
+        ],
+        [
+          0,
+          0,
+          1
+        ]
       ],
       "scene_name": "royal-esplanade",
       "fps": 16,
@@ -792,7 +1464,10 @@
       ],
       "prompt": "A small turquoise toy on a red table in a room with a painted wall.",
       "fps": 16,
-      "resolution": [480, 832],
+      "resolution": [
+        480,
+        832
+      ],
       "seed": 42,
       "reconstruct_3d": false,
       "return_dict": true,
@@ -809,5 +1484,1130 @@
       "result.zoom_factors"
     ],
     "scope": "Video generation and camera trajectory only; reconstruct_3d=false does not validate Lyra-2 reconstruction."
+  },
+  "wan21-t2v-1p3b-short": {
+    "id": "wan21-t2v-1p3b-short",
+    "model_id": "wan2.1-t2v-1.3b",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2VPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 128,
+          "width": 224,
+          "num_frames": 17,
+          "num_inference_steps": 6,
+          "guidance_scale": 6.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 128,
+          "width": 224,
+          "num_frames": 17,
+          "num_inference_steps": 6,
+          "guidance_scale": 6.0,
+          "fps": 16,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "height": 128,
+          "width": 224,
+          "num_frames": -1,
+          "num_inference_steps": 6,
+          "guidance_scale": 6.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "num_frames must be positive"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 128,
+          "width": 224,
+          "num_frames": 17,
+          "num_inference_steps": 6,
+          "guidance_scale": 6.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          128,
+          224
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          128,
+          224
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          128,
+          224
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          17,
+          128,
+          224,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "wan22-ti2v-5b-short": {
+    "id": "wan22-ti2v-5b-short",
+    "model_id": "wan2.2-ti2v-5b",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.wan.pipeline_wan_2p2:Wan2p2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "device": "cuda",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 128,
+          "width": 256,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 5.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 128,
+          "width": 256,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 5.0,
+          "fps": 16,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "height": 128,
+          "width": 256,
+          "num_frames": -1,
+          "num_inference_steps": 4,
+          "guidance_scale": 5.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "num_frames must be positive"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 128,
+          "width": 256,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 5.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          9,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          9,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          9,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          9,
+          128,
+          256,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "ltx-video-098-i2v-short": {
+    "id": "ltx-video-098-i2v-short",
+    "model_id": "ltx-video-i2v",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.ltx_video.pipeline_ltx_video_i2v:LTXVideoI2VPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/ltxv-13b-0.9.8-distilled.safetensors",
+      "device": "cuda",
+      "cpu_offload": false,
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 256,
+          "width": 384,
+          "num_frames": 17,
+          "num_inference_steps": 10,
+          "guidance_scale": 1.0,
+          "fps": 30,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 256,
+          "width": 384,
+          "num_frames": 17,
+          "num_inference_steps": 10,
+          "guidance_scale": 1.0,
+          "fps": 30,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 256,
+          "width": 384,
+          "num_frames": 17,
+          "num_inference_steps": 10,
+          "guidance_scale": 1.0,
+          "fps": 30,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "video"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/ltxv-13b-0.9.8-distilled.safetensors",
+      "upsampler": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/ltxv-spatial-upscaler-0.9.8.safetensors",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/text_encoder",
+      "tokenizer": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/tokenizer",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.video",
+      "b.video",
+      "repeat.video"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          17,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "b.video": {
+        "shape": [
+          17,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "repeat.video": {
+        "shape": [
+          17,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          17,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          30,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "cogvideox-2b-t2v-short": {
+    "id": "cogvideox-2b-t2v-short",
+    "model_id": "cogvideox-2b-t2v",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.cogvideox.pipeline_cogvideox_2b_t2v:CogVideoX2bT2VPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/THUDM--CogVideoX-2b",
+      "device": "cuda",
+      "cpu_offload": false
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 128,
+          "width": 192,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 6.0,
+          "fps": 8,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 128,
+          "width": 192,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 6.0,
+          "fps": 8,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 128,
+          "width": 192,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 6.0,
+          "fps": 8,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/THUDM--CogVideoX-2b"
+    },
+    "required_outputs": [
+      "a.video",
+      "b.video",
+      "repeat.video"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          9,
+          128,
+          192,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "b.video": {
+        "shape": [
+          9,
+          128,
+          192,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "repeat.video": {
+        "shape": [
+          9,
+          128,
+          192,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          9,
+          128,
+          192,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          8,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "cosmos-predict25-2b-short": {
+    "id": "cosmos-predict25-2b-short",
+    "model_id": "cosmos-predict2.5-2b",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2p5:CosmosPredict2p5Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B",
+      "device": "cuda",
+      "text_encoder_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "vae_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": -1,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "num_frames must be positive"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B"
+    },
+    "required_outputs": [
+      "a.video",
+      "a.latents",
+      "b.video",
+      "b.latents",
+      "repeat.video",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "b.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "repeat.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          17,
+          256,
+          448,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "matrix-game2-controls-short": {
+    "id": "matrix-game2-controls-short",
+    "model_id": "matrix-game-2",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_2:MatrixGame2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Skywork--Matrix-Game-2.0",
+      "device": "cuda",
+      "mode": "universal"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Skywork--Matrix-Game-2.0",
+      "input": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "interactions": [
+            "forward"
+          ],
+          "num_frames": 6,
+          "size": [
+            352,
+            640
+          ],
+          "seed": 43,
+          "visualize_ops": false,
+          "fps": 12,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "interactions": [
+            "left"
+          ],
+          "num_frames": 6,
+          "size": [
+            352,
+            640
+          ],
+          "seed": 43,
+          "visualize_ops": false,
+          "fps": 12,
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "interactions": [
+            "forward"
+          ],
+          "num_frames": 6,
+          "size": [
+            352,
+            640
+          ],
+          "seed": 43,
+          "visualize_ops": false,
+          "fps": 12,
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.video",
+      "b.video",
+      "repeat.video"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          21,
+          352,
+          640,
+          3
+        ]
+      },
+      "b.video": {
+        "shape": [
+          21,
+          352,
+          640,
+          3
+        ]
+      },
+      "repeat.video": {
+        "shape": [
+          21,
+          352,
+          640,
+          3
+        ]
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          21,
+          352,
+          640,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          12,
+          1
+        ]
+      }
+    },
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "scope": "Six latent frames decode to 21 RGB frames; seeded forward/left/forward resident requests. Not long-horizon quality."
+  },
+  "dreamx-world5b-ar-short": {
+    "id": "dreamx-world5b-ar-short",
+    "model_id": "dreamx-world-5b",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.dreamx_world.pipeline_dreamx_world:DreamXWorld5BARPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/GD-ML--DreamX-World-5B",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "device": "cuda"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/GD-ML--DreamX-World-5B",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "input": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}"
+    },
+    "sequence": [
+      {
+        "name": "configure",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 43,
+          "fps": 16
+        },
+        "outputs": []
+      },
+      {
+        "name": "first",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "forward"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "continue",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "camera_r"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "reset",
+        "method": "reset_realtime",
+        "outputs": []
+      },
+      {
+        "name": "configure_repeat",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 43,
+          "fps": 16
+        },
+        "outputs": []
+      },
+      {
+        "name": "repeat",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "forward"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "reset_other",
+        "method": "reset_realtime",
+        "outputs": []
+      },
+      {
+        "name": "configure_other",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 43,
+          "fps": 16
+        },
+        "outputs": []
+      },
+      {
+        "name": "other",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "left"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "first.frames",
+      "continue.frames",
+      "repeat.frames",
+      "other.frames"
+    ],
+    "array_contracts": {
+      "first.frames": {
+        "shape": [
+          9,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "continue.frames": {
+        "shape": [
+          12,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "repeat.frames": {
+        "shape": [
+          9,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "other.frames": {
+        "shape": [
+          9,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "comparisons": [
+      {
+        "left": "first.frames",
+        "right": "repeat.frames",
+        "relation": "equal"
+      },
+      {
+        "left": "first.frames",
+        "right": "other.frames",
+        "relation": "different"
+      }
+    ],
+    "scope": "One 9-frame causal block, a 12-frame continuation, reset/replay, changed initial action. Not long-horizon quality."
   }
 }
