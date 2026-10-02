@@ -240,7 +240,7 @@ class DreamXWorldRealtimeSession:
         self.weight_dtype = torch.bfloat16
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
-        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.benchmark = not torch.are_deterministic_algorithms_enabled()
 
         self.pipe, self.boundary = self._load_pipeline()
         self.fps = NATIVE_FPS

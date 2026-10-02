@@ -134,7 +134,9 @@ class DreamXWorldARRealtimeSession:
 
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
-        torch.backends.cudnn.benchmark = True
+        # Benchmarking can select different deterministic convolution algorithms
+        # between processes. Respect a caller's reproducibility policy.
+        torch.backends.cudnn.benchmark = not torch.are_deterministic_algorithms_enabled()
         self.generator, self.text_encoder, self.vae, self.timesteps = self._load_components()
         self._kv_cache: list[dict[str, torch.Tensor]] | None = None
         self._crossattn_cache: list[dict[str, Any]] | None = None

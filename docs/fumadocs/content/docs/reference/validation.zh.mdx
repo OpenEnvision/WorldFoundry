@@ -199,6 +199,8 @@ python3 tests/manual/geometry_regression_schedule.py remove \
 
 `--preflight-only` 检查全部选中案例的 assets 和环境，不加载模型权重；其 `preflight_passed` 状态不能当作数值推理通过的证据。
 
+主机 profile 还应固定数值环境配置，包括 `OMP_NUM_THREADS` 和 `MKL_NUM_THREADS`；即使所有包版本一致，CPU 深度重建也可能随线程数改变。为不同 Python/Torch/CUDA/C++ ABI 使用独立的 `TORCH_EXTENSIONS_DIR`，并保证扩展编译器采用 Torch 的 C++ ABI；单独新建缓存无法纠正编译器的 ABI 默认值。DreamX 在调用者显式启用确定性算法时关闭 cuDNN 自动选算法，避免不同进程选择不同卷积算法。确定性策略变化后的参考结果须另存，附上与受控原实现的数值对齐证明；不能覆盖旧参考或放宽阈值掩盖差异。
+
 短案例覆盖的是已声明输入和能力。Lyra-2 案例仍关闭 3D 重建；接受新 backend、更新集成状态或发布时，仍需要完整 demo 和质量 benchmark。
 
 ## 准备可选 CPU eval-core 测试环境

@@ -333,6 +333,17 @@ the runner. Profiles, local assets, weights and evidence stay outside Git.
 `--preflight-only` checks all selected assets and environments without loading
 model weights; its `preflight_passed` status is not numerical inference evidence.
 
+Pin numerical environment settings in the host profile too, including
+`OMP_NUM_THREADS` and `MKL_NUM_THREADS`; CPU depth reconstruction can change with
+different thread counts even when every package version matches. Give each
+Python/Torch/CUDA/C++ ABI combination its own `TORCH_EXTENSIONS_DIR`, and ensure
+the extension compiler uses Torch's C++ ABI. A fresh cache alone does not fix an
+incompatible compiler default. DreamX honors explicitly enabled deterministic
+algorithms by disabling cuDNN benchmarking, which can otherwise select different
+convolution algorithms in separate processes. Keep references recorded under a
+changed determinism policy separately, with an original-production parity check;
+never overwrite existing references or relax tolerances to hide drift.
+
 These short cases cover declared inputs and capabilities. The Lyra-2 case still
 disables reconstruction. Full demos, quality benchmarks, and tests of new
 backends remain necessary before changing integration or release status.
