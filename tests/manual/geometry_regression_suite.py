@@ -284,13 +284,16 @@ def probe_cuda(profile: dict, env: dict, run_root: Path, lease=None, *, case_ids
     replay_path = str(Path(__file__).with_name("geometry_regression.py"))
     code = (
         "import importlib.util,json,pathlib,torch; "
-        # Tensor runtimes import setuptools through torch's extension helpers.
-        # Mirror its vendor-path activation before enumerating distributions.
-        "import setuptools; "
         "assert torch.cuda.is_available(), 'GPU regression requires CUDA'; torch.cuda.init(); "
         f"spec=importlib.util.spec_from_file_location('preflight_replay', {replay_path!r}); "
         "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
-        f"pathlib.Path({str(metadata_path)!r}).write_text(json.dumps(module.runtime_metadata(torch)))"
+        # Extension-based runtimes activate setuptools' vendor path, while
+        # Cosmos does not. Pin either complete inventory; never merge them or
+        # ignore actual package-version differences.
+        "plain=module.runtime_metadata(torch); import setuptools; "
+        "activated=module.runtime_metadata(torch); "
+        f"pathlib.Path({str(metadata_path)!r}).write_text(json.dumps(activated)); "
+        f"pathlib.Path({str(run_root / (label + '-plain-metadata.json'))!r}).write_text(json.dumps(plain))"
     )
     helpers = process_helpers(run_root / "source")
     result = run_child(
@@ -305,16 +308,18 @@ def probe_cuda(profile: dict, env: dict, run_root: Path, lease=None, *, case_ids
     if result:
         raise RuntimeError(f"GPU preflight failed; see {label}.log")
     actual = json.loads(metadata_path.read_text())
+    plain_path = run_root / (label + "-plain-metadata.json")
+    inventories = [actual, json.loads(plain_path.read_text())] if plain_path.is_file() else [actual]
     recipes = json.loads((run_root / "recipes.json").read_text())
     for name in list(recipes) if case_ids is None else case_ids:
         expected = json.loads((Path(profile["reference"]) / name / "manifest.json").read_text())["runtime"]
         # Algorithm flags and seeds are set individually by run_case. These
         # environment fields must already match before spending time on weights.
-        differences = [
-            field
-            for field in ("python", "torch", "cuda", "cudnn", "gpu", "packages")
-            if actual.get(field) != expected.get(field)
-        ]
+        fields = ("python", "torch", "cuda", "cudnn", "gpu", "packages")
+        differences = min(
+            ([field for field in fields if inventory.get(field) != expected.get(field)] for inventory in inventories),
+            key=len,
+        )
         if differences:
             raise RuntimeError(
                 f"GPU replay environment differs from accepted reference for {name}: "

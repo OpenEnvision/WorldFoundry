@@ -329,6 +329,59 @@ def test_preflight_rejects_changed_runtime_before_loading_weights(replay_host, t
         suite.probe_cuda(replay_host, {}, tmp_path)
 
 
+@pytest.mark.parametrize("reference_inventory", ["plain", "activated"])
+def test_preflight_accepts_exact_inventory_with_or_without_setuptools_vendor_activation(
+    replay_host, tmp_path, monkeypatch, reference_inventory
+):
+    plain = {"cudnn": 9000, "packages": {"torch": "2.10", "packaging": "26.3"}}
+    activated = {"cudnn": 9000, "packages": {"torch": "2.10", "packaging": "26.0", "jaraco.text": "4.0"}}
+    manifest = Path(replay_host["reference"]) / "a/manifest.json"
+    data = json.loads(manifest.read_text())
+    data["runtime"] = plain if reference_inventory == "plain" else activated
+    suite.write_json(manifest, data)
+    suite.write_json(tmp_path / "recipes.json", {"a": {}})
+    monkeypatch.setattr(suite, "process_helpers", lambda source: None)
+
+    def fake_probe(*args, **kwargs):
+        suite.write_json(tmp_path / "cuda-preflight-metadata.json", activated)
+        suite.write_json(tmp_path / "cuda-preflight-plain-metadata.json", plain)
+        return 0
+
+    monkeypatch.setattr(suite, "run_child", fake_probe)
+    suite.probe_cuda(replay_host, {}, tmp_path)
+
+
+@pytest.mark.parametrize("change", ["package_version", "cuda_version", "mixed_inventories"])
+def test_preflight_never_ignores_real_drift_or_combines_parts_of_two_inventories(
+    replay_host, tmp_path, monkeypatch, change
+):
+    expected = {"cudnn": 9000, "cuda": "12.8", "packages": {"torch": "2.10", "packaging": "26.3"}}
+    plain = json.loads(json.dumps(expected))
+    activated = {**expected, "packages": {"torch": "2.10", "packaging": "26.0", "jaraco.text": "4.0"}}
+    if change == "package_version":
+        plain["packages"]["torch"] = activated["packages"]["torch"] = "2.11"
+    elif change == "cuda_version":
+        plain["cuda"] = activated["cuda"] = "13.0"
+    else:
+        activated.update(packages=expected["packages"], cudnn=8000)
+        plain["packages"]["packaging"] = "wrong"
+    manifest = Path(replay_host["reference"]) / "a/manifest.json"
+    data = json.loads(manifest.read_text())
+    data["runtime"] = expected
+    suite.write_json(manifest, data)
+    suite.write_json(tmp_path / "recipes.json", {"a": {}})
+    monkeypatch.setattr(suite, "process_helpers", lambda source: None)
+
+    def fake_probe(*args, **kwargs):
+        suite.write_json(tmp_path / "cuda-preflight-metadata.json", activated)
+        suite.write_json(tmp_path / "cuda-preflight-plain-metadata.json", plain)
+        return 0
+
+    monkeypatch.setattr(suite, "run_child", fake_probe)
+    with pytest.raises(RuntimeError, match="environment differs"):
+        suite.probe_cuda(replay_host, {}, tmp_path)
+
+
 def test_each_case_uses_its_accepted_environment_and_groups_preflight(replay_host, tmp_path, monkeypatch):
     no_gpu(monkeypatch)
     replay_host["env"] = {"COMMON_ENV": "shared", "CASE_ENV": "default"}
