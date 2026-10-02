@@ -12,6 +12,34 @@ permissions:
   contents: read
 
 jobs:
+  geometry-impact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with diff history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Plan affected 3D replays without weights or GPU
+        env:
+          IMPACT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$IMPACT_BASE_SHA" ] && [ "$IMPACT_BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            python tests/manual/geometry_regression_impact.py --base "$IMPACT_BASE_SHA" --output tmp/geometry-impact.json
+          else
+            python tests/manual/geometry_regression_impact.py --changed-file worldfoundry/core/__init__.py --output tmp/geometry-impact.json
+          fi
+      - name: Publish required replay plan, including uncovered changes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geometry-impact
+          path: tmp/geometry-impact.json
+          if-no-files-found: error
+
   cpu-tests:
     runs-on: ubuntu-latest
     steps:

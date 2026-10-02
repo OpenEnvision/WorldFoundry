@@ -145,8 +145,108 @@ GitHub CI runs the public CPU, CPU Torch tensor and packaging gates on pull
 requests, pushes to `main` and `release/**`, and manual dispatch. Result
 serializers, CUDA contracts, real-weight replays and broader model benchmarks
 require the prepared model environment; they are not automatically executed by
-the hosted CPU workflow. Automatic affected-model selection and scheduled GPU
-replays are not implemented yet.
+the hosted CPU workflow. CI also publishes an affected-case plan. Daily GPU
+replays are available through the explicit host schedule described below.
+
+### Automatic affected-case selection
+
+```bash
+make plan-geometry PYTHON=python3 GEOMETRY_BASE=<comparison-commit>
+# Optional: add actual imported-source evidence from a successful matrix.
+python3 tests/manual/geometry_regression_impact.py --base <comparison-commit> \
+  --evidence /absolute/path/to/successful-runs --output tmp/3d-regression-plan.json
+```
+
+The planner combines the explicit component declarations in
+`tests/manual/geometry_regression_dependencies.json`, conditional and relative
+Python imports, literal lazy imports, package initializers, and optional recorded
+imports. Git rename and deletion handling includes the old paths. Shared
+infrastructure or matrix changes select all cases; new cases require dependency
+declarations. Unknown paths or an unresolved import graph select the full matrix
+and exit with `uncovered`, requiring the coverage gap to be resolved. A docs-only
+change can report `no_inference_changes`; it still requires the CPU gates.
+
+CI uploads `geometry-impact` even when planning fails. This artifact lists
+required replays; it is not a successful GPU result. The runner rejects stale
+tree/policy hashes, contradictory empty plans, or plans omitting cases required
+by the current declarations and import graph.
+
+### Scheduled GPU regression on a prepared host
+
+Use the same model Python, accepted assets and environment as the numerical
+reference. First copy explicitly accepted outputs into durable private storage:
+
+```bash
+python3 tests/manual/geometry_regression_schedule.py import-reference \
+  --source /absolute/path/to/accepted-runs \
+  --destination /absolute/path/to/private-state/reference
+```
+
+The importer preserves the original evidence, relocates exported artifact paths,
+verifies exact numerical equality, and records each copied file's SHA-256. It
+refuses an existing destination. Save the returned `reference_index_sha256` in a
+private host profile such as `~/.config/worldfoundry/geometry-regression.json`:
+
+```json
+{
+  "source_root": "/absolute/path/to/WorldFoundry",
+  "source_ref": "refs/heads/your-validated-branch",
+  "python": "/absolute/path/to/model-env/bin/python",
+  "matrix": "tests/manual/geometry_regression_cases.json",
+  "dependencies": "tests/manual/geometry_regression_dependencies.json",
+  "reference": "/absolute/path/to/private-state/reference",
+  "reference_index_sha256": "<SHA-256 returned by import-reference>",
+  "state_root": "/absolute/path/to/private-state",
+  "cuda_visible_devices": "0",
+  "env": {
+    "WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT": "/accepted/checkpoints",
+    "WORLDFOUNDRY_REGRESSION_INPUT_ROOT": "/accepted/multiview-frames",
+    "WORLDFOUNDRY_REGRESSION_INPUT_IMAGE": "/accepted/input.png",
+    "WORLDFOUNDRY_REGRESSION_PANORAMA": "/accepted/panorama.jpg",
+    "WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE": "/accepted/lyra-input.jpg"
+  },
+  "case_timeout_seconds": 1800,
+  "suite_timeout_seconds": 7200,
+  "retain_runs": 7
+}
+```
+
+The optional `gpu_holder` object configures an existing `gg` script using an
+absolute `script`, string-list `start_args`, its `env` (including `GG_PYTHON`),
+and optional log `ready_patterns`. The runner stops that script for replays and
+restarts it in a detached session after success, failure, timeout or interruption.
+If replay descendants cannot be stopped or GPU leases cannot be released, it
+fails and defers holder restoration until those resources are cleared.
+
+```bash
+# Validate the runner with one case before enabling a complete daily matrix.
+python3 tests/manual/geometry_regression_suite.py \
+  --profile ~/.config/worldfoundry/geometry-regression.json --case-id pi3x
+python3 tests/manual/geometry_regression_schedule.py install \
+  --profile ~/.config/worldfoundry/geometry-regression.json --hour 3 --minute 0
+python3 tests/manual/geometry_regression_schedule.py status \
+  --profile ~/.config/worldfoundry/geometry-regression.json
+# Remove only WorldFoundry's marked cron block.
+python3 tests/manual/geometry_regression_schedule.py remove \
+  --profile ~/.config/worldfoundry/geometry-regression.json
+```
+
+Installation preserves other cron entries and uses `Asia/Shanghai`. It copies
+controllers from the committed source revision; reinstall after changing those
+controllers. Each run snapshots the configured local committed ref, without
+pulling, resetting, or executing dirty source files. Separate model processes
+share the host's physical-GPU lease locks, have per-case and suite time budgets,
+and undergo exact numerical and imported-source audits. The complete short
+matrix runs daily; an on-demand `--plan` can select affected cases instead.
+`latest.json` records `running` before work starts and the final outcome; run
+logs, source revision and comparisons live under `runs/`. Retention keeps seven
+run directories by default and archives older compact reports under `history/`.
+Accepted references are outside disposable runs and are never regenerated by
+the runner. Profiles, local assets, weights and evidence stay outside Git.
+
+These short cases cover declared inputs and capabilities. The Lyra-2 case still
+disables reconstruction. Full demos, quality benchmarks, and tests of new
+backends remain necessary before changing integration or release status.
 
 ### Docker helper
 

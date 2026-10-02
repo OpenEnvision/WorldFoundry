@@ -95,7 +95,77 @@ python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
 
 用最近一次成功回放的 `source_hashes` 辅助判断影响范围，再结合显式组件/能力声明和静态依赖。动态记录只覆盖实际执行的路径，无法覆盖未执行分支或动态选择的 backend；依赖关系无法确认时保留为未覆盖，并扩大对应组件的测试。保留参考实现供差分测试和 fallback 使用。精确优化与有损优化分开：后者必须明确数值和任务质量阈值，不能静默放宽容差或重新生成基准。
 
-GitHub CI 在 PR、`main` 和 `release/**` 的 push，以及手动触发时，自动运行公开 CPU、CPU Torch 张量和打包门禁。结果导出、CUDA 契约、真实权重回放和更广的模型 benchmark 依赖已准备的模型环境，不会由 hosted CPU workflow 自动执行。自动选择受影响模型和定时 GPU 回归尚未实现。
+GitHub CI 在 PR、`main` 和 `release/**` 的 push，以及手动触发时，自动运行公开 CPU、CPU Torch 张量和打包门禁，并发布受影响案例计划。真实权重回放和更广的模型 benchmark 依赖已准备的模型环境；定时 GPU 回归通过下面的主机定时任务执行。
+
+### 自动选择受影响案例
+
+```bash
+make plan-geometry PYTHON=python3 GEOMETRY_BASE=<comparison-commit>
+# 可选：叠加已通过回放的实际导入记录。
+python3 tests/manual/geometry_regression_impact.py --base <comparison-commit> \
+  --evidence /absolute/path/to/successful-runs --output tmp/3d-regression-plan.json
+```
+
+选例结合 `tests/manual/geometry_regression_dependencies.json` 中的组件声明、条件和相对导入、字符串形式的 lazy import、父包初始化文件及可选的实际导入记录。Git rename 和删除会保留旧路径。共享 infra 或案例矩阵变化选择全部案例；新增案例必须声明依赖。未知路径或无法解析的导入图会扩展到全部案例，并以 `uncovered` 非零退出，需要补上覆盖缺口。只有文档变化时可以返回 `no_inference_changes`，CPU 门禁仍需通过。
+
+CI 即使选例失败也会上传 `geometry-impact`，其中是必须执行的回归计划，不能当作 GPU 推理通过的证据。执行器拒绝源码树或规则哈希过期、状态与空选例矛盾，以及漏掉当前规则和导入图要求的案例的计划。
+
+### 在模型主机上定时执行 GPU 回归
+
+使用与参考结果相同的模型 Python、已验收 assets 和环境。先将明确验收过的结果复制到持久化的私有目录：
+
+```bash
+python3 tests/manual/geometry_regression_schedule.py import-reference \
+  --source /absolute/path/to/accepted-runs \
+  --destination /absolute/path/to/private-state/reference
+```
+
+导入器保留原始结果，只迁移导出产物路径，验证数值完全一致，并记录复制后每个文件的 SHA-256。目标目录已存在时拒绝覆盖。将返回的 `reference_index_sha256` 写入私有 profile，例如 `~/.config/worldfoundry/geometry-regression.json`：
+
+```json
+{
+  "source_root": "/absolute/path/to/WorldFoundry",
+  "source_ref": "refs/heads/your-validated-branch",
+  "python": "/absolute/path/to/model-env/bin/python",
+  "matrix": "tests/manual/geometry_regression_cases.json",
+  "dependencies": "tests/manual/geometry_regression_dependencies.json",
+  "reference": "/absolute/path/to/private-state/reference",
+  "reference_index_sha256": "<import-reference 返回的 SHA-256>",
+  "state_root": "/absolute/path/to/private-state",
+  "cuda_visible_devices": "0",
+  "env": {
+    "WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT": "/accepted/checkpoints",
+    "WORLDFOUNDRY_REGRESSION_INPUT_ROOT": "/accepted/multiview-frames",
+    "WORLDFOUNDRY_REGRESSION_INPUT_IMAGE": "/accepted/input.png",
+    "WORLDFOUNDRY_REGRESSION_PANORAMA": "/accepted/panorama.jpg",
+    "WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE": "/accepted/lyra-input.jpg"
+  },
+  "case_timeout_seconds": 1800,
+  "suite_timeout_seconds": 7200,
+  "retain_runs": 7
+}
+```
+
+可选的 `gpu_holder` 配置指定原有 `gg` 脚本的绝对 `script`、字符串列表 `start_args`、包括 `GG_PYTHON` 的 `env`，以及可选的日志就绪标记 `ready_patterns`。回放期间停止该脚本；成功、失败、超时或中断后，以独立 session 恢复。若推理子进程无法清理或 GPU 租约无法释放，执行器报告失败，并推迟占卡脚本恢复，直到残留资源清理完成。
+
+```bash
+# 先用一个案例验证执行器，再开启每日完整短矩阵。
+python3 tests/manual/geometry_regression_suite.py \
+  --profile ~/.config/worldfoundry/geometry-regression.json --case-id pi3x
+python3 tests/manual/geometry_regression_schedule.py install \
+  --profile ~/.config/worldfoundry/geometry-regression.json --hour 3 --minute 0
+python3 tests/manual/geometry_regression_schedule.py status \
+  --profile ~/.config/worldfoundry/geometry-regression.json
+# 只删除带 WorldFoundry 标记的 cron 区块。
+python3 tests/manual/geometry_regression_schedule.py remove \
+  --profile ~/.config/worldfoundry/geometry-regression.json
+```
+
+安装保留其他 cron 条目，时区为 `Asia/Shanghai`。控制脚本来自已提交版本；控制脚本变化后需要重新安装。每次运行从指定的本地已提交 ref 生成隔离快照，不自动 pull/reset，也不执行工作区未提交代码。案例各自使用独立模型进程，共用主机上的物理 GPU 租约锁，有单案例和整套超时，并接受严格数值和导入源码审计。每日运行完整短矩阵；按需执行时可传 `--plan` 使用受影响案例计划。
+
+`latest.json` 在开始时记录 `running`，结束时记录最终结果；`runs/` 保存日志、源码版本和比较报告。默认保留最近七次运行目录，更早的简要报告归档到 `history/`。已验收基准必须位于可清理的运行目录之外，执行器不会重新生成或覆盖它。profile、本地 assets、权重和数值证据不进入 Git。
+
+短案例覆盖的是已声明输入和能力。Lyra-2 案例仍关闭 3D 重建；接受新 backend、更新集成状态或发布时，仍需要完整 demo 和质量 benchmark。
 
 ## 准备可选 CPU eval-core 测试环境
 

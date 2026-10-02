@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "shared_paths": [
+    "worldfoundry/core/**",
+    "worldfoundry/runtime/**",
+    "worldfoundry/pipelines/pipeline_utils.py",
+    "worldfoundry/operators/base_operator.py",
+    "worldfoundry/studio/inference/**",
+    "worldfoundry/studio/serving/**",
+    "worldfoundry/studio/cli.py",
+    "worldfoundry/studio/ui/launch_config.py",
+    "worldfoundry/studio/ui/launcher.py",
+    "worldfoundry/data/models/**",
+    "pyproject.toml",
+    "MANIFEST.in",
+    ".gitattributes",
+    "constraints/**",
+    "requirements*.txt",
+    "scripts/setup/**",
+    "tests/manual/geometry_regression_dependencies.json",
+    "tests/manual/geometry_regression.py",
+    "tests/manual/geometry_regression_impact.py",
+    "tests/manual/geometry_regression_suite.py",
+    "tests/manual/geometry_regression_schedule.py"
+  ],
+  "ignored_paths": [
+    "docs/**",
+    "README*",
+    "LICENSE*",
+    "THIRD-PARTY-NOTICES",
+    ".github/**",
+    ".gitignore",
+    "Makefile",
+    "tests/**",
+    "worldfoundry/cli/**",
+    "worldfoundry/mcp/**",
+    "worldfoundry/evaluation/**",
+    "worldfoundry/data/benchmarks/**",
+    "worldfoundry/studio/visualization/**",
+    "worldfoundry/studio/frontend/**",
+    "worldfoundry/studio/ui/**",
+    "scripts/docs/**"
+  ],
+  "components": {
+    "depth-anything-v1": [
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v1.py",
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v1/**",
+      "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v1.py"
+    ],
+    "depth-anything-v2": [
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v2.py",
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v2/**",
+      "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v2.py"
+    ],
+    "depth-anything-v3": [
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v3.py",
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v3/**",
+      "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v3.py"
+    ],
+    "cut3r": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/cut3r/**",
+      "worldfoundry/pipelines/cut3r/**",
+      "worldfoundry/operators/cut3r_operator.py"
+    ],
+    "infinite-vggt": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/infinite_vggt/**",
+      "worldfoundry/pipelines/infinite_vggt/**",
+      "worldfoundry/operators/infinite_vggt_operator.py"
+    ],
+    "lingbot-map": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/**",
+      "worldfoundry/pipelines/lingbot_map/**",
+      "worldfoundry/operators/lingbot_map_operator.py"
+    ],
+    "vggt": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/vggt/**",
+      "worldfoundry/pipelines/vggt/**",
+      "worldfoundry/operators/vggt_operator.py"
+    ],
+    "vggt-omega": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/vggt_omega/**",
+      "worldfoundry/pipelines/vggt_omega/**",
+      "worldfoundry/operators/vggt_omega_operator.py"
+    ],
+    "flash-world": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/flash_world/**",
+      "worldfoundry/pipelines/flash_world/**",
+      "worldfoundry/operators/flash_world_operator.py"
+    ],
+    "worldfm": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/worldfm/**",
+      "worldfoundry/pipelines/worldfm/**",
+      "worldfoundry/operators/worldfm_operator.py"
+    ],
+    "pi3": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/pi3_inference/**",
+      "worldfoundry/pipelines/pi3/pipeline_pi3.py",
+      "worldfoundry/operators/pi3_operator.py"
+    ],
+    "loger": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/loger/**",
+      "worldfoundry/pipelines/pi3/pipeline_loger.py"
+    ],
+    "hunyuan-mirror": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/hunyuan_mirror/**",
+      "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_mirror.py",
+      "worldfoundry/operators/hunyuan_mirror_operator.py"
+    ],
+    "hyworldmirror-2": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/**",
+      "worldfoundry/pipelines/hunyuan_world/pipeline_hy_world_2p0.py",
+      "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_runtime.py"
+    ],
+    "lyra-2": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/lyra/**",
+      "worldfoundry/pipelines/lyra/**",
+      "worldfoundry/synthesis/visual_generation/lyra_2/**",
+      "worldfoundry/operators/lyra_operator.py"
+    ],
+    "gaussian-rendering": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/flash_world/render.py",
+      "worldfoundry/base_models/three_dimensions/point_clouds/ply_io.py"
+    ],
+    "wan-diffusion": [
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/synthesis/visual_generation/wan/**"
+    ],
+    "worldfm-diffusion": [
+      "worldfoundry/synthesis/visual_generation/worldfm/**"
+    ]
+  },
+  "cases": {
+    "cut3r": [
+      "cut3r"
+    ],
+    "da3-large-1.1": [
+      "depth-anything-v3"
+    ],
+    "da3metric-large": [
+      "depth-anything-v3"
+    ],
+    "da3nested-giant-large-1.1": [
+      "depth-anything-v3"
+    ],
+    "depth-anything-v1-base": [
+      "depth-anything-v1"
+    ],
+    "depth-anything-v1-large": [
+      "depth-anything-v1"
+    ],
+    "depth-anything-v1-small": [
+      "depth-anything-v1"
+    ],
+    "depth-anything-v2-large": [
+      "depth-anything-v2"
+    ],
+    "hunyuan-mirror": [
+      "hunyuan-mirror"
+    ],
+    "infinite-vggt": [
+      "infinite-vggt",
+      "vggt",
+      "gaussian-rendering"
+    ],
+    "lingbot-map-windowed": [
+      "lingbot-map"
+    ],
+    "loger": [
+      "loger",
+      "pi3"
+    ],
+    "pi3-original": [
+      "pi3"
+    ],
+    "pi3x": [
+      "pi3"
+    ],
+    "vggt-omega-alignment": [
+      "vggt-omega",
+      "vggt",
+      "gaussian-rendering"
+    ],
+    "vggt-omega": [
+      "vggt-omega",
+      "vggt",
+      "gaussian-rendering"
+    ],
+    "vggt": [
+      "vggt",
+      "gaussian-rendering"
+    ],
+    "hyworldmirror-2": [
+      "hyworldmirror-2"
+    ],
+    "flashworld": [
+      "flash-world",
+      "wan-diffusion",
+      "gaussian-rendering"
+    ],
+    "worldfm": [
+      "worldfm",
+      "worldfm-diffusion",
+      "gaussian-rendering"
+    ],
+    "lyra2-forward": [
+      "lyra-2",
+      "wan-diffusion",
+      "pi3",
+      "depth-anything-v3",
+      "gaussian-rendering"
+    ]
+  }
+}

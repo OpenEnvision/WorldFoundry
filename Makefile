@@ -14,6 +14,10 @@ GEOMETRY_MATRIX ?= tests/manual/geometry_regression_cases.json
 GEOMETRY_REFERENCE ?=
 GEOMETRY_CANDIDATE ?=
 GEOMETRY_REPORT ?= tmp/3d-regression-gate.json
+GEOMETRY_BASE ?=
+GEOMETRY_DEPENDENCIES ?= tests/manual/geometry_regression_dependencies.json
+GEOMETRY_PLAN ?= tmp/3d-regression-plan.json
+GEOMETRY_PROFILE ?=
 RELEASE_HFD_ROOT ?= $(if $(WORLDFOUNDRY_HFD_ROOT),$(WORLDFOUNDRY_HFD_ROOT),$(HOME)/.cache/worldfoundry/checkpoints/hfd)
 CANONICAL_DIFFUSION_SOURCES ?= \
 	worldfoundry/base_models/diffusion_model/*.py \
@@ -45,6 +49,8 @@ help:
 		'  make test-infer-contracts  Test checkpoint, geometry, serializer and execution contracts in a model environment.' \
 		'  make test-infer-cuda-contracts  Test real CUDA transfers and failed callbacks; requires an available GPU.' \
 		'  make test-geometry     Audit real 3D replays against accepted references; requires GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE.' \
+		'  make plan-geometry     Select affected short 3D cases from GEOMETRY_BASE to HEAD without GPU/weights.' \
+		'  make replay-geometry   Replay selected or all cases using a private GEOMETRY_PROFILE; optional GEOMETRY_REPLAY_PLAN.' \
 		'  make test-eval-core    Run the extended evaluation contract suite.' \
 		'  make docs-check        Verify checked-in generated documentation.' \
 		'  make docs-dev-fast     Start docs using existing generated output.' \
@@ -84,6 +90,15 @@ test-infer-cuda-contracts:
 test-geometry:
 	@test -n "$(GEOMETRY_REFERENCE)" -a -n "$(GEOMETRY_CANDIDATE)" || { printf '%s\n' 'Set GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE to completed real-checkpoint run directories.' >&2; exit 2; }
 	$(PYTHON) tests/manual/geometry_regression.py audit --matrix "$(GEOMETRY_MATRIX)" --reference "$(GEOMETRY_REFERENCE)" --candidate "$(GEOMETRY_CANDIDATE)" --source-root "$(CURDIR)" --report "$(GEOMETRY_REPORT)"
+
+.PHONY: plan-geometry replay-geometry
+plan-geometry:
+	@test -n "$(GEOMETRY_BASE)" || { printf '%s\n' 'Set GEOMETRY_BASE to the comparison commit or ref.' >&2; exit 2; }
+	$(PYTHON) tests/manual/geometry_regression_impact.py --matrix "$(GEOMETRY_MATRIX)" --dependencies "$(GEOMETRY_DEPENDENCIES)" --source-root "$(CURDIR)" --base "$(GEOMETRY_BASE)" --output "$(GEOMETRY_PLAN)"
+
+replay-geometry:
+	@test -n "$(GEOMETRY_PROFILE)" || { printf '%s\n' 'Set GEOMETRY_PROFILE to the private host profile.' >&2; exit 2; }
+	$(PYTHON) tests/manual/geometry_regression_suite.py --profile "$(GEOMETRY_PROFILE)" $(if $(GEOMETRY_REPLAY_PLAN),--plan "$(GEOMETRY_REPLAY_PLAN)",)
 
 test-eval-core:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q tests/eval_core $(TEST_ARGS)
