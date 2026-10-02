@@ -103,13 +103,15 @@ def test_cron_install_is_idempotent_preserves_jobs_and_restores_timezone(tmp_pat
 
 def test_cron_quotes_literal_paths_and_escapes_percent(tmp_path):
     runner = tmp_path / "runner ' $name%script.py"
-    runner.write_text("import sys,json; print(json.dumps(sys.argv[1:]))\n")
+    runner.write_text(
+        "import sys,json,subprocess; subprocess.run(['git','--version'],check=True,capture_output=True); print(json.dumps(sys.argv[1:]))\n"
+    )
     profile = tmp_path / "profile ' $name%.json"
     log = tmp_path / "cron ' $name%.log"
     text = schedule.cron_text("", sys.executable, runner, profile, log)
     command = next(line.split(maxsplit=5)[5] for line in text.splitlines() if line.startswith("0 3 "))
     assert "\\%" in command
-    subprocess.run(["/bin/sh", "-c", command.replace("\\%", "%")], check=True)
+    subprocess.run(["/bin/sh", "-c", command.replace("\\%", "%")], env={"PATH": "/usr/bin:/bin"}, check=True)
     assert json.loads(log.read_text()) == ["--profile", str(profile)]
 
 

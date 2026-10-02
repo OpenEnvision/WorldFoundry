@@ -128,9 +128,14 @@ def cron_text(
         if match:
             previous[match.group(1)] = match.group(2)
     args = [python, str(controller), "--profile", str(profile)]
-    if any("\n" in value or "\r" in value for value in [*args, str(log)]):
+    # Cron's default PATH can omit git, CUDA build tools and ffmpeg even when
+    # the same host successfully runs the suite in an interactive shell.
+    runtime_path = os.environ.get("PATH", os.defpath)
+    if any("\n" in value or "\r" in value or "\0" in value for value in [*args, str(log), runtime_path]):
         raise ValueError("Cron paths cannot contain newlines")
-    command = (shlex.join(args) + " >> " + shlex.quote(str(log)) + " 2>&1").replace("%", "\\%")
+    command = (
+        "PATH=" + shlex.quote(runtime_path) + " " + shlex.join(args) + " >> " + shlex.quote(str(log)) + " 2>&1"
+    ).replace("%", "\\%")
     return (
         original
         + BEGIN
