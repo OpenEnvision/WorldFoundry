@@ -93,7 +93,7 @@ _MATRIX_GAME2_OPTIMIZATION_KEYS = {
     "fuse_qkv", "qkv_strategy", "qkv_split_threshold", "quantization", "compile",
     "compile_backend", "compile_mode", "compile_dynamic", "compile_fullgraph", "compile_options",
     "attention", "attention_backend", "offload", "offload_mode",
-    "vae_channels_last", "vae_channels_last_3d",
+    "vae_channels_last", "vae_channels_last_3d", "overlap_vae_decode",
 }
 _MATRIX_GAME2_UNSUPPORTED_OPTIONS = {
     "adacache", "approximate_attention", "blocktaylorseer", "cfg_gate_fraction", "cfg_gate_step",
@@ -138,7 +138,7 @@ def _matrix_game2_runtime_policy(kwargs, *, device, dtype):
         if not disabled:
             raise ValueError(f"Matrix-Game-2 does not support requested optimization {key!r}")
 
-    for key in ("fuse_qkv", "compile", "vae_channels_last", "vae_channels_last_3d"):
+    for key in ("fuse_qkv", "compile", "vae_channels_last", "vae_channels_last_3d", "overlap_vae_decode"):
         value = options.get(key, False)
         if not isinstance(value, bool):
             raise TypeError(f"Matrix-Game-2 {key} must be a bool")
@@ -332,6 +332,15 @@ class MatrixGame2Runtime:
         pipeline.generator.to(dtype=weight_dtype)
         applied = _apply_matrix_game2_optimizations(pipeline.generator.model, runtime_policy)
         pipeline.generator._worldfoundry_applied_optimizations = applied
+        pipeline._worldfoundry_applied_optimizations = applied
+        pipeline.overlap_vae_decode = runtime_policy.options.get("overlap_vae_decode", False)
+        applied.requested["overlap_vae_decode"] = pipeline.overlap_vae_decode
+        if pipeline.overlap_vae_decode:
+            if runtime_policy.device.type == "cuda":
+                applied.effective["overlap_vae_decode"] = "decode-stream-overlap-installed (runtime-pending)"
+            else:
+                applied.effective["overlap_vae_decode"] = "synchronous (non-CUDA fallback)"
+                applied.fallbacks.append("overlap_vae_decode: CUDA tensors are required; effective=synchronous")
         applied.requested["vae_channels_last"] = runtime_policy.options.get("vae_channels_last", False)
         applied.requested["vae_channels_last_3d"] = runtime_policy.options.get("vae_channels_last_3d", False)
         if vae_layout is not None:

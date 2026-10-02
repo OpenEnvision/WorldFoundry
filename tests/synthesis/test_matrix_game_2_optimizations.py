@@ -117,6 +117,7 @@ def test_timing_uses_only_opt_in_events_on_the_callers_stream(monkeypatch, profi
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA stream execution")
+@pytest.mark.gpu
 def test_nondefault_stream_returns_correct_results_without_device_sync(monkeypatch):
     pipeline, session = _small_session("cuda")
     monkeypatch.setattr(torch.cuda, "synchronize", lambda **kwargs: pytest.fail("unexpected device barrier"))
@@ -144,6 +145,7 @@ def test_nondefault_stream_returns_correct_results_without_device_sync(monkeypat
         ({"offload": "block"}, "offload"),
         ({"attention_backend": "sage"}, "attention_backend"),
         ({"vae_channels_last_3d": "true"}, "vae_channels_last_3d"),
+        ({"overlap_vae_decode": "true"}, "overlap_vae_decode"),
         ({"runtime_options": {"fuse_qqkv": True}}, "fuse_qqkv"),
     ],
 )
@@ -297,6 +299,23 @@ def test_bfloat16_generator_placement_preserves_float16_vae_checkpoint_values(mo
     assert loaded.pipeline.vae_decoder.conv2.weight.dtype is torch.float16
     torch.testing.assert_close(loaded.pipeline.vae_decoder.conv2.weight, restored.conv2.weight, atol=0, rtol=0)
     torch.testing.assert_close(loaded.pipeline.vae_decoder.conv2.bias, restored.conv2.bias, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("requested", [False, True])
+def test_loader_decode_overlap_is_explicit_and_auditable(monkeypatch, requested):
+    _install_tiny_loader(monkeypatch)
+    loaded = runtime.MatrixGame2Runtime.from_pretrained(
+        "unused",
+        device="cpu",
+        weight_dtype=torch.float32,
+        overlap_vae_decode=requested,
+    )
+    assert loaded.pipeline.overlap_vae_decode is requested
+    receipt = loaded._worldfoundry_applied_optimizations
+    assert receipt.requested["overlap_vae_decode"] is requested
+    if requested:
+        assert receipt.effective["overlap_vae_decode"] == "synchronous (non-CUDA fallback)"
+        assert any("overlap_vae_decode" in reason for reason in receipt.fallbacks)
 
 
 def test_loader_compiles_bound_model_forward_and_preserves_checkpoint_type(monkeypatch):

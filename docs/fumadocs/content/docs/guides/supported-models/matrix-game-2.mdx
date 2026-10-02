@@ -27,6 +27,12 @@ Required: `image` and `official_bench_actions`; optional: `prompt` and `video`. 
 
 The official default is 150 latent frames, 12 fps, 352×640, seed 42. The recorded comparison used 15 latent frames and produced 57 decoded RGB frames. No public model-zoo demo helper is packaged for this comparison.
 
+The loader accepts opt-in `fuse_qkv` with `qkv_strategy="packed"`, `"split"` or `"auto"`, `quantization`, and the shared `compile` options after restoring the DiT checkpoint. Fusion preserves the causal attention and cache algorithm. `vae_channels_last` and `vae_channels_last_3d` convert matching Conv2d/Conv3d decoder weights before compilation; the decoder retains FP16 weights when the DiT uses BF16. Unsupported optimization requests fail before loading.
+
+`overlap_vae_decode=True` optionally decodes on a pipeline-owned CUDA stream while the caller stream refreshes clean generator context. A caller-stream event join orders returned video, copies, and recurrent cache reuse without a host wait during normal generation. Each pipeline has one active session; its owner serializes start, step, reset, and close. Reset, replacement sessions, close, and failed overlapped blocks drain only the owned decoder stream. A failed overlapped session must be replaced; CPU use reports a synchronous fallback.
+
+These switches are disabled by default. Small CPU/CUDA regressions verify numerical output, cache progression, stream ordering, and cleanup. Their full-checkpoint latency benefit and full-length parity remain unmeasured; a compile wrapper or queued side-stream work is reported separately from runtime execution.
+
 ## Run in WorldFoundry
 
 Status: **15-latent-frame short-run parity verified**; full-length parity and benchmark scoring remain pending. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Skywork/Matrix-Game-2.0` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run matrix-game-2-universal-action-validation` with `--pipeline.task-profile official-universal-image`. License: MIT. Minimum VRAM is recorded at 24 GB.

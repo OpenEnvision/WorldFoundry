@@ -47,7 +47,12 @@ def _assert_cache_equal(actual, expected, *, global_end, local_end):
 
 @pytest.mark.parametrize(
     "device",
-    ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA"))],
+    [
+        "cpu",
+        pytest.param(
+            "cuda", marks=[pytest.mark.gpu, pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")]
+        ),
+    ],
 )
 def test_self_attention_host_positions_match_legacy_cache_through_rewrites_and_rollover(monkeypatch, device):
     monkeypatch.setattr(wan, "attention", _sdpa)
