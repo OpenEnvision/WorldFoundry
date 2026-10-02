@@ -8,6 +8,17 @@ import pytest
 torch = pytest.importorskip("torch")
 
 
+@pytest.fixture(autouse=True)
+def _isolated_attention_dispatch_state():
+    from worldfoundry.core.attention.backends import dispatch
+
+    dispatch.clear_attention_dispatch_cache()
+    dispatch.reset_attention_provider_runtime()
+    yield
+    dispatch.clear_attention_dispatch_cache()
+    dispatch.reset_attention_provider_runtime()
+
+
 def test_fa3_is_not_marked_usable_on_ampere(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.core.attention.backends import probe as backends
 
@@ -57,7 +68,7 @@ def test_torch_sdpa_propagates_oom_instead_of_allocating_dense_scores(
         dispatch.torch_sdpa(query, query, query)
 
 
-def _configure_flash2(monkeypatch: pytest.MonkeyPatch, dispatch, error: RuntimeError) -> None:
+def _configure_flash2(monkeypatch: pytest.MonkeyPatch, dispatch, error: Exception) -> list:
     monkeypatch.setattr(
         dispatch,
         "resolve_attention_backend",
@@ -69,19 +80,25 @@ def _configure_flash2(monkeypatch: pytest.MonkeyPatch, dispatch, error: RuntimeE
         lambda name, device=None: SimpleNamespace(usable=True),
     )
 
+    calls = []
+
     def fail(*args, **kwargs):
+        calls.append(1)
         raise error
 
     monkeypatch.setattr(dispatch, "flash_attention_2", fail)
+    return calls
 
 
 def test_attention_forward_propagates_backend_oom(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.core.attention.backends import dispatch
 
-    _configure_flash2(monkeypatch, dispatch, RuntimeError("CUDA out of memory"))
-    query = torch.zeros(1, 1, 2, 4)
+    calls = _configure_flash2(monkeypatch, dispatch, RuntimeError("CUDA out of memory"))
+    query = torch.zeros(1, 1, 16, 64, dtype=torch.bfloat16)
     with pytest.raises(RuntimeError, match="out of memory"):
-        dispatch.attention_forward(query, query, query)
+        dispatch.attention_forward(query, query, query, backend="flash_attention_2")
+    assert calls == [1]
+    assert dispatch.attention_provider_runtime_report().get("torch", {}).get("attempts", 0) == 0
 
 
 def test_attention_forward_falls_back_only_for_explicit_unsupported_kernel(
@@ -89,60 +106,50 @@ def test_attention_forward_falls_back_only_for_explicit_unsupported_kernel(
 ) -> None:
     from worldfoundry.core.attention.backends import dispatch
 
-    _configure_flash2(monkeypatch, dispatch, RuntimeError("kernel only supports head dimension 128"))
-    sentinel = torch.ones(1, 1, 2, 4)
+    calls = _configure_flash2(monkeypatch, dispatch, RuntimeError("kernel only supports head dimension 128"))
+    sentinel = torch.ones(1, 1, 16, 64, dtype=torch.bfloat16)
     monkeypatch.setattr(dispatch, "torch_sdpa", lambda *args, **kwargs: sentinel)
     query = torch.zeros_like(sentinel)
-    with pytest.warns(RuntimeWarning, match="falling back"):
-        assert dispatch.attention_forward(query, query, query) is sentinel
+    with pytest.warns(RuntimeWarning, match="next eligible backend"):
+        assert dispatch.attention_forward(query, query, query, backend="flash_attention_2") is sentinel
+    assert calls == [1]
+    assert dispatch.attention_provider_runtime_report()["flash_attention_2"]["fallbacks"] == 1
 
 
 def test_attention_forward_propagates_unknown_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.core.attention.backends import dispatch
 
-    _configure_flash2(monkeypatch, dispatch, RuntimeError("invalid tensor stride"))
-    query = torch.zeros(1, 1, 2, 4)
+    calls = _configure_flash2(monkeypatch, dispatch, RuntimeError("invalid tensor stride"))
+    query = torch.zeros(1, 1, 16, 64, dtype=torch.bfloat16)
     with pytest.raises(RuntimeError, match="invalid tensor stride"):
-        dispatch.attention_forward(query, query, query)
+        dispatch.attention_forward(query, query, query, backend="flash_attention_2")
+    assert calls == [1]
+    assert dispatch.attention_provider_runtime_report().get("torch", {}).get("attempts", 0) == 0
 
 
 def test_attention_forward_propagates_backend_internal_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.core.attention.backends import dispatch
 
-    monkeypatch.setattr(dispatch, "resolve_attention_backend", lambda preferred=None, device=None: "flash_attention_2")
-    monkeypatch.setattr(
-        dispatch,
-        "attention_backend_capability",
-        lambda name, device=None: SimpleNamespace(usable=True),
-    )
-
-    def fail(*args, **kwargs):
-        raise OSError("failed reading an internal tuning database")
-
-    monkeypatch.setattr(dispatch, "flash_attention_2", fail)
-    query = torch.zeros(1, 1, 2, 4)
+    calls = _configure_flash2(monkeypatch, dispatch, OSError("failed reading an internal tuning database"))
+    query = torch.zeros(1, 1, 16, 64, dtype=torch.bfloat16)
     with pytest.raises(OSError, match="tuning database"):
-        dispatch.attention_forward(query, query, query)
+        dispatch.attention_forward(query, query, query, backend="flash_attention_2")
+    assert calls == [1]
+    assert dispatch.attention_provider_runtime_report().get("torch", {}).get("attempts", 0) == 0
 
 
 def test_attention_forward_falls_back_for_missing_optional_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.core.attention.backends import dispatch
 
-    monkeypatch.setattr(dispatch, "resolve_attention_backend", lambda preferred=None, device=None: "flash_attention_2")
-    monkeypatch.setattr(
-        dispatch,
-        "attention_backend_capability",
-        lambda name, device=None: SimpleNamespace(usable=True),
+    calls = _configure_flash2(
+        monkeypatch, dispatch, ModuleNotFoundError("No module named 'flash_attn'", name="flash_attn")
     )
-
-    def fail(*args, **kwargs):
-        raise ModuleNotFoundError("No module named 'flash_attn'", name="flash_attn")
-
-    sentinel = torch.ones(1, 1, 2, 4)
-    monkeypatch.setattr(dispatch, "flash_attention_2", fail)
+    sentinel = torch.ones(1, 1, 16, 64, dtype=torch.bfloat16)
     monkeypatch.setattr(dispatch, "torch_sdpa", lambda *args, **kwargs: sentinel)
-    with pytest.warns(RuntimeWarning, match="falling back"):
-        assert dispatch.attention_forward(sentinel, sentinel, sentinel) is sentinel
+    with pytest.warns(RuntimeWarning, match="next eligible backend"):
+        assert dispatch.attention_forward(sentinel, sentinel, sentinel, backend="flash_attention_2") is sentinel
+    assert calls == [1]
+    assert dispatch.attention_provider_runtime_report()["flash_attention_2"]["fallbacks"] == 1
 
 
 @pytest.mark.parametrize(

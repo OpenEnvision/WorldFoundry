@@ -552,7 +552,7 @@ class NativeAttention(torch.nn.Module):
     def __init__(
         self,
         qkv_format: Literal["bhsd", "bshd"] = "bhsd",
-        backend: Literal["math", "efficient", "cudnn", "flash"] = "cudnn",
+        backend: Literal["math", "efficient", "cudnn", "flash", "cudnn_fp8"] = "cudnn",
     ) -> None:
         """Configure attention format and backend.
 
@@ -563,7 +563,7 @@ class NativeAttention(torch.nn.Module):
         """
         super().__init__()
         assert qkv_format in ["bhsd", "bshd"], f"Invalid qkv format: {qkv_format}"
-        assert backend in ["math", "efficient", "cudnn", "flash"], f"Invalid backend: {backend}"
+        assert backend in ["math", "efficient", "cudnn", "flash", "cudnn_fp8"], f"Invalid backend: {backend}"
         self.qkv_format = qkv_format
         self.backend = backend
         self.device_mesh: DeviceMesh | None = None
@@ -640,6 +640,12 @@ class NativeAttention(torch.nn.Module):
         Returns:
             Attention output.
         """
+        if self.backend == "cudnn_fp8":
+            if self.device_mesh is not None:
+                raise ValueError("cudnn_fp8 context parallelism is not supported")
+            from worldfoundry.core.attention.backends.native_fp8 import native_cudnn_fp8_sdpa
+
+            return native_cudnn_fp8_sdpa(query, key, value)
         sdpa_backend = {
             "math": torch.nn.attention.SDPBackend.MATH,
             "efficient": torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION,

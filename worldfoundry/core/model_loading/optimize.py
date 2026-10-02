@@ -149,7 +149,7 @@ def apply_attention_policy(
         requested_backend=requested,
         effective_backend=effective,
         configured_modules=configured,
-        approximate=effective in {"sage_attention", "sage_attention_3"},
+        approximate=effective in {"sage_attention", "sage_attention_3", "cudnn_fp8"},
         reason=reason,
     )
 
@@ -335,7 +335,7 @@ class AppliedOptimizations:
     quality_tier: str = "exact"
 
     def record_attention(self, report: AttentionPolicyReport) -> None:
-        """Record requested vs resolved backend; mark approximate Sage paths."""
+        """Record requested vs resolved backend and numerical approximation."""
         self.requested["attention"] = report.requested_backend
         self.effective["attention"] = report.effective_backend
         self.effective["attention_modules"] = report.configured_modules

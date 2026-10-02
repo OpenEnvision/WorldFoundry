@@ -40,6 +40,12 @@ from functools import lru_cache
 import torch
 from einops import rearrange
 
+from worldfoundry.core.attention.backends.native import (
+    native_sdpa_priority,
+)
+from worldfoundry.core.attention.backends.native import (
+    scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention,
+)
 from worldfoundry.core.attention.backends.probe import (
     attention_backend_capability,
     attention_backend_from_env,
@@ -48,12 +54,6 @@ from worldfoundry.core.attention.backends.probe import (
     probe_attention_backends,
     require_generic_attention_backend,
     resolve_attention_backend,
-)
-from worldfoundry.core.attention.backends.native import (
-    native_sdpa_priority,
-)
-from worldfoundry.core.attention.backends.native import (
-    scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention,
 )
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -505,6 +505,12 @@ def _invoke_attention_provider(
 ) -> torch.Tensor:
     """Invoke one qualified non-Torch provider or fail for an unwired name."""
 
+    if selected == "cudnn_fp8":
+        from worldfoundry.core.attention.backends.native_fp8 import native_cudnn_fp8_sdpa
+
+        q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, "b n s d", dims)
+        output = native_cudnn_fp8_sdpa(q, k, v, scale=scale)
+        return rearrange_out(output, out_pattern, "b n s d", dims)
     if selected == "flash_attention_4":
         return flash_attention_4(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
     if selected == "flash_attention_3":
@@ -537,6 +543,13 @@ def _invoke_attention_provider_audited(selected: str, *args, **kwargs) -> torch.
     else:
         _record_provider_runtime(selected, attempts=1, successes=1)
     return output
+
+
+@torch.compiler.disable
+def _invoke_uncompiled_attention_provider_audited(selected: str, *args, **kwargs) -> torch.Tensor:
+    """Record actual opaque provider calls without claiming Dynamo graph traces."""
+
+    return _invoke_attention_provider_audited(selected, *args, **kwargs)
 
 
 def _invoke_torch_sdpa_audited(*args, **kwargs) -> torch.Tensor:
@@ -610,6 +623,12 @@ def attention_forward(
     # Validate before compatibility/mask short-circuiting. An explicit sparse
     # request must never look successful merely because it silently took SDPA.
     require_generic_attention_backend(preferred)
+    if preferred == "cudnn_fp8":
+        if compatibility_mode or attn_mask is not None:
+            raise ValueError("Explicit cudnn_fp8 does not support attention masks or compatibility-mode fallback")
+        return _invoke_uncompiled_attention_provider_audited(
+            preferred, q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale,
+        )
     if compatibility_mode or (attn_mask is not None):
         return _invoke_torch_sdpa_audited(
             q,

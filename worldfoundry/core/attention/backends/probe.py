@@ -77,6 +77,7 @@ _BACKEND_ALIASES: Mapping[str, str] = {
     "math": _TORCH,
     "efficient": _TORCH,
     "cudnn": _TORCH,
+    "cudnn_fp8": "cudnn_fp8",
     "flash": _FLASH_AUTO,
     "flash_attn": _FLASH_AUTO,
     "flash_attention": _FLASH_AUTO,
@@ -124,7 +125,7 @@ _REPORT_PRIORITY = (
     "xformers",
     _TORCH,
 )
-_EXPLICIT_PRIORITY = ("sage_attention_3",)
+_EXPLICIT_PRIORITY = ("sage_attention_3", "cudnn_fp8")
 _EXPERIMENTAL_PRIORITY = (
     "flex_block_attention",
     "video_sparse_attention",
@@ -263,7 +264,22 @@ def _probe_attention_backends_cached(
     # target SM103, so B300/GB300 must retain exact cuDNN/SDPA rather than being
     # accepted merely because they share the Blackwell generation name.
     sage3_gpu = capability in {(10, 0), (12, 0), (12, 1)}
+    cudnn_fp8 = _package_capability(
+        name="cudnn_fp8", package="cudnn", usable_if=nvidia_cuda and capability[0] >= 9,
+        unavailable_reason="nvidia-cudnn-frontend is not installed",
+        unusable_reason="cuDNN FP8 SDPA requires NVIDIA Hopper or newer",
+    )
+    cuda_bindings = _package_capability(
+        name="cuda_bindings", package="cuda-bindings", import_name="cuda.bindings.runtime", usable_if=True,
+        unavailable_reason="cuda-bindings is not installed", unusable_reason="",
+    )
+    if cudnn_fp8.available and not cuda_bindings.available:
+        cudnn_fp8 = AttentionKernelCapability(
+            name="cudnn_fp8", package="cudnn", available=False, usable=False,
+            reason="cuDNN FP8 SDPA requires cuda-bindings",
+        )
     return {
+        "cudnn_fp8": cudnn_fp8,
         "flash_attention_4": _package_capability(
             name="flash_attention_4",
             package="flash_attn.cute",
@@ -444,6 +460,11 @@ def resolve_attention_backend(
     dense fallback for that explicit request.
     """
     requested = attention_backend_from_env() if preferred is None else normalize_attention_backend(preferred)
+    if requested == "cudnn_fp8":
+        capability = probe_attention_backends(device)[requested]
+        if not capability.usable:
+            raise RuntimeError(f"Explicit cudnn_fp8 backend is unavailable: {capability.reason}")
+        return requested
     if requested in _MODEL_SPECIFIC_BACKEND_REQUIREMENTS:
         if not allow_model_specific:
             # Even an installed sparse kernel is not callable without its
