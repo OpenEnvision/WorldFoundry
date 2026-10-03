@@ -28,6 +28,9 @@ if _code_dir not in sys.path:
     sys.path.insert(0, _code_dir)
 
 from depth.depth_predict_da3 import DepthPredictDA3
+from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import (
+    initialize_reproducibility,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -96,6 +99,7 @@ def main():
     parser.add_argument("--config-json", type=str, default=None,
                         help="JSON string with depth model config overrides")
     args = parser.parse_args()
+    initialize_reproducibility()
 
     # Parse config
     config = {}

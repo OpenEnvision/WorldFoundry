@@ -22,6 +22,7 @@ from worldfoundry.core.io.paths import (
     resolve_local_hf_model_path,
 )
 from worldfoundry.evaluation.utils import worldfoundry_data_path
+from .inspatio_world_runtime.utils.reproducibility import SEED_ENV, reproducibility_env
 
 
 _BUNDLED_REPO_ROOT = (
@@ -521,10 +522,21 @@ class InspatioWorldRuntime:
         use_tae: bool = False,
         tae_checkpoint_path: Optional[str] = None,
         compile_dit: bool = False,
+        seed: Optional[int] = None,
+        deterministic: Optional[bool] = None,
         show_progress: bool = True,
         return_dict: bool = False,
         **kwargs,
     ):
+        """Generate video, with optional reproducible RNG in all child processes.
+
+        An omitted seed retains the stage-three default of zero. Explicit seed
+        or deterministic mode also initializes captioning and geometry workers.
+        Deterministic mode without an explicit seed uses zero in every stage.
+        """
+        seed = self.defaults.get("seed") if seed is None else seed
+        deterministic = self.defaults.get("deterministic", False) if deterministic is None else deterministic
+        env = reproducibility_env(self._build_runtime_env(), seed, deterministic)
         resolved_output_root = Path(output_root or tempfile.mkdtemp(prefix="inspatio_world_"))
         resolved_output_root = resolved_output_root.expanduser().resolve()
         resolved_output_root.mkdir(parents=True, exist_ok=True)
@@ -649,8 +661,10 @@ class InspatioWorldRuntime:
                 command.extend(["--tae_checkpoint_path", resolved_tae])
         if compile_dit:
             command.append("--compile_dit")
-
-        env = self._build_runtime_env()
+        if seed is not None:
+            command.extend(["--seed", str(seed)])
+        if deterministic:
+            command.append("--deterministic")
         stdout = None if show_progress else subprocess.DEVNULL
         stderr = None if show_progress else subprocess.STDOUT
 
@@ -683,6 +697,8 @@ class InspatioWorldRuntime:
             "florence_model_path": resolved_florence_dir,
             "config_path": resolved_config,
             "prompt": prompt,
+            "seed": int(env.get(SEED_ENV, "0")),
+            "deterministic": env.get("WORLDFOUNDRY_DETERMINISTIC", "").strip().lower() in {"1", "true", "yes", "on"},
         }
         if skip_step3 and not generated_video_paths:
             if return_dict:

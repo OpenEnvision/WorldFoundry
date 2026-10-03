@@ -104,6 +104,8 @@ class InspatioWorldPipeline(PipelineABC):
         prompt: str = "",
         output_dir: Optional[str] = None,
         return_dict: bool = False,
+        seed: Optional[int] = None,
+        deterministic: Optional[bool] = None,
         **kwargs,
     ):
         """Execute the complete pipeline generation flow."""
@@ -121,6 +123,8 @@ class InspatioWorldPipeline(PipelineABC):
             prompt=processed["prompt"],
             output_root=output_dir,
             return_dict=True,
+            seed=seed,
+            deterministic=deterministic,
             **kwargs,
         )
         if return_dict:

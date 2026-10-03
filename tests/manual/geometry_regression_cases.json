@@ -3228,6 +3228,8 @@
       "videos": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00/input/video.mp4",
       "traj_txt_path": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00/input/target_tcw.txt",
       "prompt": "A slowly moving camera in a realistic scene.",
+      "seed": 0,
+      "deterministic": true,
       "output_dir": "${OUTPUT_DIR}/generated",
       "skip_step1": true,
       "adaptive_frame": false,

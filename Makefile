@@ -46,9 +46,10 @@ STREAMING_CPU_CONTRACTS = \
 	tests/studio_visualization/test_realtime_shutdown_ownership.py \
 	tests/studio_visualization/test_world_realtime.py \
 	tests/runtime/test_inference_benchmark_correctness.py
-INFER_TENSOR_CONTRACTS = tests/synthesis/test_inspatio_v15_tensors.py tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py tests/core/test_diffusion_rounding.py tests/core/test_kernel_dispatch_receipt.py tests/core/test_diffusion_mutating_kernel.py $(VIDEO_TENSOR_CONTRACTS) $(STREAMING_CPU_CONTRACTS)
+INFER_TENSOR_CONTRACTS = tests/synthesis/test_inspatio_v15_tensors.py tests/synthesis/test_inspatio_reproducibility.py tests/synthesis/test_inspatio_python_orchestration.py tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py tests/core/test_diffusion_rounding.py tests/core/test_kernel_dispatch_receipt.py tests/core/test_diffusion_mutating_kernel.py $(VIDEO_TENSOR_CONTRACTS) $(STREAMING_CPU_CONTRACTS)
 # Select numerical CUDA nodes explicitly: older CUDA tests do not all carry the gpu marker.
 INFER_CUDA_CONTRACTS = \
+	tests/synthesis/test_inspatio_renderer_gpu.py::test_strict_renderer_matches_cpu_and_repeats \
 	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_host_pixels_wait_for_producer_and_preserve_frame_order \
 	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_prefetch_failure_uses_the_correct_blocking_fallback \
 	tests/core/execution/test_cuda_frame_transfer.py::test_failed_cuda_callback_drains_queued_work_before_reuse \

@@ -28,6 +28,9 @@ import torch
 from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.trajectory import (
     generate_traj_txt,
 )
+from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import (
+    initialize_reproducibility,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -413,6 +416,7 @@ def main():
     parser.add_argument("--freeze_frame", type=int, default=None,
                         help="Frame index to freeze (default: middle frame)")
     args = parser.parse_args()
+    initialize_reproducibility()
 
     render_point_cloud(
         da3_dir=args.da3_dir,

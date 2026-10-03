@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 import yaml
-
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/run_inference_pipeline.py"
@@ -48,7 +47,8 @@ def test_full_pipeline_preserves_gpu_flags_and_yaml_paths(monkeypatch, tmp_path)
     args = make_args(tmp_path, "--config_path", str(config), "--wan_model_path", str(tmp_path),
                      "--step1_gpus", "2,3", "--step2_gpus", "4", "--step3_gpus", "5,6",
                      "--step3_nproc", "2", "--relative_to_source", "--disable_adaptive_frame",
-                     "--freeze_repeat", "3", "--freeze_frame", "0", "--use_tae", "--compile_dit")
+                     "--freeze_repeat", "3", "--freeze_frame", "0", "--use_tae", "--compile_dit",
+                     "--seed", "1730", "--deterministic")
     calls = []
     saved_config = {}
 
@@ -62,6 +62,10 @@ def test_full_pipeline_preserves_gpu_flags_and_yaml_paths(monkeypatch, tmp_path)
     pipeline.run_pipeline(args)
     assert len(calls) == 6  # two caption workers, merge, depth, render, inference
     assert all(command[0] == sys.executable for command, _ in calls)
+    assert all(options["env"]["WORLDFOUNDRY_INSPATIO_WORLD_SEED"] == "1730" for _, options in calls)
+    assert all(options["env"]["PYTHONHASHSEED"] == "1730" for _, options in calls)
+    assert all(options["env"]["WORLDFOUNDRY_DETERMINISTIC"] == "1" for _, options in calls)
+    assert all(options["env"]["CUBLAS_WORKSPACE_CONFIG"] == ":4096:8" for _, options in calls)
     assert {options["env"]["CUDA_VISIBLE_DEVICES"] for _, options in calls[:2]} == {"2", "3"}
     depth = next(command for command, _ in calls if Path(command[1]).name == "run_da3_parallel.py")
     assert json.loads(depth[depth.index("--da3_config") + 1])["fix_resize_width"] == 832
@@ -69,6 +73,8 @@ def test_full_pipeline_preserves_gpu_flags_and_yaml_paths(monkeypatch, tmp_path)
     assert options["env"]["CUDA_VISIBLE_DEVICES"] == "5,6"
     assert "--nproc_per_node=2" in infer
     assert "--use_tae" in infer and "--compile_dit" in infer
+    assert infer[infer.index("--seed") + 1] == "1730"
+    assert "--deterministic" in infer
     camera = saved_config["value"]["camera"]
     assert camera["traj_txt_path"] == args.traj_txt_path
     assert camera["relative_to_source"] is True and camera["adaptive_frame"] is False
@@ -89,3 +95,31 @@ def test_failed_caption_does_not_start_geometry(monkeypatch, tmp_path):
         pipeline.run_pipeline(make_args(tmp_path))
     assert len(calls) == 1
     assert Path(calls[0][1]).name == "gen_json.py"
+
+
+@pytest.mark.parametrize("flags, inherited, expected", [
+    ((), None, None),
+    (("--seed", "42"), None, "42"),
+    (("--deterministic",), None, "0"),
+    ((), "7", "7"),
+])
+def test_video_stage_receives_effective_seed(monkeypatch, tmp_path, flags, inherited, expected):
+    monkeypatch.delenv("WORLDFOUNDRY_DETERMINISTIC", raising=False)
+    monkeypatch.delenv("WORLDFOUNDRY_INSPATIO_WORLD_SEED", raising=False)
+    if inherited is not None:
+        monkeypatch.setenv("WORLDFOUNDRY_INSPATIO_WORLD_SEED", inherited)
+    (tmp_path / "models_t5_umt5-xxl-enc-bf16.safetensors").touch()
+    config = tmp_path / "config.yaml"
+    config.write_text("{}")
+    args = make_args(tmp_path, "--config_path", str(config), "--wan_model_path", str(tmp_path),
+                     "--skip_step1", "--skip_step2", *flags)
+    calls = []
+    monkeypatch.setattr(pipeline.subprocess, "run", lambda argv, **kw: calls.append((argv, kw)))
+    pipeline.run_pipeline(args)
+    infer, options = calls[-1]
+    if expected is None:
+        assert "--seed" not in infer
+        assert "WORLDFOUNDRY_INSPATIO_WORLD_SEED" not in options["env"]
+    else:
+        assert infer[infer.index("--seed") + 1] == expected
+        assert options["env"]["WORLDFOUNDRY_INSPATIO_WORLD_SEED"] == expected

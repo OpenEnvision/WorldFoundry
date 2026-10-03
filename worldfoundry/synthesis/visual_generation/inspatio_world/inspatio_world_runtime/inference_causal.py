@@ -19,6 +19,7 @@ from pipeline import CausalInferencePipeline
 from pipeline.causal_inference import denoise_block
 from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 from utils.render_warper import convert_mask_video
+from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import seed_for_rank
 
 
 def write_video(filename, video_array, fps):
@@ -33,6 +34,7 @@ parser.add_argument("--checkpoint_path", type=str, help="Path to the checkpoint 
 parser.add_argument("--output_folder", type=str, help="Output folder")
 parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to generate per prompt")
 parser.add_argument("--seed", type=int, default=0, help="Random seed")
+parser.add_argument("--deterministic", action="store_true", help="Require deterministic algorithms")
 parser.add_argument("--json_path", type=str, help="Path to the json file")
 parser.add_argument("--version", type=str, default="version_0", help="Output version subfolder name")
 
@@ -53,13 +55,13 @@ if "LOCAL_RANK" in os.environ:
     device = torch.device(f"cuda:{local_rank}")
     world_size = dist.get_world_size()
     rank = dist.get_rank()
-    set_seed_everywhere(args.seed + local_rank)
+    set_seed_everywhere(seed_for_rank(args.seed, local_rank), deterministic=args.deterministic)
 else:
     device = torch.device("cuda")
     local_rank = 0
     world_size = 1
     rank = 0
-    set_seed_everywhere(args.seed)
+    set_seed_everywhere(seed_for_rank(args.seed, 0), deterministic=args.deterministic)
 
 print(f'[Rank {rank}] Free VRAM {get_cuda_free_memory_gb(gpu)} GB')
 low_memory = get_cuda_free_memory_gb(gpu) < 40

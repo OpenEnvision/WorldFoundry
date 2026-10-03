@@ -11,6 +11,11 @@ import subprocess
 import sys
 import tempfile
 
+from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import (
+    SEED_ENV,
+    reproducibility_env,
+)
+
 
 ROOT = Path(__file__).resolve().parent
 
@@ -36,6 +41,8 @@ def parser() -> argparse.ArgumentParser:
         p.add_argument(f"--skip_step{stage}", action="store_true")
     p.add_argument("--step3_nproc", type=int, default=1)
     p.add_argument("--master_port", type=int, default=29513)
+    p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--deterministic", action="store_true")
     p.add_argument("--freeze_repeat", type=int, default=0)
     p.add_argument("--freeze_frame", type=int)
     for flag in ("relative_to_source", "rotation_only", "disable_adaptive_frame", "use_tae", "compile_dit"):
@@ -61,7 +68,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         raise ValueError("step3_nproc must be positive")
     json_path = input_dir / "new.json"
     output = Path(args.output_folder or ROOT / "output" / input_dir.name / trajectory.stem).resolve()
-    env = dict(os.environ)
+    env = reproducibility_env(os.environ, args.seed, args.deterministic)
     env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(ROOT), env.get("PYTHONPATH"))))
     cuda_compat = Path(env.get("CUDA_COMPAT_DIR", "/usr/local/cuda-12.1/compat"))
     if cuda_compat.is_dir() and str(cuda_compat) not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
@@ -138,6 +145,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
                  "--master_port", args.master_port, ROOT / "inference_causal.py",
                  "--config_path", config_path, "--json_path", json_path,
                  "--checkpoint_path", args.checkpoint_path, "--output_folder", output]
+        if SEED_ENV in env:
+            infer.extend(["--seed", env[SEED_ENV]])
+        if args.deterministic:
+            infer.append("--deterministic")
         if args.use_tae:
             infer.append("--use_tae")
             infer.extend(["--tae_checkpoint_path", args.tae_checkpoint_path])
