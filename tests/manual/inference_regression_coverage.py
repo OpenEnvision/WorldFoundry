@@ -9,11 +9,19 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 from pathlib import Path
 
 import yaml
+
+
+def _coverage_policy():
+    spec = importlib.util.spec_from_file_location("native_coverage_policy", Path(__file__).with_name("native_coverage_policy.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def catalog_entries(path: Path) -> list[dict]:
@@ -177,10 +185,26 @@ def main() -> int:
     parser.add_argument("--matrix", type=Path, default=Path("tests/manual/geometry_regression_cases.json"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--require-complete", action="store_true")
+    parser.add_argument("--baseline", type=Path, default=Path("tests/manual/native_coverage_baseline.json"))
+    parser.add_argument("--changed-file", action="append", default=[])
+    parser.add_argument("--affected-model", action="append", default=[])
+    parser.add_argument("--base")
+    parser.add_argument("--head", default="HEAD")
     args = parser.parse_args()
     try:
-        report = coverage(args.source_root.resolve(), args.matrix.resolve())
-        code = 2 if args.require_complete and report["missing_short_cases"] else 0
+        root = args.source_root.resolve()
+        matrix = args.matrix if args.matrix.is_absolute() else root / args.matrix
+        baseline = args.baseline if args.baseline.is_absolute() else root / args.baseline
+        policy = _coverage_policy()
+        if args.base and args.changed_file:
+            raise ValueError("Use a pinned commit diff or explicit changed paths, not both")
+        changed = policy._load_impact_module().changed_paths(root, args.base, args.head) if args.base else args.changed_file
+        report = coverage(root, matrix.resolve())
+        report["policy"] = policy.evaluate_policy(report, json.loads(matrix.read_text()),
+                                                 policy.load_frozen_baseline(baseline), root, changed, args.affected_model)
+        report["policy"]["baseline_sha256"] = policy._BASELINE_SHA256
+        report["policy"]["change_scope"] = "commit_diff" if args.base else ("explicit_paths" if changed else "inventory_only")
+        code = 2 if report["policy"]["status"] != "passed" or (args.require_complete and report["missing_short_cases"]) else 0
     except (ValueError, OSError, KeyError, TypeError, yaml.YAMLError) as error:
         report, code = {"status": "failed", "error": str(error)}, 1
     args.output.parent.mkdir(parents=True, exist_ok=True)

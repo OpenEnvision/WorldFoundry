@@ -11,6 +11,16 @@ PREFLIGHT_PROFILE ?= all
 PREFLIGHT_OUTPUT ?= tmp/preflight
 CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
+PUBLIC_TEST_MANIFEST ?= tmp/public-cpu-selection.json
+PUBLIC_TEST_JUNIT ?= tmp/public-cpu-contracts.xml
+INFER_TENSOR_MANIFEST ?= tmp/inference-cpu-selection.json
+INFER_TENSOR_JUNIT ?= tmp/inference-cpu-contracts.xml
+STRICT_TEST_RUNNER = $(PYTHON) tests/manual/validate_junit_contract.py run
+PUBLIC_GATE_CONTRACTS = \
+	tests/runtime/test_native_coverage_policy.py \
+	tests/runtime/test_junit_contract_validator.py \
+	tests/runtime/test_inference_actions_evidence.py \
+	tests/synthesis/test_matrix_game_2_historical_reference.py
 VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
 STREAMING_CPU_CONTRACTS = \
 	tests/synthesis/test_base_synthesis_lazy_grad.py \
@@ -148,16 +158,16 @@ install-dev:
 	$(PIP) install -e ".[dev]"
 
 test:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q $(TEST_ARGS)
+	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest "$(PUBLIC_TEST_MANIFEST)" --junit "$(PUBLIC_TEST_JUNIT)" --include-public-defaults $(foreach test,$(PUBLIC_GATE_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
 
 test-infer: test
 
 # This suite needs CPU Torch, safetensors and einops, with no weights or renderer.
 test-infer-tensors:
-	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(INFER_TENSOR_CONTRACTS) $(TEST_ARGS)
+	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest "$(INFER_TENSOR_MANIFEST)" --junit "$(INFER_TENSOR_JUNIT)" --marker 'not gpu' $(foreach test,$(INFER_TENSOR_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
 
 test-infer-video-tensors:
-	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(VIDEO_TENSOR_CONTRACTS) $(TEST_ARGS)
+	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/inference-video-selection.json --junit tmp/inference-video-contracts.xml --marker 'not gpu' $(foreach test,$(VIDEO_TENSOR_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
 
 plan-inference:
 	@test -n "$(INFERENCE_BASE)" || (echo 'Set INFERENCE_BASE to the comparison commit.'; exit 2)
@@ -168,7 +178,7 @@ replay-inference:
 	$(PYTHON) tests/manual/geometry_regression_suite.py --profile "$(INFERENCE_PROFILE)" --plan "$(INFERENCE_PLAN)"
 
 coverage-inference:
-	$(PYTHON) tests/manual/inference_regression_coverage.py --matrix "$(GEOMETRY_MATRIX)" --output "$(INFERENCE_COVERAGE)"
+	$(PYTHON) tests/manual/inference_regression_coverage.py --matrix "$(GEOMETRY_MATRIX)" $(if $(INFERENCE_BASE),--base "$(INFERENCE_BASE)",) --output "$(INFERENCE_COVERAGE)"
 
 verify-inference:
 	@test -n "$(INFERENCE_PROFILE)" -a -n "$(INFERENCE_REPORT)" || (echo 'Set INFERENCE_PROFILE and INFERENCE_REPORT.'; exit 2)
@@ -176,37 +186,32 @@ verify-inference:
 
 # Run inside the 3D model environment; tensor and serializer tests need its dependencies.
 test-infer-contracts:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q -m 'not gpu' $(INFER_TENSOR_CONTRACTS) tests/pipelines/test_geometry_result_exports.py $(TEST_ARGS)
+	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/inference-model-selection.json --junit tmp/inference-model-contracts.xml --marker 'not gpu' $(foreach test,$(INFER_TENSOR_CONTRACTS),--test $(test)) --test tests/pipelines/test_geometry_result_exports.py -- $(TEST_ARGS)
 
 # Run manually on SM90+ with CUDA Torch, Triton, nvidia-cudnn-frontend and
 # cuda-bindings installed; hosted CI has no GPU runner.
 # An unavailable GPU, empty selection or skipped contract must fail this gate.
 test-infer-cuda-contracts:
 	$(PYTHON) -c 'import sys, torch; torch.cuda.is_available() or sys.exit("CUDA contract tests require an available GPU")'
-	mkdir -p "$(dir $(INFER_CUDA_REPORT))"
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(INFER_CUDA_REPORT)" $(INFER_CUDA_CONTRACTS) $(TEST_ARGS)
-	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); cases or sys.exit("CUDA gate executed no tests"); rejected = [case.get("name", "unknown") for case in cases if any(case.find(tag) is not None for tag in ("skipped", "failure", "error"))]; rejected and sys.exit("CUDA gate requires every selected test to pass: " + ", ".join(rejected)); print(f"CUDA gate: {len(cases)} tests passed without skips")' "$(INFER_CUDA_REPORT)"
+	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/inference-cuda-selection.json --junit "$(INFER_CUDA_REPORT)" $(foreach test,$(INFER_CUDA_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
 
 # Local checkpoint evidence is opt-in and independent of the public small-tensor gate.
 test-mg2-checkpoint-contracts:
 	@test -n "$(MG2_CHECKPOINT_ROOT)" || { printf '%s\n' 'Set MG2_CHECKPOINT_ROOT to existing local Matrix-Game-2.0 weights.' >&2; exit 2; }
 	$(PYTHON) -c 'import torch; assert torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9, "Checkpoint FP8 contracts require an SM90+ CUDA device"'
-	mkdir -p "$(dir $(MG2_CHECKPOINT_JUNIT))"
-	WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_CHECKPOINT_REPORT="$(MG2_CHECKPOINT_REPORT)" PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(MG2_CHECKPOINT_JUNIT)" tests/synthesis/test_matrix_game_2_checkpoint_optimizations.py $(TEST_ARGS)
+	WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_CHECKPOINT_REPORT="$(MG2_CHECKPOINT_REPORT)" PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/mg2-checkpoint-selection.json --junit "$(MG2_CHECKPOINT_JUNIT)" --test tests/synthesis/test_matrix_game_2_checkpoint_optimizations.py -- $(TEST_ARGS)
 	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); assert len(cases) == 3 and all(all(case.find(tag) is None for tag in ("skipped", "failure", "error")) for case in cases), "Every checkpoint operator contract must execute and pass"; print("Checkpoint gate: 3 operator contracts passed without skips")' "$(MG2_CHECKPOINT_JUNIT)"
 
 test-mg2-trajectory-contracts:
 	@test -n "$(MG2_CHECKPOINT_ROOT)" || { printf '%s\n' 'Set MG2_CHECKPOINT_ROOT to existing local Matrix-Game-2.0 weights.' >&2; exit 2; }
 	$(PYTHON) -c 'import torch; assert torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9, "Full trajectory contracts require an SM90+ CUDA device"'
-	mkdir -p "$(dir $(MG2_TRAJECTORY_JUNIT))"
-	WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_TRAJECTORY_REPORT="$(MG2_TRAJECTORY_REPORT)" PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(MG2_TRAJECTORY_JUNIT)" tests/synthesis/test_matrix_game_2_checkpoint_trajectory.py $(TEST_ARGS)
+	WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_TRAJECTORY_REPORT="$(MG2_TRAJECTORY_REPORT)" PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/mg2-trajectory-selection.json --junit "$(MG2_TRAJECTORY_JUNIT)" --test tests/synthesis/test_matrix_game_2_checkpoint_trajectory.py -- $(TEST_ARGS)
 	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); assert len(cases) == 2 and all(all(case.find(tag) is None for tag in ("skipped", "failure", "error")) for case in cases), "Both full-checkpoint trajectories must execute and pass"; print("Trajectory gate: 2 bitwise contracts passed without skips")' "$(MG2_TRAJECTORY_JUNIT)"
 
 test-mg2-conditioned-trajectory-contracts:
 	@test -n "$(MG2_CHECKPOINT_ROOT)" || { printf '%s\n' 'Set MG2_CHECKPOINT_ROOT to existing local Matrix-Game-2.0 weights.' >&2; exit 2; }
 	$(PYTHON) -c 'import torch; assert torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9, "Conditioned trajectory contracts require an SM90+ CUDA device"'
-	mkdir -p "$(dir $(MG2_CONDITIONED_TRAJECTORY_JUNIT))"
-	OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_CONDITIONED_TRAJECTORY_REPORT="$(MG2_CONDITIONED_TRAJECTORY_REPORT)" WORLDFOUNDRY_MATRIX_REALTIME_CONDITION_BLOCKS=5 WORLDFOUNDRY_MATRIX_REALTIME_WARMUP_DECODER=1 PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(MG2_CONDITIONED_TRAJECTORY_JUNIT)" tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py $(TEST_ARGS)
+	OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_CONDITIONED_TRAJECTORY_REPORT="$(MG2_CONDITIONED_TRAJECTORY_REPORT)" WORLDFOUNDRY_MATRIX_REALTIME_CONDITION_BLOCKS=5 WORLDFOUNDRY_MATRIX_REALTIME_WARMUP_DECODER=1 PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/mg2-conditioned-selection.json --junit "$(MG2_CONDITIONED_TRAJECTORY_JUNIT)" --test tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py -- $(TEST_ARGS)
 	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); assert len(cases) == 6 and all(all(case.find(tag) is None for tag in ("skipped", "failure", "error")) for case in cases), "All six real-image checkpoint trajectories must execute and pass"; print("Conditioned trajectory gate: 6 bitwise contracts passed without skips")' "$(MG2_CONDITIONED_TRAJECTORY_JUNIT)"
 
 test-geometry:

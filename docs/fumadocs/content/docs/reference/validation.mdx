@@ -30,16 +30,24 @@ From the repository root, with Python 3.10 or newer:
 ```bash
 python -m pip install -e ".[test]"
 make test
-# Equivalent, including the same default selection:
-python -m pytest -q
+# Individual development tests can be selected with pytest:
+python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 ```
 
 The default selection in `pyproject.toml` covers process logging, GPU lease
 bookkeeping with simulated devices, checkpoint staging, job persistence,
 Conda dispatch, pipeline cleanup, job shutdown, and packaging boundaries.
 It runs without CUDA, checkpoint downloads, or provider API credentials. CI
-uses this selection. `make test-infer` is an alias; use `PYTHON=python3` on
+uses the complete selection plus the coverage, evidence, historical-reference
+and JUnit-validator contracts. `make test-infer` is an alias; use `PYTHON=python3` on
 systems whose `python` command still points to Python 2.
+
+The Make targets collect an independent complete node manifest before running
+tests. They reject skips, collection errors, missing or additional nodes,
+duplicates, source changes and stale reports. `TEST_ARGS` applies only to the
+execution; filtering out nodes with `-k` or `-m` fails the gate. Public CPU and
+CPU Torch manifests and JUnit results are uploaded by CI. Successful standard
+library subtests keep their parent node; failed or skipped subtests still fail.
 
 ### Extended suites
 
@@ -154,6 +162,23 @@ latents, raw frames, decoded RGB exports and fps; they check changed conditions,
 A/B/A requests, expected failures, causal continuation, reset and replay. They
 protect these concrete inputs and state transitions, not full-demo quality.
 
+Additional cases cover Cosmos Transfer 2.5's general/edge 2B checkpoint,
+Gamma's released four-step causal checkpoint, and Oasis 500M's video prompt
+route. Gamma uses 189 frames per view, as required by the released weights;
+the case checks two 320×480 views and recovery after a rejected short request.
+Transfer samples its minimum 93-frame window (24 latent frames) before cropping
+the requested 17 RGB frames.
+Stage `control.mp4` under `WORLDFOUNDRY_REGRESSION_INPUT_ROOT` with at least 17
+frames (a longer clip also exercises bounded conditioning reads). Place the
+official `buildHouse_flat` sample's `first_frame.png`, `prompt.txt`,
+`action_left.json` and `action_right.json` under `gamma-world/buildHouse_flat`.
+Oasis expects `open-oasis/context.mp4` with multiple frames and
+`open-oasis/forward.one_hot_actions.json` with two 25-column rows: set column
+11 (`forward`) to 1 and every other column to 0. Its adapter reads one prompt
+frame and holds the last action through six output frames. Checkpoint paths
+and encoder/tokenizer assets are explicit in each case. These declarations
+select required replays; they do not certify GPU execution or other variants.
+
 Video cases can replace `call` with `sequence`. Each step specifies a unique
 `name`, `method` (default `__call__`), `call` and selected `outputs`. Use
 `outputs: []` for session configuration or reset. `expect_error` requires an
@@ -164,6 +189,15 @@ run. `array_contracts` checks shape, dtype, ranges or exact `values`, including
 the requested fps numerator/denominator. `export_artifacts` selects MP4s inside
 the run directory for full decode and comparison. Reference/candidate audits
 still require exact numerical equality.
+
+For a generator that returns only a video path, `output_arrays` can select an
+MP4, WebM, MOV or MKV inside the run directory. The replay decodes every frame
+and saves `artifact.<relative-path>.frames` and `.fps` in `arrays.npz`, so
+required outputs cannot be satisfied by a path or plan alone. Also declare
+the video in `export_artifacts` to compare the encoded artifact's decoded
+pixels and frame rate against the reference. Oasis uses this route because
+its subprocess returns an MP4 without in-memory tensors; its generator fixes
+the random seed to 0.
 
 ```bash
 make coverage-inference PYTHON=python3
@@ -179,7 +213,9 @@ Coverage inventories catalogued native video/world bindings and registered
 variants of their pipeline classes. A shared class, family, alias or historical
 `verified` label does not assign a case to another model ID. `case_defined`
 means a recipe exists; it does not imply accepted references or successful GPU
-inference. CI publishes existing gaps. Releases requiring complete coverage
+inference. A frozen baseline preserves existing gaps while CI rejects new
+uncovered identities, loss of an existing recipe and affected native variants
+without a runnable numerical replay. Releases requiring complete coverage
 can invoke the coverage script with `--require-complete`; gaps return exit 2.
 
 `verify-inference` checks that a trusted GPU-host report matches this commit,
@@ -188,11 +224,44 @@ all affected cases executed, and that every numerical field is exact.
 It requires a `--base` commit-diff plan and recomputes the changed paths;
 manually listed or omitted paths cannot bypass the affected-case gate.
 Preflight, stale commits, omitted cases, relaxed tolerances and failed runs
-cannot pass. Public CPU and tensor gates must pass separately. Enforcing this
-on PR merges additionally requires a configured trusted GPU runner and a
-required branch-protection check. Hosted planning and daily cron alone do not
-enforce a GPU check before each merge. Uncovered models and unexecuted variants
-remain gaps.
+cannot pass. Public CPU and tensor gates must pass separately.
+
+The hosted `inference-replay` job consumes a successful official Actions
+artifact from a maintainer-dispatched control workflow. A missing, expired,
+foreign or stale receipt fails. The dispatch verifies the candidate's exact
+commit, tree, comparison base and pinned reference index before publishing
+`trusted-inference-evidence`. Evidence-only dispatches run the attestation job;
+ordinary CI runs verify the receipt. This workflow uses a prepared trusted GPU
+host without requiring a hosted GPU runner. Configure the repository variables
+`INFERENCE_EVIDENCE_CONTROL_REF`, `INFERENCE_EVIDENCE_WORKFLOW_PATH` and
+`INFERENCE_REFERENCE_INDEX_SHA256`; protect the merge branch with the
+`inference-replay` and CPU checks. A workflow declaration alone does not enable
+branch protection. Uncovered and unexecuted variants remain gaps.
+
+MG2 changes, including changes to its numerical contract, additionally require
+all six real-image, 12-block trajectories against a frozen accepted revision.
+The reference's complete digest is pinned. Flow/x0 outputs, every rolling cache,
+conditions, latent/video/RGB pixels, VAE state and continuous RNG histories must
+match exactly. Two current paths agreeing with each other is insufficient.
+This independent contract accompanies the public-pipeline A/B/A replay; neither
+can stand in for the other. The gate never regenerates accepted references.
+
+After committing the candidate, run both GPU gates on the prepared host. Build
+the bounded dispatch input from their completed reports:
+
+```bash
+INFERENCE_REFERENCE_INDEX_SHA256=<pinned-index> python3 tests/manual/inference_actions_evidence.py compact \
+  --base <comparison-commit> --head <candidate-commit> \
+  --conditioned-report /private/path/mg2-conditioned.json \
+  --junit /private/path/mg2-conditioned.xml \
+  --generic-replay /private/path/replay/report.json --output /private/path/evidence.json
+```
+
+Dispatch `CI` on the configured control branch with those two commit IDs and
+the compact JSON as `source_revision`, `base_revision` and `evidence_json`.
+After that dispatch succeeds, retry the candidate's `inference-replay` job.
+The companion `inference-evidence-verified.yml` performs this retry once it is
+installed on the repository's default branch; until then retry it explicitly.
 
 ### Validation while optimizing
 
@@ -216,8 +285,8 @@ the latter and never silently widen tolerances or regenerate accepted references
 GitHub CI runs the public CPU, CPU Torch tensor and packaging gates on pull
 requests, pushes to `main` and `release/**`, and manual dispatch. Result
 serializers, CUDA contracts, real-weight replays and broader model benchmarks
-require the prepared model environment; they are not automatically executed by
-the hosted CPU workflow. CI also publishes an affected-case plan. Daily GPU
+require the prepared model environment. Hosted CI requires their official
+evidence for affected inference changes and publishes the affected-case plan. Daily GPU
 replays are available through the explicit host schedule described below.
 
 ### Automatic affected-case selection

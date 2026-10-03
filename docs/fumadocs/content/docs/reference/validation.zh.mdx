@@ -24,11 +24,13 @@ description: 代码、文档、runner 和 benchmark facade 的发布门禁。
 ```bash
 python -m pip install -e ".[test]"
 make test
-# 等价的默认选择：
-python -m pytest -q
+# 开发时可以单独运行某项测试：
+python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 ```
 
 默认 CPU 门禁覆盖进程日志、模拟 GPU 租约、checkpoint staging、任务持久化、Conda dispatch、推理取消与超时、worker 退出和打包边界。它不需要 CUDA、模型下载、Torch 或 API 凭据，CI 使用同一选择。`make test-infer` 是别名；系统的 `python` 仍为 Python 2 时，使用 `make test PYTHON=python3`。
+
+`make test` 还包含覆盖策略、官方推理证据、固定历史参考和 JUnit 验证器的测试。Make 门禁先独立收集完整节点清单，再执行测试，拒绝 skip、collection error、少跑、多跑、重复节点、源码改变和旧报告。`TEST_ARGS` 只影响执行阶段，使用 `-k` 或 `-m` 漏跑节点仍会失败。CI 发布完整清单及 JUnit。标准库成功 subtest 保留父节点，失败或跳过的 subtest 仍使门禁失败。
 
 | 路径 | 内容与环境要求 |
 | --- | --- |
@@ -91,7 +93,11 @@ LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音�
 
 同一个 `tests/manual/geometry_regression_cases.json` 现在包含几何、视频和世界模型案例。原有脚本和 `GEOMETRY_*` 名称继续可用；`plan-inference`、`replay-inference` 和 `verify-inference` 是覆盖更广的入口。新增短案例分别声明 Wan 2.1 1.3B、Wan 2.2 TI2V 5B、LTX 0.9.8 I2V、CogVideoX 2B、Cosmos Predict 2.5 2B、Matrix Game 2 和 DreamX World 5B AR。LTX 保留原生两阶段十步配方，其他采样参数也由案例显式固定。这些短案例比较 latent、原始帧、导出的 RGB 像素和 fps，检查换条件后输出变化、A/B/A 请求、失败恢复，以及因果块的延续、reset 与重放。它们验证具体输入下的集成和请求隔离，不验证完整 demo 的生成质量。
 
+额外案例声明 Cosmos Transfer 2.5 的 general/edge 2B 权重、Gamma 已发布的四步因果权重，以及 Oasis 500M 的视频 prompt 入口。Gamma 按权重要求固定每视角 189 帧，检查两个 320×480 视角，以及拒绝短请求后重放。Transfer 先采样最小 93 帧窗口（24 个 latent 帧），再裁剪出请求的 17 个 RGB 帧。请在 `WORLDFOUNDRY_REGRESSION_INPUT_ROOT` 下准备至少 17 帧的 `control.mp4`（更长的视频还可检查条件读取是否有界）；在 `gamma-world/buildHouse_flat` 下放置官方样本的 `first_frame.png`、`prompt.txt`、`action_left.json`、`action_right.json`。Oasis 使用多帧 `open-oasis/context.mp4` 和两行、每行 25 列的 `open-oasis/forward.one_hot_actions.json`：第 11 列（从 0 开始，`forward`）为 1，其余列为 0。适配器读取一个 prompt 帧，将末行动作延续到六帧输出。各案例显式列出权重及编码器、tokenizer 路径。这些声明用于选择待执行的回归，不代表 GPU 已运行或其他变体已覆盖。
+
 视频案例可以用 `sequence` 替代单次 `call`。每一步包含唯一 `name`、`method`（默认 `__call__`）、`call` 和需要记录的 `outputs`。`outputs: []` 用于只配置或重置会话；`expect_error` 必须指定精确异常类型与消息模式，其他异常仍会失败。返回的 CPU buffer 会立即复制，后续请求不能覆盖前一次证据。`comparisons` 的 `equal` / `different` 是单次运行内的约束；`array_contracts` 声明 shape、dtype、数值范围或精确 `values`，例如 fps 的分子/分母。`export_artifacts` 声明本次运行目录内需要完整解码并比较的 MP4。参考与候选仍要求数值完全一致。
+
+只返回视频路径的生成器可以用 `output_arrays` 选择运行目录内的 MP4、WebM、MOV 或 MKV。回归工具完整解码后，将 `artifact.<相对路径>.frames` 和 `.fps` 保存到 `arrays.npz`，因此路径或计划本身不能满足必需数值输出。还应在 `export_artifacts` 中声明视频，比较导出文件解码后的像素及帧率。Oasis 的子进程只返回 MP4，没有内存张量，因此使用此入口；生成器的随机种子固定为 0。
 
 ```bash
 make coverage-inference PYTHON=python3
@@ -103,9 +109,15 @@ make verify-inference PYTHON=python3 \
   INFERENCE_REPORT=/private/path/completed-run/report.json
 ```
 
-覆盖报告按 catalog 的 native binding 和同一 pipeline class 下注册的 variant 列出缺口。相同 class、模型家族、alias 或历史 `verified` 状态都不会自动给另一个 model ID 分配案例。`case_defined` 只表示有测试配方；报告不会将其提升成 reference 已验收或 GPU 已通过。CI 发布这一报告，未覆盖的旧模型仍保持可见；需要完整覆盖的发布可直接运行 coverage 脚本并添加 `--require-complete`，存在缺口时退出码为 2。
+覆盖报告按 catalog 的 native binding 和同一 pipeline class 下注册的 variant 列出缺口。相同 class、模型家族、alias 或历史 `verified` 状态都不会自动给另一个 model ID 分配案例。`case_defined` 只表示有测试配方；报告不会将其提升成 reference 已验收或 GPU 已通过。固定基线保留既有缺口，同时 CI 拒绝新增未覆盖身份、既有配方退化，以及实际受影响却没有可执行数值回放的 native 变体。需要完整覆盖的发布可添加 `--require-complete`，存在缺口时退出码为 2。
 
-`verify-inference` 检查可信 GPU 主机生成的报告与当前 commit、源码 tree、案例矩阵、依赖声明和固定 reference index 一致，选中案例全部执行，且所有数值字段完全一致。预检查、过期 commit、少跑案例、放宽容差和失败结果不能通过。公开 CPU 与张量门禁仍必须分别通过。要阻止不合格 PR 合并，需要在已配置的可信 GPU runner 上执行受影响回放，并将其检查设置为分支保护的 required check；当前 hosted CI 的计划报告和每日 cron 并不自动提供这一合并约束。覆盖缺口或尚未执行的 variant 不能承诺修改后不会报错。
+`verify-inference` 检查可信 GPU 主机生成的报告与当前 commit、源码 tree、案例矩阵、依赖声明和固定 reference index 一致，选中案例全部执行，且所有数值字段完全一致。预检查、过期 commit、少跑案例、放宽容差和失败结果不能通过。公开 CPU 与张量门禁仍必须分别通过。
+
+Hosted CI 的 `inference-replay` 必须读取维护者通过控制 workflow dispatch 发布的官方 Actions artifact；缺失、过期、外部来源或旧提交的证据都会失败。专用 dispatch 检查候选 commit、tree、比较基线及固定 reference index 后发布 `trusted-inference-evidence`，只运行 attestation，普通 CI 再消费它。真实回放在已准备的可信 GPU 主机执行。仓库须配置 `INFERENCE_EVIDENCE_CONTROL_REF`、`INFERENCE_EVIDENCE_WORKFLOW_PATH` 和 `INFERENCE_REFERENCE_INDEX_SHA256`，并在合并分支保护中要求 `inference-replay` 及 CPU 检查；仅添加 workflow 不会自动启用分支保护。未覆盖或未执行的变体仍是缺口。
+
+MG2 改动及其数值契约改动还必须通过六条真实图像、12-block 轨迹的固定历史参考检查。门禁锁定已验收报告的完整 digest，逐步精确比较 flow/x0、全部滚动缓存、条件、latent/video/RGB 像素、VAE 状态和连续 RNG。两条当前路径互相一致不足以通过。此独立检查与公开 pipeline 的 A/B/A 回放都必须完成，不能互相代替，也不会自动更新参考。
+
+先提交候选再跑两项 GPU 门禁，用 `tests/manual/inference_actions_evidence.py compact` 传入 `--base`、`--head`、`--conditioned-report`、`--junit`、`--generic-replay` 和 `--output`，环境中设置固定的 `INFERENCE_REFERENCE_INDEX_SHA256`。在控制分支 dispatch `CI`，三个输入为候选 `source_revision`、比较 `base_revision` 及压缩报告 `evidence_json`。官方 dispatch 成功后重试该候选的 `inference-replay` job。配套 `inference-evidence-verified.yml` 部署到默认分支后会自动重试；部署前需要显式重试。
 
 验证门禁要求使用 `--base` 生成的 commit diff 计划，并重新计算实际变更路径。手工列举或遗漏变更文件的计划无法绕过受影响案例检查。
 

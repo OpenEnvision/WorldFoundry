@@ -5,6 +5,8 @@ Six cases exercise three continuous noise streams, two projection strategies,
 independent baseline casts original image-conditioning weights directly to
 BF16 and encodes the entire 141-frame condition before rollout. Every tensor
 comparison requires bitwise equality; this is not a throughput benchmark.
+Every accepted trajectory also matches frozen historical output and state
+receipts, so a shared regression in the two current paths cannot self-certify.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import importlib.util
 import inspect
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -51,6 +54,10 @@ _metrics = _short._metrics
 _sha256_file = _short._sha256_file
 _SEEDS = (7, 42, 1730)
 _BLOCKS = 12
+_REFERENCE_PATH = Path(__file__).with_name("mg2_historical_reference.py")
+_REFERENCE_SPEC = importlib.util.spec_from_file_location("mg2_historical_reference", _REFERENCE_PATH)
+_historical = importlib.util.module_from_spec(_REFERENCE_SPEC)
+_REFERENCE_SPEC.loader.exec_module(_historical)
 
 
 def _tensor_sha256(value):
@@ -129,6 +136,20 @@ def conditioned_checkpoint_models():
     # The frozen fixture restores all original weights onto meta-created DiTs.
     # Its report environment remains unset so the old evidence is untouched.
     assert not os.getenv("WORLDFOUNDRY_MG2_TRAJECTORY_REPORT"), "use the distinct conditioned report environment"
+    historical = _historical.MG2HistoricalReference()
+    source_revision = source_tree = None
+    if os.getenv("WORLDFOUNDRY_MG2_CHECKPOINT_ROOT"):
+        snapshot = subprocess.run(
+            ["git", "rev-parse", "HEAD", "HEAD^{tree}"],
+            cwd=Path(__file__).resolve().parents[2],
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+            check=True, capture_output=True, text=True,
+        ).stdout.splitlines()
+        assert len(snapshot) == 2 and all(
+            len(value) == 40 and all(character in "0123456789abcdef" for character in value)
+            for value in snapshot
+        ), "strict conditioned trajectory requires a committed source revision and tree"
+        source_revision, source_tree = snapshot
     frozen = _short.full_checkpoint_models.__wrapped__()
     dense, optimized, decoder, runtime_config, short_evidence = next(frozen)
     root = Path(os.environ["WORLDFOUNDRY_MG2_CHECKPOINT_ROOT"]).expanduser().resolve()
@@ -144,6 +165,10 @@ def conditioned_checkpoint_models():
         acceptance=copy.deepcopy(_short._BUDGET),
         frozen_helper_sha256=_sha256_file(_HELPER_PATH),
         test_source_sha256=_sha256_file(Path(__file__)),
+        torch_version=str(torch.__version__),
+        source_revision=source_revision,
+        source_tree=source_tree,
+        historical_reference={**historical.receipt, "conditioning_passed": False, "contracts_passed": []},
     )
     try:
         assert evidence["frozen_helper_sha256"] == "84b77737b8dc055d399a8afea7a3be1db111b2cea6d0cf2584085b907005282c"
@@ -153,6 +178,7 @@ def conditioned_checkpoint_models():
                 evidence["checkpoint_and_config_provenance"][str(path.relative_to(root))] = {
                     "path": str(path), "bytes": path.stat().st_size, "sha256": _sha256_file(path),
                 }
+        historical.assert_backend_and_weights(evidence)
         print("MG2 conditioned: loading independent raw BF16 WanVAE and CLIP", flush=True)
         canonical = WanxVAEWrapper(
             WanVAE(pretrained_path=str(root / "Wan2.1_VAE.pth")).to(device="cuda", dtype=torch.bfloat16),
@@ -168,6 +194,7 @@ def conditioned_checkpoint_models():
         condition_path = Path(inspect.getfile(MatrixGame2RealtimeSession)).with_name("conditioning.py")
         assert condition_path.is_file()
         evidence["source_sha256"][str(condition_path)] = _sha256_file(condition_path)
+        evidence["source_sha256"][str(_REFERENCE_PATH.resolve())] = _sha256_file(_REFERENCE_PATH)
 
         image = _image()
         evidence["input_image"] = {"width": image.width, "height": image.height,
@@ -205,12 +232,14 @@ def conditioned_checkpoint_models():
             _assert_exact_metrics(adapter._condition_block(33), full["cond_concat"][:, :, 33:36], "condition tail prerequisite")
             _assert_exact_metrics(adapter._visual_context, full["visual_context"], "visual context prerequisite")
             assert old_tail["max_abs"] > 0, "regression image must expose the earlier unsafe tail reuse"
+            historical.assert_conditioning(evidence)
+            evidence["historical_reference"]["conditioning_passed"] = True
         baseline_public.reset_realtime()
         accelerated_public.reset_realtime()
         baseline_core.close()
         accelerated_core.close()
         print("MG2 conditioned: 33-latent prefix, future tail, and real CLIP are bitwise exact", flush=True)
-        yield dense, optimized, decoder, runtime_config, canonical, resident, image, full, evidence
+        yield dense, optimized, decoder, runtime_config, canonical, resident, image, full, evidence, historical
     finally:
         output = os.getenv("WORLDFOUNDRY_MG2_CONDITIONED_TRAJECTORY_REPORT")
         if output:
@@ -257,7 +286,7 @@ def _assert_exact_metrics(current, legacy, label):
 @pytest.mark.parametrize("strategy", ("split", "packed"))
 @torch.inference_mode()
 def test_real_conditioned_public_rollout_preserves_12_blocks_exactly(strategy, seed, conditioned_checkpoint_models):
-    dense, optimized, decoder, runtime_config, canonical, resident, image, full, evidence = conditioned_checkpoint_models
+    dense, optimized, decoder, runtime_config, canonical, resident, image, full, evidence, historical = conditioned_checkpoint_models
     fusion = optimized.model._worldfoundry_qkv_fusion
     fusion.strategy = strategy
     fusion.reset_request_window()
@@ -274,8 +303,9 @@ def test_real_conditioned_public_rollout_preserves_12_blocks_exactly(strategy, s
                 "context_noise": 0, "quantization": "none", "compile": False,
                 "conditioning_weight_dtype": "bfloat16", "vae_decode_weight_dtype": "float16",
                 "ambient_autocast": "cuda_bfloat16", "overlap_vae_decode": True,
-                "continuous_rng_without_per_block_reseed": True, "blocks": []}
+                "continuous_rng_without_per_block_reseed": True, "historical_reference_passed": False, "blocks": []}
     evidence["contracts"][key] = contract
+    historical.assert_contract_identity(key, contract)
     torch.cuda.reset_peak_memory_stats()
     noise_receipts = [[], []]
     originals = [core.scheduler.add_noise for core in cores]
@@ -393,17 +423,22 @@ def test_real_conditioned_public_rollout_preserves_12_blocks_exactly(strategy, s
                                         "recurrent_vae_cache_error": recurrent,
                                         "independent_initial_noise_sha256": _tensor_sha256(expected_input),
                                         "continuous_global_rng_sha256": _tensor_sha256(rng_after)})
+            historical.assert_block(key, block, contract["blocks"][-1])
             for trace in traces:
                 trace.trace.clear()
-            print(f"MG2 conditioned {key}: block {block + 1}/12, latent/pixel/public RGB8 bitwise exact", flush=True)
+            print(f"MG2 conditioned {key}: block {block + 1}/12, current paths and historical receipts bitwise exact", flush=True)
         receipt = qkv_fusion_report(optimized.model)
         assert receipt["fused_blocks"] == 30
         assert receipt[f"eager_{strategy}_projection_calls"] == receipt["eager_projection_calls"] == 1440
         assert cores[1]._decode_overlap_runtime == {"calls": 12, "execution": "decode-stream-overlap-enqueued"}
         assert cores[1]._decode_stream is not None
         assert all(session.current_start_frame == 36 for session in sessions)
-        contract.update(qkv_receipt=receipt, overlap_receipt=dict(cores[1]._decode_overlap_runtime),
-                        inter_step_noise=noise_receipts[0], peak_cuda_allocated_bytes=torch.cuda.max_memory_allocated(), passed=True)
+        completion = {"qkv_receipt": receipt, "overlap_receipt": dict(cores[1]._decode_overlap_runtime),
+                      "inter_step_noise": noise_receipts[0], "peak_cuda_allocated_bytes": torch.cuda.max_memory_allocated(),
+                      "passed": True}
+        historical.assert_complete_contract(key, {**contract, **completion})
+        contract.update(**completion, historical_reference_passed=True)
+        evidence["historical_reference"]["contracts_passed"].append(key)
     finally:
         for public, core, original in zip(publics, cores, originals):
             core.scheduler.add_noise = original

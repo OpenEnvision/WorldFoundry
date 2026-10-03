@@ -1,0 +1,67 @@
+name: Verify trusted inference evidence
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: write
+  checks: write
+
+jobs:
+  verify:
+    if: github.event.workflow_run.event == 'workflow_dispatch' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      EVIDENCE_RUN_ID: ${{ github.event.workflow_run.id }}
+      INFERENCE_EVIDENCE_CONTROL_REF: ${{ vars.INFERENCE_EVIDENCE_CONTROL_REF }}
+      INFERENCE_REFERENCE_INDEX_SHA256: ${{ vars.INFERENCE_REFERENCE_INDEX_SHA256 }}
+      INFERENCE_EVIDENCE_WORKFLOW_PATH: ${{ vars.INFERENCE_EVIDENCE_WORKFLOW_PATH }}
+    steps:
+      - name: Checkout trusted controller
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ vars.INFERENCE_EVIDENCE_CONTROL_REF }}
+          path: control
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Verify official artifact origin before reading candidate identities
+        id: receipt
+        run: |
+          python control/tests/manual/inference_actions_evidence.py inspect-actions \
+            --run-id "$EVIDENCE_RUN_ID" --github-output "$GITHUB_OUTPUT" --output tmp/receipt-identities.json
+      - name: Checkout exact candidate without running its code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.receipt.outputs.source_revision }}
+          fetch-depth: 0
+          path: candidate
+          persist-credentials: false
+      - name: Recompute affected cases using trusted controller code
+        env:
+          BASE_REVISION: ${{ steps.receipt.outputs.base_revision }}
+          SOURCE_REVISION: ${{ steps.receipt.outputs.source_revision }}
+        run: |
+          python control/tests/manual/geometry_regression_impact.py \
+            --source-root candidate --base "$BASE_REVISION" --head "$SOURCE_REVISION" \
+            --matrix candidate/tests/manual/geometry_regression_cases.json \
+            --dependencies candidate/tests/manual/geometry_regression_dependencies.json \
+            --output tmp/geometry-impact.json
+      - name: Require exact numerical evidence and retry the same commit's CPU receipt gate
+        run: |
+          python control/tests/manual/inference_actions_evidence.py verify-actions \
+            --source-root candidate --plan tmp/geometry-impact.json --run-id "$EVIDENCE_RUN_ID" \
+            --publish-check --output tmp/inference-evidence.json
+      - name: Publish verification result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inference-evidence-verification
+          path: tmp/inference-evidence.json
+          if-no-files-found: error

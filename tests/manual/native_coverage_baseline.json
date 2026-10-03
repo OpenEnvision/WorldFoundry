@@ -1,0 +1,2893 @@
+{
+  "models": [
+    {
+      "binding_id": "allegro",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/allegro.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/allegro.yaml",
+      "model_id": "allegro",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.allegro.pipeline_allegro_ti2v:AllegroTi2VPipeline"
+    },
+    {
+      "binding_id": "allegro-ti2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/allegro-ti2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/allegro.yaml",
+      "model_id": "allegro-ti2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.allegro.pipeline_allegro_ti2v:AllegroTi2VPipeline"
+    },
+    {
+      "binding_id": "animatediff",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/animatediff.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/animatediff.yaml",
+      "model_id": "animatediff",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:AnimateDiffPipeline"
+    },
+    {
+      "binding_id": "bernini",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/bernini.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/bernini.yaml",
+      "model_id": "bernini",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.bernini.pipeline_bernini:BerniniWorldFoundryPipeline"
+    },
+    {
+      "binding_id": "bernini-r-1.3b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/bernini-r-1.3b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/bernini-r-1.3b.yaml",
+      "model_id": "bernini-r-1.3b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.bernini.pipeline_bernini:BerniniWorldFoundryPipeline"
+    },
+    {
+      "binding_id": "bernini-r-14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/bernini-r-14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/bernini-r-14b.yaml",
+      "model_id": "bernini-r-14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.bernini.pipeline_bernini:BerniniWorldFoundryPipeline"
+    },
+    {
+      "binding_id": "cogvideox",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cogvideox.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/cogvideox.yaml",
+      "model_id": "cogvideox",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cogvideox.pipeline_cogvideox_5b_t2v:CogVideoX5bT2VPipeline"
+    },
+    {
+      "binding_id": "cogvideox-2b-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cogvideox-2b-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/cogvideox.yaml",
+      "model_id": "cogvideox-2b-t2v",
+      "required_case_ids": [
+        "cogvideox-2b-t2v-short"
+      ],
+      "target": "worldfoundry.pipelines.cogvideox.pipeline_cogvideox_2b_t2v:CogVideoX2bT2VPipeline"
+    },
+    {
+      "binding_id": "cogvideox-5b-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cogvideox-5b-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/cogvideox.yaml",
+      "model_id": "cogvideox-5b-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cogvideox.pipeline_cogvideox_5b_i2v:CogVideoX5bI2VPipeline"
+    },
+    {
+      "binding_id": "cogvideox-5b-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cogvideox-5b-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/cogvideox.yaml",
+      "model_id": "cogvideox-5b-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cogvideox.pipeline_cogvideox_5b_t2v:CogVideoX5bT2VPipeline"
+    },
+    {
+      "binding_id": "dynamicrafter",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dynamicrafter.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/dynamicrafter.yaml",
+      "model_id": "dynamicrafter",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.dynamicrafter.pipeline_dynamicrafter_512_i2v:DynamiCrafter512I2VPipeline"
+    },
+    {
+      "binding_id": "dynamicrafter-1024-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dynamicrafter-1024-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/dynamicrafter.yaml",
+      "model_id": "dynamicrafter-1024-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.dynamicrafter.pipeline_dynamicrafter_1024_i2v:DynamiCrafter1024I2VPipeline"
+    },
+    {
+      "binding_id": "dynamicrafter-512-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dynamicrafter-512-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/dynamicrafter.yaml",
+      "model_id": "dynamicrafter-512-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.dynamicrafter.pipeline_dynamicrafter_512_i2v:DynamiCrafter512I2VPipeline"
+    },
+    {
+      "binding_id": "easyanimate",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/easyanimate.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/easyanimate.yaml",
+      "model_id": "easyanimate",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.easyanimate.pipeline_easyanimate_i2v:EasyAnimateI2VPipeline"
+    },
+    {
+      "binding_id": "easyanimate-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/easyanimate-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/easyanimate.yaml",
+      "model_id": "easyanimate-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.easyanimate.pipeline_easyanimate_i2v:EasyAnimateI2VPipeline"
+    },
+    {
+      "binding_id": "fastvideo-causal-wan2.2-i2v-14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/fastvideo-causal-wan2.2-i2v-14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/fastvideo-causal-wan2.2.yaml",
+      "model_id": "fastvideo-causal-wan2.2",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.fastvideo_causal_wan.pipeline_fastvideo_causal_wan:FastVideoCausalWanPipeline"
+    },
+    {
+      "binding_id": "fastvideo-causal-wan2.2-i2v-14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/fastvideo-causal-wan2.2-i2v-14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/fastvideo-causal-wan2.2.yaml",
+      "model_id": "fastvideo-causal-wan2.2-i2v-14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.fastvideo_causal_wan.pipeline_fastvideo_causal_wan:FastVideoCausalWanPipeline"
+    },
+    {
+      "binding_id": "framepack",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/framepack.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/framepack.yaml",
+      "model_id": "framepack",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:FramePackPipeline"
+    },
+    {
+      "binding_id": "helios",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/helios.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/helios.yaml",
+      "model_id": "helios",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.helios.pipeline_helios:HeliosPipeline"
+    },
+    {
+      "binding_id": "helios",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/helios.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/helios.yaml",
+      "model_id": "helios-base",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.helios.pipeline_helios:HeliosPipeline"
+    },
+    {
+      "binding_id": "helios",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/helios.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/helios.yaml",
+      "model_id": "helios-distilled",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.helios.pipeline_helios:HeliosPipeline"
+    },
+    {
+      "binding_id": "helios",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/helios.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/helios.yaml",
+      "model_id": "helios-mid",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.helios.pipeline_helios:HeliosPipeline"
+    },
+    {
+      "binding_id": "hunyuanvideo",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanvideo.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/hunyuanvideo.yaml",
+      "model_id": "hunyuanvideo",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video:HunyuanVideoT2VPipeline"
+    },
+    {
+      "binding_id": "hunyuanvideo-1.5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanvideo-1.5.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/hunyuanvideo-1.5.yaml",
+      "model_id": "hunyuanvideo-1.5",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video:HunyuanVideo15T2VPipeline"
+    },
+    {
+      "binding_id": "hunyuanvideo-1.5-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanvideo-1.5-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/hunyuanvideo-1.5.yaml",
+      "model_id": "hunyuanvideo-1.5-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video:HunyuanVideo15I2VPipeline"
+    },
+    {
+      "binding_id": "hunyuanvideo-1.5-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanvideo-1.5-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/hunyuanvideo-1.5.yaml",
+      "model_id": "hunyuanvideo-1.5-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video:HunyuanVideo15T2VPipeline"
+    },
+    {
+      "binding_id": "hunyuanvideo-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanvideo-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/hunyuanvideo.yaml",
+      "model_id": "hunyuanvideo-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video:HunyuanVideoI2VPipeline"
+    },
+    {
+      "binding_id": "hunyuanvideo-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanvideo-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/hunyuanvideo.yaml",
+      "model_id": "hunyuanvideo-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video:HunyuanVideoT2VPipeline"
+    },
+    {
+      "binding_id": "hyperflow",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hyperflow.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/hyperflow.yaml",
+      "model_id": "hyperflow",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hyperflow.pipeline_hyperflow:HyperFlowPipeline"
+    },
+    {
+      "binding_id": "i2vgen-xl",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/i2vgen-xl.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/i2vgen-xl.yaml",
+      "model_id": "i2vgen-xl",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:I2VGenXLPipeline"
+    },
+    {
+      "binding_id": "joyai-echo-longvideo",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/joyai-echo-longvideo.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/joyai-echo-longvideo.yaml",
+      "model_id": "joyai-echo-longvideo",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.joyai_echo.pipeline_joyai_echo:JoyAIEchoLongVideoPipeline"
+    },
+    {
+      "binding_id": "krea-realtime-video",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/krea-realtime-video.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/krea-realtime-video.yaml",
+      "model_id": "krea-realtime-video",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:KreaRealtimeVideoPipeline"
+    },
+    {
+      "binding_id": "lingbot-video",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lingbot-video.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/lingbot-video.yaml",
+      "model_id": "lingbot-video",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.lingbot_video.pipeline_lingbot_video:LingBotVideoGenerationPipeline"
+    },
+    {
+      "binding_id": "longcat-video",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/longcat-video.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/longcat-video.yaml",
+      "model_id": "longcat-video",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.longcat_video.pipeline_longcat_video:LongCatVideoPipeline"
+    },
+    {
+      "binding_id": "longsana-video-2b-480p",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/longsana-video-2b-480p.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "longsana-video-2b-480p",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:LongsanaVideo2b480pPipeline"
+    },
+    {
+      "binding_id": "longvie-1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/longvie-1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/longvie-1.yaml",
+      "model_id": "longvie-1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.longvie.pipeline_longvie:LongVie1Pipeline"
+    },
+    {
+      "binding_id": "longvie-2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/longvie-2.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/longvie-2.yaml",
+      "model_id": "longvie-2",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.longvie.pipeline_longvie:LongVie2Pipeline"
+    },
+    {
+      "binding_id": "ltx-2-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-2-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-2.x.yaml",
+      "model_id": "ltx-2-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx2.pipeline_ltx2_i2v:LTX2I2VPipeline"
+    },
+    {
+      "binding_id": "ltx-2-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-2-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-2.x.yaml",
+      "model_id": "ltx-2-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx2.pipeline_ltx2_t2v:LTX2T2VPipeline"
+    },
+    {
+      "binding_id": "ltx-2-v2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-2-v2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-2.x.yaml",
+      "model_id": "ltx-2-v2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx2.pipeline_ltx2_v2v:LTX2V2VPipeline"
+    },
+    {
+      "binding_id": "ltx-2.3-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-2.3-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-2.x.yaml",
+      "model_id": "ltx-2.3-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx2.pipeline_ltx2_3_i2v:LTX23I2VPipeline"
+    },
+    {
+      "binding_id": "ltx-2.3-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-2.3-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-2.x.yaml",
+      "model_id": "ltx-2.3-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx2.pipeline_ltx2_3_t2v:LTX23T2VPipeline"
+    },
+    {
+      "binding_id": "ltx-2.3-v2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-2.3-v2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-2.x.yaml",
+      "model_id": "ltx-2.3-v2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx2.pipeline_ltx2_v2v:LTX23V2VPipeline"
+    },
+    {
+      "binding_id": "ltx-2.5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-2.5.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-2.5.yaml",
+      "model_id": "ltx-2.5",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx25.pipeline_ltx25:LTX25Pipeline"
+    },
+    {
+      "binding_id": "ltx-2.x",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-2.x.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-2.x.yaml",
+      "model_id": "ltx-2.x",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx2.pipeline_ltx2_3_i2v:LTX23I2VPipeline"
+    },
+    {
+      "binding_id": "ltx-video",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-video.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-video.yaml",
+      "model_id": "ltx-video",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ltx_video.pipeline_ltx_video_i2v:LTXVideoI2VPipeline"
+    },
+    {
+      "binding_id": "ltx-video-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ltx-video-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/ltx-video.yaml",
+      "model_id": "ltx-video-i2v",
+      "required_case_ids": [
+        "ltx-video-098-i2v-short"
+      ],
+      "target": "worldfoundry.pipelines.ltx_video.pipeline_ltx_video_i2v:LTXVideoI2VPipeline"
+    },
+    {
+      "binding_id": "magi-1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/magi-1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/magi-1.yaml",
+      "model_id": "magi-1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:MAGI1Pipeline"
+    },
+    {
+      "binding_id": "magi2-preview",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/magi2-preview.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/magi2_preview.yaml",
+      "model_id": "magi2-preview",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.magi2.pipeline_magi2:NativeMagi2Pipeline"
+    },
+    {
+      "binding_id": "minimax-h3",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/minimax-h3.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/minimax_h3.yaml",
+      "model_id": "minimax-h3",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.minimax.pipeline_minimax_h3:NativeMiniMaxH3Pipeline"
+    },
+    {
+      "binding_id": "mmaudio",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mmaudio.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/mmaudio.yaml",
+      "model_id": "mmaudio",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:MMAudioPipeline"
+    },
+    {
+      "binding_id": "mochi-1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mochi-1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/mochi-1.yaml",
+      "model_id": "mochi-1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:Mochi1PreviewT2VPipeline"
+    },
+    {
+      "binding_id": "mochi-1-preview-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mochi-1-preview-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/mochi-1.yaml",
+      "model_id": "mochi-1-preview-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:Mochi1PreviewT2VPipeline"
+    },
+    {
+      "binding_id": "modelscope-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/modelscope-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/modelscope-t2v.yaml",
+      "model_id": "modelscope-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:ModelScopeT2VPipeline"
+    },
+    {
+      "binding_id": "omnivinci",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/omnivinci.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/omnivinci.yaml",
+      "model_id": "omnivinci",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:OmniVinciPipeline"
+    },
+    {
+      "binding_id": "open-magvit2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/open-magvit2.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/open-magvit2.yaml",
+      "model_id": "open-magvit2",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:OpenMAGVIT2Pipeline"
+    },
+    {
+      "binding_id": "open-sora",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/open-sora.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/open-sora.yaml",
+      "model_id": "open-sora",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:OpenSoraPipeline"
+    },
+    {
+      "binding_id": "open-sora-plan",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/open-sora-plan.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/open-sora-plan.yaml",
+      "model_id": "open-sora-plan",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:OpenSoraPlanPipeline"
+    },
+    {
+      "binding_id": "pusa-vidgen",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pusa-vidgen.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/pusa-vidgen.yaml",
+      "model_id": "pusa-vidgen",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.pusa_vidgen.pipeline_pusa_vidgen:PusaVidGenPipeline"
+    },
+    {
+      "binding_id": "qwen2.5-omni",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/qwen2.5-omni.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/qwen2.5-omni.yaml",
+      "model_id": "qwen2.5-omni",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:Qwen25OmniPipeline"
+    },
+    {
+      "binding_id": "sama-14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sama-14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sama-14b.yaml",
+      "model_id": "sama-14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:SAMA14BPipeline"
+    },
+    {
+      "binding_id": "sana",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaPipeline"
+    },
+    {
+      "binding_id": "sana-1600m-1024px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-1600m-1024px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-1600m-1024px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1600M1024pxPipeline"
+    },
+    {
+      "binding_id": "sana-1600m-1024px-bf16",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-1600m-1024px-bf16.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-1600m-1024px-bf16",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1600M1024pxBf16Pipeline"
+    },
+    {
+      "binding_id": "sana-1600m-1024px-multiling",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-1600m-1024px-multiling.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-1600m-1024px-multiling",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1600M1024pxMultilingPipeline"
+    },
+    {
+      "binding_id": "sana-1600m-2k-bf16",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-1600m-2k-bf16.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-1600m-2k-bf16",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1600M2kBf16Pipeline"
+    },
+    {
+      "binding_id": "sana-1600m-4k-bf16",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-1600m-4k-bf16.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-1600m-4k-bf16",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1600M4kBf16Pipeline"
+    },
+    {
+      "binding_id": "sana-1600m-512px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-1600m-512px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-1600m-512px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1600M512pxPipeline"
+    },
+    {
+      "binding_id": "sana-1600m-512px-multiling",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-1600m-512px-multiling.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-1600m-512px-multiling",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1600M512pxMultilingPipeline"
+    },
+    {
+      "binding_id": "sana-600m-1024px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-600m-1024px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-600m-1024px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana600M1024pxPipeline"
+    },
+    {
+      "binding_id": "sana-600m-512px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-600m-512px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-600m-512px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana600M512pxPipeline"
+    },
+    {
+      "binding_id": "sana-controlnet-1600m-1024px-bf16",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-controlnet-1600m-1024px-bf16.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-controlnet-1600m-1024px-bf16",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaControlnet1600M1024pxBf16Pipeline"
+    },
+    {
+      "binding_id": "sana-controlnet-600m-1024px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-controlnet-600m-1024px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-controlnet-600m-1024px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaControlnet600M1024pxPipeline"
+    },
+    {
+      "binding_id": "sana-sprint-1600m-1024px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-sprint-1600m-1024px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-sprint-1600m-1024px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaSprint1600M1024pxPipeline"
+    },
+    {
+      "binding_id": "sana-sprint-600m-1024px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-sprint-600m-1024px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-sprint-600m-1024px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaSprint600M1024pxPipeline"
+    },
+    {
+      "binding_id": "sana-streaming-2b-720p",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-streaming-2b-720p.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-streaming-2b-720p",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaStreaming2b720pPipeline"
+    },
+    {
+      "binding_id": "sana-streaming-bidirectional-2b-720p",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-streaming-bidirectional-2b-720p.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-streaming-bidirectional-2b-720p",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaStreamingBidirectional2b720pPipeline"
+    },
+    {
+      "binding_id": "sana-video-2b-480p",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-video-2b-480p.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-video-2b-480p",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaVideo2b480pPipeline"
+    },
+    {
+      "binding_id": "sana-video-2b-720p",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-video-2b-720p.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana-video-2b-720p",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:SanaVideo2b720pPipeline"
+    },
+    {
+      "binding_id": "sana1p5-1600m-1024px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana1p5-1600m-1024px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana1p5-1600m-1024px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1p51600M1024pxPipeline"
+    },
+    {
+      "binding_id": "sana1p5-4800m-1024px",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana1p5-4800m-1024px.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/sana.yaml",
+      "model_id": "sana1p5-4800m-1024px",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana.pipeline_sana:Sana1p54800M1024pxPipeline"
+    },
+    {
+      "binding_id": "show-o",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/show-o.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/show-o.yaml",
+      "model_id": "show-o",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:ShowOPipeline"
+    },
+    {
+      "binding_id": "skyreels-v2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/skyreels-v2.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/skyreels-v2.yaml",
+      "model_id": "skyreels-v2",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.skyreels_v2.pipeline_skyreels_v2:SkyReelsV2Pipeline"
+    },
+    {
+      "binding_id": "skyreels-v3",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/skyreels-v3.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/skyreels-v3.yaml",
+      "model_id": "skyreels-v3",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.skyreels_v3.pipeline_skyreels_v3:SkyReelsV3Pipeline"
+    },
+    {
+      "binding_id": "spatial-ladder",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/spatial-ladder.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/spatial-ladder.yaml",
+      "model_id": "spatial-ladder",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:SpatialLadderPipeline"
+    },
+    {
+      "binding_id": "spatial-reasoner",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/spatial-reasoner.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/spatial-reasoner.yaml",
+      "model_id": "spatial-reasoner",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:SpatialReasonerPipeline"
+    },
+    {
+      "binding_id": "stable-video-infinity",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/stable-video-infinity.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/stable-video-infinity.yaml",
+      "model_id": "stable-video-infinity",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.stable_video_infinity.pipeline_stable_video_infinity:StableVideoInfinityPipeline"
+    },
+    {
+      "binding_id": "step-video-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/step-video-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/step-video-t2v.yaml",
+      "model_id": "step-video-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.step_video.pipeline_step_video_t2v:StepVideoT2VPipeline"
+    },
+    {
+      "binding_id": "t2v_turbo_t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/t2v_turbo_t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/t2v_turbo_t2v.yaml",
+      "model_id": "t2v_turbo_t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.t2v_turbo.pipeline_t2v_turbo_t2v:T2VTurboT2VPipeline"
+    },
+    {
+      "binding_id": "unianimate-dit",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/unianimate-dit.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/unianimate-dit.yaml",
+      "model_id": "unianimate-dit",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_official.pipeline_official_video:UniAnimateDiTPipeline"
+    },
+    {
+      "binding_id": "vchitect-2-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/vchitect-2-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/vchitect-2-t2v.yaml",
+      "model_id": "vchitect-2-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.vchitect.pipeline_vchitect_2_t2v:Vchitect2T2VPipeline"
+    },
+    {
+      "binding_id": "videocrafter",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/videocrafter.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/videocrafter.yaml",
+      "model_id": "videocrafter",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.videocrafter.pipeline_videocrafter2_t2v:VideoCrafter2T2VPipeline"
+    },
+    {
+      "binding_id": "videocrafter1-i2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/videocrafter1-i2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/videocrafter1-i2v.yaml",
+      "model_id": "videocrafter1-i2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.videocrafter.pipeline_videocrafter1_i2v:VideoCrafter1I2VPipeline"
+    },
+    {
+      "binding_id": "videocrafter1-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/videocrafter1-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/videocrafter1-t2v.yaml",
+      "model_id": "videocrafter1-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.videocrafter.pipeline_videocrafter1_t2v:VideoCrafter1T2VPipeline"
+    },
+    {
+      "binding_id": "videocrafter2-t2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/videocrafter2-t2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/videocrafter2-t2v.yaml",
+      "model_id": "videocrafter2-t2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.videocrafter.pipeline_videocrafter2_t2v:VideoCrafter2T2VPipeline"
+    },
+    {
+      "binding_id": "vmem",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/vmem.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/vmem.yaml",
+      "model_id": "vmem",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.vmem.pipeline_vmem:VMemPipeline"
+    },
+    {
+      "binding_id": "wan2.1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.1.yaml",
+      "model_id": "wan2.1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2VPipeline"
+    },
+    {
+      "binding_id": "wan2.1-i2v-14b-480p",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.1-i2v-14b-480p.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.1.yaml",
+      "model_id": "wan2.1-i2v-14b-480p",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p1_i2v:Wan2p1I2VPipeline"
+    },
+    {
+      "binding_id": "wan2.1-i2v-14b-720p",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.1-i2v-14b-720p.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.1.yaml",
+      "model_id": "wan2.1-i2v-14b-720p",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p1_i2v:Wan2p1I2V720PPipeline"
+    },
+    {
+      "binding_id": "wan2.1-t2v-1.3b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.1-t2v-1.3b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.1.yaml",
+      "model_id": "wan2.1-t2v-1.3b",
+      "required_case_ids": [
+        "wan21-t2v-1p3b-short"
+      ],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2VPipeline"
+    },
+    {
+      "binding_id": "wan2.1-t2v-1.3b-832x480-81f",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.1-t2v-1.3b-832x480-81f.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.1.yaml",
+      "model_id": "wan2.1-t2v-1.3b-832x480-81f",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2VPipeline"
+    },
+    {
+      "binding_id": "wan2.1-t2v-14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.1-t2v-14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.1.yaml",
+      "model_id": "wan2.1-t2v-14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2V14BPipeline"
+    },
+    {
+      "binding_id": "wan2.1-vace",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.1-vace.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.1-vace.yaml",
+      "model_id": "wan2.1-vace",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_vace:Wan2p1VACEPipeline"
+    },
+    {
+      "binding_id": "wan2.2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.2.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.2.yaml",
+      "model_id": "wan2.2",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p2:Wan2p2Pipeline"
+    },
+    {
+      "binding_id": "wan2.2-i2v-a14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.2-i2v-a14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.2.yaml",
+      "model_id": "wan2.2-i2v-a14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p2:Wan2p2I2VA14BPipeline"
+    },
+    {
+      "binding_id": "wan2.2-t2v-a14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.2-t2v-a14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.2.yaml",
+      "model_id": "wan2.2-t2v-a14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p2:Wan2p2T2VA14BPipeline"
+    },
+    {
+      "binding_id": "wan2.2-ti2v-5b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.2-ti2v-5b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.2.yaml",
+      "model_id": "wan2.2-ti2v-5b",
+      "required_case_ids": [
+        "wan22-ti2v-5b-short"
+      ],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p2:Wan2p2Pipeline"
+    },
+    {
+      "binding_id": "wan2.2-ti2v-5b-1280x704-121f",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan2.2-ti2v-5b-1280x704-121f.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/wan2.2.yaml",
+      "model_id": "wan2.2-ti2v-5b-1280x704-121f",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p2:Wan2p2Pipeline"
+    },
+    {
+      "binding_id": "zeroscope",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/zeroscope.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/video/zeroscope.yaml",
+      "model_id": "zeroscope",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:ZeroScopePipeline"
+    },
+    {
+      "binding_id": "abot-world-0-5b-lf",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/abot-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/abot-world.yaml",
+      "model_id": "abot-world-0-5b-lf",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.abot_world.pipeline_abot_world:ABotWorldPipeline"
+    },
+    {
+      "binding_id": "ac3d",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ac3d.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/ac3d.yaml",
+      "model_id": "ac3d",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ac3d.pipeline_ac3d:AC3DPipeline"
+    },
+    {
+      "binding_id": "adaworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/adaworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/adaworld.yaml",
+      "model_id": "adaworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:AdaWorldPipeline"
+    },
+    {
+      "binding_id": "alayaworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/alayaworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/alayaworld.yaml",
+      "model_id": "alayaworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.alayaworld.pipeline_alayaworld:AlayaWorldPipeline"
+    },
+    {
+      "binding_id": "alayaworld-v1.1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/alayaworld-v1.1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/alayaworld-v1.1.yaml",
+      "model_id": "alayaworld-v1.1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.alayaworld_v11.pipeline_alayaworld_v11:AlayaWorldV11Pipeline"
+    },
+    {
+      "binding_id": "astra",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/astra.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/astra.yaml",
+      "model_id": "astra",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.kling.pipeline_astra:AstraPipeline"
+    },
+    {
+      "binding_id": "astronex-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/astronex-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/astronex-world.yaml",
+      "model_id": "astronex-world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.astronex_world.pipeline_astronex_world:AstronexWorldPipeline"
+    },
+    {
+      "binding_id": "ati-wan21-14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ati-wan21-14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/ati-wan21-14b.yaml",
+      "model_id": "ati-wan21-14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.ati.pipeline_ati:ATIPipeline"
+    },
+    {
+      "binding_id": "biwm-wan21",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/biwm-wan21.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/biwm-wan21.yaml",
+      "model_id": "biwm-wan21",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.biwm.pipeline_biwm:BiWMPipeline"
+    },
+    {
+      "binding_id": "biwm-wan22",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/biwm-wan22.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/biwm-wan22.yaml",
+      "model_id": "biwm-wan22",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.biwm.pipeline_biwm:BiWMPipeline"
+    },
+    {
+      "binding_id": "cameractrl",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cameractrl.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cameractrl.yaml",
+      "model_id": "cameractrl",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:CameraCtrlPipeline"
+    },
+    {
+      "binding_id": "causal-forcing",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/causal-forcing.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/causal-forcing.yaml",
+      "model_id": "causal-forcing",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.forcing.pipeline_forcing:CausalForcingPipeline"
+    },
+    {
+      "binding_id": "causal-rcm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/causal-rcm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/causal-rcm.yaml",
+      "model_id": "causal-rcm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:CausalRCMPipeline"
+    },
+    {
+      "binding_id": "cosmos-predict-2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos-predict-2.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos-predict-2.yaml",
+      "model_id": "cosmos-predict-2",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2:CosmosPredict2Pipeline"
+    },
+    {
+      "binding_id": "cosmos-predict-2.5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos-predict-2.5.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos-predict-2.5.yaml",
+      "model_id": "cosmos-predict-2.5",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2p5:CosmosPredict2p5Pipeline"
+    },
+    {
+      "binding_id": "cosmos-predict2-14b-video2world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos-predict2-14b-video2world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos-predict-2.yaml",
+      "model_id": "cosmos-predict2-14b-video2world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2:CosmosPredict2Pipeline"
+    },
+    {
+      "binding_id": "cosmos-predict2-2b-video2world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos-predict2-2b-video2world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos-predict-2.yaml",
+      "model_id": "cosmos-predict2-2b-video2world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2:CosmosPredict2Pipeline"
+    },
+    {
+      "binding_id": "cosmos-predict2.5-14b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos-predict2.5-14b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos-predict-2.5.yaml",
+      "model_id": "cosmos-predict2.5-14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2p5:CosmosPredict2p5Pipeline"
+    },
+    {
+      "binding_id": "cosmos-predict2.5-2b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos-predict2.5-2b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos-predict-2.5.yaml",
+      "model_id": "cosmos-predict2.5-2b",
+      "required_case_ids": [
+        "cosmos-predict25-2b-short"
+      ],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2p5:CosmosPredict2p5Pipeline"
+    },
+    {
+      "binding_id": "cosmos-transfer-2.5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos-transfer-2.5.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos-transfer-2.5.yaml",
+      "model_id": "cosmos-transfer-2.5",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_transfer2p5:CosmosTransfer2p5Pipeline"
+    },
+    {
+      "binding_id": "cosmos-transfer2.5-2b-controlled-video",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos-transfer2.5-2b-controlled-video.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos-transfer-2.5.yaml",
+      "model_id": "cosmos-transfer2.5-2b-controlled-video",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_transfer2p5:CosmosTransfer2p5Pipeline"
+    },
+    {
+      "binding_id": "cosmos3",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos3.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos3.yaml",
+      "model_id": "cosmos3",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos3:Cosmos3Pipeline"
+    },
+    {
+      "binding_id": "cosmos3-nano",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos3-nano.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos3.yaml",
+      "model_id": "cosmos3-nano",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos3:Cosmos3Pipeline"
+    },
+    {
+      "binding_id": "cosmos3-super",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cosmos3-super.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/cosmos3.yaml",
+      "model_id": "cosmos3-super",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos3:Cosmos3Pipeline"
+    },
+    {
+      "binding_id": "ctrl-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ctrl-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/ctrl-world.yaml",
+      "model_id": "ctrl-world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:CtrlWorldPipeline"
+    },
+    {
+      "binding_id": "diamond",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/diamond.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/diamond.yaml",
+      "model_id": "diamond",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:DIAMONDPipeline"
+    },
+    {
+      "binding_id": "diamond",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/diamond.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/diamond.yaml",
+      "model_id": "diamond-atari",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:DIAMONDPipeline"
+    },
+    {
+      "binding_id": "diamond-csgo",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/diamond-csgo.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/diamond.yaml",
+      "model_id": "diamond-csgo",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:DIAMONDCsgoPipeline"
+    },
+    {
+      "binding_id": "dino-wm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dino-wm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/dino-wm.yaml",
+      "model_id": "dino-wm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:DinoWMPipeline"
+    },
+    {
+      "binding_id": "dreamdojo",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dreamdojo.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/dreamdojo.yaml",
+      "model_id": "dreamdojo",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:DreamDojoPipeline"
+    },
+    {
+      "binding_id": "dreamx-world-5b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dreamx-world-5b.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/dreamx-world-5b.yaml",
+      "model_id": "dreamx-world-5b",
+      "required_case_ids": [
+        "dreamx-world5b-ar-short"
+      ],
+      "target": "worldfoundry.pipelines.dreamx_world.pipeline_dreamx_world:DreamXWorld5BARPipeline"
+    },
+    {
+      "binding_id": "dreamx-world-5b-cam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dreamx-world-5b-cam.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/dreamx-world-5b-cam.yaml",
+      "model_id": "dreamx-world-5b-cam",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.dreamx_world.pipeline_dreamx_world:DreamXWorld5BCamPipeline"
+    },
+    {
+      "binding_id": "dualcamctrl",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dualcamctrl.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/dualcamctrl.yaml",
+      "model_id": "dualcamctrl",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:DualCamCtrlPipeline"
+    },
+    {
+      "binding_id": "echo-infinity",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/echo-infinity.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/echo-infinity.yaml",
+      "model_id": "echo-infinity",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.echo_infinity.pipeline_echo_infinity:EchoInfinityPipeline"
+    },
+    {
+      "binding_id": "echo-memory-context-k1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/echo-memory-context-k1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/echo-memory-context-k1.yaml",
+      "model_id": "echo-memory-context-k1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.echo_memory.pipeline_echo_memory:EchoMemoryContextK1Pipeline"
+    },
+    {
+      "binding_id": "egowm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/egowm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/egowm.yaml",
+      "model_id": "egowm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:EgoWMPipeline"
+    },
+    {
+      "binding_id": "evoke",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/evoke.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/evoke.yaml",
+      "model_id": "evoke",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.evoke.pipeline_evoke:EvokePipeline"
+    },
+    {
+      "binding_id": "gamma-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/gamma-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/gamma-world.yaml",
+      "model_id": "gamma-world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.gamma_world.pipeline_gamma_world:GammaWorldPipeline"
+    },
+    {
+      "binding_id": "gamma-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/gamma-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/gamma-world.yaml",
+      "model_id": "gamma-world-bidirectional",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.gamma_world.pipeline_gamma_world:GammaWorldPipeline"
+    },
+    {
+      "binding_id": "gamma-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/gamma-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/gamma-world.yaml",
+      "model_id": "gamma-world-causal",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.gamma_world.pipeline_gamma_world:GammaWorldPipeline"
+    },
+    {
+      "binding_id": "gamma-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/gamma-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/gamma-world.yaml",
+      "model_id": "gamma-world-causal-few-step",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.gamma_world.pipeline_gamma_world:GammaWorldPipeline"
+    },
+    {
+      "binding_id": "gen3c",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/gen3c.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/gen3c.yaml",
+      "model_id": "gen3c",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.gen3c.pipeline_gen3c:Gen3CPipeline"
+    },
+    {
+      "binding_id": "genie-envisioner",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/genie-envisioner.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/genie-envisioner.yaml",
+      "model_id": "genie-envisioner",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:GenieEnvisionerPipeline"
+    },
+    {
+      "binding_id": "giga-world-0",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/giga-world-0.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/giga-world-0.yaml",
+      "model_id": "giga-world-0",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:GigaWorld0Pipeline"
+    },
+    {
+      "binding_id": "happyoyster",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/happyoyster.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/happyoyster.yaml",
+      "model_id": "happyoyster",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:HappyOysterPipeline"
+    },
+    {
+      "binding_id": "hma",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hma.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hma.yaml",
+      "model_id": "hma",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:HMAPipeline"
+    },
+    {
+      "binding_id": "hunyuan-game-craft",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuan-game-craft.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hunyuan-game-craft.yaml",
+      "model_id": "hunyuan-game-craft",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_game_craft:HunyuanGameCraftPipeline"
+    },
+    {
+      "binding_id": "hunyuanworld-1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanworld-1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hunyuanworld-1.yaml",
+      "model_id": "hunyuanworld-1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:HunyuanWorld1Pipeline"
+    },
+    {
+      "binding_id": "hunyuanworld-mirror",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanworld-mirror.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hunyuanworld-mirror.yaml",
+      "model_id": "hunyuanworld-mirror",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_mirror:HunyuanMirrorPipeline"
+    },
+    {
+      "binding_id": "hunyuanworld-voyager",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hunyuanworld-voyager.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hunyuanworld-voyager.yaml",
+      "model_id": "hunyuanworld-voyager",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_world_voyager_official:HunyuanWorldVoyagerOfficialPipeline"
+    },
+    {
+      "binding_id": "hy-world-2.0",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hy-world-2.0.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hy-world-2.0.yaml",
+      "model_id": "hy-world-2.0",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hy_world_2p0:HYWorld2Pipeline"
+    },
+    {
+      "binding_id": "hy-worldplay",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hy-worldplay.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hy-worldplay.yaml",
+      "model_id": "hy-worldplay",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_worldplay:HunyuanWorldPlayPipeline"
+    },
+    {
+      "binding_id": "hydra",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hydra.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hydra.yaml",
+      "model_id": "hydra",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hydra.pipeline_hydra:HydraPipeline"
+    },
+    {
+      "binding_id": "hyworld-worldgen",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hyworld-worldgen.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/hyworld-worldgen.yaml",
+      "model_id": "hyworld-worldgen",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hy_world_2p0_worldgen:HYWorld2WorldgenPipeline"
+    },
+    {
+      "binding_id": "infinite-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/infinite-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/infinite-world.yaml",
+      "model_id": "infinite-world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.infinite_world.pipeline_infinite_world:InfiniteWorldPipeline"
+    },
+    {
+      "binding_id": "inspatio-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/inspatio-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/inspatio-world.yaml",
+      "model_id": "inspatio-world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world:InspatioWorldPipeline"
+    },
+    {
+      "binding_id": "irasim",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/irasim.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/irasim.yaml",
+      "model_id": "irasim",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:IRASimPipeline"
+    },
+    {
+      "binding_id": "joyai-echo-wm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/joyai-echo-wm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/joyai-echo-wm.yaml",
+      "model_id": "joyai-echo-wm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.joyai_echo.pipeline_joyai_echo:JoyAIEchoWMPipeline"
+    },
+    {
+      "binding_id": "kairos-sensenova",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/kairos-sensenova.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/kairos-sensenova.yaml",
+      "model_id": "kairos-sensenova",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.kairos.pipeline_kairos:KairosPipeline"
+    },
+    {
+      "binding_id": "leworldmodel",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/leworldmodel.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/leworldmodel.yaml",
+      "model_id": "leworldmodel",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:LeWorldModelPipeline"
+    },
+    {
+      "binding_id": "lingbot-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lingbot-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/lingbot-world.yaml",
+      "model_id": "lingbot-world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.lingbot_world.pipeline_lingbot_world:LingBotPipeline"
+    },
+    {
+      "binding_id": "lingbot-world-act",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lingbot-world-act.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/lingbot-world.yaml",
+      "model_id": "lingbot-world-act",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.lingbot_world.pipeline_lingbot_world:LingBotPipeline"
+    },
+    {
+      "binding_id": "lingbot-world-v2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lingbot-world-v2.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/lingbot-world-v2.yaml",
+      "model_id": "lingbot-world-v2",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.lingbot_world_v2.pipeline_lingbot_world_v2:LingBotWorldV2Pipeline"
+    },
+    {
+      "binding_id": "liveworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/liveworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/liveworld.yaml",
+      "model_id": "liveworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.liveworld.pipeline_liveworld:LiveWorldPipeline"
+    },
+    {
+      "binding_id": "magicworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/magicworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/magicworld.yaml",
+      "model_id": "magicworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.magic_world.pipeline_magic_world:MagicWorldPipeline"
+    },
+    {
+      "binding_id": "matrix-game-1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/matrix-game-1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/matrix-game-1.yaml",
+      "model_id": "matrix-game-1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_1:MatrixGame1Pipeline"
+    },
+    {
+      "binding_id": "matrix-game-2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/matrix-game-2.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/matrix-game-2.yaml",
+      "model_id": "matrix-game-2",
+      "required_case_ids": [
+        "matrix-game2-controls-short"
+      ],
+      "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_2:MatrixGame2Pipeline"
+    },
+    {
+      "binding_id": "matrix-game-2-universal-ref-image-seed42-15f",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/matrix-game-2-universal-ref-image-seed42-15f.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/matrix-game-2.yaml",
+      "model_id": "matrix-game-2-universal-ref-image-seed42-15f",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_2:MatrixGame2Pipeline"
+    },
+    {
+      "binding_id": "matrix-game-3",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/matrix-game-3.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/matrix-game-3.yaml",
+      "model_id": "matrix-game-3",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_3:MatrixGame3Pipeline"
+    },
+    {
+      "binding_id": "matrix-game-3.5-first-person",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/matrix-game-3.5-first-person.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/matrix-game-3.5-first-person.yaml",
+      "model_id": "matrix-game-3.5-first-person",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_3p5:MatrixGame35FirstPersonPipeline"
+    },
+    {
+      "binding_id": "matrix-game-3.5-third-person",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/matrix-game-3.5-third-person.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/matrix-game-3.5-third-person.yaml",
+      "model_id": "matrix-game-3.5-third-person",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_3p5:MatrixGame35ThirdPersonPipeline"
+    },
+    {
+      "binding_id": "mineworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mineworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/mineworld.yaml",
+      "model_id": "mineworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:MineWorldPipeline"
+    },
+    {
+      "binding_id": "minwm-hy-action2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/minwm-hy-action2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/minwm-hy-action2v.yaml",
+      "model_id": "minwm-hy-action2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.minwm.pipeline_minwm:MinWMHYAction2VPipeline"
+    },
+    {
+      "binding_id": "minwm-wan-action2v",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/minwm-wan-action2v.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/minwm-wan-action2v.yaml",
+      "model_id": "minwm-wan-action2v",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.minwm.pipeline_minwm:MinWMWanAction2VPipeline"
+    },
+    {
+      "binding_id": "mira",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mira.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/mira.yaml",
+      "model_id": "mira",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:MIRAPipeline"
+    },
+    {
+      "binding_id": "mosaicmem",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mosaicmem.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/mosaicmem.yaml",
+      "model_id": "mosaicmem",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:MosaicMemPipeline"
+    },
+    {
+      "binding_id": "motionbricks",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/motionbricks.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/motionbricks.yaml",
+      "model_id": "motionbricks",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:MotionBricksPipeline"
+    },
+    {
+      "binding_id": "motionctrl",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/motionctrl.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/motionctrl.yaml",
+      "model_id": "motionctrl",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:MotionCtrlPipeline"
+    },
+    {
+      "binding_id": "moverse",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/moverse.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/moverse.yaml",
+      "model_id": "moverse",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.moverse.pipeline_moverse:MoVersePipeline"
+    },
+    {
+      "binding_id": "multiworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/multiworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/multiworld.yaml",
+      "model_id": "multiworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.multiworld.pipeline_multiworld_ittakestwo:MultiWorldItTakesTwoPipeline"
+    },
+    {
+      "binding_id": "nwm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/nwm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/nwm.yaml",
+      "model_id": "nwm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:NWMPipeline"
+    },
+    {
+      "binding_id": "oasis-500m",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/oasis-500m.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/oasis-500m.yaml",
+      "model_id": "oasis-500m",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:Oasis500MPipeline"
+    },
+    {
+      "binding_id": "omniforcing",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/omniforcing.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/omniforcing.yaml",
+      "model_id": "omniforcing",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:OmniForcingPipeline"
+    },
+    {
+      "binding_id": "open-dreamer",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/open-dreamer.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/open-dreamer.yaml",
+      "model_id": "open-dreamer",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:OpenDreamerPipeline"
+    },
+    {
+      "binding_id": "pandora",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pandora.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/pandora.yaml",
+      "model_id": "pandora",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.component_pipelines:PandoraPipeline"
+    },
+    {
+      "binding_id": "pointworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pointworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/pointworld.yaml",
+      "model_id": "pointworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:PointWorldPipeline"
+    },
+    {
+      "binding_id": "rolling-forcing",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/rolling-forcing.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/rolling-forcing.yaml",
+      "model_id": "rolling-forcing",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.forcing.pipeline_forcing:RollingForcingPipeline"
+    },
+    {
+      "binding_id": "sana-wm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-wm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/sana-wm.yaml",
+      "model_id": "sana-wm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana_wm.pipeline_sana_wm:SanaWMPipeline"
+    },
+    {
+      "binding_id": "sana-wm-streaming",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sana-wm-streaming.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/sana-wm.yaml",
+      "model_id": "sana-wm-streaming",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.sana_wm.pipeline_sana_wm:SanaWMStreamingPipeline"
+    },
+    {
+      "binding_id": "scope",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/scope.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/scope.yaml",
+      "model_id": "scope",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.scope.pipeline_scope:SCOPEPipeline"
+    },
+    {
+      "binding_id": "self-forcing",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/self-forcing.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/self-forcing.yaml",
+      "model_id": "self-forcing",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.forcing.pipeline_forcing:SelfForcingPipeline"
+    },
+    {
+      "binding_id": "shotstream",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/shotstream.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/shotstream.yaml",
+      "model_id": "shotstream",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:ShotStreamPipeline"
+    },
+    {
+      "binding_id": "simworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/simworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/simworld.yaml",
+      "model_id": "simworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:SimWorldPipeline"
+    },
+    {
+      "binding_id": "solaris",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/solaris.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/solaris.yaml",
+      "model_id": "solaris",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.solaris.pipeline_solaris:SolarisPipeline"
+    },
+    {
+      "binding_id": "solarwm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/solarwm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/solarwm.yaml",
+      "model_id": "solarwm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.solarwm.pipeline_solarwm:SolarWMPipeline"
+    },
+    {
+      "binding_id": "solarwm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/solarwm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/solarwm.yaml",
+      "model_id": "solarwm-h3-33b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.solarwm.pipeline_solarwm:SolarWMPipeline"
+    },
+    {
+      "binding_id": "solarwm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/solarwm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/solarwm.yaml",
+      "model_id": "solarwm-ltx-22b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.solarwm.pipeline_solarwm:SolarWMPipeline"
+    },
+    {
+      "binding_id": "solarwm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/solarwm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/solarwm.yaml",
+      "model_id": "solarwm-wan2.2-14b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.solarwm.pipeline_solarwm:SolarWMPipeline"
+    },
+    {
+      "binding_id": "solarwm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/solarwm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/solarwm.yaml",
+      "model_id": "solarwm-wan2.2-5b",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.solarwm.pipeline_solarwm:SolarWMPipeline"
+    },
+    {
+      "binding_id": "spatia",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/spatia.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/spatia.yaml",
+      "model_id": "spatia",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.spatia.pipeline_spatia:SpatiaPipeline"
+    },
+    {
+      "binding_id": "starwm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/starwm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/starwm.yaml",
+      "model_id": "starwm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:StarWMPipeline"
+    },
+    {
+      "binding_id": "tesseract",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/tesseract.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/tesseract.yaml",
+      "model_id": "tesseract",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:TesserActPipeline"
+    },
+    {
+      "binding_id": "uni3c",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/uni3c.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/uni3c.yaml",
+      "model_id": "uni3c",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.uni3c.pipeline_uni3c:Uni3CPipeline"
+    },
+    {
+      "binding_id": "uniworld-view",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/uniworld-view.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/uniworld-view.yaml",
+      "model_id": "uniworld-view",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.uniworld_view.pipeline_uniworld_view:UniWorldViewPipeline"
+    },
+    {
+      "binding_id": "uwm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/uwm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/uwm.yaml",
+      "model_id": "uwm",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:UWMPipeline"
+    },
+    {
+      "binding_id": "versecrafter",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/versecrafter.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/versecrafter.yaml",
+      "model_id": "versecrafter",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.versecrafter.pipeline_versecrafter:VerseCrafterPipeline"
+    },
+    {
+      "binding_id": "vggt-world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/vggt-world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/vggt-world.yaml",
+      "model_id": "vggt-world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:VGGTWorldPipeline"
+    },
+    {
+      "binding_id": "vid2world",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/vid2world.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/vid2world.yaml",
+      "model_id": "vid2world",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:Vid2WorldPipeline"
+    },
+    {
+      "binding_id": "wan21-fun-14b-cam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan21-fun-14b-cam.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/wan21-fun-14b-cam.yaml",
+      "model_id": "wan21-fun-14b-cam",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_x_fun.pipeline_video_x_fun:Wan21Fun14BCameraPipeline"
+    },
+    {
+      "binding_id": "wan21-fun-1p3b-cam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan21-fun-1p3b-cam.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/wan21-fun-1p3b-cam.yaml",
+      "model_id": "wan21-fun-1p3b-cam",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_x_fun.pipeline_video_x_fun:Wan21Fun1P3BCameraPipeline"
+    },
+    {
+      "binding_id": "wan22-fun-5b-cam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan22-fun-5b-cam.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/wan22-fun-5b-cam.yaml",
+      "model_id": "wan22-fun-5b-cam",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_x_fun.pipeline_video_x_fun:Wan22Fun5BCameraPipeline"
+    },
+    {
+      "binding_id": "wan22-fun-a14b-cam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan22-fun-a14b-cam.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/wan22-fun-a14b-cam.yaml",
+      "model_id": "wan22-fun-a14b-cam",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.video_x_fun.pipeline_video_x_fun:Wan22FunA14BCameraPipeline"
+    },
+    {
+      "binding_id": "warp-as-history",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/warp-as-history.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/warp-as-history.yaml",
+      "model_id": "warp-as-history",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.warp_as_history.pipeline_warp_as_history:WarpAsHistoryPipeline"
+    },
+    {
+      "binding_id": "wilddet3d",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wilddet3d.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/wilddet3d.yaml",
+      "model_id": "wilddet3d",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:WildDet3DPipeline"
+    },
+    {
+      "binding_id": "wildworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wildworld.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/wildworld.yaml",
+      "model_id": "wildworld",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:WildWorldPipeline"
+    },
+    {
+      "binding_id": "worldcam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldcam.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/worldcam.yaml",
+      "model_id": "worldcam",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.worldcam.pipeline_worldcam:WorldCamPipeline"
+    },
+    {
+      "binding_id": "worldcrafter",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldcrafter.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/worldcrafter.yaml",
+      "model_id": "worldcrafter",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline"
+    },
+    {
+      "binding_id": "worldcrafter-base",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldcrafter-base.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/worldcrafter-base.yaml",
+      "model_id": "worldcrafter-base",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline"
+    },
+    {
+      "binding_id": "worldcrafter-fast",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldcrafter-fast.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/worldcrafter-fast.yaml",
+      "model_id": "worldcrafter-fast",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline"
+    },
+    {
+      "binding_id": "worldfm",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldfm.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/worldfm.yaml",
+      "model_id": "worldfm",
+      "required_case_ids": [
+        "worldfm"
+      ],
+      "target": "worldfoundry.pipelines.worldfm.pipeline_worldfm:WorldFMPipeline"
+    },
+    {
+      "binding_id": "worldgrow",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldgrow.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/worldgrow.yaml",
+      "model_id": "worldgrow",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:WorldGrowPipeline"
+    },
+    {
+      "binding_id": "worldlabs-marble-1.1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldlabs-marble-1.1.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/worldlabs-marble-1.1.yaml",
+      "model_id": "worldlabs-marble-1.1",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.worldlabs_marble_1p1.pipeline_worldlabs_marble_1p1:WorldLabsMarble11Pipeline"
+    },
+    {
+      "binding_id": "worldmem",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldmem.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/worldmem.yaml",
+      "model_id": "worldmem",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:WorldMemPipeline"
+    },
+    {
+      "binding_id": "wow",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wow.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/wow.yaml",
+      "model_id": "wow",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.wow.pipeline_wow:WoWPipeline"
+    },
+    {
+      "binding_id": "xgen-jing",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/xgen-jing.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/xgen-jing.yaml",
+      "model_id": "xgen-jing",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.xgen_jing.pipeline_xgen_jing:XGENJINGPipeline"
+    },
+    {
+      "binding_id": "yume",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/yume.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/yume.yaml",
+      "model_id": "yume",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.yume.pipeline_yume:YumePipeline"
+    },
+    {
+      "binding_id": "yume-1p5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/yume-1p5.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/yume.yaml",
+      "model_id": "yume-1p5",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.yume.pipeline_yume_1p5:Yume1p5Pipeline"
+    },
+    {
+      "binding_id": "zing",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/zing.yaml",
+      "binding_status": "ready",
+      "catalog_path": "worldfoundry/data/models/catalog/world_models/zing.yaml",
+      "model_id": "zing",
+      "required_case_ids": [],
+      "target": "worldfoundry.pipelines.zing.pipeline_zing:ZingPipeline"
+    }
+  ],
+  "outside_scope_bindings": [
+    {
+      "binding_id": "a1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/a1.yaml",
+      "binding_status": "ready",
+      "model_id": "a1",
+      "target": "worldfoundry.synthesis.action_generation.a1.pipeline:A1Pipeline"
+    },
+    {
+      "binding_id": "abot-m0",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/abot-m0.yaml",
+      "binding_status": "ready",
+      "model_id": "abot-m0",
+      "target": "worldfoundry.synthesis.action_generation.abot_m0.pipeline:ABotM0Pipeline"
+    },
+    {
+      "binding_id": "act",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/act.yaml",
+      "binding_status": "ready",
+      "model_id": "act",
+      "target": "worldfoundry.pipelines.component_pipelines:ACTPipeline"
+    },
+    {
+      "binding_id": "ahawam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/ahawam.yaml",
+      "binding_status": "ready",
+      "model_id": "ahawam",
+      "target": "worldfoundry.synthesis.action_generation.ahawam.pipeline:AHAWAMPipeline"
+    },
+    {
+      "binding_id": "being-h05",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/being-h05.yaml",
+      "binding_status": "ready",
+      "model_id": "being-h05",
+      "target": "worldfoundry.pipelines.component_pipelines:BeingH05Pipeline"
+    },
+    {
+      "binding_id": "being-h07",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/being-h07.yaml",
+      "binding_status": "ready",
+      "model_id": "being-h07",
+      "target": "worldfoundry.pipelines.component_pipelines:BeingH07Pipeline"
+    },
+    {
+      "binding_id": "cogact",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cogact.yaml",
+      "binding_status": "ready",
+      "model_id": "cogact",
+      "target": "worldfoundry.pipelines.component_pipelines:CogACTPipeline"
+    },
+    {
+      "binding_id": "cut3r",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/cut3r.yaml",
+      "binding_status": "ready",
+      "model_id": "cut3r",
+      "target": "worldfoundry.pipelines.cut3r.pipeline_cut3r:CUT3RPipeline"
+    },
+    {
+      "binding_id": "dap",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dap.yaml",
+      "binding_status": "ready",
+      "model_id": "dap",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:DAPPipeline"
+    },
+    {
+      "binding_id": "db-cogact",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/db-cogact.yaml",
+      "binding_status": "ready",
+      "model_id": "db-cogact",
+      "target": "worldfoundry.pipelines.component_pipelines:DBCogACTPipeline"
+    },
+    {
+      "binding_id": "depth-anything-v1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/depth-anything-v1.yaml",
+      "binding_status": "ready",
+      "model_id": "depth-anything-v1",
+      "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v1:DepthAnything1Pipeline"
+    },
+    {
+      "binding_id": "depth-anything-v2-prior",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/depth-anything-v2-prior.yaml",
+      "binding_status": "ready",
+      "model_id": "depth-anything-v2-prior",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:DepthAnythingV2PriorPipeline"
+    },
+    {
+      "binding_id": "depth-anything-v3-prior",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/depth-anything-v3-prior.yaml",
+      "binding_status": "ready",
+      "model_id": "depth-anything-v3-prior",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:DepthAnythingV3PriorPipeline"
+    },
+    {
+      "binding_id": "depth-anything-v3",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/depth-anything-v3.yaml",
+      "binding_status": "ready",
+      "model_id": "depth-anything-v3",
+      "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3:DepthAnything3Pipeline"
+    },
+    {
+      "binding_id": "dexora-1b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dexora-1b.yaml",
+      "binding_status": "ready",
+      "model_id": "dexora-1b",
+      "target": "worldfoundry.synthesis.action_generation.dexora.pipeline:DexoraPipeline"
+    },
+    {
+      "binding_id": "diffusion-policy",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/diffusion-policy.yaml",
+      "binding_status": "ready",
+      "model_id": "diffusion-policy",
+      "target": "worldfoundry.pipelines.component_pipelines:DiffusionPolicyPipeline"
+    },
+    {
+      "binding_id": "dm0",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dm0.yaml",
+      "binding_status": "ready",
+      "model_id": "dm0",
+      "target": "worldfoundry.synthesis.action_generation.dm0.pipeline:DM0Pipeline"
+    },
+    {
+      "binding_id": "dreamzero",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dreamzero.yaml",
+      "binding_status": "ready",
+      "model_id": "dreamzero",
+      "target": "worldfoundry.pipelines.component_pipelines:DreamZeroPipeline"
+    },
+    {
+      "binding_id": "dust3r-base-model",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dust3r-base-model.yaml",
+      "binding_status": "ready",
+      "model_id": "dust3r-base-model",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:DUSt3RPipeline"
+    },
+    {
+      "binding_id": "dust3r",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dust3r.yaml",
+      "binding_status": "ready",
+      "model_id": "dust3r",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:DUSt3RPipeline"
+    },
+    {
+      "binding_id": "dvlt",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/dvlt.yaml",
+      "binding_status": "ready",
+      "model_id": "dvlt",
+      "target": "worldfoundry.pipelines.component_pipelines:DVLTPipeline"
+    },
+    {
+      "binding_id": "emu3.5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/emu3.5.yaml",
+      "binding_status": "ready",
+      "model_id": "emu3.5",
+      "target": "worldfoundry.pipelines.emu35.pipeline_emu35:Emu35Pipeline"
+    },
+    {
+      "binding_id": "eventvla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/eventvla.yaml",
+      "binding_status": "ready",
+      "model_id": "eventvla",
+      "target": "worldfoundry.synthesis.action_generation.eventvla.pipeline:EventVLAPipeline"
+    },
+    {
+      "binding_id": "fantasyworld-wan21",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/fantasyworld-wan21.yaml",
+      "binding_status": "ready",
+      "model_id": "fantasyworld-wan21",
+      "target": "worldfoundry.pipelines.fantasy_world.pipeline_fantasy_world:FantasyWorldWan21Pipeline"
+    },
+    {
+      "binding_id": "fantasyworld-wan22",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/fantasyworld-wan22.yaml",
+      "binding_status": "ready",
+      "model_id": "fantasyworld-wan22",
+      "target": "worldfoundry.pipelines.fantasy_world.pipeline_fantasy_world:FantasyWorldWan22Pipeline"
+    },
+    {
+      "binding_id": "fantasyworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/fantasyworld.yaml",
+      "binding_status": "ready",
+      "model_id": "fantasyworld",
+      "target": "worldfoundry.pipelines.fantasy_world.pipeline_fantasy_world:FantasyWorldPipeline"
+    },
+    {
+      "binding_id": "fastwam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/fastwam.yaml",
+      "binding_status": "ready",
+      "model_id": "fastwam",
+      "target": "worldfoundry.synthesis.action_generation.fastwam.pipeline:FastWAMPipeline"
+    },
+    {
+      "binding_id": "flashworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/flashworld.yaml",
+      "binding_status": "ready",
+      "model_id": "flashworld",
+      "target": "worldfoundry.pipelines.flash_world.pipeline_flash_world:FlashWorldPipeline"
+    },
+    {
+      "binding_id": "galaxea-vla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/galaxea-vla.yaml",
+      "binding_status": "ready",
+      "model_id": "galaxea-vla",
+      "target": "worldfoundry.synthesis.action_generation.galaxea_vla.galaxea_vla_synthesis:GalaxeaVLASynthesis"
+    },
+    {
+      "binding_id": "geocalib-prior",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/geocalib-prior.yaml",
+      "binding_status": "ready",
+      "model_id": "geocalib-prior",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:GeoCalibPriorPipeline"
+    },
+    {
+      "binding_id": "giga-brain-0",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/giga-brain-0.yaml",
+      "binding_status": "ready",
+      "model_id": "giga-brain-0",
+      "target": "worldfoundry.pipelines.component_pipelines:GigaBrain0Pipeline"
+    },
+    {
+      "binding_id": "giga-world-policy-0.5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/giga-world-policy-0.5.yaml",
+      "binding_status": "ready",
+      "model_id": "giga-world-policy-0.5",
+      "target": "worldfoundry.synthesis.action_generation.giga_world_policy.pipeline:GigaWorldPolicyPipeline"
+    },
+    {
+      "binding_id": "go1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/go1.yaml",
+      "binding_status": "ready",
+      "model_id": "go1",
+      "target": "worldfoundry.synthesis.action_generation.go1.pipeline:GO1Pipeline"
+    },
+    {
+      "binding_id": "gr00t",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/gr00t.yaml",
+      "binding_status": "ready",
+      "model_id": "gr00t",
+      "target": "worldfoundry.pipelines.component_pipelines:GR00TPipeline"
+    },
+    {
+      "binding_id": "h-rdt",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/h-rdt.yaml",
+      "binding_status": "ready",
+      "model_id": "h-rdt",
+      "target": "worldfoundry.synthesis.action_generation.h_rdt.h_rdt_synthesis:HRDTSynthesis"
+    },
+    {
+      "binding_id": "hailuo-2p3",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hailuo-2p3.yaml",
+      "binding_status": "ready",
+      "model_id": "hailuo-2p3",
+      "target": "worldfoundry.pipelines.minimax.pipeline_hailuo_2p3:Hailuo2p3Pipeline"
+    },
+    {
+      "binding_id": "hy-embodied-vla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/hy-embodied-vla.yaml",
+      "binding_status": "ready",
+      "model_id": "hy-embodied-vla",
+      "target": "worldfoundry.pipelines.hy_embodied_vla.pipeline_hy_embodied_vla:HyEmbodiedVLAPipeline"
+    },
+    {
+      "binding_id": "infinite-vggt",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/infinite-vggt.yaml",
+      "binding_status": "ready",
+      "model_id": "infinite-vggt",
+      "target": "worldfoundry.pipelines.infinite_vggt.pipeline_infinite_vggt:InfiniteVGGTPipeline"
+    },
+    {
+      "binding_id": "internvla-a1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/internvla-a1.yaml",
+      "binding_status": "ready",
+      "model_id": "internvla-a1",
+      "target": "worldfoundry.synthesis.action_generation.internvla_a1.internvla_a1_synthesis:InternVLAA1Synthesis"
+    },
+    {
+      "binding_id": "kling-api",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/kling-api.yaml",
+      "binding_status": "ready",
+      "model_id": "kling-api",
+      "target": "worldfoundry.pipelines.kling.pipeline_kling_api:KlingApiPipeline"
+    },
+    {
+      "binding_id": "lagernvs",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lagernvs.yaml",
+      "binding_status": "ready",
+      "model_id": "lagernvs",
+      "target": "worldfoundry.pipelines.three_d_four_d.pipeline_runtime:LagrNVSPipeline"
+    },
+    {
+      "binding_id": "lapa",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lapa.yaml",
+      "binding_status": "ready",
+      "model_id": "lapa",
+      "target": "worldfoundry.pipelines.component_pipelines:LAPAPipeline"
+    },
+    {
+      "binding_id": "last-r1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/last-r1.yaml",
+      "binding_status": "ready",
+      "model_id": "last-r1",
+      "target": "worldfoundry.pipelines.component_pipelines:LastR1Pipeline"
+    },
+    {
+      "binding_id": "lda-1b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lda-1b.yaml",
+      "binding_status": "ready",
+      "model_id": "lda-1b",
+      "target": "worldfoundry.synthesis.action_generation.lda_1b.lda_1b_synthesis:LDA1BSynthesis"
+    },
+    {
+      "binding_id": "lingbot-map",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lingbot-map.yaml",
+      "binding_status": "ready",
+      "model_id": "lingbot-map",
+      "target": "worldfoundry.pipelines.lingbot_map.pipeline_lingbot_map:LingBotMapPipeline"
+    },
+    {
+      "binding_id": "lingbot-va",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lingbot-va.yaml",
+      "binding_status": "ready",
+      "model_id": "lingbot-va",
+      "target": "worldfoundry.pipelines.component_pipelines:LingBotVAPipeline"
+    },
+    {
+      "binding_id": "lingbot-vla-v2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lingbot-vla-v2.yaml",
+      "binding_status": "ready",
+      "model_id": "lingbot-vla-v2",
+      "target": "worldfoundry.pipelines.component_pipelines:LingBotVLAV2Pipeline"
+    },
+    {
+      "binding_id": "lingbot-vla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lingbot-vla.yaml",
+      "binding_status": "ready",
+      "model_id": "lingbot-vla",
+      "target": "worldfoundry.pipelines.component_pipelines:LingBotVLAPipeline"
+    },
+    {
+      "binding_id": "loger",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/loger.yaml",
+      "binding_status": "ready",
+      "model_id": "loger",
+      "target": "worldfoundry.pipelines.pi3.pipeline_loger:LoGeRPipeline"
+    },
+    {
+      "binding_id": "luma-ray2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/luma-ray2.yaml",
+      "binding_status": "ready",
+      "model_id": "luma-ray2",
+      "target": "worldfoundry.pipelines.luma.pipeline_luma_ray2:LumaRay2Pipeline"
+    },
+    {
+      "binding_id": "lyra-1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lyra-1.yaml",
+      "binding_status": "ready",
+      "model_id": "lyra-1",
+      "target": "worldfoundry.pipelines.lyra.pipeline_lyra1:Lyra1Pipeline"
+    },
+    {
+      "binding_id": "lyra-2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lyra-2.yaml",
+      "binding_status": "ready",
+      "model_id": "lyra-2",
+      "target": "worldfoundry.pipelines.lyra.pipeline_lyra2:Lyra2Pipeline"
+    },
+    {
+      "binding_id": "lyra",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/lyra.yaml",
+      "binding_status": "ready",
+      "model_id": "lyra",
+      "target": "worldfoundry.pipelines.lyra.pipeline_lyra2:LyraPipeline"
+    },
+    {
+      "binding_id": "mem-0",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mem-0.yaml",
+      "binding_status": "ready",
+      "model_id": "mem-0",
+      "target": "worldfoundry.synthesis.action_generation.mem0.pipeline:Mem0Pipeline"
+    },
+    {
+      "binding_id": "metric3d-prior",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/metric3d-prior.yaml",
+      "binding_status": "ready",
+      "model_id": "metric3d-prior",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:Metric3DPriorPipeline"
+    },
+    {
+      "binding_id": "mme-vla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mme-vla.yaml",
+      "binding_status": "ready",
+      "model_id": "mme-vla",
+      "target": "worldfoundry.pipelines.component_pipelines:MMEVLAPipeline"
+    },
+    {
+      "binding_id": "molmoact2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/molmoact2.yaml",
+      "binding_status": "ready",
+      "model_id": "molmoact2",
+      "target": "worldfoundry.pipelines.component_pipelines:MolmoAct2Pipeline"
+    },
+    {
+      "binding_id": "molmobot",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/molmobot.yaml",
+      "binding_status": "ready",
+      "model_id": "molmobot",
+      "target": "worldfoundry.pipelines.component_pipelines:MolmoBotPipeline"
+    },
+    {
+      "binding_id": "monst3r",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/monst3r.yaml",
+      "binding_status": "ready",
+      "model_id": "monst3r",
+      "target": "worldfoundry.pipelines.three_d_four_d.pipeline_runtime:MonST3RPipeline"
+    },
+    {
+      "binding_id": "mvdiffusion",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/mvdiffusion.yaml",
+      "binding_status": "ready",
+      "model_id": "mvdiffusion",
+      "target": "worldfoundry.pipelines.three_d_four_d.pipeline_runtime:MVDiffusionPipeline"
+    },
+    {
+      "binding_id": "neoverse",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/neoverse.yaml",
+      "binding_status": "ready",
+      "model_id": "neoverse",
+      "target": "worldfoundry.pipelines.neoverse.pipeline_neoverse:NeoVersePipeline"
+    },
+    {
+      "binding_id": "octo",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/octo.yaml",
+      "binding_status": "ready",
+      "model_id": "octo",
+      "target": "worldfoundry.pipelines.component_pipelines:OctoPipeline"
+    },
+    {
+      "binding_id": "openpi",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/openpi.yaml",
+      "binding_status": "ready",
+      "model_id": "openpi",
+      "target": "worldfoundry.pipelines.component_pipelines:OpenPIPipeline"
+    },
+    {
+      "binding_id": "openvla-oft",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/openvla-oft.yaml",
+      "binding_status": "ready",
+      "model_id": "openvla-oft",
+      "target": "worldfoundry.pipelines.component_pipelines:OpenVLAOFTPipeline"
+    },
+    {
+      "binding_id": "openvla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/openvla.yaml",
+      "binding_status": "ready",
+      "model_id": "openvla",
+      "target": "worldfoundry.pipelines.component_pipelines:OpenVLAPipeline"
+    },
+    {
+      "binding_id": "pi0-fast",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pi0-fast.yaml",
+      "binding_status": "ready",
+      "model_id": "pi0-fast",
+      "target": "worldfoundry.pipelines.component_pipelines:OpenPIPipeline"
+    },
+    {
+      "binding_id": "pi0-worldfoundry",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pi0-worldfoundry.yaml",
+      "binding_status": "ready",
+      "model_id": "pi0-worldfoundry",
+      "target": "worldfoundry.pipelines.component_pipelines:OpenPIPipeline"
+    },
+    {
+      "binding_id": "pi0",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pi0.yaml",
+      "binding_status": "ready",
+      "model_id": "pi0",
+      "target": "worldfoundry.pipelines.component_pipelines:OpenPIPipeline"
+    },
+    {
+      "binding_id": "pi05",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pi05.yaml",
+      "binding_status": "ready",
+      "model_id": "pi05",
+      "target": "worldfoundry.pipelines.component_pipelines:OpenPIPipeline"
+    },
+    {
+      "binding_id": "pi3",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pi3.yaml",
+      "binding_status": "ready",
+      "model_id": "pi3",
+      "target": "worldfoundry.pipelines.pi3.pipeline_pi3:Pi3Pipeline"
+    },
+    {
+      "binding_id": "pixelsplat",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/pixelsplat.yaml",
+      "binding_status": "ready",
+      "model_id": "pixelsplat",
+      "target": "worldfoundry.pipelines.component_pipelines:PixelSplatPipeline"
+    },
+    {
+      "binding_id": "prior-depth-anything",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/prior-depth-anything.yaml",
+      "binding_status": "ready",
+      "model_id": "prior-depth-anything",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:PriorDepthAnythingPipeline"
+    },
+    {
+      "binding_id": "rdt-1b",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/rdt-1b.yaml",
+      "binding_status": "ready",
+      "model_id": "rdt-1b",
+      "target": "worldfoundry.synthesis.action_generation.rdt_1b.pipeline:RDT1BPipeline"
+    },
+    {
+      "binding_id": "recammaster",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/recammaster.yaml",
+      "binding_status": "ready",
+      "model_id": "recammaster",
+      "target": "worldfoundry.pipelines.kling.pipeline_recammaster:ReCamMasterPipeline"
+    },
+    {
+      "binding_id": "rise",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/rise.yaml",
+      "binding_status": "ready",
+      "model_id": "rise",
+      "target": "worldfoundry.synthesis.action_generation.rise.pipeline:RisePipeline"
+    },
+    {
+      "binding_id": "roboflamingo",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/roboflamingo.yaml",
+      "binding_status": "ready",
+      "model_id": "roboflamingo",
+      "target": "worldfoundry.pipelines.component_pipelines:RoboFlamingoPipeline"
+    },
+    {
+      "binding_id": "rt-1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/rt-1.yaml",
+      "binding_status": "ready",
+      "model_id": "rt-1",
+      "target": "worldfoundry.pipelines.rt1.pipeline_rt1:RT1Pipeline"
+    },
+    {
+      "binding_id": "runway-gen4p5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/runway-gen4p5.yaml",
+      "binding_status": "ready",
+      "model_id": "runway-gen4p5",
+      "target": "worldfoundry.pipelines.runway.pipeline_runway_gen4p5:RunwayGen4p5Pipeline"
+    },
+    {
+      "binding_id": "smolvla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/smolvla.yaml",
+      "binding_status": "ready",
+      "model_id": "smolvla",
+      "target": "worldfoundry.synthesis.action_generation.smolvla.pipeline:SmolVLAPipeline"
+    },
+    {
+      "binding_id": "sora2",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/sora2.yaml",
+      "binding_status": "ready",
+      "model_id": "sora2",
+      "target": "worldfoundry.pipelines.sora.pipeline_sora2:Sora2Pipeline"
+    },
+    {
+      "binding_id": "spatial-forcing",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/spatial-forcing.yaml",
+      "binding_status": "ready",
+      "model_id": "spatial-forcing",
+      "target": "worldfoundry.pipelines.spatial_forcing.pipeline_spatial_forcing:SpatialForcingPipeline"
+    },
+    {
+      "binding_id": "spirit-v1.5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/spirit-v1.5.yaml",
+      "binding_status": "ready",
+      "model_id": "spirit-v1.5",
+      "target": "worldfoundry.synthesis.action_generation.spirit_v15.pipeline:SpiritV15Pipeline"
+    },
+    {
+      "binding_id": "splatt3r",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/splatt3r.yaml",
+      "binding_status": "ready",
+      "model_id": "splatt3r",
+      "target": "worldfoundry.pipelines.component_pipelines:Splatt3RPipeline"
+    },
+    {
+      "binding_id": "stable-virtual-camera",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/stable-virtual-camera.yaml",
+      "binding_status": "ready",
+      "model_id": "stable-virtual-camera",
+      "target": "worldfoundry.pipelines.three_d_four_d.pipeline_runtime:StableVirtualCameraPipeline"
+    },
+    {
+      "binding_id": "starvla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/starvla.yaml",
+      "binding_status": "ready",
+      "model_id": "starvla",
+      "target": "worldfoundry.pipelines.component_pipelines:StarVLAPipeline"
+    },
+    {
+      "binding_id": "tinyvla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/tinyvla.yaml",
+      "binding_status": "ready",
+      "model_id": "tinyvla",
+      "target": "worldfoundry.synthesis.action_generation.tinyvla.pipeline:TinyVLAPipeline"
+    },
+    {
+      "binding_id": "track-anything-prior",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/track-anything-prior.yaml",
+      "binding_status": "ready",
+      "model_id": "track-anything-prior",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:TrackAnythingPriorPipeline"
+    },
+    {
+      "binding_id": "unidepth-v2-prior",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/unidepth-v2-prior.yaml",
+      "binding_status": "ready",
+      "model_id": "unidepth-v2-prior",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:UniDepthV2PriorPipeline"
+    },
+    {
+      "binding_id": "unik3d-prior",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/unik3d-prior.yaml",
+      "binding_status": "ready",
+      "model_id": "unik3d-prior",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:UniK3DPriorPipeline"
+    },
+    {
+      "binding_id": "veo3",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/veo3.yaml",
+      "binding_status": "ready",
+      "model_id": "veo3",
+      "target": "worldfoundry.pipelines.veo.pipeline_veo3:Veo3Pipeline"
+    },
+    {
+      "binding_id": "vggt-omega",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/vggt-omega.yaml",
+      "binding_status": "ready",
+      "model_id": "vggt-omega",
+      "target": "worldfoundry.pipelines.vggt_omega.pipeline_vggt_omega:VGGTOmegaPipeline"
+    },
+    {
+      "binding_id": "vggt",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/vggt.yaml",
+      "binding_status": "ready",
+      "model_id": "vggt",
+      "target": "worldfoundry.pipelines.vggt.pipeline_vggt:VGGTPipeline"
+    },
+    {
+      "binding_id": "video-depth-anything-prior",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/video-depth-anything-prior.yaml",
+      "binding_status": "ready",
+      "model_id": "video-depth-anything-prior",
+      "target": "worldfoundry.pipelines.geometry_priors.pipeline_geometry_priors:VideoDepthAnythingPriorPipeline"
+    },
+    {
+      "binding_id": "vlanext",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/vlanext.yaml",
+      "binding_status": "ready",
+      "model_id": "vlanext",
+      "target": "worldfoundry.pipelines.component_pipelines:VLANeXtPipeline"
+    },
+    {
+      "binding_id": "wan-2p5",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan-2p5.yaml",
+      "binding_status": "ready",
+      "model_id": "wan-2p5",
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p5:Wan2p5Pipeline"
+    },
+    {
+      "binding_id": "wan-2p6",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan-2p6.yaml",
+      "binding_status": "ready",
+      "model_id": "wan-2p6",
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p6:Wan2p6Pipeline"
+    },
+    {
+      "binding_id": "wan-2p7",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wan-2p7.yaml",
+      "binding_status": "ready",
+      "model_id": "wan-2p7",
+      "target": "worldfoundry.pipelines.wan.pipeline_wan_2p7:Wan2p7Pipeline"
+    },
+    {
+      "binding_id": "wonderjourney",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wonderjourney.yaml",
+      "binding_status": "ready",
+      "model_id": "wonderjourney",
+      "target": "worldfoundry.pipelines.three_d_four_d.pipeline_runtime:WonderJourneyPipeline"
+    },
+    {
+      "binding_id": "wonderworld",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/wonderworld.yaml",
+      "binding_status": "ready",
+      "model_id": "wonderworld",
+      "target": "worldfoundry.pipelines.three_d_four_d.pipeline_runtime:WonderWorldPipeline"
+    },
+    {
+      "binding_id": "worldgen",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldgen.yaml",
+      "binding_status": "ready",
+      "model_id": "worldgen",
+      "target": "worldfoundry.pipelines.three_d_four_d.pipeline_runtime:WorldGenPipeline"
+    },
+    {
+      "binding_id": "worldlabs",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/worldlabs.yaml",
+      "binding_status": "ready",
+      "model_id": "worldlabs",
+      "target": "worldfoundry.pipelines.worldlabs.pipeline_worldlabs:WorldLabsPipeline"
+    },
+    {
+      "binding_id": "x-wam",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/x-wam.yaml",
+      "binding_status": "ready",
+      "model_id": "x-wam",
+      "target": "worldfoundry.pipelines.x_wam.pipeline_x_wam:XWAMPipeline"
+    },
+    {
+      "binding_id": "xiaomi-robotics-0",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/xiaomi-robotics-0.yaml",
+      "binding_status": "ready",
+      "model_id": "xiaomi-robotics-0",
+      "target": "worldfoundry.pipelines.xiaomi_robotics_0.pipeline_xiaomi_robotics_0:XiaomiRobotics0Pipeline"
+    },
+    {
+      "binding_id": "xiaomi-robotics-1",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/xiaomi-robotics-1.yaml",
+      "binding_status": "ready",
+      "model_id": "xiaomi-robotics-1",
+      "target": "worldfoundry.synthesis.action_generation.xiaomi_robotics_1.pipeline:XiaomiRobotics1Pipeline"
+    },
+    {
+      "binding_id": "xvla",
+      "binding_path": "worldfoundry/data/models/bindings/pipelines/xvla.yaml",
+      "binding_status": "ready",
+      "model_id": "xvla",
+      "target": "worldfoundry.pipelines.component_pipelines:XVLAPipeline"
+    }
+  ],
+  "schema_version": 1,
+  "scope": "Frozen native identities and replay definitions; existing uncovered variants remain uncovered.",
+  "source_revision": "61230b0b025f4f52083eae50514f42a8c7121b10"
+}
