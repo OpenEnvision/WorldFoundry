@@ -3,7 +3,7 @@ title: 可插拔 diffusion 加速
 description: 对照 Sol-Engine 与 FlashDreams，说明原生插件、正确性边界和 H100 实测。
 ---
 
-WorldFoundry 的原生加速插件默认关闭。先确认 checkpoint、执行路径和误差预算，再测实际执行与总耗时。2026-10-03 的历史完整 SANA 视频测试中，安全融合保持最终 latent 和视频逐位一致，端到端收益约 **0.8%–1.1%**。更激进的缓存和融合配置未通过固定质量门槛。
+WorldFoundry 的原生加速插件默认关闭。在干净 release 版本 `57622000` 上，SANA 逐点融合在两个 seed 保持最终 latent 与 RGB 逐位一致，但选择结果是 **`no_validated_speedup`**：seed 43 的配对置信区间跨过 1。该配置只有 `scale_shift` 实际加速，residual 保留保护性 eager 执行。解释耗时前应先确认 checkpoint、实际执行与质量。2026-10-03 记录的 SANA **0.8%–1.1%** 收益作为历史证据保留在下文。
 
 ## 上游对照
 
@@ -91,7 +91,7 @@ registry = diffusion_acceleration_registry()
 
 | 插件 | 默认与边界 |
 | --- | --- |
-| `sana_block_fusion` | `backend=auto`，`min_elements=12582912`；小输入、autograd 或不合格布局保留 eager。`fuse_layer_norm=False`、`repack_tokens=False`。这两个额外选项改变数值调度，需要独立质量预算；本轮完整视频测试未通过。 |
+| `sana_block_fusion` | `backend=auto`，`min_elements=12582912`；小输入、autograd 或不合格布局保留 eager。默认 `fuse_layer_norm=False`、`repack_tokens=False`。当前 LayerNorm 路径保留 vendor reduction，融合后续 AdaLN 运算。原生 token strides 触发布局保护，保留 eager；开启 repack 可执行组合路径，但当前完整视频质量门槛未通过。历史 norm/repack 淘汰仅适用于其记录的实现与配置。 |
 | `easycache` | 必须显式提供非负 `threshold`。在线学习 dense input/output 变化比例，累计预测 drift 后决定复用 `current_input + last_dense_transform`。本实现是 **embedded-token-block-stack** 变体，不是所有上游 raw-latent 变体的逐行移植。 |
 | `attention_policy` | 原生 Wan self/cross 分开绑定。Sol 仅 self；必须 BF16、head dim 128、无 mask、无 backward，`kv_splits=1`。参数非法或依赖不满足时失败，不偷偷切成 dense。 |
 | `selective_fp8` | 必须显式指定 `include` module-path glob，可选 `exclude`。默认 `min_features=1024`、`scaling=rowwise`、`use_fast_accum=False`；仅符合条件的原生 Wan/SANA block Linear。执行回执区分实际 scaled FP8 GEMM 与 dense fallback。 |
@@ -186,7 +186,9 @@ Wan recipe 使用已有的 `vae` checkpoint override，SANA 使用 `codec`。独
 
 `lightvae_encoder.py` 先验证 FP32 untiled teacher 能复现保存的原生 Wan RGB。Teacher 与 student 随后编码 **完全相同的 RGB**，再由不变的 teacher 解码两组 latent。质量基准是 teacher 的 encode/decode 结果，隔离 encoder 替换影响；不评估 student decoder 质量或相对原 RGB 的重建保真度。通过门禁的样本才进入至少三轮配对 resident FP32 encoder-only 计时，排除 decode 和 pilot hook。每个计时输出必须与自己的 pilot 一致，student encode 计数也必须增加。
 
-数值预算仍为有限值、最差 batch latent relative L2 ≤0.03、最差 batch 视频 PSNR ≥33 dB、SSIM ≥0.98。新 SSIM 门槛使用 **所有 frame 和 batch member 的最小值**；下文前轮视频诊断使用平均 SSIM，其数值是历史结果，不能当作新的逐帧认证。新候选须证明实际执行后才进入计时。原生计时还保存每轮新回执，拒绝 provider error、fallback/quarantine、provider 调用数或 scope 配置变化、插件未执行；逐模块 attention hook 仅用于不计时的 pilot。Wan 嵌套 runtime cache 报告与 SANA 顶层 cache 报告均被正确读取。共享 GPU 可以验证输出，但不认证速度或选出性能赢家。设备资格是计时前后采样，不是持续独占证明。
+数值预算仍为有限值、最差 batch latent relative L2 ≤0.03、最差 batch 视频 PSNR ≥33 dB、SSIM ≥0.98。新 SSIM 门槛使用 **所有 frame 和 batch member 的最小值**；下文前轮视频诊断使用平均 SSIM，其数值是历史结果，不能当作新的逐帧认证。新候选须证明实际执行后才进入计时。
+
+原生计时保存每轮新回执。可选 attention provider 的 error、fallback/quarantine、provider 调用数或 scope 配置变化会淘汰计时；逐模块 attention hook 仅用于不计时的 pilot。逐点算子可以保留保护性 eager 执行。SANA 候选必须实际执行所请求的目标算子：默认融合要求 `scale_shift`，请求 norm 融合时要求 `layer_norm_scale_shift`。Residual 因布局保护回退不会单独否定已经执行的 scale-shift 加速。Wan 嵌套 runtime cache 报告与 SANA 顶层 cache 报告均被正确读取。共享 GPU 可以验证输出，但不认证速度或选出性能赢家。设备资格是计时前后采样，不是持续独占证明。
 
 历史原生 Wan1.3B 对照使用 320×576、41 帧、20 steps、CFG 6、shift 7 和 seed 42/43。这些投影、压缩 Sol 与 LightVAE decoder 记录来自共享 vendor normalization 修复之前，只适用于其记录的源码，不能认证当前实现的算法、质量或速度。脱敏记录保留原始 fingerprint，并明确列出未记录的 provenance 检查；事后审查不等于重新测量。斜杠两侧数值依此 seed 顺序排列：
 
@@ -200,10 +202,13 @@ Wan recipe 使用已有的 `vae` checkpoint override，SANA 使用 `codec`。独
 
 上述历史 decoder 对照中的 FP32 teacher 重新解码逐位复现保存的 Wan RGB，只评估 student decoder 质量，不建立端到端加速结论。之前的 SANA saved-RGB 对照混用了 tiled 与 untiled FP32 解码，不计入本次 LightVAE 证据。历史证据：[Wan 投影](/measurements/wan-projection-quality-2026-10-03.json)、[压缩 Sol](/measurements/wan-sol-compressed-quality-2026-10-03.json)、[LightVAE decoder](/measurements/lightvae-wan21-decoder-quality-2026-10-03.json)。
 
-已完成的原生插件诊断使用 normalization 修复后的源码 `0c56052d`，保留当前源码 manifest 并使用新的执行门禁。下列已完成记录均确认执行源码未变：
+已完成的 Wan 插件诊断使用 normalization 修复后的源码 `0c56052d`；SANA 重跑使用干净 release 版本 `57622000`。当前源码 manifest 与执行门禁均被保留。下列已完成记录均确认执行源码未变：
 
 | 候选 | 当前源码结论 | 证据与限制 |
 | --- | --- | --- |
+| SANA 安全逐点融合，原生 strides | 两个 seed 逐位一致，未认证加速 | 中位加速比 **1.005086×/1.001469×**；seed 43 的 CI95 **[0.992350, 1.009025]** 跨过 1。每个 pilot 实际执行 **1600 次加速 `scale_shift`**，**1600 次 residual 保留保护性 eager**。质量、执行与设备采样门禁均通过，但候选选择是 `no_validated_speedup`。[记录](/measurements/sana-vendor-norm-quality-timing-2026-10-04.json)。 |
+| SANA vendor norm 路径，不 repack | 逐位一致，两个 seed 执行门禁均淘汰 | 每个 pilot 的 **1600 次 `layer_norm_scale_shift` 均为 eager**，目标加速调用为零；另有 1600 次 eager residual。原生非连续 token strides 未通过连续布局保护，因此不计时。[记录](/measurements/sana-vendor-norm-quality-timing-2026-10-04.json)。 |
+| SANA vendor norm 与 token repack | 实际执行通过，两个 seed 质量均淘汰 | Relative L2 **0.076547/0.099955**，PSNR **31.856/28.043 dB**，最小 frame SSIM **0.947509/0.892221**。每个 pilot 实际执行 **1600 次加速 norm/AdaLN 与 1600 次加速 residual**，没有 fallback。质量淘汰后不计时。此处是 vendor reduction 与 repack 的组合，不能将误差全部归因于 LayerNorm。[记录](/measurements/sana-vendor-norm-repacked-quality-2026-10-04.json)。 |
 | Sol 不压缩，`compress_kv=False` | seed 42/43 均淘汰 | Latent relative L2 **0.055884/0.157324**；PSNR **33.049/25.868 dB**；最小 frame SSIM **0.964725/0.881227**。执行门禁通过且源码未变，但质量未达标，不进入计时。[记录](/measurements/wan-sol-uncompressed-2026-10-04.json)。 |
 | Wan cross-KV fusion | 两个 seed 逐位一致，实测收益很小 | 最终 latent 与 RGB 不变。每 seed 三轮配对计时，中位加速比 **1.001647×/1.001000×**，约 **0.10%–0.16%**。所有计时执行门禁与设备采样门禁通过。[记录](/measurements/wan-cache-quality-timing-2026-10-04.json)。 |
 | Wan EasyCache，阈值 0.025/0.05/0.1 | 未获得质量合格的缓存加速 | 0.025/0.05 在两个 seed 均无复用。0.1 的 seed 42 实际复用一次、跳过 30 次 block 调用。PSNR **33.571 dB** 达标，但 relative L2 **0.068931** 与最小 frame SSIM **0.955778** 未达标；seed 43 无复用。[记录](/measurements/wan-cache-quality-timing-2026-10-04.json)。 |
@@ -244,7 +249,7 @@ PYTHONPATH=. python benchmarks/inference/lightvae_encoder.py \
 | Sol-Attn，独立随机 Q/K/V | **淘汰，不报告加速收益** | relative L2 约 0.74–0.75，超过预设 0.01。 |
 | 完整 SANA，EasyCache threshold 0.1 | **淘汰，不报告加速收益** | 最终 latent relative L2 0.083/0.129，PSNR 30.75/27.34 dB，SSIM 0.947/0.889。 |
 
-视频候选共享固定门槛：有限值、latent relative L2 ≤0.03、PSNR ≥33 dB、SSIM ≥0.98。重排布局或完整 norm 融合都未通过。较低缓存阈值 0.025/0.05 在这两个 seed 上没有跳块；其组合耗时不能算作 EasyCache 的加速收益。候选选择要求所有 seed 的质量与执行门槛通过，并按配对 bootstrap 下界筛选，最终选择安全融合。
+历史视频候选使用固定门槛：有限值、latent relative L2 ≤0.03、PSNR ≥33 dB、平均 SSIM ≥0.98。`repacked_fusion` 与 `full_norm_fusion` 均未通过；后者同时请求 **`fuse_layer_norm=True` 与 `repack_tokens=True`**。历史组合路径的淘汰不能单独判定当前保留 vendor reduction 的 LayerNorm 实现。历史缓存阈值 0.025/0.05 在这两个 seed 上没有跳块，当时按配对 bootstrap 下界选择安全融合。上文当前源码重跑采用最小 frame SSIM，区分质量淘汰与布局保护导致的未执行加速。
 
 小形状没有稳定收益，保持 eager 是既定策略。配对测量记录全部原始时间、运行环境和实际执行；三轮视频样本不能支撑普遍性能结论，也不等于 VBench/WorldScore 等语义质量认证。
 
