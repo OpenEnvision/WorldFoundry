@@ -99,3 +99,23 @@ def test_kernel_dispatch_receipt_retains_candidate_failure(monkeypatch) -> None:
     assert dispatch["fallback"] is True
     assert len(dispatch["failures"]) == 1
     assert "toy_broken" in dispatch["failures"][0]
+
+
+def test_explicit_backend_overrides_process_pin_without_reusing_other_selection(monkeypatch) -> None:
+    monkeypatch.setenv("WORLDFOUNDRY_KERNEL_BACKEND", "torch")
+    registry = KernelRegistry()
+    registry.register(
+        "toy", backend="test", name="toy_accelerated",
+        implementation=lambda value: value * 2, predicate=lambda _value: True,
+    )
+    receipt = {}
+    with kernel_dispatch_receipt_scope(receipt):
+        assert registry.dispatch("toy", lambda value: value + 1, 3, signature=("shape",), backend="test") == 6
+        assert registry.dispatch("toy", lambda value: value + 1, 3, signature=("shape",)) == 4
+        assert registry.dispatch("toy", lambda value: value + 1, 3, signature=("shape",), backend="test") == 6
+        monkeypatch.setenv("WORLDFOUNDRY_KERNEL_BACKEND", "test")
+        assert registry.dispatch("toy", lambda value: value + 1, 3, signature=("shape",), backend="torch") == 4
+        assert registry.dispatch("toy", lambda value: value + 1, 3, signature=("shape",)) == 6
+    assert [item["backend"] for item in receipt["dispatches"]] == ["test", "torch", "test", "torch", "test"]
+    assert receipt["dispatches"][2]["cache_hit"]
+    assert receipt["dispatches"][4]["cache_hit"]

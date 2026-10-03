@@ -229,63 +229,6 @@ def _scale_shift_kernel(
 
 
 @triton.jit
-def _layer_norm_scale_shift_kernel(
-    x_ptr,
-    scale_ptr,
-    shift_ptr,
-    out_ptr,
-    rows,
-    eps,
-    features: tl.constexpr,
-    d0: tl.constexpr,
-    d1: tl.constexpr,
-    d2: tl.constexpr,
-    d3: tl.constexpr,
-    ss0: tl.constexpr,
-    ss1: tl.constexpr,
-    ss2: tl.constexpr,
-    ss3: tl.constexpr,
-    ss4: tl.constexpr,
-    hs0: tl.constexpr,
-    hs1: tl.constexpr,
-    hs2: tl.constexpr,
-    hs3: tl.constexpr,
-    hs4: tl.constexpr,
-    round_modulation: tl.constexpr,
-    block: tl.constexpr,
-):
-    """Affine-free LayerNorm then AdaLN; one program per row, features in *block*."""
-
-    row = tl.program_id(0)
-    cols = tl.arange(0, block)
-    mask = (row < rows) & (cols < features)
-    offsets = row * features + cols
-    x_input = tl.load(x_ptr + offsets, mask=mask, other=0.0)
-    x = x_input.to(tl.float32)
-    mean = tl.sum(x, axis=0) / features
-    centered = tl.where(mask, x - mean, 0.0)
-    variance = tl.sum(centered * centered, axis=0) / features
-    # LayerNorm returns the input dtype before the following AdaLN
-    # arithmetic. Preserve that rounding point for mixed fp16/bf16 + fp32
-    # modulation as used by Wan/LingBot.
-    normed = _round_to_dtype(centered * tl.rsqrt(variance + eps), x_input.dtype)
-
-    scale_base = _broadcast_row_offset(row, d0, d1, d2, d3, ss0, ss1, ss2, ss3)
-    shift_base = _broadcast_row_offset(row, d0, d1, d2, d3, hs0, hs1, hs2, hs3)
-    scale_input = tl.load(scale_ptr + scale_base + cols * ss4, mask=mask, other=0.0)
-    shift_input = tl.load(shift_ptr + shift_base + cols * hs4, mask=mask, other=0.0)
-    # Preserve PyTorch's eager expression boundaries while keeping one launch:
-    # ``1 + scale`` and the following multiply each round when their promoted
-    # dtype is fp16/bf16. Mixed low-precision or fp32 modulation stays fp32.
-    scale_factor = _round_to_dtype(1.0 + scale_input.to(tl.float32), scale_input.dtype)
-    modulated = normed.to(tl.float32) * scale_factor.to(tl.float32)
-    if round_modulation:
-        modulated = _round_to_dtype(modulated, x_input.dtype)
-    output = modulated.to(tl.float32) + shift_input.to(tl.float32)
-    tl.store(out_ptr + offsets, output, mask=mask)
-
-
-@triton.jit
 def _rms_norm_scale_shift_kernel(
     x_ptr,
     weight_ptr,
@@ -740,45 +683,20 @@ def layer_norm_scale_shift(
     scale: torch.Tensor,
     shift: torch.Tensor,
     eps: float,
+    *,
+    upcast: bool = False,
 ) -> torch.Tensor:
-    """Launch fused LayerNorm+AdaLN; *block* must cover the last dimension."""
+    """Preserve vendor LayerNorm bits, then launch one fused AdaLN kernel."""
 
-    rows = x.numel() // x.shape[-1]
-    features = int(x.shape[-1])
-    dims, scale_strides = _padded_outer_shape_and_strides(x, scale)
-    _, shift_strides = _padded_outer_shape_and_strides(x, shift)
-    block = triton.next_power_of_2(features)
-    modulation_dtype = torch.promote_types(x.dtype, scale.dtype)
-    output_dtype = torch.promote_types(x.dtype, torch.promote_types(scale.dtype, shift.dtype))
-    output = torch.empty_like(x, dtype=output_dtype)
-    _layer_norm_scale_shift_kernel[(rows,)](
-        x,
-        scale,
-        shift,
-        output,
-        rows,
-        float(eps),
-        features=features,
-        d0=dims[0],
-        d1=dims[1],
-        d2=dims[2],
-        d3=dims[3],
-        ss0=scale_strides[0],
-        ss1=scale_strides[1],
-        ss2=scale_strides[2],
-        ss3=scale_strides[3],
-        ss4=scale_strides[4],
-        hs0=shift_strides[0],
-        hs1=shift_strides[1],
-        hs2=shift_strides[2],
-        hs3=shift_strides[3],
-        hs4=shift_strides[4],
-        round_modulation=modulation_dtype in {torch.float16, torch.bfloat16},
-        block=block,
-        num_warps=_num_warps(block),
-        enable_fp_fusion=False,
+    # A custom reduction can change even low-precision results near a rounding
+    # boundary. Keep the same vendor reduction, dtype, and optional upcast as
+    # the eager expression; only combine its following pointwise operations.
+    normalized = torch.nn.functional.layer_norm(
+        x.float() if upcast else x, (x.shape[-1],), weight=None, bias=None, eps=eps,
     )
-    return output
+    if upcast:
+        normalized = normalized.to(x.dtype)
+    return scale_shift(normalized, scale, shift)
 
 
 def rms_norm_scale_shift(
