@@ -312,6 +312,8 @@ LightVAE 的两种局部选择是全量量化失败后的探索候选；它们�
 
 所有上述完成记录均确认执行源码和输入未变。较早启动中断和 Triton 编译器崩溃的实验已排除。三个 GPU 上的独立实验共享主机 CPU；设备资格是计时前后采样，不是持续独占证明。这里的收益只适用于这些固定样本，不构成模型全量质量或通用速度认证。
 
+补全后的干净 release `31fb97a0` 最终回归：模型/core/diagnostics **726 passed、4 skipped**；公开 CPU 白名单 **584 passed、4 subtests passed**；隔离 attention/Sol **37 passed**。主环境跳过的 TMA、cuDNN Frontend FP8 与两个 Sol CUDA 路径均在隔离环境实际执行。测试集有重叠，不相加；它们覆盖所列路径，不代表仓库全量测试。[补全后的 release 验证记录](/measurements/acceleration-completion-release-validation-2026-10-04.json)。
+
 ## 历史 H100 实测与被淘汰的配置
 
 | 测量范围 | 结果 | 正确性与限制 |

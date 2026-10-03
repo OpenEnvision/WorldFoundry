@@ -308,6 +308,8 @@ The two selective codec variants are exploratory follow-ups to full-encoder reje
 
 Every completed record confirms unchanged execution sources and inputs. Interrupted startup and older Triton compiler-abort runs are excluded. Independent experiments used separate GPUs while sharing host CPU resources; device qualification samples before/after timings, not continuously exclusive ownership. Gains apply to these fixed cases, not model-wide quality or general performance.
 
+Final checks on clean merged release `31fb97a0`: model/core/diagnostics **726 passed, 4 skipped**; public CPU whitelist **584 passed, 4 subtests passed**; isolated attention/Sol **37 passed**. Optional TMA, cuDNN Frontend FP8 and two Sol CUDA paths skipped in the main environment execute in the isolated environment. Suites overlap and must not be summed or treated as repository-wide coverage. [Completion release validation](/measurements/acceleration-completion-release-validation-2026-10-04.json).
+
 ## Historical H100 results and rejected candidates
 
 | Measurement | Result | Validation and limits |
