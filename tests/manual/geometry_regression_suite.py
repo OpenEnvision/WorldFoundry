@@ -19,7 +19,7 @@ import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 def load_module(path: Path):
@@ -201,6 +201,100 @@ def materialize_case(case: dict, reference: Path, env: dict) -> dict:
     return manifest["case"]
 
 
+def _extract_source_archive(bundle: tarfile.TarFile, destination: Path) -> None:
+    """Extract an owned tree with file links validated before any writes.
+
+    Git archives can contain relative license links. Each complete link chain
+    must resolve to a regular file in this archive; directory aliases and
+    hardlinks are unnecessary for Git source snapshots and remain rejected.
+    """
+    if not destination.is_dir() or destination.is_symlink() or any(destination.iterdir()):
+        raise ValueError("Source archive destination must be an empty owned directory")
+    members = {}
+    directories = {""}
+    for member in bundle.getmembers():
+        name = impact.relative_path(member.name.rstrip("/"))
+        if name in members:
+            raise ValueError(f"Duplicate source archive member: {name}")
+        if not (member.isfile() or member.isdir() or member.issym()):
+            raise ValueError(f"Unsupported source archive member type: {name}")
+        members[name] = member
+        parents = PurePosixPath(name).parents
+        directories.update(parent.as_posix() for parent in parents if parent != PurePosixPath("."))
+        if member.isdir():
+            directories.add(name)
+    for name in members:
+        for parent in PurePosixPath(name).parents:
+            ancestor = members.get(parent.as_posix())
+            if ancestor is not None and not ancestor.isdir():
+                raise ValueError(f"Source archive member has a non-directory parent: {name}")
+
+    resolved_links, resolving = {}, set()
+
+    def resolve_link(name):
+        if name in resolved_links:
+            return resolved_links[name]
+        if name in resolving:
+            raise ValueError(f"Source archive symlink cycle: {name}")
+        target = members[name].linkname
+        if not target or PurePosixPath(target).is_absolute() or "\\" in target or "\0" in target:
+            raise ValueError(f"Unsafe source archive symlink target: {name}")
+        resolving.add(name)
+        parts = list(PurePosixPath(name).parent.parts)
+        if parts == ["."]:
+            parts = []
+        components = target.split("/")
+        for index, component in enumerate(components):
+            parent = "/".join(parts)
+            if parent not in directories:
+                raise ValueError(f"Source archive symlink has a non-directory target parent: {name}")
+            if component in {"", "."}:
+                continue
+            if component == "..":
+                if not parts:
+                    raise ValueError(f"Source archive symlink escapes its tree: {name}")
+                parts.pop()
+                continue
+            parts.append(component)
+            current = "/".join(parts)
+            item = members.get(current)
+            if item is not None and item.issym():
+                if index != len(components) - 1:
+                    raise ValueError(f"Source archive symlink traverses a parent alias: {name}")
+                current = resolve_link(current)
+                parts = current.split("/")
+        terminal = "/".join(parts)
+        if terminal not in members or not members[terminal].isfile():
+            raise ValueError(f"Source archive symlink must resolve to an archived regular file: {name}")
+        resolving.remove(name)
+        resolved_links[name] = terminal
+        return terminal
+
+    for name, member in members.items():
+        if member.issym():
+            resolve_link(name)
+
+    # No links exist while file contents are written, so archive path aliases
+    # cannot redirect a write through the destination's parent directories.
+    for name, member in members.items():
+        path = destination / name
+        if member.isdir():
+            path.mkdir(parents=True, exist_ok=True)
+        elif member.isfile():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            source = bundle.extractfile(member)
+            if source is None:
+                raise ValueError(f"Source archive file has no content: {name}")
+            with source, path.open("xb") as output:
+                shutil.copyfileobj(source, output)
+            path.chmod(member.mode & 0o777)
+    for name, member in members.items():
+        if member.issym():
+            path = destination / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.symlink_to(member.linkname)
+
+
 def snapshot_source(profile: dict, destination: Path) -> dict:
     root = Path(profile["source_root"])
     revision = impact.revision(root, profile["source_ref"] + "^{commit}")
@@ -231,12 +325,7 @@ def snapshot_source(profile: dict, destination: Path) -> dict:
             timeout=180,
         )
         with tarfile.open(archive) as bundle:
-            members = bundle.getmembers()
-            for member in members:
-                impact.relative_path(member.name.rstrip("/"))
-                if not member.isfile() and not member.isdir():
-                    raise ValueError(f"Unsupported source archive link: {member.name}")
-            bundle.extractall(destination, members=members)
+            _extract_source_archive(bundle, destination)
     finally:
         archive.unlink(missing_ok=True)
     return {"source_revision": revision, "source_tree": tree}

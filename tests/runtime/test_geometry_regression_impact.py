@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -227,3 +228,379 @@ def test_public_matrix_still_rejects_an_unintegrated_world_model():
     )
     assert plan["status"] == "uncovered"
     assert plan["uncovered_paths"] == [path]
+
+
+VERIFICATION_SUITE = "tests/manual/geometry_regression_suite.py"
+VERIFICATION_IMPACT = "tests/manual/geometry_regression_impact.py"
+MG2_CASE = "matrix-game2-controls-short"
+VERIFICATION_CONTRACTS = [
+    "tests/runtime/test_geometry_regression_impact.py",
+    "tests/runtime/test_geometry_regression_suite.py",
+]
+
+
+@pytest.fixture
+def verification_project(project):
+    root, _, _ = project
+    files = {
+        VERIFICATION_SUITE: "# Original replay orchestration\n",
+        VERIFICATION_IMPACT: "# Original affected-case planning\n",
+        "tests/manual/geometry_regression.py": "# Original numerical exporter\n",
+        VERIFICATION_CONTRACTS[0]: "def test_complete_diff_proof(): pass\n",
+        VERIFICATION_CONTRACTS[1]: "def test_replay_snapshot_safety(): pass\n",
+        "docs/orchestration.md": "original guide\n",
+        ".github/workflows/ci.yml": "name: validation\n",
+        "Makefile": "test:\n\tpython -m pytest\n",
+        ".gitignore": "worldfoundry/ignored_shadow.py\nignored_shadow.py\n",
+        "MANIFEST.in": "include LICENSE\n",
+        "LICENSE": "original project license\n",
+        "requirements/model.txt": "original-runtime==1\n",
+        "envs/model.yaml": "runtime: original\n",
+        "assets/reference.bin": "original input bytes\n",
+        "thirdparty/vendor/source.py": "# Original external runtime\n",
+    }
+    for name, value in files.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(value)
+    matrix = root / "tests/manual/geometry_regression_cases.json"
+    cases = {name: {"id": name, "target": f"worldfoundry.models.{name}:Model"} for name in ("a", "b")}
+    cases[MG2_CASE] = {"id": MG2_CASE, "target": "worldfoundry.models.a:Model"}
+    matrix.write_text(json.dumps(cases))
+    dependencies = root / "tests/manual/geometry_regression_dependencies.json"
+    dependencies.write_text(json.dumps({
+        "schema_version": 1,
+        "shared_paths": ["worldfoundry/core/**", "tests/manual/geometry_regression*.py",
+                         str(matrix.relative_to(root)), str(dependencies.relative_to(root)),
+                         "MANIFEST.in", "requirements/**", "envs/**", "assets/**", "thirdparty/**", "LICENSE"],
+        "ignored_paths": ["tests/**", "docs/**", ".github/**", "Makefile"],
+        "components": {"a": ["worldfoundry/models/a.py"], "b": ["worldfoundry/models/b.py"]},
+        "cases": {"a": ["a"], "b": ["b"], MG2_CASE: ["a"]},
+    }))
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "complete committed verification fixture")
+    return root, matrix, dependencies, git(root, "rev-parse", "HEAD")
+
+
+def commit_verification_change(project, *, tools=(VERIFICATION_SUITE,), extra=None):
+    root, _, _, base = project
+    for name in tools:
+        (root / name).write_text("# Changed verification orchestration\n")
+    for name, value in (extra or {}).items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(value)
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "verification changes")
+    head = git(root, "rev-parse", "HEAD")
+    return head, impact.changed_paths(root, base, head)
+
+
+def verification_proofs(project, *, head, changes, base=None):
+    root, matrix, dependencies, original = project
+    return impact.verification_tooling_proofs(root, matrix, dependencies, changes,
+                                              base=original if base is None else base, head=head)
+
+
+def assert_conservative_verification_fallback(project, *, head, changes, base=None):
+    root, matrix, dependencies, original = project
+    reference = original if base is None else base
+    assert impact.verification_tooling_proofs(root, matrix, dependencies, changes, base=reference, head=head) == []
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=reference, head=head)
+    assert set(plan["selected_cases"]) == {"a", "b", MG2_CASE}
+    assert not plan["cpu_only_changes"]
+    assert not plan["required_cpu_contracts"]
+    return plan
+
+
+@pytest.mark.parametrize("tool,contract", [(VERIFICATION_SUITE, VERIFICATION_CONTRACTS[1]),
+                                          (VERIFICATION_IMPACT, VERIFICATION_CONTRACTS[0])])
+def test_committed_verification_tool_change_requires_cpu_contract_and_real_mg2_replay(verification_project, tool, contract):
+    root, matrix, dependencies, base = verification_project
+    head, changes = commit_verification_change(verification_project, tools=(tool,))
+    proofs = verification_proofs(verification_project, head=head, changes=changes)
+    assert len(proofs) == 1
+    proof = proofs[0]
+    assert proof["path"] == tool
+    assert proof["base_revision"] == base and proof["head_revision"] == head
+    assert proof["source_sha256"] == hashlib.sha256((root / tool).read_bytes()).hexdigest()
+    assert proof["required_cpu_contracts"] == [contract]
+    assert len(proof["immutable_runtime_tree_sha256"]) == 64
+    assert int(proof["immutable_runtime_tree_sha256"], 16) >= 0
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)
+    assert plan["status"] == "planned" and plan["selected_cases"] == [MG2_CASE]
+    assert plan["cpu_only_changes"] == proofs
+    assert plan["required_cpu_contracts"] == [contract]
+    assert plan["required_checks"] == ["public-cpu", "inference-tensors", "real-weight-replays"]
+    assert plan["reasons"][MG2_CASE] == [{"kind": "verified_tooling_pipeline_replay", "paths": [tool]}]
+    assert not plan["uncovered_paths"] and not plan["graph_errors"]
+
+
+def test_two_changed_verification_tools_require_both_complete_cpu_contracts(verification_project):
+    root, matrix, dependencies, base = verification_project
+    tools = (VERIFICATION_IMPACT, VERIFICATION_SUITE)
+    head, changes = commit_verification_change(verification_project, tools=tools)
+    proofs = verification_proofs(verification_project, head=head, changes=changes)
+    assert {item["path"] for item in proofs} == set(tools)
+    assert len({item["immutable_runtime_tree_sha256"] for item in proofs}) == 1
+    assert all(item["required_cpu_contracts"] == VERIFICATION_CONTRACTS for item in proofs)
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)
+    assert plan["selected_cases"] == [MG2_CASE]
+    assert plan["required_cpu_contracts"] == VERIFICATION_CONTRACTS
+
+
+def test_allowed_documentation_tests_workflow_and_make_edits_preserve_runtime_proof(verification_project):
+    root, matrix, dependencies, base = verification_project
+    head, changes = commit_verification_change(verification_project)
+    original = verification_proofs(verification_project, head=head, changes=changes)[0]
+    extra = {"docs/orchestration.md": "updated guide\n", ".github/workflows/ci.yml": "name: changed validation\n",
+             "Makefile": "test:\n\tpython -m pytest -q\n", "tests/runtime/additional_contract.py": "# Additional checks\n"}
+    head, changes = commit_verification_change(verification_project, extra=extra)
+    proof = verification_proofs(verification_project, head=head, changes=changes)[0]
+    assert proof["immutable_runtime_tree_sha256"] == original["immutable_runtime_tree_sha256"]
+    assert proof["source_sha256"] == original["source_sha256"]
+    assert proof["head_revision"] == head and proof["base_revision"] == base
+    assert impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)["selected_cases"] == [MG2_CASE]
+
+
+@pytest.mark.parametrize("path", ["worldfoundry/models/b.py", "MANIFEST.in", "requirements/model.txt",
+                                  "envs/model.yaml", "assets/reference.bin", "thirdparty/vendor/source.py", "LICENSE"])
+def test_mixed_code_environment_packaging_or_asset_changes_retain_full_replay_selection(verification_project, path):
+    head, changes = commit_verification_change(verification_project, extra={path: "# Changed production bytes\n"})
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+@pytest.mark.parametrize("operation", ["mode", "delete", "rename", "new_asset", "symlink"])
+def test_runtime_modes_membership_and_symlink_changes_cannot_use_cpu_proof(verification_project, operation):
+    root, _, _, base = verification_project
+    path = root / "assets/reference.bin"
+    if operation == "mode":
+        path.chmod(0o755)
+    elif operation == "delete":
+        path.unlink()
+    elif operation == "rename":
+        path.rename(root / "assets/renamed-reference.bin")
+    elif operation == "new_asset":
+        (root / "assets/new-reference.bin").write_text("additional input\n")
+    else:
+        path.unlink()
+        path.symlink_to("../LICENSE")
+    head, changes = commit_verification_change(verification_project)
+    assert changes == impact.changed_paths(root, base, head)
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+@pytest.mark.parametrize("definition", ["matrix", "dependencies"])
+def test_committed_case_or_dependency_definition_change_cannot_be_exempted(verification_project, definition):
+    _, matrix, dependencies, _ = verification_project
+    path = matrix if definition == "matrix" else dependencies
+    data = json.loads(path.read_text())
+    if definition == "matrix":
+        data["a"]["scope"] = "Changed replay definition"
+    else:
+        data["ignored_paths"].append("new-ignored-path/**")
+    path.write_text(json.dumps(data))
+    head, changes = commit_verification_change(verification_project)
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+@pytest.mark.parametrize("path_kind", ["tool", "matrix", "dependencies", "contract"])
+def test_uncommitted_inspected_tool_definition_or_contract_cannot_authorize_proof(verification_project, path_kind):
+    root, matrix, dependencies, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    path = {"tool": root / VERIFICATION_SUITE, "matrix": matrix, "dependencies": dependencies,
+            "contract": root / VERIFICATION_CONTRACTS[1]}[path_kind]
+    if path_kind in {"matrix", "dependencies"}:
+        path.write_text(json.dumps(json.loads(path.read_text()), indent=2) + "\n")
+    else:
+        path.write_text(path.read_text() + "# Edited after commit\n")
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+@pytest.mark.parametrize("change", ["missing_tool", "missing_doc", "extra_path", "hidden_runtime"])
+def test_incomplete_or_invented_changed_path_lists_cannot_authorize_proof(verification_project, change):
+    extra = {"docs/orchestration.md": "updated guide\n"}
+    if change == "hidden_runtime":
+        extra["worldfoundry/models/b.py"] = "# Hidden production edit\n"
+    head, changes = commit_verification_change(verification_project, extra=extra)
+    if change == "missing_tool":
+        supplied = [item for item in changes if item != VERIFICATION_SUITE]
+    elif change == "missing_doc":
+        supplied = [item for item in changes if item != "docs/orchestration.md"]
+    elif change == "extra_path":
+        supplied = [*changes, "docs/invented.md"]
+    else:
+        supplied = [item for item in changes if item != "worldfoundry/models/b.py"]
+    assert verification_proofs(verification_project, head=head, changes=supplied) == []
+
+
+@pytest.mark.parametrize("base", [None, "0" * 40, "missing-base-ref"])
+def test_missing_or_unresolvable_history_cannot_turn_shared_tool_changes_into_cpu_only(verification_project, base):
+    root, matrix, dependencies, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    assert impact.verification_tooling_proofs(root, matrix, dependencies, changes, base=base, head=head) == []
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)
+    assert set(plan["selected_cases"]) == {"a", "b", MG2_CASE}
+    assert not plan["cpu_only_changes"]
+
+
+def test_replay_exporter_is_not_in_the_exact_verification_tool_allowance(verification_project):
+    head, changes = commit_verification_change(verification_project, tools=("tests/manual/geometry_regression.py",))
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+@pytest.mark.parametrize("path_kind", ["tool", "contract"])
+@pytest.mark.parametrize("operation", ["missing", "symlink"])
+def test_missing_or_symlinked_verification_implementation_cannot_be_exempted(verification_project, path_kind, operation):
+    root, _, _, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    path = root / (VERIFICATION_SUITE if path_kind == "tool" else VERIFICATION_CONTRACTS[1])
+    path.unlink()
+    if operation == "symlink":
+        path.symlink_to(root / "LICENSE")
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+def test_fixture_without_mg2_has_only_cpu_proof_and_claims_no_inference_pass(verification_project):
+    root, matrix, dependencies, _ = verification_project
+    cases, policy = json.loads(matrix.read_text()), json.loads(dependencies.read_text())
+    cases.pop(MG2_CASE)
+    policy["cases"].pop(MG2_CASE)
+    matrix.write_text(json.dumps(cases))
+    dependencies.write_text(json.dumps(policy))
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "fixture without MG2")
+    project = (root, matrix, dependencies, git(root, "rev-parse", "HEAD"))
+    head, changes = commit_verification_change(project)
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=project[3], head=head)
+    assert plan["status"] == "no_inference_changes" and plan["selected_cases"] == []
+    assert plan["required_cpu_contracts"] == [VERIFICATION_CONTRACTS[1]]
+    assert plan["required_checks"] == ["public-cpu", "inference-tensors"]
+
+
+@pytest.mark.parametrize("operation", ["modify", "delete", "mode"])
+def test_dirty_production_checkout_cannot_use_an_immutable_git_tree_proof(verification_project, operation):
+    root, _, _, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    source = root / "worldfoundry/models/b.py"
+    if operation == "modify":
+        source.write_text("# Uncommitted model implementation\n")
+    elif operation == "delete":
+        source.unlink()
+    else:
+        source.chmod(0o755)
+    assert git(root, "rev-parse", "HEAD") == head
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+@pytest.mark.parametrize("ignored", [False, True])
+def test_untracked_python_shadow_including_ignored_files_cannot_use_verification_proof(verification_project, ignored):
+    root, _, _, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    name = "ignored_shadow.py" if ignored else "untracked_shadow.py"
+    shadow = root / "worldfoundry" / name
+    shadow.write_text("# Runtime module absent from the recorded commit\n")
+    status = git(root, "status", "--porcelain", "--", str(shadow.relative_to(root)))
+    assert (not status) is ignored
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+def test_untracked_interpreter_cache_is_not_confused_with_python_source_shadow(verification_project):
+    root, _, _, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    cache = root / "worldfoundry/models/__pycache__"
+    cache.mkdir()
+    (cache / "a.cpython-311.pyc").write_bytes(b"generated interpreter cache")
+    assert verification_proofs(verification_project, head=head, changes=changes)
+
+
+@pytest.mark.parametrize("excluded_root", ["docs", "tests", ".github"])
+def test_runtime_symlink_to_changed_excluded_file_cannot_hide_runtime_bytes(verification_project, excluded_root):
+    root, matrix, dependencies, _ = verification_project
+    target = root / excluded_root / "runtime-input.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("original input consumed through a runtime alias\n")
+    alias = root / "assets/aliased-input.txt"
+    alias.symlink_to("../" + excluded_root + "/runtime-input.txt")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "runtime alias to excluded input")
+    project = (root, matrix, dependencies, git(root, "rev-parse", "HEAD"))
+    head, changes = commit_verification_change(project, extra={str(target.relative_to(root)): "changed runtime input\n"})
+    assert alias.read_text() == "changed runtime input\n"
+    assert_conservative_verification_fallback(project, head=head, changes=changes)
+
+
+def test_runtime_symlink_to_an_immutable_tracked_license_is_validated(verification_project):
+    root, matrix, dependencies, _ = verification_project
+    alias = root / "thirdparty/vendor/LICENSE"
+    alias.symlink_to("../../LICENSE")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "immutable runtime license alias")
+    project = (root, matrix, dependencies, git(root, "rev-parse", "HEAD"))
+    head, changes = commit_verification_change(project)
+    proofs = verification_proofs(project, head=head, changes=changes)
+    assert len(proofs) == 1 and proofs[0]["path"] == VERIFICATION_SUITE
+    assert impact.select_cases(matrix, dependencies, root, changes, base=project[3], head=head)["selected_cases"] == [MG2_CASE]
+
+
+def test_excluded_intermediate_symlink_cannot_redirect_an_unchanged_runtime_alias(verification_project):
+    root, matrix, dependencies, _ = verification_project
+    route = root / "docs/runtime-route.py"
+    route.symlink_to("../worldfoundry/models/a.py")
+    alias = root / "worldfoundry/runtime-alias.py"
+    alias.symlink_to("../docs/runtime-route.py")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "runtime alias through excluded routing file")
+    project = (root, matrix, dependencies, git(root, "rev-parse", "HEAD"))
+    original = alias.read_bytes()
+    route.unlink()
+    route.symlink_to("../worldfoundry/models/b.py")
+    head, changes = commit_verification_change(project)
+    assert alias.read_bytes() != original
+    assert git(root, "diff", project[3], head, "--", "worldfoundry") == ""
+    assert_conservative_verification_fallback(project, head=head, changes=changes)
+
+
+def test_immutable_symlink_chain_stays_inside_the_inspected_runtime_tree(verification_project):
+    root, matrix, dependencies, _ = verification_project
+    (root / "LICENSE_ALIAS").symlink_to("LICENSE")
+    (root / "thirdparty/vendor/LICENSE").symlink_to("../../LICENSE_ALIAS")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "immutable runtime license chain")
+    project = (root, matrix, dependencies, git(root, "rev-parse", "HEAD"))
+    head, changes = commit_verification_change(project)
+    assert verification_proofs(project, head=head, changes=changes)
+
+
+@pytest.mark.parametrize("relative", ["torch.py", "numpy/__init__.py", "thirdparty/untracked_code.py",
+                                      "shadow_extension.so", "shadow_types.pyi", "shadow_script.pyw",
+                                      "shadow_extension.pyd", "ignored_shadow.py"])
+def test_untracked_importable_code_outside_worldfoundry_cannot_shadow_a_verified_runtime(verification_project, relative):
+    root, _, _, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    shadow = root / relative
+    shadow.parent.mkdir(parents=True, exist_ok=True)
+    shadow.write_bytes(b"untracked importable runtime shadow")
+    if relative == "ignored_shadow.py":
+        assert git(root, "status", "--porcelain", "--", relative) == ""
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+def test_untracked_package_symlink_cannot_import_from_an_excluded_staging_directory(verification_project):
+    root, _, _, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    staging = root / "tmp/alternate-numpy"
+    staging.mkdir(parents=True)
+    (staging / "__init__.py").write_text("# Package outside recorded production source\n")
+    (root / "numpy").symlink_to("tmp/alternate-numpy", target_is_directory=True)
+    assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
+
+
+def test_untracked_logs_and_excluded_staging_code_do_not_change_production_proof(verification_project):
+    root, _, _, _ = verification_project
+    head, changes = commit_verification_change(verification_project)
+    (root / "root.log").write_text("validation progress\n")
+    staging = root / "tmp/temporary_validation.py"
+    staging.parent.mkdir()
+    staging.write_text("# Temporary orchestration outside runtime import roots\n")
+    assert verification_proofs(verification_project, head=head, changes=changes)

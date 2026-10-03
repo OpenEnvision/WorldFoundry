@@ -302,10 +302,18 @@ The planner combines the explicit component declarations in
 `tests/manual/geometry_regression_dependencies.json`, conditional and relative
 Python imports, literal lazy imports, package initializers, and optional recorded
 imports. Git rename and deletion handling includes the old paths. Shared
-infrastructure or matrix changes select all cases; new cases require dependency
+inference infrastructure or matrix changes select all cases; new cases require dependency
 declarations. Unknown paths or an unresolved import graph select the full matrix
 and exit with `uncovered`, requiring the coverage gap to be resolved. A docs-only
 change can report `no_inference_changes`; it still requires the CPU gates.
+
+Only changes to the planner and source-snapshot orchestrator have a narrower
+verification rule: immutable Git entries must prove that all runtime code,
+environments, assets, matrix and dependency definitions are identical. The
+complete commit diff and inspected tooling must match the committed blobs.
+Those changes require the full CPU contracts and both MG2 GPU gates to exercise
+the verification chain. Missing history, changed case definitions or a mixed
+production change retains the full conservative model selection.
 
 CI uploads `geometry-impact` even when planning fails. This artifact lists
 required replays; it is not a successful GPU result. The runner rejects stale

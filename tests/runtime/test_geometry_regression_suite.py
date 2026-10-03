@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
 import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -115,6 +117,116 @@ def test_snapshot_is_committed_and_helpers_ignore_import_cache(replay_host, tmp_
     assert "class Model" in (target / "worldfoundry/a.py").read_text()
     assert not (target / "untracked.py").exists()
     assert Path(suite.process_helpers(target).__file__).is_relative_to(target)
+
+
+def test_snapshot_preserves_a_committed_relative_license_symlink(replay_host, tmp_path):
+    source = Path(replay_host["source_root"])
+    (source / "THIRD-PARTY-NOTICES").write_text("committed license text\n")
+    link = source / "thirdparty/vendor/LICENSE"
+    link.parent.mkdir(parents=True)
+    link.symlink_to("../../THIRD-PARTY-NOTICES")
+    executable = source / "runner.sh"
+    executable.write_text("#!/bin/sh\nexit 0\n")
+    executable.chmod(0o755)
+    for args in (("add", "."), ("commit", "-qm", "safe tracked links")):
+        subprocess.run(["git", "-C", str(source), *args], check=True, capture_output=True)
+    (source / "THIRD-PARTY-NOTICES").write_text("uncommitted change\n")
+    target = tmp_path / "snapshot"
+    suite.snapshot_source(replay_host, target)
+    archived = target / "thirdparty/vendor/LICENSE"
+    assert archived.is_symlink()
+    assert os.readlink(archived) == "../../THIRD-PARTY-NOTICES"
+    assert archived.resolve().is_relative_to(target)
+    assert archived.read_text() == "committed license text\n"
+    assert (target / "runner.sh").stat().st_mode & 0o111 == 0o111
+
+
+def _source_archive(tmp_path, entries):
+    path = tmp_path / "source.tar"
+    with tarfile.open(path, "w") as bundle:
+        for name, kind, content in entries:
+            member = tarfile.TarInfo(name)
+            member.mode = 0o755 if kind == "directory" else 0o644
+            if kind == "file":
+                payload = content.encode("utf-8")
+                member.size = len(payload)
+                bundle.addfile(member, io.BytesIO(payload))
+            else:
+                member.type = {"directory": tarfile.DIRTYPE, "symlink": tarfile.SYMTYPE,
+                               "hardlink": tarfile.LNKTYPE, "fifo": tarfile.FIFOTYPE}[kind]
+                if kind in {"symlink", "hardlink"}:
+                    member.linkname = content
+                bundle.addfile(member)
+    return path
+
+
+def test_source_archive_allows_relative_link_chains_and_forward_targets(tmp_path):
+    archive = _source_archive(tmp_path, [
+        ("nested/license", "symlink", "../middle"),
+        ("middle", "symlink", "licenses/notice"),
+        ("licenses/notice", "file", "archived license"),
+    ])
+    target = tmp_path / "snapshot"
+    target.mkdir()
+    with tarfile.open(archive) as bundle:
+        suite._extract_source_archive(bundle, target)
+    assert (target / "nested/license").is_symlink()
+    assert (target / "nested/license").read_text() == "archived license"
+    assert (target / "middle").read_text() == "archived license"
+
+
+@pytest.mark.parametrize("entries", [
+    [("link", "symlink", "/tmp/outside")],
+    [("link", "symlink", "../outside")],
+    [("nested/link", "symlink", "../../outside")],
+    [("link", "symlink", "nested/other"), ("nested/other", "symlink", "../../outside")],
+    [("link", "symlink", "link")],
+    [("link", "symlink", "other"), ("other", "symlink", "link")],
+    [("link", "symlink", "missing-file")],
+    [("link", "symlink", "directory"), ("directory", "directory", "")],
+    [("alias", "symlink", "../outside"), ("alias/payload", "file", "overwrite")],
+    [("alias/payload", "file", "overwrite"), ("alias", "symlink", "../outside")],
+    [("alias", "symlink", "real"), ("real", "directory", ""), ("alias/payload", "file", "overwrite")],
+    [("regular", "file", "payload"), ("link", "symlink", "regular/../safe")],
+    [("alias", "symlink", "safe"), ("link", "symlink", "alias/../safe")],
+    [("link", "symlink", "directory/missing/../safe"), ("directory/safe", "file", "payload")],
+    [("link", "symlink", "safe/")],
+    [("link", "symlink", "")],
+    [("link", "symlink", "..\\outside")],
+    [("link", "hardlink", "/tmp/outside")],
+    [("link", "hardlink", "../outside")],
+    [("link", "hardlink", "safe")],
+    [("pipe", "fifo", "")],
+    [("duplicate", "file", "first"), ("duplicate", "file", "second")],
+    [("regular", "file", "payload"), ("regular/child", "file", "payload")],
+    [("../escaped", "file", "payload")],
+    [("/absolute", "file", "payload")],
+])
+def test_unsafe_source_archive_fails_before_writing_any_contents(tmp_path, entries):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "payload"
+    sentinel.write_text("preserved")
+    archive = _source_archive(tmp_path, [("safe", "file", "accepted contents"), *entries])
+    target = tmp_path / "snapshot"
+    target.mkdir()
+    with tarfile.open(archive) as bundle, pytest.raises(ValueError):
+        suite._extract_source_archive(bundle, target)
+    assert sentinel.read_text() == "preserved"
+    assert not list(target.iterdir())
+    assert not (tmp_path / "escaped").exists()
+
+
+def test_source_archive_rejects_a_destination_with_existing_aliases(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    archive = _source_archive(tmp_path, [("parent/payload", "file", "overwrite")])
+    target = tmp_path / "snapshot"
+    target.mkdir()
+    (target / "parent").symlink_to(outside, target_is_directory=True)
+    with tarfile.open(archive) as bundle, pytest.raises(ValueError, match="empty owned directory"):
+        suite._extract_source_archive(bundle, target)
+    assert not (outside / "payload").exists()
 
 
 @pytest.mark.parametrize("ref", ["--help", "HEAD^{tree}", "does-not-exist"])

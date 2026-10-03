@@ -7,7 +7,10 @@ import ast
 import fnmatch
 import hashlib
 import json
+import os
+import posixpath
 import re
+import stat
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -194,6 +197,137 @@ def matches(path: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
 
 
+_VERIFICATION_TOOLS = {
+    "tests/manual/geometry_regression_impact.py": "tests/runtime/test_geometry_regression_impact.py",
+    "tests/manual/geometry_regression_suite.py": "tests/runtime/test_geometry_regression_suite.py",
+}
+
+
+def verification_tooling_proofs(
+    source_root: Path, matrix: Path, dependencies: Path, changes: list[str], *,
+    base: str | None, head: str, history_root: Path | None = None,
+) -> list[dict]:
+    """Distinguish verified test orchestration from changes to inference itself.
+
+    Immutable blobs must prove that every runtime, environment, asset and case
+    definition is unchanged. Missing history or mixed production changes keep
+    the ordinary conservative replay selection.
+    """
+    changed_tools = sorted(set(changes) & _VERIFICATION_TOOLS.keys())
+    if base is None or not changed_tools:
+        return []
+    history = history_root or source_root
+    commits = [revision(history, ref + "^{commit}") for ref in (base, head)]
+    if not all(commits) or changed_paths(history, *commits) != sorted(set(changes)):
+        return []
+
+    def entries(commit):
+        raw = subprocess.check_output(["git", "-C", str(history), "ls-tree", "-r", "-z", commit])
+        result = {}
+        for entry in raw.split(b"\0"):
+            if entry:
+                metadata, path = entry.split(b"\t", 1)
+                mode, kind, blob = metadata.decode().split()
+                result[path.decode()] = (mode, kind, blob)
+        return result
+
+    before, after = [entries(commit) for commit in commits]
+
+    def runtime_entries(tree):
+        return {path: value for path, value in tree.items()
+                if not path.startswith(("tests/", "docs/", ".github/")) and path != "Makefile"}
+
+    runtime = runtime_entries(after)
+    if not runtime or runtime_entries(before) != runtime:
+        return []
+    for path, (mode, kind, object_id) in runtime.items():
+        target = source_root / path
+        if kind != "blob" or mode not in {"100644", "100755", "120000"}:
+            return []
+        try:
+            for parent in PurePosixPath(path).parents:
+                if parent != PurePosixPath(".") and (source_root / parent).is_symlink():
+                    return []
+            actual_mode = target.lstat().st_mode
+            if mode == "120000":
+                if not stat.S_ISLNK(actual_mode):
+                    return []
+                link_text = os.readlink(target)
+                first_hop = posixpath.normpath(str(PurePosixPath(path).parent / link_text))
+                if runtime.get(first_hop, (None,))[0] not in {"100644", "100755", "120000"}:
+                    return []
+                terminal = target.resolve(strict=True).relative_to(source_root.resolve()).as_posix()
+                if runtime.get(terminal, (None,))[0] not in {"100644", "100755"}:
+                    return []
+                data = os.fsencode(link_text)
+            else:
+                if (not stat.S_ISREG(actual_mode)
+                        or bool(actual_mode & stat.S_IXUSR) != (mode == "100755")):
+                    return []
+                data = target.read_bytes()
+        except (OSError, ValueError, RuntimeError):
+            return []
+        # Use Git's canonical blob identity for every inspected runtime file.
+        actual_object = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0")
+        actual_object.update(data)
+        if actual_object.hexdigest() != object_id:
+            return []
+    for target in (source_root / "worldfoundry").rglob("*"):
+        relative = target.relative_to(source_root).as_posix()
+        if "__pycache__" in target.parts and target.suffix in {".pyc", ".pyo"}:
+            continue
+        if (target.is_file() or target.is_symlink()) and relative not in runtime:
+            return []
+    for directory, folders, files in os.walk(source_root, followlinks=False):
+        parent = Path(directory)
+        relative_parent = parent.relative_to(source_root)
+        if relative_parent == Path("."):
+            folders[:] = [name for name in folders if name not in {
+                ".git", "tests", "docs", ".github", "tmp", ".pytest_cache", ".ruff_cache", ".mypy_cache",
+            }]
+        for name in folders:
+            target = parent / name
+            if target.is_symlink() and target.relative_to(source_root).as_posix() not in runtime:
+                return []
+        for name in files:
+            target = parent / name
+            if target.suffix in {".py", ".pyi", ".pyw", ".so", ".pyd"}:
+                if target.relative_to(source_root).as_posix() not in runtime:
+                    return []
+    definitions = [path.relative_to(source_root).as_posix() for path in (matrix, dependencies)]
+    for path in definitions:
+        if before.get(path) != after.get(path):
+            return []
+    inspected = [*definitions, *changed_tools]
+    for path in inspected:
+        entry = after.get(path)
+        if entry is None or entry[0] not in {"100644", "100755"} or entry[1] != "blob":
+            return []
+        if path in changed_tools and (before.get(path) is None or before[path][0] not in {"100644", "100755"}):
+            return []
+        target = source_root / path
+        blob = subprocess.check_output(["git", "-C", str(history), "cat-file", "blob", entry[2]])
+        if (target.is_symlink() or not target.is_file()
+                or not target.resolve().is_relative_to(source_root.resolve()) or target.read_bytes() != blob):
+            return []
+    contracts = sorted({_VERIFICATION_TOOLS[path] for path in changed_tools})
+    for path in contracts:
+        target = source_root / path
+        entry = after.get(path)
+        if (entry is None or entry[0] not in {"100644", "100755"} or target.is_symlink()
+                or not target.is_file() or not target.resolve().is_relative_to(source_root.resolve())):
+            return []
+        blob = subprocess.check_output(["git", "-C", str(history), "cat-file", "blob", entry[2]])
+        if target.read_bytes() != blob:
+            return []
+    runtime_digest = hashlib.sha256(json.dumps(runtime, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return [{"path": path, "reason": "Verification tooling changed; immutable runtime and case definitions are identical.",
+             "base_revision": commits[0], "head_revision": commits[1],
+             "immutable_runtime_tree_sha256": runtime_digest,
+             "source_sha256": digest(source_root / path), "required_cpu_contracts": contracts}
+            for path in changed_tools]
+
+
 def relocation_proofs(
     source_root: Path, policy: dict, changes: list[str], *, base: str | None, head: str,
     history_root: Path | None = None,
@@ -311,6 +445,10 @@ def select_cases(
                 raise ValueError(f"Declared CPU contract has no inspected implementation: {contract}")
     graph = ImportGraph(source_root)
     proofs = relocation_proofs(source_root, policy, changes, base=base, head=head, history_root=history_root)
+    verification = verification_tooling_proofs(
+        source_root, matrix, dependencies, changes, base=base, head=head, history_root=history_root,
+    )
+    verified_tools = {proof["path"] for proof in verification}
     proven_paths = {path for proof in proofs for path in (proof["old_path"], proof["new_path"]) if path}
     reasons = {name: [] for name in cases}
     graph_errors = {}
@@ -326,8 +464,10 @@ def select_cases(
             manifest = json.loads((evidence / name / "manifest.json").read_text())
             if manifest.get("status") == "passed" and manifest.get("case", {}).get("id") == name:
                 traces[name] = {relative_path(path) for path in manifest.get("source_hashes", {})}
-    ignored, uncovered, cpu_only = [], [], []
+    ignored, uncovered, cpu_only = [], [], list(verification)
     for path in changes:
+        if path in verified_tools:
+            continue
         matched = False
         if matches(path, policy["shared_paths"]) or path == matrix.relative_to(source_root).as_posix():
             for name in cases:
@@ -364,6 +504,10 @@ def select_cases(
             reasons[name].append(
                 {"kind": "conservative_fallback", "paths": uncovered, "graph_errors": sorted(graph_errors)}
             )
+    if verification and "matrix-game2-controls-short" in cases:
+        reasons["matrix-game2-controls-short"].append({
+            "kind": "verified_tooling_pipeline_replay", "paths": sorted(verified_tools),
+        })
     selected = [name for name in cases if reasons[name]]
     return {
         "schema_version": 1,

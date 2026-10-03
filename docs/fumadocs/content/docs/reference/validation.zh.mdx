@@ -146,6 +146,8 @@ python3 tests/manual/geometry_regression_impact.py --base <comparison-commit> \
 
 选例结合 `tests/manual/geometry_regression_dependencies.json` 中的组件声明、条件和相对导入、字符串形式的 lazy import、父包初始化文件及可选的实际导入记录。Git rename 和删除会保留旧路径。共享 infra 或案例矩阵变化选择全部案例；新增案例必须声明依赖。未知路径或无法解析的导入图会扩展到全部案例，并以 `uncovered` 非零退出，需要补上覆盖缺口。只有文档变化时可以返回 `no_inference_changes`，CPU 门禁仍需通过。
 
+只有 planner 和源码快照编排工具具有较窄的验证规则：不可变 Git entries 必须证明全部运行时代码、环境、assets、案例及依赖定义完全不变，完整 diff 及检查的工具文件也必须与提交 blob 一致。此类改动仍要求完整 CPU 契约和 MG2 两项 GPU 门禁，验证完整工具链。缺少历史、案例定义变化或混入任何生产改动，仍保留原来的全量保守模型选择。
+
 CI 即使选例失败也会上传 `geometry-impact`，其中是必须执行的回归计划，不能当作 GPU 推理通过的证据。执行器拒绝源码树或规则哈希过期、状态与空选例矛盾，以及漏掉当前规则和导入图要求的案例的计划。
 
 ### 在模型主机上定时执行 GPU 回归
