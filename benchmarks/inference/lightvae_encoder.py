@@ -70,9 +70,29 @@ def _load_reference(path):
 
 
 def _source_paths(repo):
-    # Loading traverses converters, policy, IO, VRAM and runtime helpers. Hash
-    # the full local Python source trees rather than an incomplete short list.
-    return sorted({path for name in ("worldfoundry", "benchmarks") for path in (repo / name).rglob("*.py")})
+    """Cover codec computation, loading and diagnostics without unrelated UI."""
+    paths = [
+        repo / "benchmarks/inference/lightvae_encoder.py",
+        repo / "benchmarks/inference/plugin_diagnostics.py",
+        repo / "benchmarks/harness.py",
+        repo / "worldfoundry/runtime/performance.py",
+    ]
+    # Codec loading traverses converters, policy, IO, VRAM and shared attention
+    # implementations. Preserve full coverage of those execution source trees.
+    paths += sorted((repo / "worldfoundry/core").rglob("*.py"))
+    paths += sorted((repo / "worldfoundry/base_models/diffusion_model").rglob("*.py"))
+    paths += [
+        path
+        for parent in (
+            "benchmarks",
+            "benchmarks/inference",
+            "worldfoundry",
+            "worldfoundry/base_models",
+            "worldfoundry/runtime",
+        )
+        if (path := repo / parent / "__init__.py").is_file()
+    ]
+    return sorted(set(paths))
 
 
 def _validate_codec(codec, *, student):
@@ -256,6 +276,8 @@ def main(argv=None):
         "quality_aggregation": "worst batch latent relative L2 and video PSNR; minimum SSIM over every frame",
         "timing_scope": "paired resident FP32 untiled encoder-only wall time; decode, loading and pilot hooks excluded",
         "timing_receipts": "pilot encoder module hooks; every timed output must match its pilot and student count advance",
+        "source_manifest_scope": "diagnostic helpers, runtime performance, complete core and diffusion-model Python trees, "
+        "and parent package initializers",
         "parameters": vars(args)
         | {key: str(getattr(args, key)) for key in ("teacher", "student", "out")}
         | {"reference": [str(path) for path in args.reference]},

@@ -341,18 +341,62 @@ def test_existing_output_directory_rejected_before_gpu_work(tmp_path, monkeypatc
     assert not (tmp_path / "results/results.json").exists()
 
 
-def test_source_manifest_includes_loaders_runtime_and_benchmark_helpers(tmp_path):
+def _execution_source_fixture(root):
     paths = [
-        "worldfoundry/core/model_loading/policy.py",
-        "worldfoundry/runtime/performance.py",
+        "benchmarks/__init__.py",
+        "benchmarks/inference/__init__.py",
+        "benchmarks/inference/lightvae_encoder.py",
+        "benchmarks/inference/plugin_diagnostics.py",
         "benchmarks/harness.py",
+        "worldfoundry/__init__.py",
+        "worldfoundry/base_models/__init__.py",
+        "worldfoundry/core/__init__.py",
+        "worldfoundry/core/attention/backends/sol.py",
+        "worldfoundry/core/model_loading/policy.py",
+        "worldfoundry/base_models/diffusion_model/models/autoencoders/wan/model.py",
+        "worldfoundry/runtime/__init__.py",
+        "worldfoundry/runtime/performance.py",
     ]
     for name in paths:
-        path = tmp_path / name
+        path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# source\n")
+    return sorted(root / name for name in paths)
+
+
+def test_source_manifest_includes_codec_attention_loaders_and_parent_initializers(tmp_path):
+    expected = _execution_source_fixture(tmp_path)
     (tmp_path / "benchmarks/ignore.txt").write_text("not executable source")
-    assert diagnostic._source_paths(tmp_path) == sorted(tmp_path / name for name in paths)
+    assert diagnostic._source_paths(tmp_path) == expected
+
+
+def test_unrelated_tui_edits_do_not_invalidate_execution_manifest(tmp_path):
+    _execution_source_fixture(tmp_path)
+    tui = tmp_path / "worldfoundry/cli/tui_app.py"
+    tui.parent.mkdir(parents=True)
+    tui.write_text("# original UI\n")
+    before = diagnostic.file_manifest(diagnostic._source_paths(tmp_path), tmp_path)
+    tui.write_text("# edited UI\n")
+    (tui.parent / "tui_logo.py").write_text("# added unrelated UI source\n")
+    assert diagnostic.file_manifest(diagnostic._source_paths(tmp_path), tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "worldfoundry/core/attention/backends/sol.py",
+        "worldfoundry/core/model_loading/policy.py",
+        "worldfoundry/base_models/diffusion_model/models/autoencoders/wan/model.py",
+    ],
+)
+def test_execution_dependency_edits_invalidate_source_manifest(tmp_path, name):
+    _execution_source_fixture(tmp_path)
+    before = diagnostic.file_manifest(diagnostic._source_paths(tmp_path), tmp_path)
+    (tmp_path / name).write_text("# changed execution source\n")
+    after = diagnostic.file_manifest(diagnostic._source_paths(tmp_path), tmp_path)
+    assert after != before
+    changed = [right["file"] for left, right in zip(before, after, strict=True) if left != right]
+    assert changed == [name]
 
 
 def test_cli_rejects_duplicate_references_and_short_performance_rounds(tmp_path):
