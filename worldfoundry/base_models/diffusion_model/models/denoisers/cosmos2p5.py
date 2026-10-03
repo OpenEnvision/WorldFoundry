@@ -8,10 +8,11 @@ sees the vendor checkpoint layout.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 
 import torch
 
-from ...components import ComponentBuildContext
+from ...components import BuildPurpose, ComponentBuildContext
 from ...contracts import DenoiserInput, DenoiserOutput
 from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.cosmos2p5.model import Cosmos25Transfer3DModel, Cosmos25Transformer3DModel
@@ -196,25 +197,69 @@ class Cosmos25TransferDenoiser(Cosmos25Denoiser):
 
 
 def _build(context: ComponentBuildContext, config: Mapping[str, object]) -> Cosmos25Denoiser:
+    from worldfoundry.core.distributed.model_parallel.inference_parallel import (
+        InferenceParallelContext,
+        build_inference_parallel_context,
+        validate_inference_parallel_policy,
+        validate_parallel_degrees,
+    )
     from worldfoundry.core.vram import AutoWrappedLinear, AutoWrappedModule
 
-    model = NativeModuleLoader().load(
-        ModuleLoadSpec(
-            module_class=Cosmos25Transformer3DModel,
-            config=config,
-            state_dict_converter=convert_cosmos25_state_dict,
-            vram_module_map={
-                torch.nn.Linear: AutoWrappedLinear,
-                torch.nn.LayerNorm: AutoWrappedModule,
-                torch.nn.RMSNorm: AutoWrappedModule,
-            },
-            layer_container="transformer_blocks",
-        ),
-        context.require_checkpoint("weights"),
-        context.policy,
+    tp, cp = validate_parallel_degrees(
+        context.component_options.get("tensor_parallel", 1),
+        context.component_options.get("context_parallel", 1),
     )
-    if not isinstance(model, Cosmos25Transformer3DModel):
-        raise TypeError(f"expected Cosmos25Transformer3DModel, got {type(model).__name__}")
+    parallel = context.component_options.get("parallel_context")
+    owns_context = False
+    load_policy = context.policy
+    if tp * cp > 1:
+        validate_inference_parallel_policy(context.policy)
+        if context.purpose is not BuildPurpose.INFERENCE:
+            raise ValueError("Cosmos model parallelism supports inference builds only")
+        if config["num_attention_heads"] % tp:
+            raise ValueError("tensor_parallel must evenly divide Cosmos2.5 attention heads")
+        if parallel is None:
+            parallel = build_inference_parallel_context(
+                tensor_parallel=tp, context_parallel=cp, device=context.policy.device,
+            )
+            owns_context = True
+        if not isinstance(parallel, InferenceParallelContext):
+            raise TypeError("parallel_context must be an InferenceParallelContext")
+        if (parallel.tp_size, parallel.cp_size, parallel.device) != (tp, cp, context.policy.device):
+            raise ValueError("parallel_context must match the component degrees and device")
+        load_policy = replace(context.policy, device=torch.device("cpu"))
+    elif parallel is not None:
+        raise ValueError("parallel_context requires explicit multi-rank component degrees")
+
+    try:
+        if parallel is not None:
+            parallel.agree(("cosmos25-load", dict(config), str(context.policy.dtype), str(context.require_checkpoint())))
+        model = NativeModuleLoader().load(
+            ModuleLoadSpec(
+                module_class=Cosmos25Transformer3DModel,
+                config=config,
+                state_dict_converter=convert_cosmos25_state_dict,
+                vram_module_map={
+                    torch.nn.Linear: AutoWrappedLinear,
+                    torch.nn.LayerNorm: AutoWrappedModule,
+                    torch.nn.RMSNorm: AutoWrappedModule,
+                },
+                layer_container="transformer_blocks",
+            ),
+            context.require_checkpoint("weights"),
+            load_policy,
+        )
+        if not isinstance(model, Cosmos25Transformer3DModel):
+            raise TypeError(f"expected Cosmos25Transformer3DModel, got {type(model).__name__}")
+        if parallel is not None:
+            model.parallelize(parallel).to(device=context.policy.device)
+    except BaseException:
+        if owns_context:
+            try:
+                parallel.close()
+            except Exception:
+                pass
+        raise
     return Cosmos25Denoiser(model)
 
 
@@ -227,8 +272,14 @@ def build_cosmos25_14b_denoiser(context: ComponentBuildContext) -> Cosmos25Denoi
 
 
 def build_cosmos25_transfer_2b_denoiser(context: ComponentBuildContext) -> Cosmos25TransferDenoiser:
+    from worldfoundry.core.distributed.model_parallel.inference_parallel import validate_parallel_degrees
     from worldfoundry.core.vram import AutoWrappedLinear, AutoWrappedModule
 
+    tp, cp = validate_parallel_degrees(
+        context.component_options.get("tensor_parallel", 1), context.component_options.get("context_parallel", 1),
+    )
+    if tp * cp > 1 or context.component_options.get("parallel_context") is not None:
+        raise ValueError("multi-rank Cosmos Transfer inference is not supported")
     model = NativeModuleLoader().load(
         ModuleLoadSpec(
             module_class=Cosmos25Transfer3DModel,

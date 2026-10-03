@@ -19,6 +19,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
 from ..pipeline_utils import PipelineABC
+from .reason1_options import reason1_component_options
 
 COSMOS_TRANSFER2P5_MODEL_ID = "cosmos-transfer2.5-2b-controlled-video"
 COSMOS_TRANSFER2P5_DEFAULT_FPS = 16
@@ -58,6 +59,12 @@ class CosmosTransfer2p5Pipeline(PipelineABC):
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)
+        encoder_options = reason1_component_options(options)
+        from worldfoundry.core.distributed.model_parallel.inference_parallel import validate_parallel_degrees
+
+        tp, cp = validate_parallel_degrees(options.get("tensor_parallel", 1), options.get("context_parallel", 1))
+        if tp * cp > 1:
+            raise ValueError("multi-rank Cosmos Transfer inference is not supported")
         requested = str(options.get("variant_id") or model_id or "").lower()
         supported = {
             "",
@@ -101,7 +108,9 @@ class CosmosTransfer2p5Pipeline(PipelineABC):
                 ),
             ),
             checkpoint_overrides=overrides or None,
+            extensions=options.get("extensions", ()),
             component_options={
+                "conditioner:main": encoder_options,
                 "latent_initializer:main": {
                     "tiled": bool(options.get("vae_tiling", False)),
                     "tile_size": tuple(options.get("vae_tile_size", (34, 34))),

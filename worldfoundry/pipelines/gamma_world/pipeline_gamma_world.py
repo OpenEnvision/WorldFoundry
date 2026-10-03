@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
+from worldfoundry.base_models.diffusion_model.models.encoders.gamma_world import component as gamma_conditioning
 from worldfoundry.base_models.diffusion_model.optimizations import (
     RuntimePolicy,
     parse_offload_policy,
     parse_torch_dtype,
 )
-from worldfoundry.base_models.diffusion_model.models.encoders.gamma_world import component as gamma_conditioning
+from worldfoundry.pipelines.cosmos.reason1_options import reason1_component_options
 from worldfoundry.pipelines.native_diffusion_video import NativeTextToVideoPipeline
-
 
 _MODE_TO_MODEL_ID = {
     "causal_few_step": "gamma-world-causal-few-step",
@@ -119,6 +119,21 @@ class GammaWorldPipeline(NativeTextToVideoPipeline):
     ) -> "GammaWorldPipeline":
         options = cls._options(model_path, required_components, kwargs)
         cls._validate_num_frames(options)
+        component_options = dict(cls._component_options(options) or {})
+        encoder_options = dict(component_options.get("conditioner:main", {}))
+        resolved_encoder_options = reason1_component_options(options)
+        for name, value in resolved_encoder_options.items():
+            public_name = "text_encoder_run_on_cpu" if name == "run_on_cpu" else f"text_{name}"
+            if public_name in options or name not in encoder_options:
+                encoder_options[name] = value
+        component_options["conditioner:main"] = encoder_options
+        from worldfoundry.core.model_loading.text_embeddings import validate_prompt_encoder_options
+
+        validate_prompt_encoder_options(
+            run_on_cpu=encoder_options["run_on_cpu"],
+            embedding_cache_size=encoder_options["embedding_cache_size"],
+            embedding_cache_max_bytes=encoder_options["embedding_cache_max_bytes"],
+        )
         mode = str(options.pop("mode", "causal_few_step")).strip().lower()
         try:
             recipe_model_id = _MODE_TO_MODEL_ID[mode]
@@ -139,6 +154,8 @@ class GammaWorldPipeline(NativeTextToVideoPipeline):
                 ),
             ),
             checkpoint_overrides=cls._checkpoint_overrides(model_path, options),
+            component_options=component_options,
+            extensions=options.get("extensions", ()),
         )
         pipeline = cls(native_pipeline=native, device=device)
         pipeline.recipe_model_id = recipe_model_id

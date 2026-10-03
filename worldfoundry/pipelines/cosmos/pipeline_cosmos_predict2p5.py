@@ -19,6 +19,8 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
 from ..pipeline_utils import PipelineABC
+from .parallel_options import agree_cosmos_request, build_cosmos_parallel_context
+from .reason1_options import reason1_component_options
 
 COSMOS_PREDICT2P5_DEFAULT_FPS = 16
 COSMOS_PREDICT2P5_DEFAULT_NUM_FRAMES = 93
@@ -56,9 +58,18 @@ class CosmosPredict2p5Pipeline(PipelineABC):
 
     MODEL_ID = "cosmos-predict2.5"
 
-    def __init__(self, *, native_pipeline: NativeDiffusionPipeline, device: str, model_id: str) -> None:
+    def __init__(
+        self, *, native_pipeline: NativeDiffusionPipeline, device: str, model_id: str, parallel_context=None,
+    ) -> None:
         super().__init__(model_id=model_id, synthesis_model=None, device=device)
         self.native_pipeline = native_pipeline
+        self.parallel_context = parallel_context
+
+    def close(self) -> None:
+        """Release owned inference subgroups; keep the caller-owned world live."""
+
+        if self.parallel_context is not None:
+            self.parallel_context.close()
 
     @classmethod
     def from_pretrained(
@@ -69,9 +80,26 @@ class CosmosPredict2p5Pipeline(PipelineABC):
         model_id: str | None = None,
         **kwargs: Any,
     ) -> "CosmosPredict2p5Pipeline":
+        """Load native components with optional Reason1 placement and reuse.
+
+        ``text_embedding_cache_size`` counts complete prompt batches (default
+        zero); ``text_embedding_cache_max_bytes`` bounds host tensor storage
+        (default 512 MiB). ``text_encoder_run_on_cpu=True`` keeps Reason1
+        weights and computation on CPU while returning GPU conditioning.
+        ``tensor_parallel`` and ``context_parallel`` default to one. Multi-rank
+        inference requires an initialized world, explicit per-rank CUDA devices
+        and ``offload_mode=none``, ``torch_dtype=float32``. Low-precision model
+        parallelism is rejected because its generation drift failed validation.
+        All ranks load and call together; each returns
+        full tensors, and only rank zero writes video artifacts. Call ``close``
+        together before destroying the caller-owned world. Parallel kernels can
+        differ numerically from single-rank inference.
+        """
+
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)
+        encoder_options = reason1_component_options(options)
         source = (
             options.get("checkpoint_path")
             or options.get("transformer_model_path")
@@ -97,26 +125,46 @@ class CosmosPredict2p5Pipeline(PipelineABC):
             root = str(Path(text_source).expanduser().resolve())
             overrides.update({"text-encoder": root, "tokenizer": root})
 
-        native = NativeDiffusionPipeline.from_pretrained(
-            resolved_model_id,
-            policy=RuntimePolicy(
-                device=torch.device(device),
-                dtype=parse_torch_dtype(
-                    options.get("torch_dtype", options.get("weight_dtype", options.get("dtype"))),
-                    owner="Cosmos2.5",
-                ),
-                offload=parse_offload_policy(options.get("offload_mode", "block"), owner="Cosmos2.5"),
+        policy = RuntimePolicy(
+            device=torch.device(device),
+            dtype=parse_torch_dtype(
+                options.get("torch_dtype", options.get("weight_dtype", options.get("dtype"))),
+                owner="Cosmos2.5",
             ),
-            checkpoint_overrides=overrides or None,
-            component_options={
-                "latent_initializer:main": {
-                    "tiled": bool(options.get("vae_tiling", False)),
-                    "tile_size": tuple(options.get("vae_tile_size", (34, 34))),
-                    "tile_stride": tuple(options.get("vae_tile_stride", (18, 16))),
-                }
-            },
+            offload=parse_offload_policy(options.get("offload_mode", "block"), owner="Cosmos2.5"),
         )
-        return cls(native_pipeline=native, device=device, model_id=resolved_model_id)
+        parallel = build_cosmos_parallel_context(
+            options, policy, attention_heads=40 if resolved_model_id.endswith("14b") else 16,
+        )
+        component_options = {
+            "conditioner:main": encoder_options,
+            "latent_initializer:main": {
+                "tiled": bool(options.get("vae_tiling", False)),
+                "tile_size": tuple(options.get("vae_tile_size", (34, 34))),
+                "tile_stride": tuple(options.get("vae_tile_stride", (18, 16))),
+            }
+        }
+        if parallel is not None:
+            component_options["denoiser:main"] = {
+                "tensor_parallel": parallel.tp_size, "context_parallel": parallel.cp_size,
+                "parallel_context": parallel,
+            }
+        try:
+            if parallel is not None:
+                parallel.agree(("cosmos25-pipeline", resolved_model_id, overrides, str(policy.dtype),
+                                encoder_options, component_options["latent_initializer:main"]))
+            native = NativeDiffusionPipeline.from_pretrained(
+                resolved_model_id, policy=policy, checkpoint_overrides=overrides or None,
+                extensions=options.get("extensions", ()), component_options=component_options,
+            )
+        except BaseException:
+            if parallel is not None:
+                try:
+                    parallel.close()
+                except Exception:
+                    pass
+            raise
+        return cls(native_pipeline=native, device=device, model_id=resolved_model_id, parallel_context=parallel)
 
     @classmethod
     def plan(
@@ -186,7 +234,15 @@ class CosmosPredict2p5Pipeline(PipelineABC):
             inputs["image"] = image_value
         if video_value is not None:
             inputs["video"] = video_value
-        actual_seed = secrets.randbits(63) if int(seed) < 0 else int(seed)
+        if self.parallel_context is not None:
+            agree_cosmos_request(
+                self.parallel_context, prompt=prompt, negative_prompt=negative_prompt or DEFAULT_NEGATIVE_PROMPT,
+                inputs=inputs, seed=int(seed), height=int(height), width=int(width), num_frames=int(num_frames),
+                steps=int(num_inference_steps), guidance_scale=float(guidance_scale), output_type=output_type,
+            )
+            actual_seed = self.parallel_context.broadcast_seed(int(seed))
+        else:
+            actual_seed = secrets.randbits(63) if int(seed) < 0 else int(seed)
         request = DiffusionRequest(
             prompt=prompt,
             negative_prompt=negative_prompt or DEFAULT_NEGATIVE_PROMPT,
@@ -202,7 +258,8 @@ class CosmosPredict2p5Pipeline(PipelineABC):
         )
         output = self.native_pipeline(request)
         artifact_path = None
-        if output_path is not None and output_type != "latent":
+        if (output_path is not None and output_type != "latent"
+                and (self.parallel_context is None or self.parallel_context.is_main)):
             artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps))
         result = {
             "video": output.sample,
