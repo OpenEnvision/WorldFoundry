@@ -3,6 +3,8 @@ title: Pluggable diffusion acceleration
 description: Native plugin contracts, the Sol-Engine and FlashDreams comparison, and measured H100 results.
 ---
 
+This completion adds calibrated packed SVDQuant, independent Wan MHA schedules and an FP8 LightVAE encoder plugin. Native-precision MHA fusion preserves final latents/RGB bit for bit for both seeds at two durations: **1.19%–1.42%** speedup at 17 frames and **0.60%–0.66%** at 41 frames. Approximate candidates retain separate quality/performance results and default off.
+
 Native acceleration plugins are disabled by default. On clean release revision `57622000`, SANA pointwise fusion preserves final latents and RGB bit for bit on both seeds, but the selection is **`no_validated_speedup`**: seed 43's paired confidence interval crosses 1. Only `scale_shift` accelerates in this configuration; residuals retain guarded eager execution. Validate checkpoint, execution and quality before interpreting latency. The **0.8%–1.1%** SANA gain recorded on 2026-10-03 remains historical evidence below.
 
 ## Upstream comparison
@@ -15,12 +17,12 @@ The audit uses [FlashDreams `91c906b`](https://github.com/NVIDIA/flashdreams/tre
 | Block fusion | AdaLN, residual gates, QK norm/RoPE, projection and FFN glue | Existing common kernels and Wan QKV/RoPE/FFN transforms. Adds removable SANA adapters; defaults retain native normalization and token strides. |
 | Invariant/history reuse | Text cross-KV, streaming KV and stable cache layouts | Existing Wan cross-KV and several autoregressive caches. Adds removable cross-KV projection fusion with derived packed weights and static-cache miss support. Raw KV, rotated KV and recurrent linear-attention states retain separate contracts. |
 | Feature cache | Sol EasyCache, TeaCache and model-specific controllers | Existing Tea/Ada/Mag/Taylor/block caches, mostly Wan. Adds native EasyCache for stateless SanaMS/SanaMSVideo and WanModel, plus locally tested global-to-local schedules for resident Wan2.2 dual experts. |
-| Quantization | FlashDreams separate projection/attention precision; Sol documents FP8 and SVDQuant/Nunchaku | Existing FP8, INT8, INT4, NVFP4 paths; some low-bit modes still dequantize into dense GEMMs. Adds reversible selective FP8 projections using scaled GEMMs. Native packed SVDQuant/Nunchaku and a complete optimized-MHA precision schedule remain work to do. |
-| Lightweight codec | FlashDreams uses a matched pruned Wan2.1 LightVAE encoder and calibrated native FP8 implementation | Adds the matching native base24/16-latent architecture and strict student checkpoint admission, restricted to FP32 inference. This does not port the calibrated native FP8 encoder. |
+| Quantization | FlashDreams separate projection/attention precision; Sol documents FP8 and SVDQuant/Nunchaku | Existing FP8, INT8, INT4, NVFP4 paths; some low-bit modes still dequantize into dense GEMMs. Adds reversible selective FP8, calibrated native packed SVDQuant, and independent Wan self/cross MHA schedules. The SVDQuant weight format is independent and not Nunchaku binary-compatible. |
+| Lightweight codec | FlashDreams uses a matched pruned Wan2.1 LightVAE encoder and calibrated native FP8 implementation | Adds the matched native base24/16-latent architecture, strict checkpoint admission and calibrated FP8 encoder convolutions using an independent Triton implicit GEMM. Norms, caches and decoding remain FP32. |
 | Compile, graphs, parallelism | Regional compile, stable-shape capture and model-specific pipelines | Existing compile/cache, CUDA Graph, SP/CFG/VAE parallelism and offload. Plugins preserve existing cache/Graph/SP restrictions. |
 | Composition search | Sol model/hardware/quality-budget search | Existing operator autotuning. Adds fixed-candidate real native SANA/Wan generation search, scoped to the tested prompt, seeds, geometry and device. |
 
-HyperFlow already forwards `--sol-attn` upstream, and WorldGen already has an optional Flux/Nunchaku path. Those do not establish shared native Wan/SANA support. The matching LightVAE architecture now loads, while FlashDreams' calibrated native FP8 codec, complete optimized MHA, and steady-state graphs still require additional provider and lifecycle work.
+HyperFlow already forwards `--sol-attn` upstream, and WorldGen already has an optional Flux/Nunchaku path. Those do not establish shared native Wan/SANA support. Native packed SVDQuant, independent MHA precision/kernel schedules and calibrated FP8 encoder execution are now integrated with restricted contracts. Nunchaku checkpoint compatibility, FP8 TMA, streaming KV and steady-state graph combinations remain unsupported.
 
 Sources: [FlashDreams accelerated](https://github.com/NVIDIA/flashdreams/blob/91c906b69992f63fb19907a25cd805fb783d314a/docs/source/developer_guides/flashdreams_accelerated.md), Sol [kernel](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/kernel.md), [cache](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/cache.md), [quant](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/quant.md), and [Sol-Attn](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/sparse/sol_attn.md). The EasyCache controller independently implements the [upstream algorithm](https://github.com/H-EmbodVis/EasyCache/tree/bfc63232cfae8c77e2dccf9d72b8f2f56bd995b8).
 
@@ -153,7 +155,7 @@ Ordinary parameter operations, checkpoint assignment and dtype/device conversion
 
 The explicit `lightvae-wan21` codec variant uses [LightX2V's student checkpoint](https://huggingface.co/lightx2v/Autoencoders/resolve/main/lightvaew2_1.pth): 32,208,043 bytes, SHA256 `d5d6b094d4829fb03b6179be2cf4589baab21c9fea1ca70dcaa8c85ba8183ec9`. All **194** keys and shapes match the native base24 architecture: 24/48/96 feature channels, 16 latent channels and 11 encoder downsample blocks. It shares Wan16 mean/std, BCTHW layout and 8× spatial/4× temporal compression. Teacher base96 or Wan2.2 48-channel weights fail strict admission.
 
-This is a codec architecture choice using different learned weights. The report always marks it **algorithmically approximate**, even when its implementation matches the independent student reference. Rebuild the codec with teacher weights to restore the teacher architecture. FP32 resident CPU/CUDA inference is the supported path; other build purposes, lower precision/autocast, tiling, extra temporal chunking, parallel decode, offload, quantization, compile, Graph and SP remain rejected.
+This is a codec architecture choice using different learned weights. The report always marks it **algorithmically approximate**, even when its implementation matches the independent student reference. Rebuild the codec with teacher weights to restore the teacher architecture. FP32 resident CPU/CUDA inference is the supported path; other build purposes, lower precision/autocast, tiling, extra temporal chunking, parallel decode, offload, generic quantization, compile, Graph and SP remain rejected.
 
 SANA-Video 480p defaults to tiled codec execution, so explicitly disable it when selecting this variant:
 
@@ -169,6 +171,60 @@ pipeline = NativeDiffusionPipeline.from_pretrained(
 ```
 
 Wan recipes use their existing `vae` checkpoint override instead of SANA's `codec` binding. Standalone consumers use `load_wan_video_codec(path, variant="lightvae-wan21", device="cuda", dtype=torch.float32)`. No global decoder substitution occurs. CPU/H100 tests compare the official student against independent `reference_21.WanVAE_(dim=24)`, including first/body cache transitions, repeat-call reset, encode/decode and honest call receipts. Matching architecture and implementation does not certify student-vs-teacher video quality.
+
+## Calibrated plugins and independent MHA schedules
+
+All new plugins default off. Numerical providers live under `core/acceleration/quantization/` and `core/attention/`; checkpoint graph and lifecycle adapters live under `base_models/diffusion_model/optimizations/`. Shared `projection_selection.py` and `guards.py` keep projection admission and fixed-weight lifecycle checks consistent.
+
+| Entry point | Execution contract | Boundaries |
+| --- | --- | --- |
+| `svdquant: {artifact: path}` | Offline channel calibration, smoothing, deterministic low-rank decomposition and group-64 packed W4A4 residuals; integer register unpacking feeds INT8 tensor-core dots; separate low-rank down GEMM with up projection fused into the epilogue | Selected native Wan/SANA linears; CUDA SM80+, FP16/BF16, eager no-grad. No dense residual-weight expansion or silent dense fallback. Original modules stay resident for removal, so total weight-memory savings are not claimed. |
+| `optimized_mha` | Independent Wan self/cross fusion, projection/output precision and SDPA; original RMSNorm, RoPE, image/text split and canonical parameters | Fusion `none/kv/qkv`; cross qkv means separate Q plus fused KV. Precision `native/fp8_e4m3/fp8_e5m2/int8`; E5M2 uses a separate Triton GEMM. |
+| MHA SDPA | `torch/cudnn/fa2`; explicit `quantized_sdpa=True` casts raw unscaled E4M3 Q/K/V; pointer FA2 also quantizes P in P@V | FP8 SDPA uses pointer FA2 or optional cuDNN Frontend. TMA supports native-precision FA2 only and requires Triton ≥3.5. Older Triton pointer FA2 uses a validated fixed tile to avoid Hopper compiler-abort configurations. |
+| Codec `fp8_calibration=path` | Calibrated E4M3 implicit GEMM for selected matched Wan21 LightVAE encoder Conv2d/Conv3d; original `CausalConv3d.forward` and caching | SM90+, resident FP32, untiled. Decoder, normalization, SDPA math and caches remain FP32; selected attention convolution projections are quantized. This is not a port of the entire FlashDreams C++ codec. |
+
+MHA receipts distinguish actual low-precision kernels from dense/fallback projection calls. Existing providers may retain dense execution for small GEMMs; diagnostics require every configured module and projection to execute and reject any dense/fallback calls in requested quantized projections.
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={"dit_weight_dtype": "bf16", "accelerations": {
+        "optimized_mha": {
+            "self": {"fusion": "qkv", "sdpa_backend": "torch"},
+            "cross": {"fusion": "kv", "sdpa_backend": "torch"},
+        },
+    }},
+)
+# Evaluate SVDQuant separately after exporting checkpoint-bound calibration:
+svd_options = {"svdquant": {"artifact": "/path/to/svdquant.pt"}}
+```
+
+Calibration artifacts load with `weights_only=True` and record source-parameter SHA256, tensor geometry, provenance and observed calls. Weight or convolution-geometry mismatches reject installation before mutation. `worldfoundry-svdquant-v1` is an independent layout and cannot consume Nunchaku packed checkpoints. INT4 represents only the residual branch; low-rank and quantized branches jointly determine accuracy.
+
+```bash
+PYTHONPATH=. python benchmarks/inference/calibrate_plugins.py svdquant \
+  --assets "$ASSETS" --include 'blocks.*.ffn.0' 'blocks.*.ffn.2' \
+  --rank 32 --frames 17 --out /tmp/calibration-new/svdquant.pt \
+  --save-references /tmp/calibration-new/rgb
+PYTHONPATH=. python benchmarks/inference/calibrate_plugins.py lightvae_fp8 \
+  --checkpoint /path/to/lightvaew2_1.pth \
+  --reference /tmp/calibration-new/rgb/calibration_11.pt /tmp/calibration-new/rgb/calibration_12.pt \
+  --include 'model.encoder.*' 'model.conv1' --frames 17 \
+  --out /tmp/calibration-new/lightvae-fp8.pt
+```
+
+Calibration uses distinct prompts with seeds 11/12; evaluation uses held-out seeds 42/43. Pass `fp8_calibration` to `load_wan_video_codec` or codec component options, or use runtime option `vae_fp8_calibration`; the explicit `lightvae-wan21` variant is required.
+
+`benchmarks/inference/lightvae_fp8.py` compares FP32 and FP8 encoders from the identical student checkpoint through a common unchanged FP32 student decoder. It isolates quantization drift and does not replace student/teacher quality validation. Every selected convolution must execute without input clipping before timing. Timed outputs must match their own pilots bit for bit; GPU occupancy, execution sources and input hashes are checked.
+
+```bash
+PYTHONPATH=. python benchmarks/inference/lightvae_fp8.py \
+  --checkpoint /path/to/lightvaew2_1.pth --artifact /path/to/lightvae-fp8.pt \
+  --reference /path/to/reference_42.pt /path/to/reference_43.pt \
+  --rounds 3 --out /tmp/lightvae-fp8-diagnostic-new
+```
+
+These plugins require fixed placement, eval and eager inference. Uninstall before editing weights, loading checkpoints or moving the model. MHA and FP8 codec retain canonical state dicts; active SVDQuant wrappers reject canonical checkpoint serialization. Existing cache, compile, Graph and SP restrictions remain in force.
 
 ## Resident dual-expert EasyCache
 
@@ -234,6 +290,24 @@ PYTHONPATH=. python benchmarks/inference/lightvae_encoder.py \
   --rounds 3 --out /tmp/lightvae-encoder-new
 ```
 
+## Completion measurements
+
+Implementation and diagnostic revision: `183147e3`. Wan1.3B cases use 320×576, 20 steps, CFG 6, shift 7 and seeds 42/43. Each quality/execution-admitted case receives three alternating paired timing rounds. Percentages describe speedup ratios above 1, not latency reductions.
+
+| Candidate | Result | Evidence and limits |
+| --- | --- | --- |
+| Native-precision MHA, self QKV + cross KV, 17 frames | Final latents/RGB bitwise identical for both seeds | **1.014243×/1.011870×**, CI95 **[1.012128, 1.017954]/[1.010975, 1.015053]**. Every timed output matches its pilot; execution and sampled GPU gates pass. [Record](/measurements/wan-mha-quality-timing-2026-10-04.json). |
+| Same configuration, 41 frames | Bitwise identical for both seeds | **1.005988×/1.006554×**, CI95 **[1.003248, 1.033685]/[1.006424, 1.007259]**. [Record](/measurements/wan-mha-41f-quality-timing-2026-10-04.json). |
+| Pointer FA2, FP8 SDPA, FP8/INT8 self projections, 17 frames | All eight cases execute their requested kernels but fail quality | Relative L2 **0.0966–0.3870**; minimum frame SSIM **0.6442–0.9295**. No timing. [Record](/measurements/wan-mha-quality-timing-2026-10-04.json). |
+| Rank32 SVDQuant, all FFN / final-block FFN | All four cases execute packed kernels but fail quality | All-FFN relative L2 **0.5033/0.4037**; block 29 only **0.0925/0.1455**. No dense/fallback or timing. [Record](/measurements/wan-svdquant-quality-2026-10-04.json). |
+| Full FP8 LightVAE encoder, 32 convolutions | Both cases fail latent quality | Relative L2 **0.2568/0.2511**. Passing PSNR/SSIM cannot override the latent budget; seed 42 also clips input operands. [Record](/measurements/lightvae-fp8-full-quality-2026-10-04.json). |
+| LightVAE `downsamples.0.residual.6` only | Both cases pass quality/execution but run slower | Relative L2 **0.01082/0.01106**; encoder speedup **0.95264×/0.92091×**. [Record](/measurements/lightvae-fp8-residual-quality-timing-2026-10-04.json). |
+| LightVAE `middle.1.proj` only | Both cases pass quality/execution; no stable speed certification | Relative L2 **0.000979/0.000983**; encoder speedup **1.00769×/1.00349×**. Seed 43 CI95 **[0.98503, 1.01022]** crosses 1. [Record](/measurements/lightvae-fp8-projection-quality-timing-2026-10-04.json). |
+
+The two selective codec variants are exploratory follow-ups to full-encoder rejection. They compare against the identical FP32 student and time only encoding; their percentages cannot be added to Wan end-to-end results. Calibration uses different prompts with seeds 11/12. The [calibration record](/measurements/native-calibration-provenance-2026-10-04.json) preserves artifact/checkpoint/RGB hashes, selected modules and original revisions; later fixes do not retroactively replace calibration provenance.
+
+Every completed record confirms unchanged execution sources and inputs. Interrupted startup and older Triton compiler-abort runs are excluded. Independent experiments used separate GPUs while sharing host CPU resources; device qualification samples before/after timings, not continuously exclusive ownership. Gains apply to these fixed cases, not model-wide quality or general performance.
+
 ## Historical H100 results and rejected candidates
 
 | Measurement | Result | Validation and limits |
@@ -274,4 +348,4 @@ PYTHONPATH=. python benchmarks/inference/sana_plugins.py \
 PYTHONPATH=. python benchmarks/inference/sol_attention.py --out /tmp/sol-attention-new
 ```
 
-Remaining integrations include truly packed SVDQuant checkpoints with calibration and a compatible provider, complete MHA precision/kernel schedules, calibrated native FP8 LightVAE, and qualified cache/Graph/SP combinations. The local dual-expert schedule support and matched student codec narrow those gaps; they do not complete all upstream techniques. Sol's synthetic operator measurements still do not certify native Wan generation.
+Native packed SVDQuant, MHA schedules and calibrated FP8 encoder execution are integrated. Remaining work includes Nunchaku format adapters, FP8 TMA and qualified cache/Graph/SP combinations; the new plugins explicitly reject unsupported combinations. The local dual-expert schedule support and matched student codec narrow those gaps; they do not complete all upstream techniques. Sol's synthetic operator measurements still do not certify native Wan generation.
