@@ -117,6 +117,12 @@ class VideoPostProcessor(ABC):
 
         return type(self).__name__
 
+    @property
+    def processing_device(self) -> str | None:
+        """Declare an explicit GPU device for optional stream profiling."""
+
+        return None
+
     def output_spec(self, input_spec: VideoSpec) -> VideoSpec:
         """Declare the spec this processor emits; default is identity (no resize)."""
 
@@ -190,10 +196,34 @@ class VideoPostprocessChain:
 
         sessions: list[VideoPostProcessorSession] = []
         current = input_spec
-        for processor in self.processors:
-            sessions.append(processor.start(current))
-            current = processor.output_spec(current)
+        try:
+            for processor in self.processors:
+                sessions.append(processor.start(current))
+                current = processor.output_spec(current)
+        except BaseException as error:
+            _close_sessions(sessions, primary_error=error)
+            raise
         return _VideoPostprocessChainSession(sessions)
+
+
+def _close_sessions(
+    sessions: Iterable[VideoPostProcessorSession], *, primary_error: BaseException | None = None,
+) -> None:
+    """Attempt every close while retaining the original failure."""
+
+    error = primary_error
+    for session in sessions:
+        try:
+            session.close()
+        except BaseException as caught:
+            if error is None:
+                error = caught
+            else:
+                add_note = getattr(error, "add_note", None)
+                if callable(add_note):
+                    add_note(f"Postprocess cleanup also failed: {caught!r}")
+    if primary_error is None and error is not None:
+        raise error
 
 
 class _VideoPostprocessChainSession(VideoPostProcessorSession):
@@ -204,19 +234,34 @@ class _VideoPostprocessChainSession(VideoPostProcessorSession):
 
         self._sessions = sessions
         self._closed = False
+        self._released = False
 
     def prepare(self) -> None:
         """Warm every stage before the first measured chunk so latency is not front-loaded."""
 
-        for session in self._sessions:
-            session.prepare()
+        if self._closed:
+            raise RuntimeError("cannot prepare a closed post-processing chain")
+        try:
+            for session in self._sessions:
+                session.prepare()
+        except BaseException as error:
+            self._closed = True
+            self._released = True
+            _close_sessions(self._sessions, primary_error=error)
+            raise
 
     def process(self, chunk: VideoChunk) -> list[VideoChunk]:
         """Push one chunk through every stage; reject work after ``flush``."""
 
         if self._closed:
             raise RuntimeError("cannot process a post-processing chain after flush()")
-        return self._run(first_session_index=0, chunks=[chunk])
+        try:
+            return self._run(first_session_index=0, chunks=[chunk])
+        except BaseException as error:
+            self._closed = True
+            self._released = True
+            _close_sessions(self._sessions, primary_error=error)
+            raise
 
     def flush(self) -> list[VideoChunk]:
         """Drain each stage once; a partial failure must not be retried.
@@ -229,19 +274,24 @@ class _VideoPostprocessChainSession(VideoPostProcessorSession):
         self._closed = True
         outputs: list[VideoChunk] = []
         for index, session in enumerate(self._sessions):
-            tail = session.flush()
-            if tail:
-                outputs.extend(self._run(first_session_index=index + 1, chunks=tail))
+            try:
+                tail = session.flush()
+                if tail:
+                    outputs.extend(self._run(first_session_index=index + 1, chunks=tail))
+            except BaseException as error:
+                self._released = True
+                _close_sessions(self._sessions, primary_error=error)
+                raise
         return outputs
 
     def close(self) -> None:
         """Discard remaining tails; idempotent so ``reset`` can call it twice."""
 
-        if self._closed:
+        if self._released:
             return
+        self._released = True
         self._closed = True
-        for session in self._sessions:
-            session.close()
+        _close_sessions(self._sessions)
 
     def _run(
         self,
@@ -266,22 +316,26 @@ class _VideoPostprocessChainSession(VideoPostProcessorSession):
 
 @dataclass(frozen=True, slots=True)
 class VideoPostprocessStepStats:
-    """Wall-clock and frame-count telemetry for one processed chunk."""
+    """Host dispatch, optional CUDA stream time, and frame-count telemetry."""
 
     elapsed_ms: float
     input_frames: int
     output_frames: int
     buffering: bool
+    gpu_elapsed_ms: float | None = None
 
     def to_payload(self) -> dict[str, float | int | bool]:
         """JSON-safe receipt; ``buffering`` is True when the stage emitted no frames."""
 
-        return {
+        payload = {
             "elapsed_ms": self.elapsed_ms,
             "input_frames": self.input_frames,
             "output_frames": self.output_frames,
             "buffering": self.buffering,
         }
+        if self.gpu_elapsed_ms is not None:
+            payload["gpu_elapsed_ms"] = self.gpu_elapsed_ms
+        return payload
 
 
 class VideoPostprocessStream:
@@ -292,11 +346,15 @@ class VideoPostprocessStream:
         *,
         chain: VideoPostprocessChain | None = None,
         fps: float | None = None,
+        profile_cuda: bool = False,
     ) -> None:
         """Bind a chain; the session is created lazily on the first ``process``."""
 
         self.chain = chain or VideoPostprocessChain()
         self.fps = fps
+        if not isinstance(profile_cuda, bool):
+            raise TypeError("profile_cuda must be a bool")
+        self.profile_cuda = profile_cuda
         self.input_spec: VideoSpec | None = None
         self.output_spec: VideoSpec | None = None
         self.last_stats: VideoPostprocessStepStats | None = None
@@ -334,10 +392,12 @@ class VideoPostprocessStream:
             raise RuntimeError("cannot process video after finish()")
         spec = infer_video_spec(frames, layout=layout, fps=self.fps)
         if self.input_spec is None:
+            output_spec = self.chain.output_spec(spec)
+            session = self.chain.start(spec)
+            session.prepare()
             self.input_spec = spec
-            self.output_spec = self.chain.output_spec(spec)
-            self._session = self.chain.start(spec)
-            self._session.prepare()
+            self.output_spec = output_spec
+            self._session = session
         elif spec != self.input_spec:
             raise ValueError(f"postprocess input stream specification changed from {self.input_spec!r} to {spec!r}.")
         if self._session is None:  # pragma: no cover - guarded by initialization above
@@ -346,10 +406,19 @@ class VideoPostprocessStream:
         chunk_metadata = dict(metadata or {})
         chunk_metadata.setdefault("autoregressive_index", self._chunk_index)
         chunk = VideoChunk(frames=frames, layout=layout, metadata=chunk_metadata)
+        cuda_timer = self._start_cuda_timer(frames) if self.profile_cuda else None
         started = time.perf_counter()
         with nvtx_range("worldfoundry.postprocess"):
             outputs = self._session.process(chunk)
         elapsed_ms = (time.perf_counter() - started) * 1000.0
+        gpu_elapsed_ms = None
+        if cuda_timer is not None:
+            torch, stream, start_event = cuda_timer
+            end_event = torch.cuda.Event(enable_timing=True)
+            end_event.record(stream)
+            # Synchronization is restricted to explicitly requested profiling.
+            end_event.synchronize()
+            gpu_elapsed_ms = start_event.elapsed_time(end_event)
         self._validate_outputs(outputs)
         output_frames = sum(output.frame_count for output in outputs)
         self.last_stats = VideoPostprocessStepStats(
@@ -357,9 +426,46 @@ class VideoPostprocessStream:
             input_frames=chunk.frame_count,
             output_frames=output_frames,
             buffering=output_frames == 0,
+            gpu_elapsed_ms=gpu_elapsed_ms,
         )
         self._chunk_index += 1
         return outputs
+
+    def _start_cuda_timer(self, frames: Any):
+        """Time one resolved CUDA device; CPU paths keep host-only telemetry.
+
+        Processors must enqueue work on that device's current stream, or join
+        any private stream before returning. Mixed-device chains cannot be
+        measured correctly with one CUDA event pair and are rejected only
+        when CUDA profiling is explicitly requested.
+        """
+
+        declared = [processor.processing_device for processor in self.chain.processors]
+        frame_values = frames if isinstance(frames, (list, tuple)) else (frames,)
+        requested = [value for value in declared if value is not None]
+        requested.extend(
+            value.device for value in frame_values
+            if getattr(getattr(value, "device", None), "type", None) == "cuda"
+        )
+        if not requested:
+            return None
+        import torch
+
+        devices = set()
+        for value in requested:
+            device = torch.device(value)
+            if device.type != "cuda":
+                continue
+            devices.add(device.index if device.index is not None else torch.cuda.current_device())
+        if not devices:
+            return None
+        if len(devices) != 1:
+            raise ValueError("CUDA postprocess profiling requires one CUDA device")
+        device_index = devices.pop()
+        stream = torch.cuda.current_stream(device_index)
+        start_event = torch.cuda.Event(enable_timing=True)
+        start_event.record(stream)
+        return torch, stream, start_event
 
     def finish(self) -> list[VideoChunk]:
         """Flush buffered tails once; later calls return an empty list."""
@@ -374,14 +480,15 @@ class VideoPostprocessStream:
     def reset(self) -> None:
         """Discard buffered output, release state, and accept a fresh stream."""
 
-        if self._session is not None:
-            self._session.close()
+        session = self._session
         self.input_spec = None
         self.output_spec = None
         self.last_stats = None
         self._session = None
         self._chunk_index = 0
         self._closed = False
+        if session is not None:
+            session.close()
 
     def _validate_outputs(self, outputs: Iterable[VideoChunk]) -> None:
         """Require every non-empty chunk to match the chain's declared output spec."""

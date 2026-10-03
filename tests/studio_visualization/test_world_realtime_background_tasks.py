@@ -4,7 +4,7 @@ The event loop only keeps weak references to tasks, so a bare
 ``asyncio.create_task(self.close_active())`` inside the WebRTC channel
 ``on_close`` callback could be garbage collected mid-flight, intermittently
 dropping session cleanup.  ``RealtimePeerManager`` now anchors such tasks in
-``self._background_tasks`` and discards them on completion.
+``self._shutdown_tasks`` and discards them on completion.
 """
 
 from __future__ import annotations
@@ -42,16 +42,16 @@ def test_spawn_background_task_holds_reference_until_completion() -> None:
             completed.set()
 
         task = manager._spawn_background_task(cleanup(), name="test-cleanup")
-        assert task in manager._background_tasks
+        assert task in manager._shutdown_tasks
         await started.wait()
         # While the task is in flight the manager must hold a strong reference.
-        assert task in manager._background_tasks
+        assert task in manager._shutdown_tasks
         release.set()
         await task
         assert completed.is_set()
         # The done callback discards the reference once the task finishes.
         await asyncio.sleep(0)
-        assert task not in manager._background_tasks
+        assert task not in manager._shutdown_tasks
 
     asyncio.run(scenario())
 
@@ -67,7 +67,7 @@ def test_spawn_background_task_discards_failed_tasks_too() -> None:
         with pytest.raises(RuntimeError, match="expected test failure"):
             await task
         await asyncio.sleep(0)
-        assert task not in manager._background_tasks
+        assert task not in manager._shutdown_tasks
 
     asyncio.run(scenario())
 

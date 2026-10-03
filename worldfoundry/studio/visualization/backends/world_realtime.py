@@ -29,10 +29,8 @@ from urllib.parse import quote
 import numpy as np
 from PIL import Image
 
-from worldfoundry.core.execution.realtime.prewarm import run_async_prewarm_sequence
 from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
-from worldfoundry.core.observability.logging_setup import get_logger, write_jsonl_event
-from worldfoundry.core.observability.realtime_timing import RealtimeChunkTiming, RealtimeTimingWindow
+from worldfoundry.core.execution.realtime.prewarm import run_async_prewarm_sequence
 from worldfoundry.core.media.processing.postprocess import (
     IdentityVideoPostProcessor,
     VideoPostprocessChain,
@@ -40,9 +38,10 @@ from worldfoundry.core.media.processing.postprocess import (
     VideoSpec,
     frame_list_from_chunks,
 )
+from worldfoundry.core.observability.logging_setup import get_logger, write_jsonl_event
+from worldfoundry.core.observability.realtime_timing import RealtimeChunkTiming, RealtimeTimingWindow
 from worldfoundry.studio.inference.catalog import CatalogEntry
 from worldfoundry.studio.inference.execution import IMAGE_EXTS, VIDEO_EXTS, PreparedInputs, StudioManager
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 from worldfoundry.studio.serving import (
     bind_security_warning,
     path_allowed,
@@ -67,6 +66,7 @@ from worldfoundry.studio.serving.realtime.media import (
 )
 from worldfoundry.studio.serving.realtime.media import encode_jpeg_frames as _encode_jpeg_frames
 from worldfoundry.studio.serving.realtime.media import resize_rgb_frames as _resize_rgb_frames
+from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 
 _MIN_OUTPUT_WIDTH = realtime_media.MIN_OUTPUT_WIDTH
 _MIN_OUTPUT_HEIGHT = realtime_media.MIN_OUTPUT_HEIGHT
@@ -577,16 +577,13 @@ async def _run_by_shutdown_deadline(
     warn_on_timeout: bool = True,
 ) -> bool:
     task = asyncio.create_task(awaitable, name=f"world-realtime-shutdown-{label}")
-    if deadline <= asyncio.get_running_loop().time():
-        # Issuing cleanup still matters when an earlier worker spent the
-        # budget. Give the coroutine its first cooperative slice before
-        # canceling/retaining it; otherwise close/reset never starts.
-        try:
-            await asyncio.sleep(0)
-        except BaseException:
-            task.cancel()
-            _retain_shutdown_task(task, retained)
-            raise
+    try:
+        # Start each cleanup stage even when an earlier stage used the budget.
+        await asyncio.sleep(0)
+    except BaseException:
+        task.cancel()
+        _retain_shutdown_task(task, retained)
+        raise
     return await _finish_tasks_by_deadline(
         (task,),
         deadline=deadline,
@@ -672,6 +669,7 @@ def _realtime_postprocess_stream(
         return VideoPostprocessStream(
             chain=VideoPostprocessChain((IdentityVideoPostProcessor(),)),
             fps=fps,
+            profile_cuda=_env_bool("WORLDFOUNDRY_REALTIME_PROFILE_CUDA_POSTPROCESS", False),
         )
 
     from worldfoundry.core.media.processing.rtx import (
@@ -716,6 +714,7 @@ def _realtime_postprocess_stream(
     return VideoPostprocessStream(
         chain=VideoPostprocessChain((processor,)),
         fps=fps,
+        profile_cuda=_env_bool("WORLDFOUNDRY_REALTIME_PROFILE_CUDA_POSTPROCESS", False),
     )
 
 
@@ -917,13 +916,19 @@ class ResidentWorldRuntime:
         self.warmup_image_path = warmup_image_path
         self.warmup_chunks = max(int(warmup_chunks), 0)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="world-realtime-runtime")
+        self._session_lock = asyncio.Lock()
+        self._reset_task: asyncio.Task[Any] | None = None
         self._base_request: PreparedInputs | None = None
+        self._reset_request: PreparedInputs | None = None
+        self._generation_inflight = False
         self._preload_future: asyncio.Future[Any] | None = None
         self._preload_task: asyncio.Task[Any] | None = None
         self._preload_error: str | None = None
         self._shutdown_tasks: set[asyncio.Task[Any]] = set()
         self._closed = False
         self.warmup_ms = 0.0
+        self.preload_ms = 0.0
+        self.warmup_metrics: dict[str, Any] = {}
         self._configured = False
         self._first_stream_step = True
         self._seed_image: Image.Image | None = None
@@ -997,6 +1002,20 @@ class ResidentWorldRuntime:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
+        if self._closed:
+            raise RuntimeError("cannot schedule new futures after shutdown")
+        loop = asyncio.get_running_loop()
+        call = functools.partial(func, *args, **kwargs)
+        return await loop.run_in_executor(self._executor, call)
+
+    async def _run_cleanup(
+        self,
+        func: Callable[..., Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Submit owned reset work after normal admission has closed."""
+
         loop = asyncio.get_running_loop()
         call = functools.partial(func, *args, **kwargs)
         return await loop.run_in_executor(self._executor, call)
@@ -1071,47 +1090,93 @@ class ResidentWorldRuntime:
         )
 
     async def preload(self) -> None:
-        if self._preload_future is not None:
-            await asyncio.shield(self._preload_future)
+        self._ensure_open()
+        if self.ready:
             return
-        loop = asyncio.get_running_loop()
-        self._preload_future = loop.create_future()
-        current_task = asyncio.current_task()
-        self._preload_task = current_task
-        try:
-            request = await self._run(
-                self._build_request,
-                prompt=self.entry.default_prompt or "",
-                image=None,
-                input_path="",
-                video_path="",
+        task = self._preload_task
+        if task is None or task.done():
+            self._preload_error = None
+            task = asyncio.create_task(
+                self._preload_session(), name="world-realtime-resident-preload",
             )
-            result = await self._run(
-                self.manager.run_realtime,
-                entry=self.entry,
-                request=request,
-                action="configure",
-            )
-            self._accept_realtime_spec(result)
-            if self.warmup_chunks and self.warmup_image_path and self.entry.supports_stream:
-                await self._warmup()
-            self._preload_future.set_result(None)
-        except BaseException as exc:
-            if isinstance(exc, asyncio.CancelledError):
-                if not self._preload_future.done():
-                    self._preload_future.cancel()
-            else:
-                self._preload_error = str(exc)
-                if not self._preload_future.done():
-                    self._preload_future.set_exception(exc)
-                traceback.print_exc()
-            raise
-        finally:
-            if self._preload_task is current_task:
-                self._preload_task = None
+            self._preload_task = task
+            self._preload_future = task
+
+            def consume(completed: asyncio.Task[Any]) -> None:
+                if not completed.cancelled():
+                    completed.exception()
+
+            task.add_done_callback(consume)
+        await asyncio.shield(task)
+        self._ensure_open()
+
+    async def _preload_session(self) -> None:
+        """Own loading and cleanup independently of any individual waiter."""
+
+        async with self._session_lock:
+            started = time.perf_counter()
+            dispatched = False
+            try:
+                self._ensure_open()
+                if self._configured or self._reset_request is not None:
+                    await self._reset_session()
+                request = await self._run(
+                    self._build_request,
+                    prompt=self.entry.default_prompt or "",
+                    image=None,
+                    input_path="",
+                    video_path="",
+                )
+                self._ensure_open()
+                self._reset_request = request
+                dispatched = True
+                result = await self._run(
+                    self.manager.run_realtime,
+                    entry=self.entry,
+                    request=request,
+                    action="configure",
+                )
+                self._ensure_open()
+                self._accept_realtime_spec(result)
+                self.preload_ms = (time.perf_counter() - started) * 1000.0
+                if self.warmup_chunks and self.warmup_image_path and self.entry.supports_stream:
+                    await self._warmup_session()
+                self._ensure_open()
+            except BaseException as error:
+                self._preload_error = str(error) or type(error).__name__
+                if dispatched:
+                    cleanup = asyncio.create_task(
+                        self._reset_session(), name="world-realtime-preload-reset",
+                    )
+                    try:
+                        # CUDA work already running on the worker must finish
+                        # before cleanup and a subsequent attempt can reuse it.
+                        while not cleanup.done():
+                            try:
+                                await asyncio.shield(cleanup)
+                            except asyncio.CancelledError:
+                                if cleanup.cancelled():
+                                    raise
+                        cleanup.result()
+                    except BaseException as reset_error:
+                        self._reset_request = self._reset_request or request
+                        add_note = getattr(error, "add_note", None)
+                        if callable(add_note):
+                            add_note(f"Preload reset also failed: {reset_error!r}")
+                if not isinstance(error, asyncio.CancelledError):
+                    traceback.print_exc()
+                raise
 
     async def _warmup(self) -> None:
         """Compile and stabilize the actual resident stream before user input."""
+
+        self._ensure_open()
+        async with self._session_lock:
+            self._ensure_open()
+            await self._warmup_session()
+
+    async def _warmup_session(self) -> None:
+        """Exercise cold, steady, and buffered tail paths before clearing state."""
 
         def open_seed() -> Image.Image:
             with Image.open(self.warmup_image_path) as source:
@@ -1128,9 +1193,12 @@ class ResidentWorldRuntime:
         )
         interactions = ["forward"]
         configured = False
+        timings: list[dict[str, float]] = []
+        self.warmup_metrics = {}
 
         async def configure_warmup() -> None:
             nonlocal configured
+            configured = True
             result = await self._run(
                 self.manager.run_realtime,
                 entry=self.entry,
@@ -1138,9 +1206,9 @@ class ResidentWorldRuntime:
                 action="configure",
             )
             self._accept_realtime_spec(result)
-            configured = True
 
         async def warmup_step(index: int) -> None:
+            step_started = time.perf_counter()
             stream_request = replace(
                 request,
                 image=request.image if index == 0 else None,
@@ -1158,30 +1226,52 @@ class ResidentWorldRuntime:
                 request=stream_request,
                 action="stream",
             )
+            model_finished = time.perf_counter()
             frames = await self._run(realtime_frames_from_result, result)
+            copy_finished = time.perf_counter()
             await self._run(
                 self._postprocess_frames,
                 frames,
                 metadata={"warmup": True, "warmup_index": index},
             )
+            timings.append({
+                "runtime_ms": (model_finished - step_started) * 1000.0,
+                "copy_ms": (copy_finished - model_finished) * 1000.0,
+                "postprocess_ms": (time.perf_counter() - copy_finished) * 1000.0,
+            })
 
+        primary_error = None
         try:
-            await run_async_prewarm_sequence(
+            sequence = await run_async_prewarm_sequence(
                 cold_start=configure_warmup,
                 steady_state=warmup_step,
                 steady_steps=self.warmup_chunks,
                 label=f"studio.{self.entry.model_id}",
                 timeout_s=_env_optional_timeout_s("WORLDFOUNDRY_REALTIME_PREWARM_TIMEOUT_SECONDS"),
             )
+            flush_started = time.perf_counter()
+            await self._run(self._postprocess.finish)
+            self.warmup_metrics = {
+                "configure_ms": sequence.cold_start.elapsed_ms if sequence.cold_start is not None else 0.0,
+                "steps": timings,
+                "flush_ms": (time.perf_counter() - flush_started) * 1000.0,
+            }
+        except BaseException as error:
+            primary_error = error
+            raise
         finally:
-            await self._run(self._postprocess.reset)
+            reset_started = time.perf_counter()
             if configured:
-                await self._run(
-                    self.manager.run_realtime,
-                    entry=self.entry,
-                    request=request,
-                    action="reset",
-                )
+                self._reset_request = request
+            try:
+                await self._reset_session()
+            except BaseException as error:
+                if primary_error is None:
+                    raise
+                add_note = getattr(primary_error, "add_note", None)
+                if callable(add_note):
+                    add_note(f"Warmup reset also failed: {error!r}")
+            self.warmup_metrics["reset_ms"] = (time.perf_counter() - reset_started) * 1000.0
         self.warmup_ms = (time.perf_counter() - started) * 1000.0
 
     async def configure(
@@ -1193,7 +1283,25 @@ class ResidentWorldRuntime:
         dense_video_path: str = "",
         sparse_video_path: str = "",
     ) -> Image.Image:
+        self._ensure_open()
+        async with self._session_lock:
+            self._ensure_open()
+            if self._configured or self._reset_request is not None:
+                await self._reset_session()
         await self.preload()
+        async with self._session_lock:
+            self._ensure_open()
+            return await self._configure_session(
+                prompt=prompt, image_path=image_path, video_path=video_path,
+                dense_video_path=dense_video_path, sparse_video_path=sparse_video_path,
+            )
+
+    async def _configure_session(
+        self, *, prompt: str, image_path: str, video_path: str,
+        dense_video_path: str, sparse_video_path: str,
+    ) -> Image.Image:
+        if self._configured or self._reset_request is not None:
+            await self._reset_session()
         await self._run(self._postprocess.reset)
         if self.queued_segment_generation:
             missing = [
@@ -1222,6 +1330,7 @@ class ResidentWorldRuntime:
             dense_video_path=dense_video_path,
             sparse_video_path=sparse_video_path,
         )
+        self._reset_request = request
         configured = await self._run(
             self.manager.run_realtime,
             entry=self.entry,
@@ -1230,6 +1339,7 @@ class ResidentWorldRuntime:
         )
         self._accept_realtime_spec(configured)
         self._base_request = request
+        self._reset_request = None
         self._configured = True
         self._first_stream_step = True
         self._seed_image = image or Image.new("RGB", (1280, 720), "black")
@@ -1297,10 +1407,31 @@ class ResidentWorldRuntime:
         dense_video_path: str | None = None,
         sparse_video_path: str | None = None,
     ) -> tuple[list[np.ndarray], float]:
+        self._ensure_open()
+        async with self._session_lock:
+            self._ensure_open()
+            try:
+                return await self._generate_session(
+                    interactions, seed=seed, control_segments=control_segments, prompt=prompt,
+                    dense_video_path=dense_video_path, sparse_video_path=sparse_video_path,
+                )
+            except BaseException:
+                if self._generation_inflight:
+                    self._reset_request = self._base_request
+                    self._clear_session()
+                raise
+            finally:
+                self._generation_inflight = False
+
+    async def _generate_session(
+        self, interactions: list[str], *, seed: int,
+        control_segments: list[ControlSegment] | None, prompt: str | None,
+        dense_video_path: str | None, sparse_video_path: str | None,
+    ) -> tuple[list[np.ndarray], float]:
         if not self._configured or self._base_request is None:
             raise RuntimeError("Realtime runtime is not configured.")
         if self.queued_segment_generation:
-            call_kwargs = dict(self._base_request.call_kwargs)
+            call_kwargs = {**self._base_request.call_kwargs, "seed": int(seed)}
             if not self._first_stream_step:
                 if not dense_video_path or not sparse_video_path:
                     raise ValueError(
@@ -1342,6 +1473,7 @@ class ResidentWorldRuntime:
                 request = replace(request, image=None, image_path=None)
             action = "stream"
         started = time.perf_counter()
+        self._generation_inflight = True
         result = await self._run(
             self.manager.run_realtime,
             entry=self.entry,
@@ -1378,22 +1510,11 @@ class ResidentWorldRuntime:
         return frames, generation_ms
 
     async def reset(self) -> None:
-        request = self._base_request
-        self._configured = False
-        self._base_request = None
-        self._seed_image = None
-        self._first_stream_step = True
-        self.preserve_cuda_frames = False
-        # Submit the whole cleanup transaction before yielding. The stable
-        # worker then completes postprocess/model cleanup before later model
-        # work, even when the caller's shutdown budget expires.
-        loop = asyncio.get_running_loop()
-        future = loop.run_in_executor(self._executor, self._reset_components, request)
-
-        async def complete_reset() -> None:
-            await asyncio.shield(future)
-
-        task = asyncio.create_task(complete_reset(), name="world-realtime-reset-components")
+        if self._reset_task is None or self._reset_task.done():
+            self._reset_task = asyncio.create_task(
+                self._reset_locked(), name="world-realtime-session-reset",
+            )
+        task = self._reset_task
         try:
             done, _ = await asyncio.wait({task}, timeout=_realtime_shutdown_timeout_s())
         except BaseException:
@@ -1402,29 +1523,57 @@ class ResidentWorldRuntime:
         if task in done:
             task.result()
         else:
+            # Keep the session lock until the worker has actually cleaned up.
             _retain_shutdown_task(task, self._shutdown_tasks)
             logger.warning(
                 "Realtime postprocess reset did not finish within the shutdown budget; "
-                "accepted cleanup continues on the resident worker."
+                "session reuse will wait for cleanup."
             )
 
-    def _reset_components(self, request: PreparedInputs | None) -> None:
+    async def _reset_locked(self) -> None:
+        async with self._session_lock:
+            await self._reset_session()
+
+    def _clear_session(self) -> None:
+        self._configured = False
+        self._base_request = None
+        self._seed_image = None
+        self._first_stream_step = True
+        self.last_generation_metrics = {}
+        self.preserve_cuda_frames = False
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("Realtime runtime is closed.")
+
+    async def _reset_session(self) -> None:
+        request = self._base_request or self._reset_request
+        self._reset_request = request
+        self._clear_session()
+        error = None
         try:
-            self._postprocess.reset()
-        finally:
-            # Preserve a postprocess failure while still resetting the model.
-            if request is not None:
-                try:
-                    self.manager.run_realtime(
-                        entry=self.entry,
-                        request=request,
-                        action="reset",
-                    )
-                except Exception:
-                    logger.warning(
-                        "Realtime runtime reset action failed; continuing session teardown.",
-                        exc_info=True,
-                    )
+            await self._run_cleanup(self._postprocess.reset)
+        except BaseException as caught:
+            error = caught
+        if request is not None:
+            try:
+                await self._run_cleanup(
+                    self.manager.run_realtime,
+                    entry=self.entry,
+                    request=request,
+                    action="reset",
+                )
+            except BaseException as caught:
+                if error is None:
+                    error = caught
+                else:
+                    add_note = getattr(error, "add_note", None)
+                    if callable(add_note):
+                        add_note(f"Model reset also failed: {caught!r}")
+            else:
+                self._reset_request = None
+        if error is not None:
+            raise error
 
     async def close(self, *, deadline: float | None = None) -> None:
         if self._closed:
@@ -1446,15 +1595,34 @@ class ResidentWorldRuntime:
                 label="runtime reset",
             )
         finally:
-            # Reject new submissions without joining running Python/CUDA
-            # work. Already accepted cleanup must drain even when it is
-            # queued behind an inference call that cannot be canceled.
-            self._executor.shutdown(wait=False, cancel_futures=False)
+            # Running Python/CUDA callables cannot be killed safely. Do not
+            # join them here; reject queued work and let running work finish
+            # cooperatively after the async shutdown handler returns.
+            pending = tuple(
+                task for task in (self._preload_task, self._reset_task)
+                if task is not None and not task.done()
+            )
+            if pending:
+                shutdown = asyncio.create_task(
+                    self._shutdown_executor_after(pending), name="world-realtime-worker-shutdown",
+                )
+                _retain_shutdown_task(shutdown, self._shutdown_tasks)
+            else:
+                self._executor.shutdown(wait=False, cancel_futures=True)
+
+    async def _shutdown_executor_after(self, tasks: tuple[asyncio.Task[Any], ...]) -> None:
+        """Keep the worker available for cleanup that outlives close's budget."""
+
+        try:
+            await asyncio.wait(tasks)
+        finally:
+            self._executor.shutdown(wait=False, cancel_futures=True)
 
     @property
     def ready(self) -> bool:
         return bool(
-            self._preload_future
+            not self._closed
+            and self._preload_future
             and self._preload_future.done()
             and not self._preload_future.cancelled()
             and self._preload_future.exception() is None
@@ -2009,12 +2177,19 @@ class RealtimePeerManager:
         wait_for_drain = self._draining and not has_session
         return active, active_socket, has_session, wait_for_drain
 
+    def _spawn_background_task(self, awaitable: Any, *, name: str) -> asyncio.Task[Any]:
+        """Own background cleanup until its result has been consumed."""
+
+        task = asyncio.create_task(awaitable, name=name)
+        _retain_shutdown_task(task, self._shutdown_tasks)
+        return task
+
     def _schedule_deferred_close(self) -> None:
         existing = self._deferred_close_task
         if existing is not None and not existing.done():
             return
         timeout_s = _realtime_shutdown_timeout_s()
-        task = asyncio.create_task(
+        task = self._spawn_background_task(
             self._deferred_close_after_lock(timeout_s),
             name="world-realtime-deferred-close",
         )
@@ -2025,7 +2200,6 @@ class RealtimePeerManager:
                 self._deferred_close_task = None
 
         task.add_done_callback(clear_deferred)
-        _retain_shutdown_task(task, self._shutdown_tasks)
 
     async def _deferred_close_after_lock(self, timeout_s: float) -> None:
         await self._lock.acquire()
@@ -2272,8 +2446,9 @@ class RealtimePeerManager:
 
                 @channel.on("close")
                 def on_close() -> None:
-                    active.close_task = asyncio.create_task(self.close_active())
-                    active.close_task.add_done_callback(_consume_task_result)
+                    active.close_task = self._spawn_background_task(
+                        self.close_active(), name="world-realtime-channel-close",
+                    )
 
                 active.generation_task = asyncio.create_task(self._generation_worker(active))
                 active.liveness_task = asyncio.create_task(self._liveness_watchdog(active))

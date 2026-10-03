@@ -209,7 +209,8 @@ class LatestFrameBuffer:
 class ChunkPresentationBuffer:
     """Present complete generated chunks through a two-frame sender mailbox.
 
-    Active and pending chunks share an event-loop clock so transports request
+    Active and pending chunks share a bounded presentation queue.
+    The event-loop clock lives here so transports only request
     real frames; they do not add another pacing loop or repeat a held frame.
     """
 

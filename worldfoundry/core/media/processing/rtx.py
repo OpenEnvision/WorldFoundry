@@ -185,6 +185,12 @@ class RTXVideoSuperResolutionPostProcessor(VideoPostProcessor):
 
         return "rtx-video-super-resolution"
 
+    @property
+    def processing_device(self) -> str:
+        """Use the configured VFX device instead of the caller's current GPU."""
+
+        return f"cuda:{self.config.device}"
+
     def output_spec(self, input_spec: VideoSpec) -> VideoSpec:
         """Delegate geometry to the config so the chain can size the sink first."""
 

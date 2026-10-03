@@ -14,8 +14,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from worldfoundry.core.execution.realtime.prewarm import PrewarmTimeoutError
 from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.execution.realtime.prewarm import PrewarmTimeoutError
 from worldfoundry.core.media.processing.postprocess import VideoSpec
 from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference.execution import (
@@ -24,8 +24,8 @@ from worldfoundry.studio.inference.execution import (
     PreparedInputs,
     StudioManager,
 )
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 from worldfoundry.studio.serving.realtime.media import FrameQueuePolicy
+from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 from worldfoundry.studio.visualization.backends import world_realtime as realtime_backend
 from worldfoundry.studio.visualization.backends.world import world_frontend_html
 from worldfoundry.studio.visualization.backends.world_realtime import (
@@ -305,8 +305,8 @@ def test_close_active_is_bounded_when_workers_and_runtime_ignore_cancellation(
 
     asyncio.run(exercise())
 
-    assert "shutdown deadline expired while waiting for WebRTC workers" in caplog.text
-    assert "shutdown deadline expired while waiting for session runtime reset" in caplog.text
+    assert "deadline expired while waiting for WebRTC workers" in caplog.text
+    assert "deadline expired while waiting for session runtime reset" in caplog.text
 
 
 def test_close_active_normal_teardown_is_idempotent() -> None:
@@ -346,7 +346,6 @@ def test_close_active_normal_teardown_is_idempotent() -> None:
 
 def test_socket_generation_cancel_does_not_wait_forever_for_inference(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setenv("WORLDFOUNDRY_REALTIME_SHUTDOWN_TIMEOUT_SECONDS", "0.02")
 
@@ -407,9 +406,6 @@ def test_socket_generation_cancel_does_not_wait_forever_for_inference(
 
     asyncio.run(exercise())
 
-    # The model task remains owned until it acknowledges cancellation or
-    # finishes; canceling the presentation worker does not wait for it.
-
 
 def test_runtime_reset_and_close_have_independent_deadlines(
     monkeypatch: pytest.MonkeyPatch,
@@ -469,7 +465,7 @@ def test_runtime_reset_and_close_have_independent_deadlines(
         monkeypatch.setattr(close_runtime, "reset", cancellation_resistant_reset)
         await asyncio.wait_for(close_runtime.close(), timeout=0.25)
         assert reset_started.is_set()
-        await asyncio.wait_for(reset_cancelled.wait(), timeout=0.1)
+        assert reset_cancelled.is_set()
         lingering = list(close_runtime._shutdown_tasks)
         assert lingering
         release.set()
@@ -480,7 +476,7 @@ def test_runtime_reset_and_close_have_independent_deadlines(
 
     asyncio.run(exercise_close())
 
-    assert "shutdown deadline expired while waiting for runtime reset" in caplog.text
+    assert "deadline expired while waiting for runtime reset" in caplog.text
 
 
 def test_datachannel_events_ack_and_idle_step_are_ordered() -> None:
@@ -2252,8 +2248,9 @@ def test_queued_segment_runtime_runs_fresh_then_extends_resident_state(tmp_path:
     asyncio.run(exercise())
 
     assert [action for action, _ in calls[:2]] == ["run", "stream"]
-    assert calls[0][1].call_kwargs["seed"] == 0
+    assert calls[0][1].call_kwargs["seed"] == 99
     continuation = calls[1][1]
+    assert continuation.call_kwargs["seed"] == 100
     assert continuation.prompt == "second segment"
     assert continuation.input_path == ""
     assert continuation.image is None

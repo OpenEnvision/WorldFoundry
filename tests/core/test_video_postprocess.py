@@ -152,3 +152,80 @@ def test_video_layout_helpers_validate_shapes_and_preserve_frame_order() -> None
     assert len(frame_list_from_chunks(chunks)) == 3
     with pytest.raises(ValueError, match="requires 5 dimensions"):
         infer_video_spec(np.zeros((2, 4, 5, 3)), layout="bthwc")
+
+
+def test_cpu_profiling_keeps_original_payload_without_cuda_events(monkeypatch) -> None:
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "Event", lambda **kwargs: pytest.fail("CPU input must not create CUDA events"))
+    stream = VideoPostprocessStream(profile_cuda=True)
+    frames = _frames()
+    [chunk] = stream.process(frames, layout="frame-list")
+    assert chunk.frames is frames
+    assert stream.last_stats.gpu_elapsed_ms is None
+    assert set(stream.last_stats.to_payload()) == {"elapsed_ms", "input_frames", "output_frames", "buffering"}
+
+
+def test_cuda_profiling_uses_declared_processor_device_and_waits_for_end_event(monkeypatch) -> None:
+    import torch
+
+    events = []
+    calls = []
+    stream_marker = object()
+
+    class _Event:
+        def record(self, stream):
+            assert stream is stream_marker
+            calls.append("record")
+
+        def synchronize(self):
+            calls.append("synchronize")
+
+        def elapsed_time(self, end):
+            assert end is events[-1]
+            assert calls[-1] == "synchronize"
+            return 3.5
+
+    def make_event(*, enable_timing):
+        assert enable_timing
+        event = _Event()
+        events.append(event)
+        return event
+
+    def current_stream(device):
+        assert device == 1
+        return stream_marker
+
+    class _GPUIdentity(IdentityVideoPostProcessor):
+        @property
+        def processing_device(self):
+            return "cuda:1"
+
+    monkeypatch.setattr(torch.cuda, "Event", make_event)
+    monkeypatch.setattr(torch.cuda, "current_stream", current_stream)
+    frames = _frames()
+    stream = VideoPostprocessStream(chain=VideoPostprocessChain((_GPUIdentity(),)), profile_cuda=True)
+    [chunk] = stream.process(frames, layout="frame-list")
+    assert chunk.frames is frames
+    assert calls == ["record", "record", "synchronize"]
+    assert stream.last_stats.to_payload()["gpu_elapsed_ms"] == 3.5
+
+
+def test_cuda_profiling_rejects_ambiguous_multiple_devices():
+    class _GPUIdentity(IdentityVideoPostProcessor):
+        def __init__(self, device):
+            self.device = device
+
+        @property
+        def processing_device(self):
+            return self.device
+
+    stream = VideoPostprocessStream(chain=VideoPostprocessChain((_GPUIdentity("cuda:0"), _GPUIdentity("cuda:1"))), profile_cuda=True)
+    with pytest.raises(ValueError, match="one CUDA device"):
+        stream.process(_frames(), layout="frame-list")
+
+
+def test_default_profiling_path_does_not_start_cuda_timer(monkeypatch):
+    stream = VideoPostprocessStream()
+    monkeypatch.setattr(stream, "_start_cuda_timer", lambda _: pytest.fail("default path must remain asynchronous"))
+    stream.process(_frames(), layout="frame-list")
