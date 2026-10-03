@@ -20,7 +20,12 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.core.execution.process import process_group_alive, process_identity, terminate_process_group
+from worldfoundry.core.execution.process import (
+    process_group_alive,
+    process_identity,
+    terminate_owned_process_group,
+    terminate_process_group,
+)
 from worldfoundry.runtime.jobs import (
     JOB_STORE_STATE_SCHEMA_VERSION,
     AsyncCommandJobStore,
@@ -331,15 +336,25 @@ def test_completion_survives_the_controller_process_exiting(tmp_path):
     restored = AsyncCommandJobStore(state_path=state_path)
     try:
         deadline = time.monotonic() + 5
-        while restored.get("detached").status == "running" and time.monotonic() < deadline:
+        while time.monotonic() < deadline:
+            job = restored.get("detached")
+            # The receipt is published before the supervisor itself exits.
+            # Both milestones must complete within the original deadline.
+            if job.terminal and not process_group_alive(job.pid):
+                break
             time.sleep(0.03)
         job = restored.get("detached")
         assert job.status == "failed"
         assert job.returncode == 7
         assert not process_group_alive(job.pid)
     finally:
-        if not restored.get("detached").terminal:
-            asyncio.run(restored.cancel("detached"))
+        job = restored.get("detached")
+        if (
+            job.process_identity is not None
+            and process_identity(job.pid) == job.process_identity
+            and process_group_alive(job.pid)
+        ):
+            terminate_owned_process_group(job.pid, grace_seconds=0)
 
 
 def test_supervised_timeout_is_reported_to_a_restored_store(tmp_path):
