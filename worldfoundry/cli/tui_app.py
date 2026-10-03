@@ -697,10 +697,11 @@ class WorldFoundryTui(App[None]):
     def _sync_responsive_layout(self) -> None:
         """Reserve enough width for buttons and stack form fields on small screens."""
         width = self.size.width
-        self.screen.set_class(width < 80, "-compact")
-        self.screen.set_class(width < 128 or self.size.height < 44, "-hide-brand")
-        self.screen.set_class(self.size.height < 32, "-short")
-        self.screen.set_class(width < 96 or 128 <= width < 160, "-stack-actions")
+        screen = self.query_one("#main-content").screen
+        screen.set_class(width < 80, "-compact")
+        screen.set_class(width < 128 or self.size.height < 44, "-hide-brand")
+        screen.set_class(self.size.height < 32, "-short")
+        screen.set_class(width < 96 or 128 <= width < 160, "-stack-actions")
         self.sub_title = "Inference · Evaluation · Studio" if width >= 110 else ""
         self.query_one(Footer).compact = width < 100
         self.call_after_refresh(self._refresh_catalog_layout)
@@ -2004,7 +2005,8 @@ class WorldFoundryTui(App[None]):
 
     def _brand_logo_width(self) -> int:
         """Fit the complete official logo while reserving space for the catalog."""
-        max_rows = max(6, min(18, int(self.size.height * 0.3)))
+        # Keep eight catalog rows after the status, search, and window chrome.
+        max_rows = max(6, self.size.height - 31)
         max_width = int(max_rows * brand_logo_aspect_ratio() / logo_cell_aspect_ratio())
         available = max(1, int(self.size.width * 0.4) - 8)
         try:

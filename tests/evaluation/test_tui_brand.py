@@ -94,6 +94,21 @@ def test_native_output_preserves_original_bitmap_when_resized(monkeypatch, backe
             logo.display = True
             await pilot.pause()
 
+            await pilot.click("#brand")
+            await pilot.pause()
+            assert isinstance(app.screen, tui_logo.LogoPreview)
+            preview = app.screen.query_one("#logo-preview-image", tui_logo.BrandLogo)
+            assert preview.native_image
+            assert preview._image.content_size.width == 56
+            await pilot.resize_terminal(80, 24)
+            await pilot.pause()
+            assert preview._image.content_size.width == 40
+            assert preview._image.region.bottom < 24
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.query_one("#brand") is logo
+            assert logo._image.content_size.width == 24
+
     asyncio.run(exercise())
     if backend == "tgp":
         chunks: dict[int, list[str]] = {}
@@ -104,10 +119,75 @@ def test_native_output_preserves_original_bitmap_when_resized(monkeypatch, backe
             if packet["m"] == 0:
                 encoded.append(Image.open(io.BytesIO(base64.b64decode("".join(chunks.pop(packet["i"]))))).convert("RGB"))
         assert any(packet.get("a") == "d" for packet in packets)
-    assert {image.width for image in encoded} == {240, 360}
+    assert {image.width for image in encoded} == {240, 360, 400, 560}
     with Image.open(logo_asset_path()) as source:
         artwork = source.convert("RGB").crop((59, 83, 407, 355))
     for image in encoded:
         expected = ImageOps.contain(artwork, image.size, method=Image.Resampling.LANCZOS)
         top = (image.height - expected.height) // 2
         assert image.crop((0, top, expected.width, top + expected.height)).tobytes() == expected.tobytes()
+
+
+def test_text_logo_preview_opens_by_keyboard_and_refits_after_resize(monkeypatch) -> None:
+    from textual.app import App, ComposeResult
+
+    from worldfoundry.cli import tui_logo
+
+    monkeypatch.setattr(tui_logo, "TerminalImage", None)
+
+    class LogoApp(App):
+        def compose(self) -> ComposeResult:
+            yield tui_logo.BrandLogo(width_chars=33, id="brand")
+
+    async def exercise() -> None:
+        app = LogoApp()
+        async with app.run_test(size=(160, 50)) as pilot:
+            logo = app.query_one("#brand", tui_logo.BrandLogo)
+            logo.focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, tui_logo.LogoPreview)
+            preview = app.screen.query_one("#logo-preview-image", tui_logo.BrandLogo)
+            assert not preview.native_image
+            assert preview._image.content_size.width > 100
+            await pilot.click("#logo-preview-image")
+            assert len(app.screen_stack) == 2
+            for size in ((80, 24), (128, 44)):
+                await pilot.resize_terminal(*size)
+                await pilot.pause()
+                assert preview._image.region.x >= 0
+                assert preview._image.region.right <= size[0]
+                assert preview._image.region.bottom <= size[1] - 3
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.query_one("#brand") is logo
+            assert logo._image.content_size.width == 33
+            assert logo.has_focus
+
+    asyncio.run(exercise())
+
+
+def test_workspace_layout_recovers_after_resizing_logo_preview(tmp_path) -> None:
+    from worldfoundry.cli.tui_app import WorldFoundryTui
+    from worldfoundry.cli.tui_logo import LogoPreview
+
+    async def exercise() -> None:
+        app = WorldFoundryTui(output_dir=tmp_path)
+        async with app.run_test(size=(160, 50)) as pilot:
+            await pilot.pause()
+            assert app.query_one("#models-table").region.height >= 8
+            await pilot.click("#brand-logo")
+            await pilot.resize_terminal(80, 24)
+            await pilot.pause()
+            assert isinstance(app.screen, LogoPreview)
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.screen.has_class("-short")
+            assert app.screen.has_class("-hide-brand")
+            assert not app.query_one("#brand-collapse").display
+            await pilot.resize_terminal(160, 50)
+            await pilot.pause()
+            assert app.query_one("#brand-collapse").display
+            assert app.query_one("#models-table").region.height >= 8
+
+    asyncio.run(exercise())
