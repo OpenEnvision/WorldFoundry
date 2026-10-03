@@ -43,7 +43,7 @@ from textual.widgets import (
 
 from worldfoundry.core.io.paths import checkpoint_root_path, conda_envs_root_path
 
-from .tui_brand import render_brand_logo
+from .tui_brand import brand_logo_aspect_ratio, render_brand_logo
 from .tui_discovery import (
     ASTRA_CAM_TYPE_OPTIONS,
     INFER_VARIANT_TO_MODEL,
@@ -367,7 +367,15 @@ class WorldFoundryTui(App[None]):
             with Vertical(id="left-column"):
                 with Vertical(id="status-pane", classes="pane"):
                     with Collapsible(title="OpenEnvision", id="brand-collapse", collapsed=False):
-                        yield Static(render_brand_logo(width_chars=64, dark=self.current_theme.dark), id="brand-logo", markup=True)
+                        yield Static(
+                            render_brand_logo(
+                                width_chars=self._brand_logo_width(),
+                                dark=self.current_theme.dark,
+                                background=self.current_theme.panel,
+                            ),
+                            id="brand-logo",
+                            markup=True,
+                        )
                     with Horizontal(id="action-row"):
                         yield Label("Mode:", id="action-label")
                         yield Select(icons.action_options(), value=self.action, id="action", allow_blank=False)
@@ -2002,22 +2010,17 @@ class WorldFoundryTui(App[None]):
             return
 
     def _brand_logo_width(self) -> int:
-        """Compute an appropriate Braille-art logo width constrained by terminal size and aspect ratio."""
-
-        # NOTE: The cropped logo's bounding box is roughly 921×713 pixels.
-        aspect = 921 / 713
-
-        # Determine maximum acceptable height in rows — never so large that
-        # the CSS/Textual layout engine gets confused.
-        max_rows = max(18, int(self.size.height * 0.35))
-
-        # A width of ~60 chars yields ~23 rows of Braille art.
-        max_width = int(max_rows * 2 * aspect)
-
-        # NOTE: Render width is constrained by available terminal width and our max height allowance.
-        available = max(40, int(self.size.width * 0.4) - 8)
-        render_width = max(40, min(available, max_width, 80))
-        return render_width
+        """Fit the swan to its widget and reserve space for the model catalog."""
+        max_rows = max(6, min(18, int(self.size.height * 0.3)))
+        max_width = int((max_rows - 2) * 2 * brand_logo_aspect_ratio())
+        available = max(1, int(self.size.width * 0.4) - 8)
+        try:
+            measured_width = self.query_one("#brand-logo", Static).content_size.width
+            if measured_width:
+                available = measured_width
+        except NoMatches:
+            pass
+        return max(1, min(available, max_width, 64))
 
     def _sync_brand_logo(self) -> None:
         """Re-render the brand logo at the correct width, using a short timer to debounce layout changes."""
@@ -2033,7 +2036,13 @@ class WorldFoundryTui(App[None]):
         def do_update():
             # NOTE: For round borders, wait for size layout to settle before rendering
             try:
-                logo.update(render_brand_logo(width_chars=self._brand_logo_width(), dark=self.current_theme.dark))
+                logo.update(
+                    render_brand_logo(
+                        width_chars=self._brand_logo_width(),
+                        dark=self.current_theme.dark,
+                        background=self.current_theme.panel,
+                    )
+                )
             except Exception:
                 pass
             

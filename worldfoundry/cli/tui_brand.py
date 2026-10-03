@@ -1,8 +1,7 @@
 """OpenEnvision brand rendering for the WorldFoundry TUI.
 
-Renders the official logo PNG as high-resolution Braille terminal art.
-Provides deep integration for dark-mode terminals by automatically inverting
-the black/dark-grey shades to white/light-grey while preserving the red accent.
+Renders the official swan mark with solid terminal half-blocks and a native
+text wordmark. Neutral colors follow the terminal theme; the beak stays red.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from pathlib import Path
 
 try:
     import numpy as np
-    from PIL import Image
+    from PIL import Image, ImageColor
 except ImportError:
     Image = None
     np = None
@@ -54,15 +53,22 @@ def _rgb_to_hex(red: int, green: int, blue: int) -> str:
     return f"#{red:02x}{green:02x}{blue:02x}"
 
 
-def _prepare_logo_image(image: Image.Image) -> Image.Image:
+def _prepare_logo_image(image: Image.Image, *, mark_only: bool = False) -> Image.Image:
     """Crop the logo image to its non-white bounding box with padding.
 
-    Converts to RGBA, finds non-white pixels, and returns a padded crop
-    region for efficient Braille rendering.
+    Composite transparency onto white before finding the foreground. The
+    packaged swan and wordmark are separated by blank rows, so ``mark_only``
+    retains the first foreground band for a readable native-text wordmark.
     """
-    rgba = image.convert("RGBA")
+    rgba = Image.alpha_composite(Image.new("RGBA", image.size, "white"), image.convert("RGBA"))
     pixels = np.array(rgba)
-    mask = (pixels[:, :, 0] < 250) | (pixels[:, :, 1] < 250) | (pixels[:, :, 2] < 250)
+    mask = np.any(pixels[:, :, :3] < 240, axis=2)
+    occupied_rows = np.flatnonzero(mask.any(axis=1))
+    if mark_only and occupied_rows.size:
+        first_row = int(occupied_rows[0])
+        blank_rows = np.flatnonzero(~mask[first_row:].any(axis=1))
+        if blank_rows.size:
+            mask[first_row + int(blank_rows[0]):] = False
     ys, xs = np.where(mask)
     if ys.size == 0 or xs.size == 0:
         return rgba
@@ -144,7 +150,7 @@ def render_logo_braille(image: Image.Image, *, width_chars: int = 56, dark: bool
                 
                 bits |= 1 << bit
                 # NOTE: Dark-mode inversion — keep the red accent, invert everything else
-                if r > 150 and g < 100 and b < 100:
+                if int(r) > int(g) + 20 and int(r) > int(b) + 20:
                     colors.append((r, g, b))
                 elif dark:
                     colors.append((255 - r, 255 - g, 255 - b))
@@ -170,9 +176,74 @@ def render_logo_braille(image: Image.Image, *, width_chars: int = 56, dark: bool
 
 # ── Brand rendering ────────────────────────────────────────────────
 
+@lru_cache(maxsize=1)
+def _brand_mark_image() -> Image.Image:
+    if Image is None or np is None:
+        raise RuntimeError("Pillow and NumPy are required to render the OpenEnvision logo.")
+    path = logo_asset_path()
+    if not path.is_file():
+        raise FileNotFoundError(f"OpenEnvision logo asset not found: {path}")
+    with Image.open(path) as image:
+        return _prepare_logo_image(image, mark_only=True)
+
+
+def brand_logo_aspect_ratio() -> float:
+    """Return the cropped swan's aspect ratio for terminal layout."""
+    image = _brand_mark_image()
+    return image.width / image.height
+
+
+def render_logo_halfblocks(
+    image: Image.Image,
+    *,
+    width_chars: int = 40,
+    dark: bool = True,
+    background: str | None = None,
+) -> str:
+    """Render two square image pixels per terminal cell with continuous fills."""
+    if Image is None or np is None:
+        raise RuntimeError("Pillow and NumPy are required to render the OpenEnvision logo.")
+    if width_chars < 1:
+        raise ValueError("Logo width must be positive.")
+    prepared = _prepare_logo_image(image)
+    pixel_height = max(1, round(prepared.height * width_chars / prepared.width))
+    resized = prepared.resize((width_chars, pixel_height), Image.Resampling.LANCZOS)
+    if pixel_height % 2:
+        canvas = Image.new("RGBA", (width_chars, pixel_height + 1), "white")
+        canvas.paste(resized, (0, 0))
+        resized = canvas
+
+    pixels = np.asarray(resized.convert("RGB"), dtype=np.float32)
+    red = (pixels[:, :, 0] > pixels[:, :, 1] + 20) & (pixels[:, :, 0] > pixels[:, :, 2] + 20)
+    coverage = 1 - pixels.mean(axis=2) / 255
+    coverage[red] = 1 - np.minimum(pixels[:, :, 1], pixels[:, :, 2])[red] / 255
+    coverage[coverage < 0.025] = 0
+
+    panel_color = background or ("#1b1e24" if dark else "#eef1eb")
+    panel = np.asarray(ImageColor.getrgb(panel_color), dtype=np.float32)
+    panel_hex = _rgb_to_hex(*(int(channel) for channel in panel))
+    ink = np.empty_like(pixels)
+    ink[:] = (230, 232, 236) if dark else (16, 18, 20)
+    ink[red] = (240, 52, 62) if dark else (217, 35, 45)
+    colors = np.rint(panel + coverage[:, :, None] * (ink - panel)).astype(np.uint8)
+
+    lines: list[str] = []
+    for row in range(0, colors.shape[0], 2):
+        parts: list[str] = []
+        for column in range(width_chars):
+            upper = _rgb_to_hex(*colors[row, column])
+            lower = _rgb_to_hex(*colors[row + 1, column])
+            if upper == lower == panel_hex:
+                parts.append(" ")
+            else:
+                parts.append(f"[{upper} on {lower}]▀[/]")
+        lines.append("".join(parts))
+    return "\n".join(lines)
+
+
 @lru_cache(maxsize=8)
-def render_brand_logo(*, width_chars: int = 56, dark: bool = True) -> str:
-    """Render the OpenEnvision logo as Braille-art with dark-mode inversion.
+def render_brand_logo(*, width_chars: int = 56, dark: bool = True, background: str | None = None) -> str:
+    """Render the swan with half-blocks and the brand name as terminal text.
 
     Caches up to 8 width and theme variants. Reads the PNG asset via :func:`logo_asset_path`.
 
@@ -180,17 +251,17 @@ def render_brand_logo(*, width_chars: int = 56, dark: bool = True) -> str:
         FileNotFoundError: When the logo asset PNG is not found.
         RuntimeError: When Pillow is not installed.
     """
-    path = logo_asset_path()
-    if not path.is_file():
-        raise FileNotFoundError(f"OpenEnvision logo asset not found: {path}")
-    with Image.open(path) as image:
-        return render_logo_braille(image, width_chars=width_chars, dark=dark)
+    mark = render_logo_halfblocks(_brand_mark_image(), width_chars=width_chars, dark=dark, background=background)
+    if width_chars < len(BRAND_NAME):
+        return mark
+    text_color = "#e6e8ec" if dark else "#101214"
+    return f"{mark}\n\n[bold {text_color}]{BRAND_NAME.center(width_chars)}[/]"
 
 
 def render_fallback_header(*, width_chars: int = 56) -> str:
     """Return a plain-text header for the ``--fallback`` mode (no Textual dependency).
 
-    Falls back to simple text lines if Braille rendering fails.
+    Falls back to simple text lines if logo rendering fails.
     """
     try:
         logo = render_brand_logo(width_chars=width_chars)
