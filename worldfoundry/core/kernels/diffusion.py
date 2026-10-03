@@ -624,14 +624,14 @@ def _residual_gate_inplace_torch(
     return residual.add_(update * gate)
 
 
-def residual_gate_add(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+def residual_gate_add(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor, *, backend: str | None = None) -> torch.Tensor:
     """Return ``residual + update * gate`` with broadcast-aware fusion."""
 
     # Inductor already emits one pointwise kernel for this expression and can
     # fuse it with adjacent compiled work. Keep the explicit Triton kernel for
     # eager execution, where PyTorch otherwise launches multiply and add
     # separately. An explicit backend override remains available for profiling.
-    requested = _requested_kernel_backend()
+    requested = _requested_kernel_backend() if backend is None else backend
     if (
         torch.compiler.is_compiling()
         or requested in _TORCH_BACKENDS
@@ -649,6 +649,7 @@ def residual_gate_add(residual: torch.Tensor, update: torch.Tensor, gate: torch.
         update,
         gate,
         signature=_workload_signature(residual, update, gate),
+        backend=backend,
     )
 
 
@@ -784,10 +785,10 @@ def _scale_shift_triton(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tenso
     return implementation(x, scale, shift)
 
 
-def scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor) -> torch.Tensor:
+def scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor, *, backend: str | None = None) -> torch.Tensor:
     """Return ``x * (1 + scale) + shift`` with eager BF16 rounding parity."""
 
-    requested = _requested_kernel_backend()
+    requested = _requested_kernel_backend() if backend is None else backend
     if (
         torch.compiler.is_compiling()
         or requested in _TORCH_BACKENDS
@@ -805,6 +806,7 @@ def scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor) -> to
         scale,
         shift,
         signature=_workload_signature(x, scale, shift),
+        backend=backend,
     )
 
 
@@ -877,10 +879,11 @@ def layer_norm_scale_shift(
     eps: float = 1e-6,
     *,
     upcast: bool = False,
+    backend: str | None = None,
 ) -> torch.Tensor:
     """Fuse affine-free LayerNorm with AdaLN scale and shift."""
 
-    requested = _requested_kernel_backend()
+    requested = _requested_kernel_backend() if backend is None else backend
     if (
         torch.compiler.is_compiling()
         or requested in _TORCH_BACKENDS
@@ -900,6 +903,7 @@ def layer_norm_scale_shift(
         eps,
         upcast,
         signature=_workload_signature(x, scale, shift, extra=(float(eps), bool(upcast))),
+        backend=backend,
     )
 
 
