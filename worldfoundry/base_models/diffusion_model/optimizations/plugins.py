@@ -63,7 +63,10 @@ def _sana_block_fusion(model: Any, options: Mapping[str, Any], policy: Any) -> P
             if config.fuse_layer_norm or config.repack_tokens
             else "eager-pointwise-rounding",
         },
-        frozenset({"sana.block_glue"}),
+        frozenset(
+            {"sana.block_glue"}
+            | ({"diffusion.approximation"} if config.fuse_layer_norm or config.repack_tokens else set())
+        ),
     )
 
 
@@ -121,20 +124,34 @@ def _easycache(model: Any, options: Mapping[str, Any], policy: Any) -> PreparedA
         "_worldfoundry_easycache_config",
         config,
         {"approximate": config.threshold > 0, "seam": "embedded-token-block-stack", **config.options},
-        frozenset({"diffusion.block_stack"}),
+        frozenset({"diffusion.block_stack", "diffusion.precision_cache", "diffusion.approximation"}),
     )
 
 
 def diffusion_acceleration_registry() -> AccelerationRegistry:
     """Return an extensible registry without loading optional provider packages."""
+    from .kv_fusion import prepare_wan_cross_kv_fusion
+    from .precision import prepare_selective_fp8
+
     registry = AccelerationRegistry()
     registry.register("sana_block_fusion", _sana_block_fusion)
     registry.register("easycache", _easycache)
     registry.register("attention_policy", _attention_policy)
+    registry.register("selective_fp8", prepare_selective_fp8)
+    registry.register("wan_cross_kv_fusion", prepare_wan_cross_kv_fusion)
     return registry
 
 
 def install_diffusion_accelerations(model: Any, options: Mapping[str, Any], policy: Any = None):
+    from worldfoundry.core.model_loading.policy import RuntimePolicy
+
+    if not isinstance(options, Mapping):
+        raise TypeError("accelerations must be a mapping of plugin names to options")
+    if policy is None:
+        policy = RuntimePolicy()
+    if not isinstance(policy, RuntimePolicy):
+        raise TypeError("diffusion acceleration adapters require a RuntimePolicy context")
+    policy = replace(policy, options={**policy.options, "accelerations": dict(options)})
     return diffusion_acceleration_registry().install(model, options, policy)
 
 
@@ -211,7 +228,7 @@ def _attention_policy(model: Any, options: Mapping[str, Any], policy: Any) -> Pr
         resolved = resolve_attention_backend(requested, None if policy is None else policy.device)
         if values and resolved != "sol_attn":
             raise ValueError("provider options are currently supported only for Sol-Attn")
-        if set(values) - {"tau", "thresh_type", "kv_splits"}:
+        if set(values) - {"tau", "thresh_type", "kv_splits", "compress_kv"}:
             raise ValueError("unknown Sol-Attn provider options")
         if resolved == "sol_attn" and scope != "self":
             raise ValueError("Sol-Attn is supported only for unmasked self-attention")
@@ -227,6 +244,8 @@ def _attention_policy(model: Any, options: Mapping[str, Any], policy: Any) -> Pr
             for child in model.modules()
             if type(child).__name__ == class_name and type(child).__module__.endswith(".wan.model")
         ]
+        if not parents:
+            raise ValueError(f"scoped attention_policy found no native Wan {scope}-attention modules")
         targets = [parent.attn for parent in parents]
         if scope == "self":
             from ..models.networks.wan.model import SelfAttentionProcessor
@@ -264,6 +283,9 @@ def _attention_policy(model: Any, options: Mapping[str, Any], policy: Any) -> Pr
         )
         return AccelerationHandle("attention_policy", {"approximate": approximate, "scopes": reports}, undo)
 
-    return PreparedAcceleration(
-        "attention_policy", frozenset(f"wan.{scope}_attention.backend" for scope in options), activate
-    )
+    seams = {f"wan.{scope}_attention.backend" for scope in options}
+    if any(
+        row["resolved"] in {"sol_attn", "sage_attention", "sage_attention_3", "cudnn_fp8"} for row in reports.values()
+    ):
+        seams.add("diffusion.approximation")
+    return PreparedAcceleration("attention_policy", frozenset(seams), activate)

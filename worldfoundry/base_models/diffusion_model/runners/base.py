@@ -616,6 +616,16 @@ class NativeDiffusionRunner:
                         f"got {step.index} at position {expected_index}"
                     )
 
+            validate_execution = getattr(self.components.denoiser, "validate_request_execution", None)
+            if callable(validate_execution):
+                validate_execution(
+                    cfg_parallel_degree=self.cfg_parallel_degree,
+                    cfg_gate_step=self.cfg_gate_step,
+                )
+            prepare_schedule = getattr(self.components.denoiser, "prepare_request_schedule", None)
+            if callable(prepare_schedule):
+                prepare_schedule(context.request_id, schedule)
+
             for step in schedule:
                 with nvtx_range("worldfoundry.denoise_step"):
                     context.step = step

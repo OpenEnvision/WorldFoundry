@@ -13,6 +13,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_multi_sc
 from worldfoundry.base_models.diffusion_model.models.networks.wan.model import CrossAttention, SelfAttention, WanModel
 from worldfoundry.base_models.diffusion_model.optimizations.plugins import (
     acceleration_policy,
+    diffusion_acceleration_registry,
     install_diffusion_accelerations,
     validate_acceleration_installation,
 )
@@ -62,6 +63,7 @@ def test_zero_threshold_keeps_native_output_and_state_dict_exact():
     dense = SanaDenoiser(model)
     with torch.inference_mode():
         expected = dense(_input()).sample
+        dense.end_request("a")
         session = install_diffusion_accelerations(
             model, {"sana_block_fusion": True, "easycache": {"threshold": 0.0}}, RuntimePolicy()
         )
@@ -116,6 +118,42 @@ def test_scoped_attention_does_not_modify_other_scope():
     assert model.self_attn.attn.attention_backend is None
 
 
+def test_scoped_attention_rejects_empty_target_without_installation():
+    model = _model()
+    with pytest.raises(ValueError, match="found no native Wan"):
+        install_diffusion_accelerations(model, {"attention_policy": {"self": "torch"}})
+    assert not hasattr(model, "_worldfoundry_accelerations")
+
+
+@pytest.mark.parametrize("backend", ["sol_attn", "sage_attention", "sage_attention_3", "cudnn_fp8"])
+@pytest.mark.parametrize("cache_first", [False, True])
+def test_cache_and_approximate_scopes_conflict_in_direct_registry_without_context(monkeypatch, backend, cache_first):
+    from worldfoundry.core.attention.backends import probe
+
+    monkeypatch.setattr(probe, "resolve_attention_backend", lambda *args: backend)
+    model = WanModel(
+        dim=128,
+        in_dim=2,
+        ffn_dim=256,
+        out_dim=2,
+        text_dim=64,
+        freq_dim=16,
+        patch_size=(1, 1, 1),
+        num_heads=1,
+        num_layers=1,
+        eps=1e-6,
+        has_image_input=False,
+    ).eval()
+    options = {"easycache": {"threshold": 0.1}, "attention_policy": {"self": backend}}
+    if not cache_first:
+        options = dict(reversed(tuple(options.items())))
+    with pytest.raises(ValueError, match="conflicts on seams"):
+        diffusion_acceleration_registry().install(model, options)
+    assert not hasattr(model, "_worldfoundry_accelerations")
+    assert getattr(model, "_worldfoundry_easycache_config", None) is None
+    assert model.blocks[0].self_attn.attn.attention_backend is None
+
+
 def test_conflicting_cache_and_compile_fail_before_installation():
     model = _model()
     for policy in (
@@ -158,6 +196,7 @@ def test_sana_cuda_default_fusion_keeps_native_strides_and_output():
     try:
         with torch.inference_mode():
             expected = denoiser(item).sample
+            denoiser.end_request("a")
             session = install_diffusion_accelerations(
                 model, {"sana_block_fusion": {"backend": "triton", "min_elements": 0}}
             )
@@ -167,6 +206,7 @@ def test_sana_cuda_default_fusion_keeps_native_strides_and_output():
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
         assert strides[0] == strides[1] and strides[0][-1] != 1
         assert any(row["op"] == "scale_shift" and row["accelerated"] for row in receipt["dispatches"])
+        denoiser.end_request("a")
         session.uninstall()
     finally:
         hook.remove()
@@ -194,6 +234,7 @@ def test_real_wan_blocks_use_request_cache_and_zero_threshold_is_exact(threshold
     item = replace(_input(), latents=torch.ones(1, 2, 1, 2, 2), conditioning={"context": torch.ones(1, 2, 8)})
     with torch.inference_mode():
         expected = denoiser(item).sample
+        denoiser.end_request("a")
         session = install_diffusion_accelerations(model, {"easycache": {"threshold": threshold}})
         for step in range(6):
             actual = denoiser(replace(item, step_index=step)).sample
@@ -239,13 +280,14 @@ def test_unsupported_denoiser_cannot_silently_accept_plugin_options():
     validate_acceleration_installation(supported, context)
 
 
-def test_dual_expert_easycache_is_rejected_before_loading():
+@pytest.mark.parametrize("option", [{"cuda_graph": True}, {"cfg_parallel": 2}, {"cfg_gate_step": 0.5}])
+def test_dual_expert_easycache_unsupported_combinations_rejected_before_loading(option):
     context = SimpleNamespace(
-        policy=RuntimePolicy(options={"accelerations": {"easycache": {"threshold": 0.1}}}),
+        policy=RuntimePolicy(options={"accelerations": {"easycache": {"threshold": 0.1}}, **option}),
         component_options={},
         purpose="inference",
     )
-    with pytest.raises(ValueError, match="single-expert"):
+    with pytest.raises(ValueError, match="dual-expert EasyCache conflicts"):
         _build_wan22_dual_expert_denoiser(context, config={})
 
 

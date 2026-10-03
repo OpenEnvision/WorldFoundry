@@ -18,7 +18,7 @@ from ...components import ComponentBuildContext
 from ...contracts import DenoiserInput, DenoiserOutput
 from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.sana.normalization import RMSNorm
-from .graph_wrapped import FeatureCacheDenoiserMixin
+from .graph_wrapped import FeatureCacheDenoiserMixin, acceleration_runtime_call
 
 
 def _base_image_config(
@@ -310,7 +310,12 @@ class SanaDenoiser(FeatureCacheDenoiserMixin):
         self._feature_cache_config = getattr(model, "_worldfoundry_easycache_config", None)
 
     def end_request(self, request_id: str, *, error: BaseException | None = None) -> None:
-        self.end_feature_cache_request(request_id, error=error)
+        from worldfoundry.core.acceleration.plugins import end_acceleration_request
+
+        try:
+            self.end_feature_cache_request(request_id, error=error)
+        finally:
+            end_acceleration_request(self.model, self, request_id)
 
     def runtime_optimization_report(self, request_id: str | None = None) -> dict[str, object]:
         session = getattr(self.model, "_worldfoundry_accelerations", None)
@@ -333,6 +338,7 @@ class SanaDenoiser(FeatureCacheDenoiserMixin):
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         return self.forward_with_options(model_input)
 
+    @acceleration_runtime_call
     def forward_with_options(
         self,
         model_input: DenoiserInput,

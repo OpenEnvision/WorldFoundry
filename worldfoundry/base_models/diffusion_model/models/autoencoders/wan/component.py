@@ -22,7 +22,7 @@ from pathlib import Path
 
 import torch
 
-from ....components import ComponentBuildContext
+from ....components import BuildPurpose, ComponentBuildContext
 from ....contracts import DiffusionRequest
 from ....loaders import CheckpointSpec, ModuleLoadSpec, NativeModuleLoader
 from ....optimizations import (
@@ -791,6 +791,109 @@ class WanVideoDecoder:
         }
 
 
+class Wan21LightVAECodec(WanVideoDecoder):
+    """Inference adapter with student-quality reporting and measured call counts."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._lightvae_encode_calls = 0
+        self._validate_execution()
+
+    @property
+    def name(self) -> str:
+        return "lightvae_wan21_tokenizer"
+
+    def _validate_execution(self) -> None:
+        from .variants.light_21 import Wan21LightVAE
+
+        if type(self.vae) is not Wan21LightVAE:
+            raise TypeError("LightVAE codec requires the matched Wan21LightVAE native architecture")
+        if self.dtype != torch.float32 or self.vae.training:
+            raise ValueError("Wan2.1 LightVAE supports FP32 eval inference only")
+        if self.tiled or self.temporal_chunk_size or self.parallel_degree != 1:
+            raise ValueError("Wan2.1 LightVAE tiling, extra temporal chunking and parallel decode are unvalidated")
+        if self.vae.decode_autocast_dtype is not None:
+            raise ValueError("Wan2.1 LightVAE decode autocast is unvalidated")
+        if torch.is_autocast_enabled(self.device.type):
+            raise ValueError("Wan2.1 LightVAE outer autocast is unvalidated")
+        if torch.compiler.is_compiling():
+            raise RuntimeError("Wan2.1 LightVAE torch.compile is unvalidated")
+        if self.device.type == "cuda" and torch.cuda.is_current_stream_capturing():
+            raise RuntimeError("Wan2.1 LightVAE CUDA Graph capture is unvalidated")
+
+    @torch.no_grad()
+    def encode(self, images: torch.Tensor) -> torch.Tensor:
+        self._validate_execution()
+        output = super().encode(images)
+        self._lightvae_encode_calls += 1
+        return output
+
+    @torch.no_grad()
+    def decode(self, latents: torch.Tensor, request: DiffusionRequest | None = None) -> torch.Tensor:
+        self._validate_execution()
+        return super().decode(latents, request)
+
+    def runtime_optimization_report(self) -> dict[str, object]:
+        report = super().runtime_optimization_report()
+        for key in ("requested", "effective"):
+            report[key].update(
+                {
+                    "vae_variant": "lightvae-wan21",
+                    "vae_base_dim": 24,
+                    "vae_latent_channels": 16,
+                    "vae_pruning_rate": 0.75,
+                }
+            )
+        report["effective"]["vae_architecture"] = "native-wan21-base24-student"
+        report["quality_tier"] = "algorithmically-approximate"
+        report["runtime"]["lightvae_encode_calls"] = self._lightvae_encode_calls
+        report["runtime"]["lightvae_decode_calls"] = self._decode_calls
+        report["runtime"]["lifetime"]["lightvae_encode_calls"] = self._lightvae_encode_calls
+        report["runtime"]["lifetime"]["lightvae_decode_calls"] = self._lifetime_decode_calls
+        return report
+
+
+def _select_wan_codec_variant(module_class, state_dict_converter, variant):
+    if variant is None or variant == "default":
+        return module_class, state_dict_converter
+    if variant != "lightvae-wan21":
+        raise ValueError(f"unsupported Wan codec variant {variant!r}")
+    if module_class is not WanVideoVAE:
+        raise ValueError("lightvae-wan21 requires the 16-channel Wan2.1 codec, not Wan2.2/48-channel")
+    from .variants.light_21 import Wan21LightVAE, convert_lightvae_wan21_state_dict
+
+    return Wan21LightVAE, convert_lightvae_wan21_state_dict
+
+
+def _validate_lightvae_policy(policy, *, weight_dtype, tiled, temporal_chunk_size, parallel_degree):
+    if weight_dtype != torch.float32 or policy.device.type not in {"cpu", "cuda"}:
+        raise ValueError("Wan2.1 LightVAE supports resident FP32 CPU/CUDA inference only")
+    conflicts = [
+        key
+        for key in (
+            "cuda_graph",
+            "vae_decode_autocast",
+            "vae_channels_last",
+            "vae_channels_last_3d",
+            "device_map",
+            "sequence_parallel",
+            "sp_degree",
+            "vae_preview_decoder_path",
+        )
+        if policy.options.get(key)
+    ]
+    if policy.compile:
+        conflicts.append("compile")
+    if policy.offload.mode is not OffloadMode.NONE:
+        conflicts.append("offload")
+    if policy.quantization.mode.value != "none":
+        conflicts.append("quantization")
+    if tiled or temporal_chunk_size or parallel_degree != 1:
+        conflicts.append("tiling/temporal_chunking/parallel")
+    if conflicts:
+        raise ValueError(f"Wan2.1 LightVAE conflicts with unvalidated options: {conflicts}")
+
+
 def _load_wan_video_decoder(
     checkpoint: CheckpointSpec,
     policy: RuntimePolicy,
@@ -803,13 +906,23 @@ def _load_wan_video_decoder(
     temporal_chunk_size: int = 0,
     parallel_degree: int = 1,
     chunk_duration: int = 81,
+    variant: str | None = None,
 ) -> WanVideoDecoder:
     """Load one Wan VAE variant through the shared native module loader."""
 
     from worldfoundry.core.vram import AutoWrappedLinear, AutoWrappedModule
 
+    module_class, state_dict_converter = _select_wan_codec_variant(module_class, state_dict_converter, variant)
     requested_offload = policy.offload.mode.value
     weight_dtype = _resolve_vae_weight_dtype(policy)
+    if variant == "lightvae-wan21":
+        _validate_lightvae_policy(
+            policy,
+            weight_dtype=weight_dtype,
+            tiled=tiled,
+            temporal_chunk_size=temporal_chunk_size,
+            parallel_degree=parallel_degree,
+        )
     channels_last_3d = _resolve_vae_channels_last_3d(policy)
     channels_last = policy.options.get("vae_channels_last", False)
     if not isinstance(channels_last, bool):
@@ -855,7 +968,8 @@ def _load_wan_video_decoder(
     conv3d_count = layout_report.conv3d_total
     if len(tile_size) != 2 or len(tile_stride) != 2:
         raise ValueError("Wan VAE tile_size and tile_stride must contain two values")
-    return WanVideoDecoder(
+    codec_class = Wan21LightVAECodec if variant == "lightvae-wan21" else WanVideoDecoder
+    return codec_class(
         vae,
         device=policy.device,
         tiled=bool(tiled),
@@ -882,6 +996,10 @@ def _build_wan_video_decoder(
     module_class: type[WanVideoVAE],
     state_dict_converter=convert_wan21_vae_state_dict,
 ) -> WanVideoDecoder:
+    variant = context.component_options.get("variant")
+    _select_wan_codec_variant(module_class, state_dict_converter, variant)
+    if variant == "lightvae-wan21" and context.purpose is not BuildPurpose.INFERENCE:
+        raise ValueError("Wan2.1 LightVAE supports inference builds only")
     if "dtype" in context.component_options:
         codec_dtype = context.component_options["dtype"]
     elif "vae_weight_dtype" in context.policy.options:
@@ -934,6 +1052,7 @@ def _build_wan_video_decoder(
         ),
         parallel_degree=parallel_degree,
         chunk_duration=int(context.component_options.get("chunk_duration", 81)),
+        variant=variant,
     )
 
 
@@ -943,8 +1062,9 @@ def load_wan_video_codec(
     device: str | torch.device = "cuda",
     dtype: torch.dtype = torch.float32,
     chunk_duration: int = 81,
+    variant: str | None = None,
 ) -> WanVideoDecoder:
-    """Load the shared Wan2.1 codec for native and representation consumers."""
+    """Load Wan16 teacher or an explicitly matched ``lightvae-wan21`` student."""
 
     if isinstance(checkpoint_path, CheckpointSpec):
         checkpoint = checkpoint_path
@@ -960,6 +1080,7 @@ def load_wan_video_codec(
         RuntimePolicy(device=device, dtype=dtype),
         module_class=WanVideoVAE,
         chunk_duration=chunk_duration,
+        variant=variant,
     )
 
 
@@ -973,6 +1094,8 @@ def build_wan_video_vae38_decoder(
     context: ComponentBuildContext,
 ) -> WanVideoDecoder | WanTAEPreviewDecoder:
     """Build the 48-channel Wan2.2 video decoder."""
+
+    _select_wan_codec_variant(WanVideoVAE38, convert_wan21_vae_state_dict, context.component_options.get("variant"))
 
     preview_path = context.component_options.get(
         "preview_decoder_path",
@@ -1005,6 +1128,7 @@ def build_diffusers_wan_video_codec(context: ComponentBuildContext) -> WanVideoD
 __all__ = [
     "WanTAEPreviewDecoder",
     "WanVideoDecoder",
+    "Wan21LightVAECodec",
     "build_diffusers_wan_video_codec",
     "build_wan_video_decoder",
     "build_wan_video_vae38_decoder",

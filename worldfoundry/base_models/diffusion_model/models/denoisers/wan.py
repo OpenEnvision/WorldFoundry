@@ -42,6 +42,7 @@ from ..networks.wan.model import RMSNorm, WanModel
 from .graph_wrapped import (
     FeatureCacheDenoiserMixin,
     GraphWrappedDenoiserMixin,
+    acceleration_runtime_call,
     resolve_cuda_graph_option,
     validate_cuda_graph_options,
 )
@@ -739,6 +740,20 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
     ) -> None:
         """Finalize request telemetry and release request-owned cache tensors."""
 
+        from worldfoundry.core.acceleration.plugins import end_acceleration_request
+
+        try:
+            self._finalize_request(request_id, error=error)
+        finally:
+            end_acceleration_request(self.model, self, request_id)
+
+    def _finalize_request(
+        self,
+        request_id: str,
+        *,
+        error: BaseException | None = None,
+    ) -> None:
+        """Complete all receipts before releasing acceleration ownership."""
         self._feature_cache_context_var().set(request_id)
         cleanup_errors: list[BaseException] = []
         try:
@@ -845,6 +860,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                     )
             raise primary
 
+    @acceleration_runtime_call
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         self._begin_request_optimization_state(model_input)
         try:
@@ -1526,11 +1542,6 @@ class Wan22DualExpertDenoiser:
             raise ValueError("Wan2.2 A14B boundary_ratio must be in (0, 1)")
         if int(num_train_timesteps) <= 0:
             raise ValueError("Wan2.2 A14B num_train_timesteps must be positive")
-        if any(
-            getattr(getattr(expert, "_feature_cache_config", None), "algorithm", None) == "easycache"
-            for expert in (high_noise, low_noise)
-        ):
-            raise ValueError("EasyCache currently requires a single-expert Wan schedule")
         self.high_noise = high_noise
         self.low_noise = low_noise
         self.boundary_ratio = boundary
@@ -1547,6 +1558,79 @@ class Wan22DualExpertDenoiser:
         # runner-created request id. Explicit requests never use it as proof.
         self._route_calls = {"high-noise": 0, "low-noise": 0}
         self._last_expert: str | None = None
+        self._validate_easycache_experts()
+
+    def _easycache_enabled(self) -> bool:
+        return any(
+            getattr(getattr(expert, "_feature_cache_config", None), "algorithm", None) == "easycache"
+            for expert in (self.high_noise, self.low_noise)
+        )
+
+    def _validate_easycache_experts(self) -> None:
+        if not self._easycache_enabled():
+            return
+        if any(
+            type(expert) is not WanDenoiser or getattr(expert._feature_cache_config, "algorithm", None) != "easycache"
+            for expert in (self.high_noise, self.low_noise)
+        ):
+            raise ValueError("dual-expert EasyCache requires EasyCache on both native Wan denoisers")
+        if self.high_noise is self.low_noise or self.high_noise.model is self.low_noise.model:
+            raise ValueError("dual-expert EasyCache requires independent expert models and denoisers")
+        for expert in (self.high_noise, self.low_noise):
+            if (
+                getattr(expert, "_graph_runner", None) is not None
+                or getattr(expert, "inplace_residual", False)
+                or getattr(expert, "_teacache_threshold", None) is not None
+                or getattr(expert.model, "training", False)
+                or any(
+                    getattr(expert.model, name, None) is not None
+                    for name in (
+                        "_worldfoundry_compile_runtime",
+                        "_worldfoundry_sequence_parallel",
+                        "_worldfoundry_layerwise_cpu_offload_handle",
+                        "_worldfoundry_approximate_attention",
+                        "_worldfoundry_static_cross_kv",
+                    )
+                )
+            ):
+                raise ValueError("dual-expert EasyCache requires resident eager experts without Graph/SP or other caches")
+
+    def validate_request_execution(self, *, cfg_parallel_degree: int, cfg_gate_step: float) -> None:
+        if self._easycache_enabled() and (cfg_parallel_degree != 1 or cfg_gate_step != 1.0):
+            raise ValueError("dual-expert EasyCache requires dense single-rank CFG execution")
+
+    def prepare_request_schedule(self, request_id: str, schedule) -> None:
+        """Freeze both expert phases before the first CFG evaluation."""
+        if not self._easycache_enabled():
+            return
+        from worldfoundry.core.acceleration.plugins import acceleration_runtime_scope
+
+        from ...optimizations.wan.expert_schedule import WanExpertSchedule
+
+        self._validate_easycache_experts()
+        if not isinstance(request_id, str) or not request_id.strip():
+            raise ValueError("dual-expert EasyCache requires an explicit request_id")
+        plan = WanExpertSchedule.build(
+            schedule, boundary_ratio=self.boundary_ratio, num_train_timesteps=self.num_train_timesteps
+        )
+        self._route_current_request.set(request_id)
+        with self._route_lock:
+            state = self._route_request_state(request_id, create=True)
+            assert state is not None
+            previous = state.get("expert_schedule")
+            if previous is not None:
+                if previous != plan:
+                    raise ValueError("expert schedule changed during an active request")
+                if state["events"]:
+                    raise ValueError("cannot prepare an expert schedule after request execution started")
+                return
+            state["expert_schedule"] = plan
+            state["branch_global_steps"] = {}
+            state["expert_branch_steps"] = {}
+            # Guard both models even before an expert's first actual call.
+            for expert in (self.high_noise, self.low_noise):
+                with acceleration_runtime_scope(expert.model, expert, request_id):
+                    pass
 
     def _route_request_state(
         self,
@@ -1591,6 +1675,11 @@ class Wan22DualExpertDenoiser:
                     "route_calls": dict(state["route_calls"]),
                     "branch_calls": dict(state["branch_calls"]),
                     "events": [dict(event) for event in state["events"]],
+                    **(
+                        {"expert_schedule": state["expert_schedule"].receipt()}
+                        if state.get("expert_schedule") is not None
+                        else {}
+                    ),
                 }
         if isinstance(request_id, str):
             with self._route_lock:
@@ -1635,12 +1724,29 @@ class Wan22DualExpertDenoiser:
         raise ValueError("one Wan2.2 inference call cannot mix high- and low-noise experts")
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
-        if any(
-            getattr(getattr(expert, "_feature_cache_config", None), "algorithm", None) == "easycache"
-            for expert in (self.high_noise, self.low_noise)
-        ):
-            raise ValueError("EasyCache currently requires a single-expert Wan schedule")
+        local_step = None
+        if self._easycache_enabled():
+            self._validate_easycache_experts()
+            if model_input.conditioning.get("_worldfoundry_cfg_parallel_request", False):
+                raise ValueError("dual-expert EasyCache requires dense single-rank CFG execution")
+            state = self._route_request_state(model_input.request_id, create=False)
+            if state is None or state.get("expert_schedule") is None:
+                raise ValueError("dual-expert EasyCache requires a prepared full request schedule")
+            with self._route_lock:
+                local_step = state["expert_schedule"].select(model_input)
+                branch = str(model_input.branch)
+                previous = state["branch_global_steps"].get(branch)
+                if (
+                    (previous is None and local_step.local_index != 0)
+                    or (previous is not None and model_input.step_index != previous + 1)
+                    or (previous is None and branch in {"positive", "unconditional"} and model_input.step_index != 0)
+                ):
+                    raise ValueError("expert CFG branch steps must be unique and contiguous from a phase boundary")
+                state["branch_global_steps"][branch] = model_input.step_index
+                state["expert_branch_steps"][(local_step.expert, branch)] = local_step.local_index
         expert = self.expert_for_timestep(model_input.timestep)
+        if local_step is not None and local_step.expert != expert:
+            raise ValueError("denoiser routing differs from the prepared expert schedule")
         denoiser = self.high_noise if expert == "high-noise" else self.low_noise
         request_id = model_input.request_id
         if isinstance(request_id, str) and request_id.strip():
@@ -1662,6 +1768,11 @@ class Wan22DualExpertDenoiser:
                         "expert": expert,
                         "branch": branch,
                         "step_index": int(model_input.step_index),
+                        **(
+                            {"local_step_index": local_step.local_index, "local_total_steps": local_step.local_count}
+                            if local_step is not None
+                            else {}
+                        ),
                     }
                 )
                 state["last_expert"] = expert
@@ -1681,9 +1792,10 @@ class Wan22DualExpertDenoiser:
             self._last_expert = expert
         routed_conditioning = dict(model_input.conditioning)
         routed_conditioning["_worldfoundry_approximate_routed_steps"] = True
-        output = denoiser(
-            model_input.with_updates(conditioning=routed_conditioning)
-        )
+        routed_input = model_input.with_updates(conditioning=routed_conditioning)
+        if local_step is not None:
+            routed_input = routed_input.with_updates(step_index=local_step.local_index, total_steps=local_step.local_count)
+        output = denoiser(routed_input)
         return output.with_updates(extras={**dict(output.extras), "expert": expert})
 
     def end_request(
@@ -1695,6 +1807,23 @@ class Wan22DualExpertDenoiser:
         """Finalize both experts and freeze a bounded immutable route receipt."""
 
         cleanup_errors: list[BaseException] = []
+        state = self._route_request_state(request_id, create=False)
+        if error is None and state is not None and state.get("expert_schedule") is not None:
+            plan = state["expert_schedule"]
+            with self._route_lock:
+                phase_counts = {step.expert: step.local_count for step in plan.steps}
+                unfinished = not state["expert_branch_steps"] or any(
+                    last_step != phase_counts[expert] - 1
+                    for (expert, branch), last_step in state["expert_branch_steps"].items()
+                )
+                unfinished = unfinished or any(
+                    last_step != len(plan.steps) - 1
+                    for branch, last_step in state["branch_global_steps"].items()
+                    if branch in {"positive", "unconditional"}
+                )
+            if unfinished:
+                error = ValueError("expert EasyCache request ended before its active CFG phases completed")
+                cleanup_errors.append(error)
         for denoiser in (self.high_noise, self.low_noise):
             finalize = getattr(denoiser, "end_request", None)
             if callable(finalize):
@@ -1703,7 +1832,6 @@ class Wan22DualExpertDenoiser:
                 except BaseException as cleanup_error:
                     cleanup_errors.append(cleanup_error)
 
-        state = self._route_request_state(request_id, create=False)
         if state is not None:
             report = self.route_receipt(request_id)
             report["finalized"] = True
@@ -2144,13 +2272,44 @@ def _build_wan22_dual_expert_denoiser(
 ) -> Wan22DualExpertDenoiser:
     from ...optimizations.plugins import acceleration_policy
 
-    accelerations = acceleration_policy(context).options.get("accelerations", {})
+    policy = acceleration_policy(context)
+    accelerations = policy.options.get("accelerations", {})
     if (
         isinstance(accelerations, Mapping)
         and accelerations.get("easycache") is not None
         and accelerations.get("easycache") is not False
     ):
-        raise ValueError("EasyCache currently requires a single-expert Wan schedule")
+        incompatible = [
+            name
+            for name in (
+                "cuda_graph",
+                "sequence_parallel",
+                "sp_degree",
+                "device_map",
+                "feature_cache",
+                "teacache",
+                "magcache",
+                "adacache",
+                "taylorseer",
+                "blocktaylorseer",
+                "custom",
+                "approximate_attention",
+                "inplace_residual",
+                "static_cross_kv",
+            )
+            if policy.options.get(name)
+        ]
+        if policy.compile or policy.offload.mode.value != "none":
+            incompatible.append("compile/offload")
+        if any(policy.options.get(key, 1) != 1 for key in ("cfg_parallel", "cfg_parallel_degree")):
+            incompatible.append("cfg_parallel")
+        if any(
+            policy.options.get(key) is not None and float(policy.options[key]) != 1.0
+            for key in ("cfg_gate_step", "cfg_gate_fraction")
+        ):
+            incompatible.append("cfg_gate")
+        if incompatible:
+            raise ValueError(f"dual-expert EasyCache conflicts with unvalidated options: {incompatible}")
     expert_options = {
         key: value
         for key, value in context.component_options.items()

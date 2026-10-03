@@ -1321,7 +1321,7 @@ class VideoVAE_(nn.Module):
 class WanVideoVAE(nn.Module):
     """Wan video vae implementation."""
 
-    def __init__(self, z_dim=16, vae_pretrained_path: str | None = None):
+    def __init__(self, z_dim=16, vae_pretrained_path: str | None = None, *, base_dim: int = 96):
         """Init.
 
         Args:
@@ -1370,7 +1370,7 @@ class WanVideoVAE(nn.Module):
         self.scale = [self.mean, 1.0 / self.std]
 
         # init model
-        self.model = VideoVAE_(z_dim=z_dim).eval().requires_grad_(False)
+        self.model = VideoVAE_(dim=base_dim, z_dim=z_dim).eval().requires_grad_(False)
         self.upsampling_factor = 8
         self.z_dim = z_dim
         self.vae_pretrained_path = vae_pretrained_path
