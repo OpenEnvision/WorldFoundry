@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
 import importlib.util
@@ -13,11 +14,82 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 PATH = Path(__file__).resolve().parents[1] / "manual/inference_actions_evidence.py"
 SPEC = importlib.util.spec_from_file_location("test_actions_evidence", PATH)
 evidence = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(evidence)
+
+PRIMARY_CHECK_CONTEXTS = (
+    "geometry-impact", "inference-replay", "cpu-tests", "inference-tensors",
+    "public-surface", "packaging-license-gate",
+)
+
+
+def actions_job_expression(value, *, event_name, evidence_json):
+    """Evaluate the workflow's string, comparison and short-circuit expressions."""
+    if isinstance(value, bool) or not value.startswith("${{"):
+        return value
+    assert value.endswith("}}"), value
+    expression = ast.parse(value[3:-2].strip().replace("&&", " and ").replace("||", " or "), mode="eval")
+    contexts = {"github.event_name": event_name, "inputs.evidence_json": evidence_json}
+
+    def evaluate(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (str, bool)):
+            return node.value
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            return contexts[f"{node.value.id}.{node.attr}"]
+        if isinstance(node, ast.Compare):
+            assert len(node.ops) == len(node.comparators) == 1
+            left, right = evaluate(node.left), evaluate(node.comparators[0])
+            if isinstance(node.ops[0], ast.Eq):
+                return left == right
+            if isinstance(node.ops[0], ast.NotEq):
+                return left != right
+        if isinstance(node, ast.BoolOp):
+            result = evaluate(node.values[0])
+            for operand in node.values[1:]:
+                if isinstance(node.op, ast.And) and not result:
+                    return result
+                if isinstance(node.op, ast.Or) and result:
+                    return result
+                result = evaluate(operand)
+            return result
+        raise AssertionError(f"Unsupported workflow expression: {ast.dump(node)}")
+
+    return evaluate(expression.body)
+
+
+@pytest.mark.parametrize("event_name", ["push", "pull_request", "workflow_dispatch"])
+@pytest.mark.parametrize("report_input", ["", "{}", "invalid-json", " ", "0", "false"])
+def test_evidence_dispatch_skips_cannot_replace_required_check_contexts(event_name, report_input):
+    workflow = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    jobs = yaml.safe_load(workflow.read_text(encoding="utf-8"))["jobs"]
+    assert set(PRIMARY_CHECK_CONTEXTS) <= jobs.keys()
+    attesting = event_name == "workflow_dispatch" and report_input != ""
+    emitted_names, skipped_names = {}, []
+    for job_id, job in jobs.items():
+        context = {"event_name": event_name, "evidence_json": report_input}
+        name = actions_job_expression(job.get("name", job_id), **context)
+        runs = actions_job_expression(job.get("if", True), **context)
+        assert isinstance(name, str) and name, (job_id, name)
+        emitted_names[job_id] = name
+        if not runs:
+            skipped_names.append(name)
+        if job_id in PRIMARY_CHECK_CONTEXTS:
+            assert runs == (not attesting), (job_id, event_name, report_input)
+            if attesting:
+                assert name not in PRIMARY_CHECK_CONTEXTS, (job_id, name)
+            else:
+                assert name == job_id, (job_id, name)
+    assert len(set(emitted_names.values())) == len(emitted_names)
+    assert set(skipped_names).isdisjoint(PRIMARY_CHECK_CONTEXTS)
+    attestation = jobs["attest-inference-evidence"]
+    assert actions_job_expression(attestation["if"], event_name=event_name, evidence_json=report_input) == attesting
+    if attesting:
+        assert len(skipped_names) == len(PRIMARY_CHECK_CONTEXTS)
+        assert set(emitted_names.values()).isdisjoint(PRIMARY_CHECK_CONTEXTS)
 
 
 def documents():

@@ -27,6 +27,7 @@ permissions:
 
 jobs:
   geometry-impact:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-geometry-impact' || 'geometry-impact' }}
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
     runs-on: ubuntu-latest
     steps:
@@ -76,6 +77,7 @@ jobs:
           if-no-files-found: error
 
   inference-replay:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-inference-replay' || 'inference-replay' }}
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
     runs-on: ubuntu-latest
     env:
@@ -150,6 +152,7 @@ jobs:
           retention-days: 90
 
   cpu-tests:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-cpu-tests' || 'cpu-tests' }}
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
     runs-on: ubuntu-latest
     steps:
@@ -174,6 +177,7 @@ jobs:
           if-no-files-found: error
 
   inference-tensors:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-inference-tensors' || 'inference-tensors' }}
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
     runs-on: ubuntu-latest
     env:
@@ -205,6 +209,7 @@ jobs:
           if-no-files-found: error
 
   public-surface:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-public-surface' || 'public-surface' }}
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
     runs-on: ubuntu-latest
     defaults:
@@ -253,6 +258,7 @@ jobs:
 
 
   packaging-license-gate:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-packaging-license-gate' || 'packaging-license-gate' }}
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
     runs-on: ubuntu-latest
     defaults:
