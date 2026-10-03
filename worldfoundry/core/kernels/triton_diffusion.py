@@ -110,6 +110,32 @@ def _round_float32_to_bfloat16(value):
 
 
 @triton.jit
+def _round_float32_to_float16(value):
+    """Keep eager FP16 product rounding even if LLVM removes cast pairs."""
+
+    return tl.inline_asm_elementwise(
+        "{ .reg .b16 rounded; cvt.rn.f16.f32 rounded, $1; cvt.f32.f16 $0, rounded; }",
+        constraints="=f,f",
+        args=[value],
+        dtype=tl.float32,
+        is_pure=True,
+        pack=1,
+    )
+
+
+@triton.jit
+def _round_to_dtype(value, dtype: tl.constexpr):
+    """Materialize a PyTorch low-precision expression boundary in registers."""
+
+    if dtype == tl.bfloat16:
+        return _round_float32_to_bfloat16(value)
+    elif dtype == tl.float16:
+        return _round_float32_to_float16(value)
+    else:
+        return value
+
+
+@triton.jit
 def _residual_gate_kernel(
     residual_ptr,
     update_ptr,
@@ -152,7 +178,7 @@ def _residual_gate_kernel(
     if round_product_bf16:
         product = _round_float32_to_bfloat16(product)
     elif round_product_fp16:
-        product = product.to(tl.float16).to(tl.float32)
+        product = _round_float32_to_float16(product)
     tl.store(out_ptr + offsets, residual + product.to(tl.float32), mask=mask)
 
 
@@ -195,10 +221,10 @@ def _scale_shift_kernel(
     # Match ``x * (1 + scale) + shift`` expression boundaries.  Keeping the
     # vendor LayerNorm outside this kernel preserves its exact reduction order;
     # this kernel only removes one of the two following pointwise launches.
-    scale_factor = (1.0 + scale_input.to(tl.float32)).to(scale_input.dtype)
+    scale_factor = _round_to_dtype(1.0 + scale_input.to(tl.float32), scale_input.dtype)
     product = x_input.to(tl.float32) * scale_factor.to(tl.float32)
     if round_product:
-        product = product.to(x_input.dtype)
+        product = _round_to_dtype(product, x_input.dtype)
     tl.store(out_ptr + offsets, product.to(tl.float32) + shift_input.to(tl.float32), mask=mask)
 
 
@@ -242,7 +268,7 @@ def _layer_norm_scale_shift_kernel(
     # LayerNorm returns the input dtype before the following AdaLN
     # arithmetic. Preserve that rounding point for mixed fp16/bf16 + fp32
     # modulation as used by Wan/LingBot.
-    normed = (centered * tl.rsqrt(variance + eps)).to(x_input.dtype)
+    normed = _round_to_dtype(centered * tl.rsqrt(variance + eps), x_input.dtype)
 
     scale_base = _broadcast_row_offset(row, d0, d1, d2, d3, ss0, ss1, ss2, ss3)
     shift_base = _broadcast_row_offset(row, d0, d1, d2, d3, hs0, hs1, hs2, hs3)
@@ -251,10 +277,10 @@ def _layer_norm_scale_shift_kernel(
     # Preserve PyTorch's eager expression boundaries while keeping one launch:
     # ``1 + scale`` and the following multiply each round when their promoted
     # dtype is fp16/bf16. Mixed low-precision or fp32 modulation stays fp32.
-    scale_factor = (1.0 + scale_input.to(tl.float32)).to(scale_input.dtype)
+    scale_factor = _round_to_dtype(1.0 + scale_input.to(tl.float32), scale_input.dtype)
     modulated = normed.to(tl.float32) * scale_factor.to(tl.float32)
     if round_modulation:
-        modulated = modulated.to(x_input.dtype)
+        modulated = _round_to_dtype(modulated, x_input.dtype)
     output = modulated.to(tl.float32) + shift_input.to(tl.float32)
     tl.store(out_ptr + offsets, output, mask=mask)
 
@@ -593,6 +619,7 @@ def residual_gate(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tens
         round_product_fp16=product_dtype == torch.float16,
         block=block,
         num_warps=_num_warps(block),
+        enable_fp_fusion=False,
     )
     return output
 
@@ -703,6 +730,7 @@ def scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor) -> to
         round_product=product_dtype in {torch.float16, torch.bfloat16},
         block=block,
         num_warps=4,
+        enable_fp_fusion=False,
     )
     return output
 
@@ -748,6 +776,7 @@ def layer_norm_scale_shift(
         round_modulation=modulation_dtype in {torch.float16, torch.bfloat16},
         block=block,
         num_warps=_num_warps(block),
+        enable_fp_fusion=False,
     )
     return output
 
