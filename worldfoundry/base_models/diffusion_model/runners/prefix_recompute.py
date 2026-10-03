@@ -557,6 +557,7 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
                 refined_state[:, :, absolute_active_start:end] = refined_active
                 refined_state[:, :, : self.sink_frames] = anchor
 
+            self._notify_diffusion_complete(context, refined_state)
             sample = self.components.decoder.decode(refined_state, request)
             if not isinstance(sample, Tensor):
                 raise TypeError("decoder.decode must return a tensor")

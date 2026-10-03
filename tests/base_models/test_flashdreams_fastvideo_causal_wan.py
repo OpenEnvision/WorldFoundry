@@ -19,6 +19,7 @@ from worldfoundry.base_models.diffusion_model.contracts import (
     LatentInitialization,
     SamplingConfig,
 )
+from worldfoundry.base_models.diffusion_model.extensions import DiffusionExtension
 from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec
 from worldfoundry.base_models.diffusion_model.models.denoisers.wan import (
     CausalWanCacheBundle,
@@ -433,6 +434,56 @@ def _fake_components(denoiser: _WindowedDenoiser) -> RunnerComponents:
         scheduler=FastVideoCausalWanSelfForcingScheduler(),
         decoder=codec,
     )
+
+
+@pytest.mark.parametrize("fail_hook", [False, True])
+def test_ar_completion_observes_all_committed_blocks_and_preserves_output(fail_hook):
+    denoiser = _WindowedDenoiser()
+    components = _fake_components(denoiser)
+    observed = []
+    decoded = []
+    failure = RuntimeError("completion failed")
+    original_decode = components.decoder.decode
+
+    def decode(latents, request):
+        decoded.append(latents)
+        assert len(observed) == 1
+        return original_decode(latents, request)
+
+    components.decoder.decode = decode
+
+    class Observer(DiffusionExtension):
+        def on_diffusion_complete(self, context):
+            observed.append((context, context.final_latents.clone(), len(denoiser.calls)))
+            if fail_hook:
+                raise failure
+
+    runner = AutoregressiveWindowRunner(
+        model_id="ar-completion-test", components=components,
+        prediction_mode="flow", device="cpu", dtype=torch.float32, extensions=(Observer(),),
+    )
+    request = DiffusionRequest(
+        prompt="test", num_frames=21,
+        sampling=SamplingConfig(num_inference_steps=8, guidance_scale=1, seed=7),
+    )
+    if fail_hook:
+        with pytest.raises(RuntimeError, match="completion failed") as caught:
+            runner.run(request)
+        assert caught.value is failure
+        assert not decoded
+        assert denoiser.end_calls[0][1] is failure
+    else:
+        output = runner.run(request)
+        reference = AutoregressiveWindowRunner(
+            model_id="ar-completion-test", components=_fake_components(_WindowedDenoiser()),
+            prediction_mode="flow", device="cpu", dtype=torch.float32,
+        )
+        torch.testing.assert_close(output.sample, reference.run(request).sample, rtol=0, atol=0)
+        torch.testing.assert_close(observed[0][1], decoded[0], rtol=0, atol=0)
+    assert len(observed) == 1
+    assert observed[0][0].final_latents is None
+    assert observed[0][2] == len(denoiser.calls)
+    assert denoiser.calls[-1][0] == "positive-cache-commit"
 
 
 def test_fastvideo_strategy_binds_vae_encoder_for_required_image() -> None:

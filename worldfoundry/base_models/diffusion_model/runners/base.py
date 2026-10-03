@@ -168,6 +168,19 @@ class NativeDiffusionRunner:
                     f"{type(cleanup_error).__name__}: {cleanup_error}"
                 )
 
+    def _notify_diffusion_complete(self, context: DiffusionRunContext, latents: Tensor) -> None:
+        """Publish one final decoder input without synchronizing or retaining it."""
+
+        context.final_latents = latents
+        try:
+            for extension in self.extensions:
+                # Preserve duck-typed extensions that predate the callback.
+                on_complete = getattr(extension, "on_diffusion_complete", None)
+                if on_complete is not None:
+                    on_complete(context)
+        finally:
+            context.final_latents = None
+
     @staticmethod
     def _branch_conditioning(
         conditioning: Conditioning,
@@ -649,6 +662,7 @@ class NativeDiffusionRunner:
                                 f"got {type(latents).__name__}"
                             )
 
+            self._notify_diffusion_complete(context, latents)
             with nvtx_range("worldfoundry.decode"):
                 sample = self.components.decoder.decode(latents, request)
             if not isinstance(sample, Tensor):

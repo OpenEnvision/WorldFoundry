@@ -43,6 +43,9 @@ class DiffusionRunContext:
         state: Mutable per-run bag owned by extensions (not by the recipe).
         step: Current :class:`~..contracts.SchedulerStep`, or ``None``
             outside the denoise loop.
+        final_latents: Borrowed final tensor, available only while completion
+            hooks run. Observe it without in-place writes; use a readiness
+            event before consuming it from a different CUDA stream.
     """
 
     request: DiffusionRequest
@@ -53,6 +56,7 @@ class DiffusionRunContext:
     state: dict[str, object] = field(default_factory=dict)
     step: SchedulerStep | None = None
     total_steps: int | None = None
+    final_latents: Tensor | None = None
 
 
 class DiffusionExtension:
@@ -123,6 +127,18 @@ class DiffusionExtension:
         """
 
         return latents
+
+    def on_diffusion_complete(self, context: DiffusionRunContext) -> None:
+        """Observe final latents after all updates/cache commits, before decoding.
+
+        This is a host-side submission boundary, including an optional final
+        denoise pass. CUDA work is not synchronized; a consumer on another
+        stream must record and wait on its own readiness event. This hook does
+        not transfer ownership of latent/KV state or start another request.
+        ``context.final_latents`` exposes the complete decoder input during
+        this callback. Standard, chunked, AR-window and prefix-recompute
+        runners invoke it once per request, after any final refinement.
+        """
 
     def after_decode(
         self,

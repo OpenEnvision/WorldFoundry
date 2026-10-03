@@ -12,6 +12,7 @@ from worldfoundry.base_models.diffusion_model.contracts import (
     SamplingConfig,
     SchedulerStep,
 )
+from worldfoundry.base_models.diffusion_model.extensions import DiffusionExtension
 from worldfoundry.base_models.diffusion_model.runners.base import RunnerComponents
 from worldfoundry.base_models.diffusion_model.runners.chunked import (
     ChunkedKVCacheRunner,
@@ -149,6 +150,34 @@ def test_chunked_runner_finalizes_request_after_success() -> None:
     assert request_id
     assert error is None
     assert set(denoiser.request_ids) == {request_id}
+
+
+@pytest.mark.parametrize("fail_hook", [False, True])
+def test_chunked_completion_runs_once_after_commits_and_cleans_on_failure(fail_hook) -> None:
+    runner, denoiser = _runner()
+    observed = []
+    failure = RuntimeError("completion failed")
+
+    class Observer(DiffusionExtension):
+        def on_diffusion_complete(self, context):
+            observed.append((context, context.final_latents.clone(), len(denoiser.request_ids)))
+            if fail_hook:
+                raise failure
+
+    runner.extensions = (Observer(),)
+    if fail_hook:
+        with pytest.raises(RuntimeError, match="completion failed") as caught:
+            runner.run(_request())
+        assert caught.value is failure
+        assert denoiser.end_calls[0][1] is failure
+    else:
+        output = runner.run(_request())
+        torch.testing.assert_close(observed[0][1], output.latents, rtol=0, atol=0)
+        reference, _ = _runner()
+        torch.testing.assert_close(output.sample, reference.run(_request()).sample, rtol=0, atol=0)
+    assert len(observed) == 1
+    assert observed[0][0].final_latents is None
+    assert observed[0][2] == len(denoiser.request_ids)
 
 
 def test_chunked_runner_finalizes_request_after_failure() -> None:

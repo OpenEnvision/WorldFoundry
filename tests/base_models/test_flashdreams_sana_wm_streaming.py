@@ -19,6 +19,7 @@ from worldfoundry.base_models.diffusion_model.contracts import (
     LatentInitialization,
     SamplingConfig,
 )
+from worldfoundry.base_models.diffusion_model.extensions import DiffusionExtension
 from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec
 from worldfoundry.base_models.diffusion_model.models.denoisers.sana import SanaDenoiser
 from worldfoundry.base_models.diffusion_model.models.denoisers.sana_refiner import (
@@ -283,6 +284,54 @@ class _Refiner:
         return active + 100.0
 
 
+@pytest.mark.parametrize("fail_hook", [False, True])
+def test_prefix_completion_observes_final_refinement_and_cleans_on_failure(fail_hook):
+    denoiser, refiner, codec = _Denoiser(), _Refiner(), _Codec()
+    observed = []
+    decoded = []
+    failure = RuntimeError("completion failed")
+
+    def decode(latents, request):
+        assert len(observed) == 1
+        decoded.append(latents)
+        return latents
+
+    codec.decode = decode
+
+    class Observer(DiffusionExtension):
+        def on_diffusion_complete(self, context):
+            observed.append((context, context.final_latents.clone(), len(refiner.active)))
+            if fail_hook:
+                raise failure
+
+    def build(codec, extensions=()):
+        return PrefixRecomputeRunner(
+            model_id="prefix-completion-test",
+            components=RunnerComponents(
+                denoiser=denoiser, conditioner=_Conditioner(), latent_initializer=_Initializer(),
+                scheduler=SanaWMStreamingEulerScheduler(), decoder=codec, latent_encoder=codec,
+            ),
+            refiner=refiner, refiner_conditioner=_RefinerConditioner(), chunk_size=3,
+            history_frames=6, sink_frames=1, refiner_max_frames=11,
+            device="cpu", dtype=torch.float32, extensions=extensions,
+        )
+
+    runner = build(codec, (Observer(),))
+    if fail_hook:
+        with pytest.raises(RuntimeError, match="completion failed") as caught:
+            runner.run(_request())
+        assert caught.value is failure
+        assert not decoded
+        assert denoiser.end_calls[0][1] is failure
+    else:
+        output = runner.run(_request())
+        torch.testing.assert_close(observed[0][1], output.latents, rtol=0, atol=0)
+        assert observed[0][2] == 10
+        torch.testing.assert_close(output.sample, build(_Codec()).run(_request()).sample, rtol=0, atol=0)
+    assert len(observed) == 1
+    assert observed[0][0].final_latents is None
+
+
 def test_sana_prefix_runner_executes_stage1_and_refiner_end_to_end() -> None:
     denoiser = _Denoiser()
     refiner = _Refiner()
@@ -358,12 +407,8 @@ class _RefinerTransformer(torch.nn.Module):
             self.moves.append(torch.device(raw_device))
         return super().to(*args, **kwargs)
 
-    def forward(
-        self,
-        *,
-        video_self_attention_mask: torch.Tensor,
-        **kwargs: object,
-    ) -> tuple[torch.Tensor]:
+    def forward(self, *, video_self_attention_mask=None, **kwargs: object) -> tuple[torch.Tensor]:
+        # Advertise the same top-level mask argument as this fixture consumes.
         kwargs["video_self_attention_mask"] = video_self_attention_mask
         self.kwargs = kwargs
         hidden = kwargs["hidden_states"]

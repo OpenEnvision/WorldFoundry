@@ -490,6 +490,7 @@ class ChunkedKVCacheRunner(NativeDiffusionRunner):
                     if requested_cached < 0:
                         self._promote_full_history(negative_cache, chunk_index, state_blocks)
 
+            self._notify_diffusion_complete(context, latents)
             sample = self.components.decoder.decode(latents, request)
             for extension in self.extensions:
                 sample = extension.after_decode(context, sample)

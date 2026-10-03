@@ -542,6 +542,7 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
                     )
 
             latents = rearrange(output_by_view, "B C V T H W -> B C (V T) H W")
+            self._notify_diffusion_complete(context, latents)
             sample = self.components.decoder.decode(latents, request)
             for extension in self.extensions:
                 sample = extension.after_decode(context, sample)
