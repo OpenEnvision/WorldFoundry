@@ -76,19 +76,19 @@ class QKVFusionState:
         self.request_compiled_split_graph_traces = 0
 
 
-_QKV_FUSION_STATES: WeakValueDictionary[int, QKVFusionState] = WeakValueDictionary()
+_QKV_FUSION_STATES: WeakValueDictionary[str, QKVFusionState] = WeakValueDictionary()
 _QKV_FUSION_STATES_LOCK = Lock()
 
 
-def _register_qkv_fusion_state(state: QKVFusionState) -> int:
-    token = id(state)
+def _register_qkv_fusion_state(state: QKVFusionState) -> str:
+    token = str(id(state))
     with _QKV_FUSION_STATES_LOCK:
         _QKV_FUSION_STATES[token] = state
     return token
 
 
 @torch.compiler.assume_constant_result
-def _record_compiled_qkv_graph_trace(receipt_token: int, path_code: int) -> int:
+def _record_compiled_qkv_graph_trace(receipt_token: str, path_code: int) -> int:
     """Record that a fused projection was embedded in a compiled graph.
 
     Dynamo evaluates this helper while tracing and replaces its return value
@@ -135,9 +135,9 @@ class _FusedQKVLinear(nn.Linear):
             dtype=dtype,
         )
         self._worldfoundry_qkv_fusion_state = fusion_state
-        # Dynamo can treat this integer as a Python constant. Passing the
-        # dataclass itself to an assume_constant_result helper breaks
-        # ``fullgraph=True`` with UserDefinedObjectVariable.
+        # Text identities stay specialized across models. Integer identities
+        # can become symbolic during recompilation and cannot be passed to an
+        # assume_constant_result helper.
         self._worldfoundry_qkv_receipt_token = _register_qkv_fusion_state(
             fusion_state
         )
