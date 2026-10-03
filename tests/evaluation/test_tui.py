@@ -51,7 +51,7 @@ def test_tui_mounts_and_switches_modes(tmp_path: Path) -> None:
         )
         async with app.run_test(size=(160, 50)) as pilot:
             await pilot.pause()
-            assert app._brand_logo_width() >= 40
+            assert 0 < app._brand_logo_width() <= app.query_one("#brand-logo").content_size.width
             assert app.action == "infer"
             assert app.query_one("#output-dir", Input).value.endswith("/infer")
 
@@ -78,7 +78,7 @@ def test_tui_mounts_and_switches_modes(tmp_path: Path) -> None:
             await pilot.resize_terminal(80, 24)
             await pilot.pause()
             assert app.screen.has_class("-narrow")
-            assert app.query_one("#brand-collapse", Collapsible).collapsed
+            assert not app.query_one("#brand-collapse", Collapsible).display
             assert app.query_one("#right-column").region.x <= 2
 
     asyncio.run(exercise())

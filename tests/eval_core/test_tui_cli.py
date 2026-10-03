@@ -359,12 +359,18 @@ def test_textual_app_headless_button_interactions_when_available(tmp_path) -> No
         async with app.run_test(size=(150, 45)) as pilot:
             await pilot.pause()
             results: dict[str, bool] = {}
+
+            async def click_visible_button(selector: str) -> None:
+                app.query_one(selector, Button).scroll_visible(animate=False)
+                await pilot.pause()
+                assert await pilot.click(selector, offset=(1, 1))
+
             await pilot.click("#toggle-command", offset=(1, 1))
             await pilot.pause()
             results["command_preview_open"] = not app.query_one("#command-preview", Collapsible).collapsed
             results["buttons_remain_visible"] = app.query_one("#run-controls").region.y >= 0
             for selector in ("#copy", "#preflight", "#artifacts", "#gpu-status", "#refresh"):
-                await pilot.click(selector, offset=(1, 1))
+                await click_visible_button(selector)
                 await pilot.pause()
                 results[f"{selector}_clicked"] = True
 
@@ -373,11 +379,11 @@ def test_textual_app_headless_button_interactions_when_available(tmp_path) -> No
                 "-c",
                 "import time; print('button-test-started', flush=True); time.sleep(30)",
             )
-            await pilot.click("#run", offset=(1, 1))
+            await click_visible_button("#run")
             results["run_started"] = await wait_until(lambda: app.running_process is not None)
             results["run_disabled_while_running"] = app.query_one("#run", Button).disabled
             results["stop_enabled_while_running"] = not app.query_one("#stop", Button).disabled
-            await pilot.click("#stop", offset=(1, 1))
+            await click_visible_button("#stop")
             results["stop_cleared_process"] = await wait_until(
                 lambda: app.running_task is None and app.running_process is None,
                 timeout=8.0,
