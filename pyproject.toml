@@ -483,6 +483,7 @@ transformers_low = [
 # A CPU gate that runs in a public checkout with the test extra. Select other
 # suites explicitly; they can require model-specific or local-only resources.
 testpaths = [
+    "tests/synthesis/test_inspatio_v15_catalog.py",
     "tests/core/test_core_module_boundaries.py",
     "tests/core/execution/test_overlap_lifecycle.py",
     "tests/core/test_process_logging.py",

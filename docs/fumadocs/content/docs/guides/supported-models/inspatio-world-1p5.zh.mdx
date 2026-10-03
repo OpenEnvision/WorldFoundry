@@ -1,0 +1,57 @@
+---
+title: "InSpatio World 1.5"
+description: "从单图、四图或视频生成相机轨迹可控的世界视频。"
+pageSource: authored
+---
+
+[官方代码](https://github.com/inspatio/inspatio-world-v1.5) · [权重](https://huggingface.co/inspatio/world-1.5) · [官方样例与输入格式](https://github.com/inspatio/inspatio-world-v1.5/tree/dd3561f544053fe22d739b6b2f8461c9c97bf8cb/examples)
+
+模型 ID 为 `inspatio-world-1p5`。原有 `inspatio-world` 继续使用旧版权重和视频推理入口。
+
+新入口复用 WorldFoundry 的因果 Wan2.1 骨干、UMT5、Wan VAE、分块采样器和 DA3 base model，无需另行安装 InSpatio 仓库。已发布模型的推理规格为 **832×480、BF16、每块三个潜帧、四次去噪**。当前入口生成完整视频文件，尚未开放交互式流式会话。
+
+先准备本地 `inspatio/world-1.5` 和 `Wan-AI/Wan2.1-T2V-1.3B` 权重。直接输入图像或视频还需要 `depth-anything/DA3NESTED-GIANT-LARGE-1.1`；已准备深度和相机的场景不加载 DA3。推理只读取本地权重，不修改权重目录。
+
+```python
+from worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15 import InspatioWorldV15Pipeline
+
+pipeline = InspatioWorldV15Pipeline.from_pretrained(
+    model_path="/models/inspatio--world-1.5",
+    wan_model_path="/models/Wan-AI--Wan2.1-T2V-1.3B",
+    da3_model_path="/models/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+    device="cuda:0",
+)
+result = pipeline(
+    scene_dir="/data/prepared_scene",
+    output_path="/outputs/pred.mp4",
+    seed=0,
+)
+print(result["artifact_path"])
+```
+
+准备好的场景沿用官方 `scene.json` 格式，包括 RGB、prompt 文件（允许为空）、带统一 min/max 的 uint16 深度、源视角内参与位姿，以及目标轨迹。相机位姿为 OpenCV **world-to-camera** 4×4 矩阵，每个目标帧一行、16 个数字、按行展开。四图模式要求四个源视角，并覆盖完整的三个潜帧分组；输出会裁掉场景中的补齐帧。
+
+直接输入时，用 `videos="/data/input.mp4"` 或 `images=["/data/view_00.png"]`（单图或四图）替换 `scene_dir`，并传入 `prompt` 和 `traj_txt_path`。视频会缩放到 832×480，直接输入的图像必须已具有这个分辨率。目标轨迹必须采用以第一个源相机为基准的坐标系，并与重建结果的位移尺度一致。有已标定深度和相机时，请使用准备好的场景。
+
+默认返回视频路径；`return_frames=True` 会额外把帧载入主机内存。加载时可选 `compile_dit=True`，普通推理不要求编译。
+
+快速测试位于 `tests/synthesis/test_inspatio_v15_catalog.py` 和 `tests/synthesis/test_inspatio_v15_tensors.py`。`tests/manual/inspatio_v15_regression.py` 使用同一套本地权重，分别运行本入口和固定版本的官方实现，比较潜变量以及 source、render、mask、pred 的解码帧。
+
+六组短 GPU 测试已通过 BF16/SDPA 完全一致对照：三类准备好的场景，以及三类原始 RGB 输入。直接输入的对照使用同一份 DA3 估计几何验证生成结果，不单独评估 DA3 的重建质量。每组覆盖两个因果块，包含前一块的上下文。
+
+复现时，先将官方仓库切到 catalog 记录的固定版本，并就位本地组件权重。请使用新的输出目录；官方视频样例没有附带深度，`prepare-depth` 会调用共享 DA3 补齐。
+
+```bash
+INSPATIO_UPSTREAM=/path/to/inspatio-world-v1.5
+INSPATIO_CHECKPOINTS=/models
+INSPATIO_VALIDATION=/tmp/inspatio-v15-validation
+for mode in prepare prepare-depth native upstream compare; do
+  CUDA_VISIBLE_DEVICES=0 WAN_DISABLE_FA3=1 python tests/manual/inspatio_v15_regression.py "$mode" \
+    --upstream "$INSPATIO_UPSTREAM" --checkpoints "$INSPATIO_CHECKPOINTS" \
+    --output "$INSPATIO_VALIDATION"
+done
+```
+
+再给 `native`、`upstream`、`compare` 加上 `--direct`，即可检查原始 RGB 输入和 DA3 路径。`--cases` 可选择单例并在不同 GPU 上并行运行。标准回归矩阵包含 `inspatio-world-1p5-{image,multiview,video}-short`；将 `WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` 设为验证目录下的 `fixtures`。对照结果记录权重和数值输出哈希，并拒绝使用不同版本的发布权重。
+
+代码归属和 Apache-2.0 正文统一保留在根目录 `THIRD-PARTY-NOTICES`，各组件权重继续遵循上游条款。

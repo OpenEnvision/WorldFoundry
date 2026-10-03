@@ -1,5 +1,5 @@
 {
-  "total": 261,
+  "total": 262,
   "categories": [
     {
       "id": "video",
@@ -20,7 +20,7 @@
       "label": "World models",
       "label_zh": "世界模型",
       "description": "Interactive worlds, prediction, navigation, and simulator-shaped systems.",
-      "count": 106
+      "count": 107
     },
     {
       "id": "three_d_four_d",
@@ -8357,6 +8357,438 @@
         "run": "worldfoundry-eval run \\\n  infinite-world \\\n  --pipeline.task-profile world \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.image /path/to/input \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/world_models/infinite-world.yaml"
+    },
+    {
+      "id": "inspatio-world-1p5",
+      "name": "InSpatio World 1.5",
+      "category": "world_models",
+      "categoryLabel": "World models",
+      "categoryLabelZh": "世界模型",
+      "provider": "inspatio",
+      "summary": "Native inference reuses the existing causal Wan graph, UMT5 encoder, Wan VAE, causal sampler and in-tree DA3.",
+      "aliases": [
+        "inspatio-world-v1.5",
+        "inspatio-world-1.5"
+      ],
+      "tasks": [
+        "image-to-video",
+        "video-to-video",
+        "trajectory-conditioned-video",
+        "novel-view-synthesis"
+      ],
+      "status": {
+        "group": "verified",
+        "label": "Runner verified",
+        "integration": "verified",
+        "runner": "verified",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "inspatio-world-1p5",
+        "bindingId": "inspatio-world-1p5",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_in_tree_runtime",
+        "runtimeStatus": "verified",
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "Prepared scenes follow the official scene.json, RGB/depth and row-major OpenCV Tcw contract.",
+          "Direct input resolves DA3 locally. Prepared scenes do not need DA3; inference does not download models or modify checkpoint directories.",
+          "Version 1.5 uses the existing Wan2.1 components and a distinct fine-tuned checkpoint.",
+          "Verified on six short BF16/SDPA generation cases against pinned upstream, including native DA3 direct inputs replayed with the same estimated geometry.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "project",
+          "label": "Project",
+          "url": "https://inspatio.github.io/inspatio-world-1.5/"
+        },
+        {
+          "kind": "paper",
+          "label": "Paper",
+          "url": "https://arxiv.org/abs/2604.07209"
+        },
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/inspatio/inspatio-world-v1.5"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/inspatio/world-1.5"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/inspatio/inspatio-world-v1.5#readme"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "inspatio/world-1.5",
+          "revision": "6a5cf5e27b8a05930911a5416fa8c68eabdda414"
+        },
+        {
+          "id": "Wan-AI/Wan2.1-T2V-1.3B",
+          "revision": "37ec512624d61f7aa208f7ea8140a131f93afc9a",
+          "role": "wan_text_vae_architecture"
+        },
+        {
+          "id": "depth-anything/DA3NESTED-GIANT-LARGE-1.1",
+          "revision": "b2359bdf726fb44ef62acca04d629dcf158053e7",
+          "role": "optional_direct_input_geometry"
+        },
+        {
+          "id": "inspatio/world-1.5",
+          "license": "apache-2.0"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "image-to-video",
+          "label": "Image To Video",
+          "description": "Catalog task profile used by the model runtime.",
+          "source": "catalog",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "image",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "video",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "actions",
+              "detail": "camera_path",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_world",
+              "filename": "inspatio-world-1p5.mp4"
+            }
+          ]
+        },
+        {
+          "id": "video-to-video",
+          "label": "Video To Video",
+          "description": "Catalog task profile used by the model runtime.",
+          "source": "catalog",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "image",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "video",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "actions",
+              "detail": "camera_path",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_world",
+              "filename": "inspatio-world-1p5.mp4"
+            }
+          ]
+        },
+        {
+          "id": "trajectory-conditioned-video",
+          "label": "Trajectory Conditioned Video",
+          "description": "Catalog task profile used by the model runtime.",
+          "source": "catalog",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "image",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "video",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "actions",
+              "detail": "camera_path",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_world",
+              "filename": "inspatio-world-1p5.mp4"
+            }
+          ]
+        },
+        {
+          "id": "novel-view-synthesis",
+          "label": "Novel View Synthesis",
+          "description": "Catalog task profile used by the model runtime.",
+          "source": "catalog",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "image",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "video",
+              "detail": "Required",
+              "kind": "string",
+              "target": "input",
+              "required": true,
+              "description": "Recorded input field from the runtime profile."
+            },
+            {
+              "field": "actions",
+              "detail": "camera_path",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "description": "Recorded input field from the runtime profile."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_world",
+              "filename": "inspatio-world-1p5.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Required"
+        },
+        {
+          "field": "actions",
+          "detail": "camera_path"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_world",
+          "filename": "inspatio-world-1p5.mp4"
+        }
+      ],
+      "notes": [
+        "Native inference reuses the existing causal Wan graph, UMT5 encoder, Wan VAE, causal sampler and in-tree DA3.",
+        "Prepared scenes support one image, four images or video; target poses use row-major OpenCV world-to-camera matrices.",
+        "The released checkpoint uses resolution 480x832, three latent frames per block and four denoising calls.",
+        "Original InSpatio World remains a separate model and checkpoint.",
+        "Exact BF16/SDPA parity on two causal blocks for prepared single-image, four-image and 21-frame video scenes.",
+        "Direct single-image, four-image and video inputs generated successfully with in-tree DA3; replaying the estimated geometry through upstream also matched latents and decoded frames exactly.",
+        "Direct replay verifies generation from the same geometry; it does not independently certify DA3 reconstruction quality or long-horizon generation.",
+        "Prepared scenes follow the official scene.json, RGB/depth and row-major OpenCV Tcw contract.",
+        "Direct input resolves DA3 locally. Prepared scenes do not need DA3; inference does not download models or modify checkpoint directories.",
+        "Version 1.5 uses the existing Wan2.1 components and a distinct fine-tuned checkpoint.",
+        "Verified on six short BF16/SDPA generation cases against pinned upstream, including native DA3 direct inputs replayed with the same estimated geometry."
+      ],
+      "docs": {
+        "curated": false,
+        "publisher": null,
+        "overview": [
+          "InSpatio World 1.5 is a world model from inspatio. The catalog records it for image-to-video, video-to-video, trajectory-conditioned-video, and novel-view-synthesis. It is also cataloged under the aliases inspatio-world-v1.5 and inspatio-world-1.5.",
+          "WorldFoundry records a binding to the worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline pipeline via worldfoundry.pipeline.",
+          "It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).",
+          "Weights are pulled from the Hugging Face repository inspatio/world-1.5, pinned to revision 6a5cf5e27, plus 3 more recorded repositories.",
+          "A WorldFoundry runner-parity artifact is recorded for this route."
+        ],
+        "overviewZh": [
+          "InSpatio World 1.5 是来自 inspatio 的世界模型。Catalog 将它记录为图生视频、视频到视频转换、trajectory-conditioned-video、新视角合成任务。它还有别名 inspatio-world-v1.5、inspatio-world-1.5。",
+          "WorldFoundry 记录了到 worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline pipeline 的绑定（runner：worldfoundry.pipeline）。",
+          "它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。",
+          "权重来自 Hugging Face 仓库 inspatio/world-1.5，固定在 revision 6a5cf5e27，另有 3 个已记录仓库。",
+          "该路径已记录 WorldFoundry runner parity 产物。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [],
+        "usageNotesZh": [],
+        "highlights": [
+          "Image To Video",
+          "Video To Video",
+          "Trajectory Conditioned Video",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "图生视频",
+          "视频到视频转换",
+          "trajectory-conditioned-video",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "image",
+            "video"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "Native demo evidence: Not recorded.",
+          "Exact BF16/SDPA parity on two causal blocks for prepared single-image, four-image and 21-frame video scenes.",
+          "Direct single-image, four-image and video inputs generated successfully with in-tree DA3; replaying the estimated geometry through upstream also matched latents and decoded frames exactly.",
+          "Direct replay verifies generation from the same geometry; it does not independently certify DA3 reconstruction quality or long-horizon generation."
+        ],
+        "limitationsZh": [
+          "原生 Demo 证据：未记录。",
+          "Exact BF16/SDPA parity on two causal blocks for prepared single-image, four-image and 21-frame video scenes.",
+          "Direct single-image, four-image and video inputs generated successfully with in-tree DA3; replaying the estimated geometry through upstream also matched latents and decoded frames exactly.",
+          "Direct replay verifies generation from the same geometry; it does not independently certify DA3 reconstruction quality or long-horizon generation."
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh inspatio-world-1p5",
+        "install": "bash scripts/setup/model_env_install.sh --model inspatio-world-1p5",
+        "inspect": "worldfoundry-eval zoo model-show --model-id inspatio-world-1p5 --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id inspatio-world-1p5 --check-local --json",
+        "run": "worldfoundry-eval run \\\n  inspatio-world-1p5 \\\n  --pipeline.task-profile image-to-video \\\n  --pipeline.prompt \"Describe the desired output.\" \\\n  --pipeline.image /path/to/input \\\n  --pipeline.video /path/to/input \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/world_models/inspatio-world-1p5.yaml"
     },
     {
       "id": "inspatio-world",

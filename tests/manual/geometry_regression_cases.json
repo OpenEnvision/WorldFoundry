@@ -3052,5 +3052,164 @@
       }
     ],
     "scope": "One 9-frame causal block, a 12-frame continuation, reset/replay, changed initial action. Not long-horizon quality."
+  },
+  "inspatio-world-1p5-image-short": {
+    "id": "inspatio-world-1p5-image-short",
+    "model_id": "inspatio-world-1p5",
+    "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline",
+    "seed": 0,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda:0"
+    },
+    "call": {
+      "scene_dir": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/image_example_00",
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "seed": 0,
+      "return_latents": true,
+      "return_frames": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5/InSpatio-World-1.5-1.3B.safetensors",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "scene": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/image_example_00"
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "required_outputs": [
+      "result.latents",
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.latents": {
+        "shape": [
+          1,
+          6,
+          16,
+          60,
+          104
+        ],
+        "dtype": "float32"
+      },
+      "result.video": {
+        "shape": [
+          20,
+          480,
+          832,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Two causal blocks with pinned prepared RGB/depth/camera inputs; exact upstream parity at BF16 on the tested SDPA backend. Not long-horizon or cross-backend quality."
+  },
+  "inspatio-world-1p5-multiview-short": {
+    "id": "inspatio-world-1p5-multiview-short",
+    "model_id": "inspatio-world-1p5",
+    "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline",
+    "seed": 0,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda:0"
+    },
+    "call": {
+      "scene_dir": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/multiview_example_00",
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "seed": 0,
+      "return_latents": true,
+      "return_frames": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5/InSpatio-World-1.5-1.3B.safetensors",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "scene": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/multiview_example_00"
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "required_outputs": [
+      "result.latents",
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.latents": {
+        "shape": [
+          1,
+          6,
+          16,
+          60,
+          104
+        ],
+        "dtype": "float32"
+      },
+      "result.video": {
+        "shape": [
+          20,
+          480,
+          832,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Two causal blocks with pinned prepared RGB/depth/camera inputs; exact upstream parity at BF16 on the tested SDPA backend. Not long-horizon or cross-backend quality."
+  },
+  "inspatio-world-1p5-video-short": {
+    "id": "inspatio-world-1p5-video-short",
+    "model_id": "inspatio-world-1p5",
+    "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline",
+    "seed": 0,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda:0"
+    },
+    "call": {
+      "scene_dir": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00",
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "seed": 0,
+      "return_latents": true,
+      "return_frames": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5/InSpatio-World-1.5-1.3B.safetensors",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "scene": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00"
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "required_outputs": [
+      "result.latents",
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.latents": {
+        "shape": [
+          1,
+          6,
+          16,
+          60,
+          104
+        ],
+        "dtype": "float32"
+      },
+      "result.video": {
+        "shape": [
+          21,
+          480,
+          832,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Two causal blocks with pinned prepared RGB/depth/camera inputs; exact upstream parity at BF16 on the tested SDPA backend. Not long-horizon or cross-backend quality."
   }
 }

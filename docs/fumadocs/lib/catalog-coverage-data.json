@@ -1,6 +1,6 @@
 {
-  "modelsTotal": 266,
-  "modelsListed": 256,
+  "modelsTotal": 267,
+  "modelsListed": 257,
   "benchmarksTotal": 74,
   "modelFamilies": [
     {
@@ -477,7 +477,7 @@
       "id": "world_models",
       "label": "World models",
       "blurb": "Interactive worlds, camera/action conditioning, navigation, and simulator-shaped systems.",
-      "count": 103,
+      "count": 104,
       "entries": [
         {
           "id": "abot-world-0-5b-lf",
@@ -826,6 +826,14 @@
           "status": "integrated",
           "aliases": [
             "infinite-world"
+          ]
+        },
+        {
+          "id": "inspatio-world-1p5",
+          "name": "InSpatio World 1.5",
+          "status": "verified",
+          "aliases": [
+            "inspatio-world-1p5"
           ]
         },
         {

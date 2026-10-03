@@ -5533,3 +5533,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----- END RETAINED LICENSE TEXT -----
+
+InSpatio World 1.5 inference integration
+----------------------------------------
+Source: https://github.com/inspatio/inspatio-world-v1.5
+Revision: dd3561f544053fe22d739b6b2f8461c9c97bf8cb
+Code license: Apache-2.0. The exact upstream LICENSE text is identical to the
+retained Apache-2.0 block above (SHA256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4).
+Retained adaptations: condition codecs, RGBD rendering/view selection, and the
+depth-weighted splat in the 3D base-model layer. Local changes replace copied
+Wan/T5/VAE/scheduler code with existing base models, share the 1.0/1.5 causal
+sampler, load local checkpoints strictly, isolate request RNG, and integrate
+WorldFoundry catalog/pipeline interfaces. No training code or example media is
+redistributed for this integration.
+Weights: inspatio/world-1.5 at 6a5cf5e27b8a05930911a5416fa8c68eabdda414.
+The weight repository has no separate LICENSE or model card at that revision;
+its release is linked from the official Apache-2.0 code repository. Wan and
+Depth Anything 3 code and weights retain their respective upstream terms;
+DA3NESTED-GIANT-LARGE-1.1 weight terms are separate from DA3's Apache code.

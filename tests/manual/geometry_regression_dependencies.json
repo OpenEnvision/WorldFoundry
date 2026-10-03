@@ -175,6 +175,16 @@
       "tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py",
       "tests/synthesis/mg2_historical_reference.py"
     ],
+    "inspatio-world-1p5": [
+      "worldfoundry/pipelines/inspatio_world/pipeline_inspatio_world_v15.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_v15_synthesis.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/v15*.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/wan_causal_world.py",
+      "worldfoundry/base_models/diffusion_model/runners/inspatio_world.py",
+      "worldfoundry/base_models/three_dimensions/point_clouds/depth_warper.py",
+      "tests/synthesis/test_inspatio_v15*.py",
+      "tests/manual/inspatio_v15_regression.py"
+    ],
     "dreamx-world": [
       "worldfoundry/pipelines/dreamx_world/**",
       "worldfoundry/synthesis/visual_generation/dreamx_world/**",
@@ -182,6 +192,9 @@
     ]
   },
   "cases": {
+    "inspatio-world-1p5-image-short": ["inspatio-world-1p5"],
+    "inspatio-world-1p5-multiview-short": ["inspatio-world-1p5"],
+    "inspatio-world-1p5-video-short": ["inspatio-world-1p5"],
     "cut3r": [
       "cut3r"
     ],
