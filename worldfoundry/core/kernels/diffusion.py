@@ -864,12 +864,11 @@ def _layer_norm_scale_shift_triton(
     eps: float,
     upcast: bool,
 ) -> torch.Tensor:
-    """Launch Triton LayerNorm+AdaLN; *upcast* is ignored because the kernel always uses fp32 reduce."""
+    """Keep vendor LayerNorm reduction and fuse the following AdaLN arithmetic."""
 
-    del upcast
     from worldfoundry.core.kernels.triton_diffusion import layer_norm_scale_shift as implementation
 
-    return implementation(x, scale, shift, eps)
+    return implementation(x, scale, shift, eps, upcast=upcast)
 
 
 def layer_norm_scale_shift(

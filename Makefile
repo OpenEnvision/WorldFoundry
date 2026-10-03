@@ -46,7 +46,7 @@ STREAMING_CPU_CONTRACTS = \
 	tests/studio_visualization/test_realtime_shutdown_ownership.py \
 	tests/studio_visualization/test_world_realtime.py \
 	tests/runtime/test_inference_benchmark_correctness.py
-INFER_TENSOR_CONTRACTS = tests/synthesis/test_inspatio_v15_tensors.py tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py $(VIDEO_TENSOR_CONTRACTS) $(STREAMING_CPU_CONTRACTS)
+INFER_TENSOR_CONTRACTS = tests/synthesis/test_inspatio_v15_tensors.py tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py tests/core/test_diffusion_rounding.py tests/core/test_kernel_dispatch_receipt.py tests/core/test_diffusion_mutating_kernel.py $(VIDEO_TENSOR_CONTRACTS) $(STREAMING_CPU_CONTRACTS)
 # Select numerical CUDA nodes explicitly: older CUDA tests do not all carry the gpu marker.
 INFER_CUDA_CONTRACTS = \
 	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_host_pixels_wait_for_producer_and_preserve_frame_order \
@@ -54,6 +54,9 @@ INFER_CUDA_CONTRACTS = \
 	tests/core/execution/test_cuda_frame_transfer.py::test_failed_cuda_callback_drains_queued_work_before_reuse \
 	tests/core/execution/test_inference_graph_cuda.py \
 	tests/core/test_diffusion_mutating_kernel.py::test_bf16_mutating_kernel_preserves_alias_version_and_eager_bits \
+	tests/core/test_diffusion_rounding.py::test_eager_rounding_and_explicit_model_backend \
+	tests/core/test_diffusion_rounding.py::test_rounding_with_strided_modulation_across_supported_ranks \
+	tests/core/test_diffusion_rounding.py::test_layer_norm_modulation_preserves_vendor_bits_and_upcast \
 	tests/core/attention/test_kv_arena.py::test_cuda_long_sequence_attention_and_stream_ownership \
 	tests/core/attention/test_kv_arena.py::test_cuda_graph_replay_reads_updated_current_segment \
 	tests/core/attention/test_gqa_storage.py::test_efficient_cuda_gqa_matches_math \
