@@ -250,15 +250,11 @@ Later validation was recorded in separate invocations:
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
-| Relevant model/core suites | **495 passed, 2 skipped** | Before the nine new boundary regressions. |
-| New boundary regressions | **9 passed** | Separate focused run. |
-| Shared kernel merge checks | **60 passed** | Normalization and kernel integration regression. |
-| Native benchmark diagnostics | **39 passed** | Quality, execution, timing rejection and provenance gates. |
-| Encoder benchmark diagnostics | **38 passed** | CPU admission, receipts, quality, timing and four added dependency-manifest regressions. |
-| Isolated Sol provider checks | **15 passed** | Includes actual CUDA execution in the provider environment. |
-| Earlier public-path CPU whitelist | **584 passed** | Historical selected checks, before the latest changes. |
+| Final release model/core/diagnostics suites | **620 passed, 2 skipped** | Includes CUDA rounding, reversible installation, ownership, CFG/dual-expert isolation and both benchmark diagnostics. The two skips require the separate Sol provider. |
+| Final release public CPU whitelist | **584 passed, 4 subtests passed** | Repository default public selection, with CUDA hidden. |
+| Final release isolated Sol provider | **15 passed** | Actual H100 execution, including full KV coverage and custom scale. |
 
-These suites overlap and are not summed. They do not establish full-repository success; the final release gate remains pending.
+All three gates ran from a clean `release/public-inference-20260909` worktree after both acceleration branches were merged, at revision `a2a26b9c`. These suites overlap and are not summed; they cover the selected paths rather than every repository test. The [release validation record](/measurements/acceleration-release-validation-2026-10-04.json) preserves the tested revision, exact scopes and log hashes. Subsequent documentation updates retain the measured source fingerprints and tested implementation.
 
 Evidence: [contiguous block](/measurements/sana-block-pointwise-2026-10-03.json), [native-stride block](/measurements/sana-block-strided-2026-10-03.json), [full-video candidates](/measurements/sana-plugins-video-2026-10-03.json), [Sol operators](/measurements/sol-attention-2026-10-03.json). Video records include complete weight hashes; checkpoint and video tensors stay in local experiment directories.
 

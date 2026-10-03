@@ -250,19 +250,15 @@ PYTHONPATH=. python benchmarks/inference/lightvae_encoder.py \
 
 前轮专项回归 **236 passed、3 skipped**，覆盖原有 SANA/Wan 路径、GPU 数值边界、实际 checkpoint loader、请求/CFG 隔离、条件失效、撤销、训练策略与 dispatcher。两项 skip 是不适用于 image block 的 frame-aware 参数组合，另一项 Sol CUDA 测试在主环境缺少 provider；隔离 Sol 环境另跑 **9 passed**，包含实际 H100 CuTe 调用。这些是前轮计数，不是后续新增实现的仓库全量测试结论。
 
-后续校验分次记录如下：
+合并后的最终 release 校验如下：
 
 | 范围 | 已记录结果 | 限制 |
 | --- | --- | --- |
-| 相关 model/core 测试集 | **495 passed、2 skipped** | 在新增九项边界回归之前。 |
-| 新增边界回归 | **9 passed** | 单独专项执行。 |
-| 共享 kernel 合并检查 | **60 passed** | Normalization 与 kernel 集成回归。 |
-| 原生 benchmark 诊断 | **39 passed** | 质量、执行、计时淘汰与 provenance 门禁。 |
-| Encoder benchmark 诊断 | **38 passed** | CPU admission、回执、质量、计时和四项新增依赖 manifest 回归。 |
-| 隔离 Sol provider 检查 | **15 passed** | 包含 provider 环境中的实际 CUDA 执行。 |
-| 较早 public 路径 CPU 白名单 | **584 passed** | 历史选定范围，早于最近修改。 |
+| 最终 release model/core/diagnostics 测试集 | **620 passed、2 skipped** | 包含 CUDA rounding、可撤销安装、ownership、CFG/双 expert 隔离及两个 benchmark 诊断。两项 skip 需要独立 Sol provider。 |
+| 最终 release public CPU 白名单 | **584 passed、4 subtests passed** | 仓库默认的公开测试范围，隐藏 CUDA 执行。 |
+| 最终 release 隔离 Sol provider | **15 passed** | 实际 H100 执行，包含完整 KV 覆盖和自定义 scale。 |
 
-这些测试集存在重叠，不相加，也不代表仓库全量通过；最终 release gate 仍待完成。
+三个门禁均在两个加速分支合并后的干净 `release/public-inference-20260909` 工作树上执行，对应版本 `a2a26b9c`。这些测试集存在重叠，不相加，覆盖所选路径，不代表仓库全量测试。[Release 校验记录](/measurements/acceleration-release-validation-2026-10-04.json) 保留测试版本、准确范围和日志 hash。后续文档更新保留原测量指纹，测试过的实现不再变更。
 
 原始证据：[连续 block](/measurements/sana-block-pointwise-2026-10-03.json)、[native strides block](/measurements/sana-block-strided-2026-10-03.json)、[完整视频候选](/measurements/sana-plugins-video-2026-10-03.json)、[Sol 算子](/measurements/sol-attention-2026-10-03.json)。视频记录含完整权重 hash；视频张量和 checkpoint 留在本地实验目录。
 
