@@ -203,15 +203,96 @@ _VERIFICATION_TOOLS = {
 }
 
 
+def committed_json_definition(
+    source_root: Path, path: Path, changes: list[str], *, base: str | None, head: str,
+    history_root: Path | None = None,
+) -> tuple[dict, dict] | None:
+    """Read unique, finite JSON from the exact before/after committed blobs."""
+    if base is None or path.is_symlink() or not path.resolve().is_relative_to(source_root.resolve()):
+        return None
+    history = history_root or source_root
+    commits = [revision(history, ref + "^{commit}") for ref in (base, head)]
+    if not all(commits):
+        return None
+    relative = path.relative_to(source_root).as_posix()
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Repeated JSON key in replay definitions")
+            result[key] = value
+        return result
+
+    def invalid_constant(value):
+        raise ValueError(f"Non-finite JSON constant: {value}")
+
+    try:
+        if changed_paths(history, *commits) != sorted(set(changes)):
+            return None
+        blobs = [subprocess.check_output(
+            ["git", "-C", str(history), "show", commit + ":" + relative], stderr=subprocess.PIPE,
+        ) for commit in commits]
+        if path.read_bytes() != blobs[1]:
+            return None
+        before, after = [json.loads(blob, object_pairs_hook=unique_object, parse_constant=invalid_constant)
+                         for blob in blobs]
+        return (before, after) if isinstance(before, dict) and isinstance(after, dict) else None
+    except (OSError, ValueError, TypeError, subprocess.CalledProcessError):
+        return None
+
+
+def committed_additional_cases(
+    source_root: Path, matrix: Path, dependencies: Path, changes: list[str], *,
+    base: str | None, head: str, history_root: Path | None = None,
+) -> set[str] | None:
+    """Prove append-only recipes and ownership without altering old coverage.
+
+    Existing recipes, components and global rules must remain semantically
+    identical. Added components may only be used by added cases. Any removal,
+    reclassification, dirty file or incomplete history keeps full selection.
+    """
+    options = dict(base=base, head=head, history_root=history_root)
+    recipes = committed_json_definition(source_root, matrix, changes, **options)
+    rules = committed_json_definition(source_root, dependencies, changes, **options)
+    if recipes is None or rules is None:
+        return None
+    before_cases, after_cases = recipes
+    before, after = rules
+    def canonical(value):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+    if (not before_cases.keys() <= after_cases.keys()
+            or any(canonical(before_cases[name]) != canonical(after_cases[name]) for name in before_cases)):
+        return None
+    global_before = {key: value for key, value in before.items() if key not in {"components", "cases"}}
+    global_after = {key: value for key, value in after.items() if key not in {"components", "cases"}}
+    if canonical(global_before) != canonical(global_after):
+        return None
+    for key in ("components", "cases"):
+        old, new = before.get(key), after.get(key)
+        if (not isinstance(old, dict) or not isinstance(new, dict) or not old.keys() <= new.keys()
+                or any(canonical(old[name]) != canonical(new[name]) for name in old)):
+            return None
+    added = after_cases.keys() - before_cases.keys()
+    if after["cases"].keys() - before["cases"].keys() != added:
+        return None
+    used = {component for name in added for component in after["cases"][name]}
+    if not (after["components"].keys() - before["components"].keys()) <= used:
+        return None
+    return added
+
+
 def verification_tooling_proofs(
     source_root: Path, matrix: Path, dependencies: Path, changes: list[str], *,
     base: str | None, head: str, history_root: Path | None = None,
 ) -> list[dict]:
     """Distinguish verified test orchestration from changes to inference itself.
 
-    Immutable blobs must prove that every runtime, environment, asset and case
-    definition is unchanged. Missing history or mixed production changes keep
-    the ordinary conservative replay selection.
+    Immutable blobs must prove that every runtime, environment, asset and
+    existing case definition is unchanged. Strictly additional recipes still
+    require their own replays. Missing history or mixed production changes
+    keep the ordinary conservative replay selection.
     """
     changed_tools = sorted(set(changes) & _VERIFICATION_TOOLS.keys())
     if base is None or not changed_tools:
@@ -295,8 +376,11 @@ def verification_tooling_proofs(
                 if target.relative_to(source_root).as_posix() not in runtime:
                     return []
     definitions = [path.relative_to(source_root).as_posix() for path in (matrix, dependencies)]
-    for path in definitions:
-        if before.get(path) != after.get(path):
+    additional_cases = set()
+    if any(before.get(path) != after.get(path) for path in definitions):
+        additional_cases = committed_additional_cases(source_root, matrix, dependencies, changes,
+                                                     base=base, head=head, history_root=history_root)
+        if additional_cases is None:
             return []
     inspected = [*definitions, *changed_tools]
     for path in inspected:
@@ -321,8 +405,9 @@ def verification_tooling_proofs(
         if target.read_bytes() != blob:
             return []
     runtime_digest = hashlib.sha256(json.dumps(runtime, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    return [{"path": path, "reason": "Verification tooling changed; immutable runtime and case definitions are identical.",
+    return [{"path": path, "reason": "Verification tooling changed; immutable runtime and existing case definitions are identical. Additional cases require replay.",
              "base_revision": commits[0], "head_revision": commits[1],
+             "additional_case_ids": sorted(additional_cases),
              "immutable_runtime_tree_sha256": runtime_digest,
              "source_sha256": digest(source_root / path), "required_cpu_contracts": contracts}
             for path in changed_tools]
@@ -440,43 +525,17 @@ def committed_case_changes(
     Missing history, dirty definitions, ambiguous JSON or changed case IDs keep
     the full replay selection. Runtime dependencies are still selected separately.
     """
-    if base is None or matrix.is_symlink() or not matrix.resolve().is_relative_to(source_root.resolve()):
+    definitions = committed_json_definition(source_root, matrix, changes,
+                                            base=base, head=head, history_root=history_root)
+    if definitions is None:
         return None
-    history = history_root or source_root
-    commits = [revision(history, ref + "^{commit}") for ref in (base, head)]
-    if not all(commits):
+    before, after = definitions
+    if not before.keys() <= after.keys():
         return None
-    path = matrix.relative_to(source_root).as_posix()
+    def canonical(value):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
-    def unique_object(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("Repeated JSON key in replay definitions")
-            result[key] = value
-        return result
-
-    def invalid_constant(value):
-        raise ValueError(f"Non-finite JSON constant: {value}")
-
-    try:
-        if changed_paths(history, *commits) != sorted(set(changes)):
-            return None
-        blobs = [subprocess.check_output(
-            ["git", "-C", str(history), "show", commit + ":" + path], stderr=subprocess.PIPE,
-        ) for commit in commits]
-        if matrix.read_bytes() != blobs[1]:
-            return None
-        before, after = [json.loads(blob, object_pairs_hook=unique_object, parse_constant=invalid_constant)
-                         for blob in blobs]
-        if not isinstance(before, dict) or not isinstance(after, dict) or before.keys() != after.keys():
-            return None
-        def canonical(value):
-            return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
-
-        return {name for name in after if canonical(before[name]) != canonical(after[name])}
-    except (OSError, ValueError, TypeError, subprocess.CalledProcessError):
-        return None
+    return {name for name in after if name not in before or canonical(before[name]) != canonical(after[name])}
 
 
 def select_cases(
@@ -501,6 +560,10 @@ def select_cases(
     edited_cases = committed_case_changes(
         source_root, matrix, changes, base=base, head=head, history_root=history_root,
     ) if matrix_path in changes else None
+    dependencies_path = dependencies.relative_to(source_root).as_posix()
+    additional_cases = committed_additional_cases(
+        source_root, matrix, dependencies, changes, base=base, head=head, history_root=history_root,
+    ) if dependencies_path in changes else None
     proven_paths = {path for proof in proofs for path in (proof["old_path"], proof["new_path"]) if path}
     reasons = {name: [] for name in cases}
     graph_errors = {}
@@ -524,6 +587,10 @@ def select_cases(
         if path == matrix_path and edited_cases is not None:
             for name in edited_cases:
                 reasons[name].append({"path": path, "kind": "committed_case_definition"})
+            matched = True
+        elif path == dependencies_path and additional_cases is not None:
+            for name in additional_cases:
+                reasons[name].append({"path": path, "kind": "committed_additional_case_dependency"})
             matched = True
         elif matches(path, policy["shared_paths"]) or path == matrix_path:
             for name in cases:

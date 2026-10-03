@@ -107,6 +107,46 @@ def _load_impact_module():
     return module
 
 
+def runtime_dependencies(rows: list[dict], root: Path) -> dict[str, set[str]]:
+    """Include runtime declarations and subprocess source roots in ownership.
+
+    A subprocess does not appear in Python's import graph. Its checked-in
+    runtime profile explicitly identifies both its binding and source roots.
+    This ownership supplements static imports; it never certifies a replay.
+    """
+    dependencies = {variant_key(row): set() for row in rows}
+    profiles = root / "worldfoundry/data/models/runtime/profiles"
+    for path in sorted(profiles.glob("*.y*ml")):
+        if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+            raise ValueError("Runtime profile escapes the inspected source tree")
+        profile = yaml.safe_load(path.read_text())
+        if not isinstance(profile, dict):
+            raise ValueError("Runtime profile must contain a mapping")
+        binding = profile.get("execution", {}).get("pipeline_binding")
+        owners = [row for row in rows if row["model_id"] == profile.get("model_id")
+                  or row["binding_id"] == binding]
+        if not owners:
+            continue
+        paths = {path.relative_to(root).as_posix()}
+        for source in profile.get("source_repos", []):
+            declared = source.get("in_tree_path")
+            if declared is None:
+                continue
+            if not isinstance(declared, str):
+                raise ValueError("Runtime source root must be a canonical in-tree path")
+            pure = Path(declared)
+            if (pure.is_absolute() or ".." in pure.parts
+                    or pure.as_posix() != declared or not declared.startswith("worldfoundry/")):
+                raise ValueError("Runtime source root must be a canonical in-tree path")
+            target = root / declared
+            if target.is_symlink() or not target.resolve().is_relative_to(root.resolve()):
+                raise ValueError("Runtime source root escapes the inspected source tree")
+            paths.add(declared.rstrip("/") + "/" if target.is_dir() else declared)
+        for row in owners:
+            dependencies[variant_key(row)].update(paths)
+    return dependencies
+
+
 def affected_variants(rows: list[dict], root: Path, changed_paths: list[str], requested: list[str]) -> tuple[set[str], list[str]]:
     affected, unknown = set(), []
     for identity in requested:
@@ -114,6 +154,7 @@ def affected_variants(rows: list[dict], root: Path, changed_paths: list[str], re
         if not matched:
             raise ValueError(f"Affected native model is absent from the inventory: {identity}")
         affected.update(variant_key(row) for row in matched)
+    declared_dependencies = runtime_dependencies(rows, root) if changed_paths else {}
     source_changes = []
     for path in changed_paths:
         pure = Path(path)
@@ -143,6 +184,10 @@ def affected_variants(rows: list[dict], root: Path, changed_paths: list[str], re
         for path in source_changes:
             matched = [row for row in rows if closures[row.get("target")] is not None
                        and path in closures[row.get("target")]]
+            matched.extend(row for row in rows if any(
+                path.startswith(dependency) if dependency.endswith("/") else path == dependency
+                for dependency in declared_dependencies.get(variant_key(row), ())
+            ))
             if matched:
                 affected.update(variant_key(row) for row in matched)
             else:

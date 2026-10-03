@@ -3211,5 +3211,220 @@
       }
     },
     "scope": "Two causal blocks with pinned prepared RGB/depth/camera inputs; exact upstream parity at BF16 on the tested SDPA backend. Not long-horizon or cross-backend quality."
+  },
+  "inspatio-world-video-short": {
+    "id": "inspatio-world-video-short",
+    "model_id": "inspatio-world",
+    "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world:InspatioWorldPipeline",
+    "seed": 0,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "da3_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "device": "cuda"
+    },
+    "call": {
+      "videos": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00/input/video.mp4",
+      "traj_txt_path": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00/input/target_tcw.txt",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "output_dir": "${OUTPUT_DIR}/generated",
+      "skip_step1": true,
+      "adaptive_frame": false,
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world/InSpatio-World-1.3B.safetensors",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "da3": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "input": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00/input"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Real legacy checkpoint, video geometry reconstruction, controlled camera rendering and complete short causal rollout. No caption model or long-horizon quality claim."
+  },
+  "lingbot-world-controls-short": {
+    "id": "lingbot-world-controls-short",
+    "model_id": "lingbot-world",
+    "target": "worldfoundry.pipelines.lingbot_world.pipeline_lingbot_world:LingBotPipeline",
+    "seed": 42,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-base-cam",
+      "model_id": "lingbot-world",
+      "device": "cuda",
+      "t5_cpu": true,
+      "offload_model": true,
+      "convert_model_dtype": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+      "num_frames": 21,
+      "max_area": 28672,
+      "sampling_steps": 4,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-base-cam",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "controls": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "dtype": "float32"
+      }
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "scope": "Own released lingbot-world checkpoint and explicit camera/action inputs; four-step, 21-frame numerical regression at reduced area. Does not cover the other checkpoint or full-demo quality."
+  },
+  "lingbot-world-act-controls-short": {
+    "id": "lingbot-world-act-controls-short",
+    "model_id": "lingbot-world-act",
+    "target": "worldfoundry.pipelines.lingbot_world.pipeline_lingbot_world:LingBotPipeline",
+    "seed": 42,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/robbyant--lingbot-world-base-act-preview",
+      "model_id": "lingbot-world-act",
+      "device": "cuda",
+      "t5_cpu": true,
+      "offload_model": true,
+      "convert_model_dtype": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+      "num_frames": 21,
+      "max_area": 28672,
+      "sampling_steps": 4,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/robbyant--lingbot-world-base-act-preview",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "controls": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "dtype": "float32"
+      }
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "scope": "Own released lingbot-world-act checkpoint and explicit camera/action inputs; four-step, 21-frame numerical regression at reduced area. Does not cover the other checkpoint or full-demo quality."
+  },
+  "lingbot-world-v2-causal-short": {
+    "id": "lingbot-world-v2-causal-short",
+    "model_id": "lingbot-world-v2",
+    "target": "worldfoundry.pipelines.lingbot_world_v2.pipeline_lingbot_world_v2:LingBotWorldV2Pipeline",
+    "seed": 42,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-v2-14b-causal-fast",
+      "device": "cuda",
+      "nproc_per_node": 1,
+      "t5_fsdp": false,
+      "dit_fsdp": false,
+      "t5_cpu": true,
+      "convert_model_dtype": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+      "frame_num": 21,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-v2-14b-causal-fast",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "controls": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "shape": [
+          21,
+          464,
+          848,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "scope": "Own released causal-fast checkpoint, explicit camera controls and multiple causal chunks at the official 480p area budget with aspect-preserving VAE alignment. Not long-horizon or streaming-session quality."
+  },
+  "ati-wan21-14b-tracks-short": {
+    "id": "ati-wan21-14b-tracks-short",
+    "model_id": "ati-wan21-14b",
+    "target": "worldfoundry.pipelines.ati.pipeline_ati:ATIPipeline",
+    "seed": 42,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/bytedance-research--ATI",
+      "base_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan2.1-I2V-14B-480P",
+      "device": "cuda",
+      "t5_cpu": true,
+      "offload_model": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "track_path": "${WORLDFOUNDRY_REGRESSION_ATI_TRACKS}",
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "num_frames": 81,
+      "width": 224,
+      "height": 128,
+      "num_inference_steps": 4,
+      "seed": 42,
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/bytedance-research--ATI",
+      "base": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan2.1-I2V-14B-480P",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "tracks": "${WORLDFOUNDRY_REGRESSION_ATI_TRACKS}"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "dtype": "float32"
+      }
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "scope": "Own ATI checkpoint and quantized dense point-track input; official 81-frame resampling, four denoising steps at reduced area. Does not certify full-resolution trajectory adherence."
   }
 }

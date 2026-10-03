@@ -189,12 +189,45 @@
       "worldfoundry/pipelines/dreamx_world/**",
       "worldfoundry/synthesis/visual_generation/dreamx_world/**",
       "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "inspatio-world": [
+      "worldfoundry/pipelines/inspatio_world/pipeline_inspatio_world.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_synthesis.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/worldfoundry_runtime.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/**",
+      "worldfoundry/base_models/diffusion_model/runners/inspatio_world.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/variants/causal_camera_21.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/variants/camera_21.py",
+      "worldfoundry/data/models/runtime/configs/inspatio_world/**"
+    ],
+    "lingbot-world": [
+      "worldfoundry/pipelines/lingbot_world/**",
+      "worldfoundry/synthesis/visual_generation/lingbot_world/**",
+      "worldfoundry/operators/lingbot_world_operator.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/variants/lingbot/**",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/utils/taehv.py"
+    ],
+    "lingbot-world-v2": [
+      "worldfoundry/pipelines/lingbot_world_v2/**",
+      "worldfoundry/synthesis/visual_generation/lingbot_world_v2/**",
+      "worldfoundry/operators/lingbot_world_operator.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/utils/taehv.py"
+    ],
+    "ati-wan21": [
+      "worldfoundry/pipelines/ati/**",
+      "worldfoundry/synthesis/visual_generation/ati/**"
     ]
   },
   "cases": {
-    "inspatio-world-1p5-image-short": ["inspatio-world-1p5"],
-    "inspatio-world-1p5-multiview-short": ["inspatio-world-1p5"],
-    "inspatio-world-1p5-video-short": ["inspatio-world-1p5"],
+    "inspatio-world-1p5-image-short": [
+      "inspatio-world-1p5"
+    ],
+    "inspatio-world-1p5-multiview-short": [
+      "inspatio-world-1p5"
+    ],
+    "inspatio-world-1p5-video-short": [
+      "inspatio-world-1p5"
+    ],
     "cut3r": [
       "cut3r"
     ],
@@ -304,6 +337,21 @@
     "dreamx-world5b-ar-short": [
       "dreamx-world",
       "wan-diffusion"
+    ],
+    "inspatio-world-video-short": [
+      "inspatio-world"
+    ],
+    "lingbot-world-controls-short": [
+      "lingbot-world"
+    ],
+    "lingbot-world-act-controls-short": [
+      "lingbot-world"
+    ],
+    "lingbot-world-v2-causal-short": [
+      "lingbot-world-v2"
+    ],
+    "ati-wan21-14b-tracks-short": [
+      "ati-wan21"
     ]
   },
   "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",

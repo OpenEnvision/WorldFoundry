@@ -111,6 +111,12 @@ make verify-inference PYTHON=python3 \
 
 覆盖报告按 catalog 的 native binding 和同一 pipeline class 下注册的 variant 列出缺口。相同 class、模型家族、alias 或历史 `verified` 状态都不会自动给另一个 model ID 分配案例。`case_defined` 只表示有测试配方；报告不会将其提升成 reference 已验收或 GPU 已通过。固定基线保留既有缺口，同时 CI 拒绝新增未覆盖身份、既有配方退化，以及实际受影响却没有可执行数值回放的 native 变体。需要完整覆盖的发布可添加 `--require-complete`，存在缺口时退出码为 2。
 
+Runtime profile 按声明的 model ID 和 pipeline binding 识别归属，并纳入 `source_repos[].in_tree_path`，覆盖静态 import 图无法发现的子进程代码。这些声明补充静态依赖；未知路径仍保守扩大选择，受影响的 native 变体没有真实权重回放时仍失败。
+
+追加案例及组件声明时，只有实际提交前后的定义能证明全部既有配方、归属和全局规则未变，才只选择新增案例。测试编排工具改动还要求提交中的 runtime、环境和 assets 不变，工作文件与提交一致，并通过对应 CPU 契约和真实 MG2 smoke 回放。生产代码变更仍独立加入选择；未提交定义、删除或重新分类都会保留完整回放范围。
+
+旧 InSpatio、LingBot Cam/Act/V2 和 ATI 案例分别加载各自发布的 checkpoint。`WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` 指向含 `video_example_00/input/{video.mp4,target_tcw.txt}` 的已验收场景；`WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` 包含 21 帧的 `poses.npy`、`intrinsics.npy`，Act 还使用 `action.npy`。ATI 的固定量化 packed-NPZ tracks 文件由 `WORLDFOUNDRY_REGRESSION_ATI_TRACKS` 指定。输入与权重均保存哈希；这些短数值案例不代表完整 demo 质量或其他 variant 已通过。
+
 `verify-inference` 检查可信 GPU 主机生成的报告与当前 commit、源码 tree、案例矩阵、依赖声明和固定 reference index 一致，选中案例全部执行，且所有数值字段完全一致。预检查、过期 commit、少跑案例、放宽容差和失败结果不能通过。公开 CPU 与张量门禁仍必须分别通过。
 
 Hosted CI 的 `inference-replay` 必须读取维护者通过控制 workflow dispatch 发布的官方 Actions artifact；缺失、过期、外部来源或旧提交的证据都会失败。专用 dispatch 检查候选 commit、tree、比较基线及固定 reference index 后发布 `trusted-inference-evidence`，只运行 attestation，普通 CI 再消费它。真实回放在已准备的可信 GPU 主机执行。仓库须配置 `INFERENCE_EVIDENCE_CONTROL_REF`、`INFERENCE_EVIDENCE_WORKFLOW_PATH` 和 `INFERENCE_REFERENCE_INDEX_SHA256`，并在合并分支保护中要求 `inference-replay` 及 CPU 检查；仅添加 workflow 不会自动启用分支保护。未覆盖或未执行的变体仍是缺口。

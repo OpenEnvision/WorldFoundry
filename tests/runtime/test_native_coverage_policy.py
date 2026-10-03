@@ -163,3 +163,69 @@ def test_baseline_json_cannot_be_refreshed_to_grandfather_a_new_gap(tmp_path):
     path.write_text(json.dumps(baseline))
     with pytest.raises(ValueError, match="Frozen coverage baseline changed"):
         policy.load_frozen_baseline(path)
+
+
+def _runtime_profile(root, source="worldfoundry/synthesis/subprocess_model"):
+    profiles = root / "worldfoundry/data/models/runtime/profiles"
+    profiles.mkdir(parents=True, exist_ok=True)
+    path = profiles / "arbitrary-profile-name.yaml"
+    path.write_text(yaml.safe_dump({
+        "model_id": "small", "execution": {"pipeline_binding": "small"},
+        "source_repos": [{"in_tree_path": source}],
+    }))
+    if isinstance(source, str) and source.startswith("worldfoundry/") and ".." not in source:
+        (root / source).mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def test_runtime_profile_is_owned_by_declared_identity_not_its_filename(project):
+    root, _, cases, report, baseline = project
+    path = _runtime_profile(root)
+    result = policy.evaluate_policy(report, cases, baseline, root, [path.relative_to(root).as_posix()])
+    assert result["status"] == "passed"
+    assert result["affected_variants"] == ["small@small"]
+    assert result["unknown_inference_paths"] == []
+
+
+def test_subprocess_sources_supplement_imports_without_hiding_unknown_paths(project):
+    root, _, cases, report, baseline = project
+    _runtime_profile(root)
+    known = "worldfoundry/synthesis/subprocess_model/pipeline/inference.py"
+    result = policy.evaluate_policy(report, cases, baseline, root, [known])
+    assert result["status"] == "passed"
+    assert result["affected_variants"] == ["small@small"]
+    assert result["unknown_inference_paths"] == []
+    unknown = "worldfoundry/synthesis/subprocess_model_extra/inference.py"
+    result = policy.evaluate_policy(report, cases, baseline, root, [unknown])
+    assert result["status"] == "failed"
+    assert result["unknown_inference_paths"] == [unknown]
+
+
+def test_subprocess_ownership_still_requires_a_real_affected_model_recipe(project):
+    root, _, cases, report, baseline = project
+    _runtime_profile(root)
+    result = policy.evaluate_policy(report, {}, baseline, root,
+                                    ["worldfoundry/synthesis/subprocess_model/inference.py"])
+    assert result["status"] == "failed"
+    assert {"variant": "small@small", "reason": "affected_native_variant_without_replay_recipe"} in result["violations"]
+
+
+@pytest.mark.parametrize("source", ["/tmp/model", "../outside", "worldfoundry/../outside", 42])
+def test_runtime_source_ownership_rejects_noncanonical_paths(project, source):
+    root, _, cases, report, baseline = project
+    path = _runtime_profile(root, source)
+    with pytest.raises(ValueError, match="canonical in-tree"):
+        policy.evaluate_policy(report, cases, baseline, root, [path.relative_to(root).as_posix()])
+
+
+def test_runtime_source_ownership_rejects_symlink_escapes(project, tmp_path):
+    root, _, cases, report, baseline = project
+    _runtime_profile(root)
+    vendor = root / "worldfoundry/synthesis/subprocess_model"
+    vendor.rmdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    vendor.symlink_to(external, target_is_directory=True)
+    with pytest.raises(ValueError, match="escapes"):
+        policy.evaluate_policy(report, cases, baseline, root,
+                               ["worldfoundry/synthesis/subprocess_model/inference.py"])

@@ -218,6 +218,29 @@ uncovered identities, loss of an existing recipe and affected native variants
 without a runnable numerical replay. Releases requiring complete coverage
 can invoke the coverage script with `--require-complete`; gaps return exit 2.
 
+Runtime profile ownership uses the declared model ID and pipeline binding,
+including `source_repos[].in_tree_path` for code executed in subprocesses.
+These declarations supplement static imports. Unknown paths still expand
+selection conservatively and fail when an affected native variant lacks a
+real checkpoint replay.
+
+Appending recipes and their component declarations selects the added cases
+only when the exact committed before/after definitions prove that every
+existing recipe, ownership and global rule is unchanged. Changed test
+orchestration additionally requires unchanged committed runtime, environment
+and asset files, matching checkout contents, its CPU contracts and a real MG2
+smoke replay. Changed production code remains independently selected; dirty
+definitions, deletions or reclassifications keep the full replay selection.
+
+The legacy InSpatio, LingBot Cam/Act/V2 and ATI cases each use their own released
+checkpoint. Set `WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` to the accepted
+scene containing `video_example_00/input/{video.mp4,target_tcw.txt}`.
+`WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` contains 21-frame `poses.npy` and
+`intrinsics.npy`, plus `action.npy` for Act. ATI requires its fixed quantized
+packed-NPZ track file in `WORLDFOUNDRY_REGRESSION_ATI_TRACKS`. Inputs are hashed
+alongside weights. These short numerical replays do not certify full-demo
+quality or unrelated variants.
+
 `verify-inference` checks that a trusted GPU-host report matches this commit,
 source tree, matrix, dependency declarations and pinned reference index, that
 all affected cases executed, and that every numerical field is exact.

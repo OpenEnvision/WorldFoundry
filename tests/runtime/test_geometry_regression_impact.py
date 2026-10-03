@@ -689,3 +689,82 @@ def test_untracked_logs_and_excluded_staging_code_do_not_change_production_proof
     staging.parent.mkdir()
     staging.write_text("# Temporary orchestration outside runtime import roots\n")
     assert verification_proofs(verification_project, head=head, changes=changes)
+
+
+def commit_additional_case(project, mutation=None):
+    root, matrix, dependencies, base = project
+    cases, policy = json.loads(matrix.read_text()), json.loads(dependencies.read_text())
+    cases["extra"] = {"id": "extra", "target": "worldfoundry.models.b:Model"}
+    policy["components"]["extra"] = ["worldfoundry/models/b.py"]
+    policy["cases"]["extra"] = ["extra"]
+    if mutation is not None:
+        mutation(cases, policy)
+    matrix.write_text(json.dumps(cases))
+    dependencies.write_text(json.dumps(policy))
+    (root / VERIFICATION_IMPACT).write_text("# Updated verification with added recipes\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "additional replay and verification contracts")
+    head = git(root, "rev-parse", "HEAD")
+    return head, impact.changed_paths(root, base, head)
+
+
+def test_append_only_case_and_component_select_new_case_and_real_tooling_replay(verification_project):
+    root, matrix, dependencies, base = verification_project
+    head, changes = commit_additional_case(verification_project)
+    assert impact.committed_additional_cases(root, matrix, dependencies, changes, base=base, head=head) == {"extra"}
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)
+    assert set(plan["selected_cases"]) == {"extra", MG2_CASE}
+    assert plan["status"] == "planned"
+    assert plan["required_cpu_contracts"] == [VERIFICATION_CONTRACTS[0]]
+    assert plan["cpu_only_changes"]
+    assert any(reason["kind"] == "committed_additional_case_dependency" for reason in plan["reasons"]["extra"])
+
+
+@pytest.mark.parametrize("mutation", ["recipe", "component", "case_owner", "global", "json_type", "unreferenced_component"])
+def test_case_additions_cannot_exempt_changes_to_existing_definitions(verification_project, mutation):
+    root, matrix, dependencies, base = verification_project
+    def mutate(cases, policy):
+        if mutation == "recipe":
+            cases["a"]["call"] = {"seed": 1730}
+        elif mutation == "component":
+            policy["components"]["a"] = ["worldfoundry/models/b.py"]
+        elif mutation == "case_owner":
+            policy["cases"]["a"] = ["b"]
+        elif mutation == "global":
+            policy["ignored_paths"].append("worldfoundry/**")
+        elif mutation == "json_type":
+            policy["schema_version"] = True
+        else:
+            policy["components"]["unused"] = ["worldfoundry/unexecuted.py"]
+    head, changes = commit_additional_case(verification_project, mutate)
+    assert impact.committed_additional_cases(root, matrix, dependencies, changes, base=base, head=head) is None
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)
+    assert set(plan["selected_cases"]) == {"a", "b", "extra", MG2_CASE}
+    assert not plan["cpu_only_changes"]
+
+
+@pytest.mark.parametrize("dirty", ["matrix", "dependencies", "runtime"])
+def test_case_addition_proof_never_exempts_dirty_definitions_or_runtime(verification_project, dirty):
+    root, matrix, dependencies, base = verification_project
+    head, changes = commit_additional_case(verification_project)
+    if dirty == "runtime":
+        (root / "worldfoundry/models/b.py").write_text("# Uncommitted runtime change\n")
+    else:
+        path = matrix if dirty == "matrix" else dependencies
+        path.write_text(path.read_text() + "\n")
+    assert not verification_proofs(verification_project, head=head, changes=changes)
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)
+    assert set(plan["selected_cases"]) == {"a", "b", "extra", MG2_CASE}
+
+
+def test_added_case_cannot_hide_independently_committed_runtime_changes(verification_project):
+    root, matrix, dependencies, base = verification_project
+    commit_additional_case(verification_project)
+    (root / "worldfoundry/models/a.py").write_text("# Changed inference implementation\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "independent runtime change")
+    head = git(root, "rev-parse", "HEAD")
+    changes = impact.changed_paths(root, base, head)
+    plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)
+    assert set(plan["selected_cases"]) == {"a", "b", "extra", MG2_CASE}
+    assert not plan["cpu_only_changes"]
