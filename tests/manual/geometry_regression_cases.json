@@ -2686,7 +2686,7 @@
     "deterministic": true,
     "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:Oasis500MPipeline",
     "load": {
-      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/oasis500m.safetensors",
+      "checkpoint_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/oasis500m.safetensors",
       "vae_ckpt": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/vit-l-20.safetensors",
       "device": "cuda"
     },

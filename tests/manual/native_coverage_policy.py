@@ -45,8 +45,13 @@ def has_replay_recipe(case: dict) -> bool:
     if not any(isinstance(load.get(name), str) and load[name].strip()
                for name in ("model_path", "pretrained_model_path", "checkpoint_path")):
         return False
+    runtime_manifest = str(case.get("target", "")).startswith(
+        "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:"
+    )
+    if runtime_manifest and load.get("plan_only"):
+        return False
     if isinstance(case.get("call"), dict) and case["call"]:
-        return True
+        return not (runtime_manifest and case["call"].get("plan_only"))
     sequence = case.get("sequence")
     if not isinstance(sequence, list) or not sequence:
         return False
@@ -59,6 +64,8 @@ def has_replay_recipe(case: dict) -> bool:
         if not isinstance(fields, list) or not all(isinstance(field, str) and field for field in fields):
             return False
         if fields and not isinstance(step.get("call"), dict):
+            return False
+        if fields and runtime_manifest and step["call"].get("plan_only"):
             return False
         if step.get("expect_error") and fields:
             return False

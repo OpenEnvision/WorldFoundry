@@ -147,6 +147,22 @@ def test_successful_sequence_outputs_are_required_not_only_error_or_reset_steps(
     assert not policy.has_replay_recipe(case)
 
 
+@pytest.mark.parametrize("plan_only", [True, "false", 1])
+@pytest.mark.parametrize("location", ["load", "call", "sequence"])
+def test_runtime_manifest_plan_cannot_count_as_inference_coverage(plan_only, location):
+    case = _recipe()
+    case["target"] = "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:Oasis500MPipeline"
+    if location == "sequence":
+        case["sequence"] = [{"name": "first", "call": case.pop("call"), "outputs": ["video"]}]
+        case["required_outputs"] = ["first.video"]
+    options = case["sequence"][0]["call"] if location == "sequence" else case[location]
+    assert policy.has_replay_recipe(case)
+    options["plan_only"] = plan_only
+    assert not policy.has_replay_recipe(case)
+    options["plan_only"] = False
+    assert policy.has_replay_recipe(case)
+
+
 def test_committed_baseline_preserves_real_repository_gaps():
     matrix = _ROOT / "tests/manual/geometry_regression_cases.json"
     baseline = policy.load_frozen_baseline(_ROOT / "tests/manual/native_coverage_baseline.json")
@@ -154,6 +170,20 @@ def test_committed_baseline_preserves_real_repository_gaps():
     assert result["status"] == "passed"
     assert result["existing_uncovered_variants"]
     assert result["native_variants_with_replay_recipes"] >= sum(bool(row["required_case_ids"]) for row in baseline["models"])
+
+
+def test_oasis_replay_checkpoint_reaches_the_runtime_asset_gate():
+    from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import Oasis500MPipeline
+    from worldfoundry.synthesis.visual_generation.open_oasis import worldfoundry_runtime
+
+    case = json.loads((_ROOT / "tests/manual/geometry_regression_cases.json").read_text())["oasis500m-video-short"]
+    load = dict(case["load"])
+    options = Oasis500MPipeline._runtime_options(model_path=load.pop("model_path", None), kwargs=load)
+    missing = worldfoundry_runtime.missing_requirements(
+        options=options, runtime_root=worldfoundry_runtime.RUNTIME_DIR,
+        entrypoint=worldfoundry_runtime.OFFICIAL_ENTRYPOINT, profile=None,
+    )
+    assert not any(item["kind"] == "option" and item["path"] == "oasis_ckpt" for item in missing)
 
 
 def test_baseline_json_cannot_be_refreshed_to_grandfather_a_new_gap(tmp_path):
