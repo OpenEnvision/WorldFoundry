@@ -216,6 +216,7 @@ ui = [
     "pillow>=10",
     "pydantic",
     "textual",
+    "textual-image[textual]>=0.12,<0.13",
     "uvicorn",
 ]
 studio_realtime = [
@@ -234,6 +235,7 @@ rtx_postprocess = [
 tui = [
     "pillow",
     "textual",
+    "textual-image[textual]>=0.12,<0.13",
 ]
 optimized_core = [
     "boto3",
@@ -409,6 +411,7 @@ all = [
     "submitit",
     "tensorboard",
     "textual",
+    "textual-image[textual]>=0.12,<0.13",
     "timm",
     "torch>=2.7,<2.12.0",
     "torchmetrics",
@@ -619,6 +622,7 @@ include-package-data = true
 "*" = ["*.npy", "*.npz"]
 "worldfoundry.cli" = [
     "tui_app.tcss",
+    "assets/*.png",
 ]
 "worldfoundry.data" = [
     "benchmarks/**/*.json",
