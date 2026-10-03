@@ -96,6 +96,7 @@ class AttentionModule(nn.Module):
             k: Key tokens, same layout as ``q``.
             v: Value tokens, same layout as ``q``.
         """
+        options = getattr(self, "_worldfoundry_attention_options", None)
         x = flash_attention(
             q=q,
             k=k,
@@ -103,6 +104,7 @@ class AttentionModule(nn.Module):
             num_heads=self.num_heads,
             compatibility_mode=self.compatibility_mode,
             backend=self.attention_backend,
+            **({"backend_options": options} if options else {}),
         )
         return x
 
@@ -242,6 +244,19 @@ class SelfAttention(nn.Module):
         return self.processor(self, x, freqs, **kwargs)
 
 
+def project_wan_cross_kv(
+    attention: "CrossAttention", context: torch.Tensor, *, image: bool = False
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return normalized keys and values, preserving the dense call order."""
+    norm_key = attention.norm_k_img if image else attention.norm_k
+    fusion = getattr(attention, "_worldfoundry_cross_kv_fusion", None)
+    if fusion is not None:
+        key, value = fusion.project(attention, context, image=image)
+        return norm_key(key), value
+    key, value = (attention.k_img, attention.v_img) if image else (attention.k, attention.v)
+    return norm_key(key(context)), value(context)
+
+
 class CrossAttentionProcessor:
     """Default Wan cross-attention policy, replaceable by research adapters."""
 
@@ -259,12 +274,10 @@ class CrossAttentionProcessor:
         else:
             text_context = context
         query = attention.norm_q(attention.q(x))
-        key = attention.norm_k(attention.k(text_context))
-        value = attention.v(text_context)
+        key, value = project_wan_cross_kv(attention, text_context)
         output = attention.attn(query, key, value)
         if attention.has_image_input:
-            image_key = attention.norm_k_img(attention.k_img(image_context))
-            image_value = attention.v_img(image_context)
+            image_key, image_value = project_wan_cross_kv(attention, image_context, image=True)
             output = output + attention.attn(query, image_key, image_value)
         return attention.o(output)
 

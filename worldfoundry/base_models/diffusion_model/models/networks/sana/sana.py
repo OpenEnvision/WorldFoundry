@@ -44,6 +44,11 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules
     GLUMBConv,
     Mlp,
 )
+from worldfoundry.base_models.diffusion_model.models.networks.sana.block_ops import (
+    gated_residual,
+    modulated_norm,
+    prepare_sana_block_input,
+)
 from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import (
     is_triton_module_available,
 )
@@ -59,10 +64,9 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks i
     RopePosEmbed,
     T2IFinalLayer,
     TimestepEmbedder,
-    t2i_modulate,
 )
-from worldfoundry.core.model_loading.checkpoints import load_weights_only, require_mapping, require_tensor
 from worldfoundry.core.distributed.collectives.generic import get_rank
+from worldfoundry.core.model_loading.checkpoints import load_weights_only, require_mapping, require_tensor
 from worldfoundry.core.nn import to_2tuple
 from worldfoundry.core.nn.blocks.layers import DropPath
 
@@ -79,6 +83,8 @@ class SanaBlock(nn.Module):
     """
     A Sana block with global shared adaptive layer norm (adaLN-single) conditioning.
     """
+
+    _worldfoundry_block_fusion = None
 
     def __init__(
         self,
@@ -200,9 +206,13 @@ class SanaBlock(nn.Module):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.scale_shift_table[None] + t.reshape(B, 6, -1)
         ).chunk(6, dim=1)
-        x = x + self.drop_path(gate_msa * self.attn(t2i_modulate(self.norm1(x), shift_msa, scale_msa)).reshape(B, N, C))
+        attn_out = self.attn(
+            modulated_norm(x, self.norm1, shift_msa, scale_msa, policy=self._worldfoundry_block_fusion)
+        ).reshape(B, N, C)
+        x = gated_residual(x, attn_out, gate_msa, self.drop_path, policy=self._worldfoundry_block_fusion)
         x = x + self.cross_attn(x, y, mask)
-        x = x + self.drop_path(gate_mlp * self.mlp(t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)))
+        mlp_out = self.mlp(modulated_norm(x, self.norm2, shift_mlp, scale_mlp, policy=self._worldfoundry_block_fusion))
+        x = gated_residual(x, mlp_out, gate_mlp, self.drop_path, policy=self._worldfoundry_block_fusion)
 
         return x
 
@@ -422,6 +432,7 @@ class Sana(nn.Module):
         else:
             y_lens = [y.shape[2]] * y.shape[0]
             y = y.squeeze(1).view(1, -1, x.shape[-1])
+        x = prepare_sana_block_input(self.blocks, x)
         for block in self.blocks:
             x = block(x, y, t0, y_lens, image_pos_embed)
         x = self.final_layer(x, t)  # (N, T, patch_size ** 2 * out_channels)

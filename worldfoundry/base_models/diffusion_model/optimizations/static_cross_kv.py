@@ -63,15 +63,15 @@ class StaticCrossKVProcessor:
 
         entry = self._cache.get(attention, context)
         if entry is None:
+            from ..models.networks.wan.model import project_wan_cross_kv
+
             if getattr(attention, "has_image_input", False):
                 image_context = context[:, :257]
                 text_context = context[:, 257:]
-                image_key = attention.norm_k_img(attention.k_img(image_context))
-                image_value = attention.v_img(image_context)
+                image_key, image_value = project_wan_cross_kv(attention, image_context, image=True)
             else:
                 text_context = context
-            key = attention.norm_k(attention.k(text_context))
-            value = attention.v(text_context)
+            key, value = project_wan_cross_kv(attention, text_context)
             tensors = (key, value)
             if getattr(attention, "has_image_input", False):
                 tensors += (image_key, image_value)

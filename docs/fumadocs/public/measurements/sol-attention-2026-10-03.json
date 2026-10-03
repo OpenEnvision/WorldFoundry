@@ -1,0 +1,344 @@
+{
+  "scope": "synthetic attention operator; no model or video certification",
+  "publication_certified": false,
+  "thresholds": {
+    "relative_l2_max": 0.01
+  },
+  "runtime": {
+    "platform": "cuda",
+    "vendor": "nvidia",
+    "arch": "sm_90",
+    "device": "NVIDIA H100 80GB HBM3",
+    "device_index": 0,
+    "memory_bytes": 85017624576,
+    "driver_version": null,
+    "runtime_version": "12.8",
+    "torch_version": "2.10.0+cu128",
+    "python_version": "3.11.15",
+    "worldfoundry_version": "0.1.dev217+g20069cbf7.d20261003",
+    "worldfoundry_commit": "53cbcd8e1c1d632c6e14d8c6a7ab655c5ef29ca1",
+    "system": "Linux",
+    "system_release": "5.10.0-218.0.0.mt20250120.565.mt2203sp4.x86_64"
+  },
+  "upstream_backend": "cute_sm90",
+  "parameters": {
+    "out": "<fresh-output-directory>",
+    "tokens": [
+      4096,
+      8192,
+      32768
+    ],
+    "heads": 8,
+    "rounds": 8,
+    "tau": 1.0
+  },
+  "cases": [
+    {
+      "tokens": 4096,
+      "kind": "random",
+      "quality": {
+        "relative_l2": 0.7410764694213867,
+        "finite": true,
+        "passed": false
+      },
+      "execution": {
+        "sol_attn": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        },
+        "torch": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        }
+      },
+      "status": "rejected_quality"
+    },
+    {
+      "tokens": 4096,
+      "kind": "block_correlated",
+      "quality": {
+        "relative_l2": 0.00016620168753433973,
+        "finite": true,
+        "passed": true
+      },
+      "execution": {
+        "sol_attn": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        },
+        "torch": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        }
+      },
+      "timing": {
+        "name": "sol_block_correlated_4096",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.2127893368403117,
+          "p10_ms": 0.21096000671386717,
+          "p90_ms": 0.21321387092272442,
+          "mad_over_median": 0.001353449913062845,
+          "raw_ms": [
+            0.21303466955820718,
+            0.21287467082341513,
+            0.21287467082341513,
+            0.21363200743993124,
+            0.21222400665283203,
+            0.21270400285720825,
+            0.21245867013931274,
+            0.20801067352294922
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.29542400439580285,
+          "p10_ms": 0.2922912001609802,
+          "p90_ms": 0.29627732435862225,
+          "mad_over_median": 0.002834319612981848,
+          "raw_ms": [
+            0.2951040069262187,
+            0.29574400186538696,
+            0.294815997282664,
+            0.29627732435862225,
+            0.29627732435862225,
+            0.2962453365325928,
+            0.2925119996070862,
+            0.29177600145339966
+          ]
+        },
+        "speedup_median": 0.7202845187732986,
+        "speedup_ci95": [
+          0.7171321226752713,
+          0.7241836643495968
+        ]
+      }
+    },
+    {
+      "tokens": 8192,
+      "kind": "random",
+      "quality": {
+        "relative_l2": 0.7500352263450623,
+        "finite": true,
+        "passed": false
+      },
+      "execution": {
+        "sol_attn": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        },
+        "torch": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        }
+      },
+      "status": "rejected_quality"
+    },
+    {
+      "tokens": 8192,
+      "kind": "block_correlated",
+      "quality": {
+        "relative_l2": 0.0002202231844421476,
+        "finite": true,
+        "passed": true
+      },
+      "execution": {
+        "sol_attn": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        },
+        "torch": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        }
+      },
+      "timing": {
+        "name": "sol_block_correlated_8192",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.9642346700032552,
+          "p10_ms": 0.9479157288869222,
+          "p90_ms": 0.9721343755722046,
+          "mad_over_median": 0.00852901372139177,
+          "raw_ms": [
+            0.9716479778289795,
+            0.9732693036397299,
+            0.9689493179321289,
+            0.9687360127766927,
+            0.9597333272298177,
+            0.950645367304484,
+            0.9481173356374105,
+            0.9474453131357828
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.32683733105659485,
+          "p10_ms": 0.26960213780403136,
+          "p90_ms": 0.38939947287241616,
+          "mad_over_median": 0.17385203876546282,
+          "raw_ms": [
+            0.38909868399302167,
+            0.27139200766881305,
+            0.3901013135910034,
+            0.27193599939346313,
+            0.38412801424662274,
+            0.2675413290659587,
+            0.38173866271972656,
+            0.2704853415489197
+          ]
+        },
+        "speedup_median": 2.950197478623668,
+        "speedup_ci95": [
+          2.486992919991406,
+          3.571293887640999
+        ]
+      }
+    },
+    {
+      "tokens": 32768,
+      "kind": "random",
+      "quality": {
+        "relative_l2": 0.7490779161453247,
+        "finite": true,
+        "passed": false
+      },
+      "execution": {
+        "sol_attn": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        },
+        "torch": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        }
+      },
+      "status": "rejected_quality"
+    },
+    {
+      "tokens": 32768,
+      "kind": "block_correlated",
+      "quality": {
+        "relative_l2": 0.0004045737150590867,
+        "finite": true,
+        "passed": true
+      },
+      "execution": {
+        "sol_attn": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        },
+        "torch": {
+          "attempts": 1,
+          "successes": 1,
+          "fallbacks": 0,
+          "errors": 0,
+          "quarantined_skips": 0,
+          "compiled_graph_traces": 0
+        }
+      },
+      "timing": {
+        "name": "sol_block_correlated_32768",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 15.026725133260092,
+          "p10_ms": 14.619688924153646,
+          "p90_ms": 15.213844426472981,
+          "mad_over_median": 0.012654455818585956,
+          "raw_ms": [
+            14.618464152018229,
+            15.153024037679037,
+            15.00882085164388,
+            15.224469502766928,
+            15.044629414876303,
+            15.209290822347006,
+            14.687349955240885,
+            14.620213826497396
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 1.9356906414031982,
+          "p10_ms": 1.880558904012044,
+          "p90_ms": 1.9943562507629395,
+          "mad_over_median": 0.028128486602721065,
+          "raw_ms": [
+            1.99016539255778,
+            1.8789013226826985,
+            1.9964693387349446,
+            1.8814613024393718,
+            1.99345064163208,
+            1.882421334584554,
+            1.9889599482218425,
+            1.8812692960103352
+          ]
+        },
+        "speedup_median": 7.762978655704557,
+        "speedup_ci95": [
+          7.36532812409375,
+          8.079642183668547
+        ]
+      }
+    }
+  ],
+  "status": "completed_diagnostic",
+  "evidence_origin": "benchmarks/results/sol_attention_h100_20261003/results.json",
+  "source_state": "Acceleration implementation was uncommitted at measurement time; runtime.worldfoundry_commit records the then-current HEAD.",
+  "post_measurement_review": {
+    "implementation_commit": "9bfe87097af3f8fb26ae27fc9d376afb728b4d3e",
+    "note": "Implementation commit identified after measurement for code review and reproduction. This metadata does not replace or reinterpret the recorded runtime fingerprint."
+  }
+}

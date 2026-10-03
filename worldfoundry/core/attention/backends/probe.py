@@ -91,6 +91,9 @@ _BACKEND_ALIASES: Mapping[str, str] = {
     "cudnn": _TORCH,
     "cudnn_fp8": "cudnn_fp8",
     "triton_tma": "triton_tma",
+    "sol": "sol_attn",
+    "sol_attn": "sol_attn",
+    "sol_attention": "sol_attn",
     "flash": _FLASH_AUTO,
     "flash_attn": _FLASH_AUTO,
     "flash_attention": _FLASH_AUTO,
@@ -138,7 +141,7 @@ _REPORT_PRIORITY = (
     "xformers",
     _TORCH,
 )
-_EXPLICIT_PRIORITY = ("sage_attention_3", "cudnn_fp8", "triton_tma")
+_EXPLICIT_PRIORITY = ("sage_attention_3", "cudnn_fp8", "triton_tma", "sol_attn")
 _EXPERIMENTAL_PRIORITY = (
     "flex_block_attention",
     "video_sparse_attention",
@@ -265,6 +268,29 @@ def _probe_attention_backends_cached(
     contract.
     """
     nvidia_cuda = capability is not None and not hip
+    sol = _package_capability(
+        name="sol_attn",
+        package="sol-attn",
+        import_name="sol_attn",
+        usable_if=nvidia_cuda and capability[0] >= 8,
+        unavailable_reason="sol-attn is not installed",
+        unusable_reason="Sol-Attn requires NVIDIA Ampere or newer",
+    )
+    if sol.usable:
+        try:
+            supported = (
+                Version(torch.__version__.split("+")[0]) >= Version("2.10")
+                and Version(torch.version.cuda or "0") >= Version("12.8")
+                and Version(metadata.version("triton")) >= Version("3.6")
+                and Version(metadata.version("sol-attn")) >= Version("0.5")
+            )
+        except (InvalidVersion, metadata.PackageNotFoundError):
+            supported = False
+        if not supported:
+            sol = AttentionKernelCapability(
+                "sol_attn", "sol-attn", True, False,
+                "Sol-Attn requires sol-attn >=0.5, PyTorch >=2.10, CUDA >=12.8 and Triton >=3.6",
+            )
     flash_gpu = capability is not None and capability[0] in {8, 9}
     flash3_gpu = capability == (9, 0)
     # CuTeDSL FA4 forward kernels cover Ampere and newer NVIDIA targets. It is
@@ -309,6 +335,7 @@ def _probe_attention_backends_cached(
                 ),
             )
     return {
+        "sol_attn": sol,
         "cudnn_fp8": cudnn_fp8,
         "triton_tma": triton_tma,
         "flash_attention_4": _package_capability(
@@ -491,7 +518,7 @@ def resolve_attention_backend(
     dense fallback for that explicit request.
     """
     requested = attention_backend_from_env() if preferred is None else normalize_attention_backend(preferred)
-    if requested in {"cudnn_fp8", "triton_tma"}:
+    if requested in {"cudnn_fp8", "triton_tma", "sol_attn"}:
         capability = probe_attention_backends(device)[requested]
         if not capability.usable:
             raise RuntimeError(f"Explicit {requested} backend is unavailable: {capability.reason}")

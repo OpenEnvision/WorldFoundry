@@ -182,12 +182,20 @@ class NativeDiffusionAssembler:
                 recipe_options=recipe.options,
                 component_options={**spec.options, **options.get(spec.key, {})},
             )
+            if spec.key.kind is ComponentKind.DENOISER:
+                from .optimizations.plugins import acceleration_policy
+
+                acceleration_policy(context)
             component = spec.factory(context)
             expected_protocol = self._EXPECTED_PROTOCOLS[spec.key.kind]
             if not isinstance(component, expected_protocol):
                 raise TypeError(
                     f"factory for {spec.key} returned {type(component).__name__}; expected {expected_protocol.__name__}"
                 )
+            if spec.key.kind is ComponentKind.DENOISER:
+                from .optimizations.plugins import validate_acceleration_installation
+
+                validate_acceleration_installation(component, context)
             components[spec.key] = component
         return components
 

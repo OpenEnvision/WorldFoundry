@@ -1,0 +1,280 @@
+---
+title: 可插拔 diffusion 加速
+description: 对照 Sol-Engine 与 FlashDreams，说明原生插件、正确性边界和 H100 实测。
+---
+
+WorldFoundry 的原生加速插件默认关闭。先确认 checkpoint、执行路径和误差预算，再测实际执行与总耗时。2026-10-03 的历史完整 SANA 视频测试中，安全融合保持最终 latent 和视频逐位一致，端到端收益约 **0.8%–1.1%**。更激进的缓存和融合配置未通过固定质量门槛。
+
+## 上游对照
+
+对照固定版本：[FlashDreams `91c906b`](https://github.com/NVIDIA/flashdreams/tree/91c906b69992f63fb19907a25cd805fb783d314a) 与 [Sana Sol-Engine `670482d`](https://github.com/NVlabs/Sana/tree/670482d8a857d578ac8a2ea89b052d0fb47badba)。已有能力按真实消费入口区分；可选依赖或同名开关不能证明执行和性能。
+
+| 技术 | 上游路径 | WorldFoundry 既有集成与本轮变化 |
+| --- | --- | --- |
+| Attention kernel | FlashDreams 的 Triton FA2/TMA、cuDNN、原生 FP8；Sol 的 Flash/cuDNN 与 Sol-Attn | 已有 SDPA、FA2/3/4、Sage/Sage3、xFormers、TMA、原生 cuDNN FP8。新增共享 Sol-Attn dispatcher 和 Wan self/cross 独立选择。 |
+| 块内融合 | AdaLN、residual gate、QK norm/RoPE、投影与 FFN glue | 已有公共 kernel、Wan QKV/RoPE 和部分 FFN 融合。新增 SANA 可撤销适配器，默认仅逐点融合，保持 norm 和 token strides。 |
+| 不变量与历史缓存 | 文本 cross-KV、streaming KV、稳定缓存布局 | 已有 Wan 文本 cross-KV 和多种自回归缓存。新增可撤销 cross-KV 投影融合，使用派生 packed 权重并支持 static-cache miss。各模型的 raw KV、旋转后 KV、递推状态仍有不同语义。 |
+| Feature cache | Sol 使用 EasyCache、TeaCache 和模型专属控制器 | 已有 Tea/Ada/Mag/Taylor/block cache，主要用于 Wan。新增原生 EasyCache，支持 stateless SanaMS/SanaMSVideo、WanModel，并补了 resident Wan2.2 双 expert 的全局到局部 schedule；目前后者是本地测试范围。 |
+| 量化 | FlashDreams 可分别量化投影与 attention；Sol 文档覆盖 FP8、SVDQuant/Nunchaku 等 | 已有 FP8、INT8、INT4、NVFP4 等路径；部分低位模式仍反量化后做 dense GEMM。新增以 scaled GEMM 执行的可撤销 selective FP8；真正 packed 的原生 SVDQuant/Nunchaku 与完整 MHA 调度仍待实现。 |
+| 轻量 codec | FlashDreams 使用匹配的 pruned Wan2.1 LightVAE encoder 和经过校准的原生 FP8 实现 | 新增匹配的 base24/16-latent 原生架构和严格 student checkpoint 校验，限定 FP32 inference；未移植其原生 FP8 encoder。 |
+| Compile、Graph、并行 | regional compile、稳定形状 capture、模型专属并行与流水 | 已有 compile/cache、CUDA Graph、SP/CFG/VAE 并行和 offload。新增插件不解除已有 cache/Graph/SP 禁用条件。 |
+| 组合搜索 | Sol 的模型、硬件与质量预算搜索 | 已有算子 autotune。本轮新增真实原生 SANA/Wan 的固定候选搜索；它只选择当前 prompt、seed、几何和设备上的合格配置。 |
+
+HyperFlow 先前已向上游转发 `--sol-attn`，WorldGen 也已有可选 Flux/Nunchaku 路径；这些不等于共享原生 Wan/SANA 已完成集成。现在能加载匹配的 LightVAE 架构，但 FlashDreams 经过校准的原生 FP8 codec、完整 optimized MHA 和 steady-state Graph 仍需要 provider 和模型专属生命周期工作。
+
+上游依据：[FlashDreams accelerated](https://github.com/NVIDIA/flashdreams/blob/91c906b69992f63fb19907a25cd805fb783d314a/docs/source/developer_guides/flashdreams_accelerated.md)、[Sol kernel](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/kernel.md)、[cache](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/cache.md)、[quant](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/quant.md)、[Sol-Attn](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/sparse/sol_attn.md)。EasyCache 控制器依据[上游算法](https://github.com/H-EmbodVis/EasyCache/tree/bfc63232cfae8c77e2dccf9d72b8f2f56bd995b8)独立实现。
+
+## 代码与生命周期
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| 通用安装器 | `core/acceleration/plugins.py` | registry、计划、冲突检测、整组安装、失败回滚、撤销 |
+| 请求状态 | `core/acceleration/easycache.py` | 在线误差估计、条件快照、dense/hit 决策、执行回执 |
+| 模型适配器 | `base_models/diffusion_model/optimizations/plugins.py` | checkpoint graph、能力和组合校验；只安装模型局部属性 |
+| SANA 运算入口 | `base_models/diffusion_model/models/networks/sana/block_ops.py` | norm/modulation/residual；保留训练、DropPath 和自定义 norm 语义 |
+| Sol provider | `core/attention/backends/sol.py` | 可选依赖的执行边界、dtype/shape/参数检查 |
+| 选择性精度 | `base_models/diffusion_model/optimizations/precision.py` | 显式投影选择、保留原模块、固定 placement、scaled FP8 执行 |
+| Cross-KV 融合 | `base_models/diffusion_model/optimizations/kv_fusion.py` | 非持久化 packed 权重、源参数版本刷新、执行回执 |
+| Expert schedule | `base_models/diffusion_model/optimizations/wan/expert_schedule.py` | 每个 expert phase 的不可变全局到局部索引 |
+| 匹配 student codec | `base_models/diffusion_model/models/autoencoders/wan/variants/light_21.py` | 原生 student 架构与全量 key/shape 校验；codec adapter 位于 `component.py` |
+| 验证与测量 | `tests/core/acceleration/`、模型测试、`benchmarks/inference/` | 默认输出、请求隔离、撤销、CUDA 执行与配对测量 |
+
+源码路径以 `worldfoundry/` 为根。
+
+安装器先准备全部计划，再修改模型；冲突或任一安装失败会撤销已完成的修改。融合和 cache adapter 保留原 checkpoint 参数和 state-dict key。Selective FP8 保留原模块用于撤销，但启用时的 wrapper 是推理视图：保存或加载 canonical state dict、修改 placement/dtype、训练或编辑权重之前先卸载。
+
+模型持有的生命周期 guard 在插件尚未安装时就跟踪活跃 forward 和显式 request ID。安装与撤销都拒绝活跃请求；双 expert schedule 在任一 expert 执行前就保护两个模型。原生 runner 在成功和异常结束时释放 ownership。切换插件要求模型空闲；已编译模型或持有 CUDA Graph runner 的模型需要重建。这些保护覆盖框架 denoiser；直接调用 module 时，调用方仍需避免并发修改。
+
+EasyCache 按显式 `request_id` 和 CFG 分支隔离，正常结束和异常退出均释放张量，只留下有界 JSON 回执。条件快照能够检测 inference tensor 的原地修改，并使旧 residual 失效。阈值 `0.0` 执行全部原始块并直接返回 dense 输出。
+
+模型加载器只在声明 `supports_acceleration_plugins` 的 DiT 上应用共享配置。assembler 检查 denoiser 的安装回执，拒绝接收了插件选项却没有安装的路径。安装回执始终标为 `execution_verified=False`；实际 kernel 和跳过块数另行验证。
+
+## 使用方式
+
+```python
+import torch
+from worldfoundry.base_models.diffusion_model.pipeline import NativeDiffusionPipeline
+from worldfoundry.core.model_loading.policy import RuntimePolicy
+
+policy = RuntimePolicy(
+    device="cuda",
+    dtype=torch.bfloat16,
+    options={"accelerations": {"sana_block_fusion": True}},
+)
+pipeline = NativeDiffusionPipeline.from_pretrained("sana-video-2b-480p", policy=policy)
+# 按常规 DiffusionRequest 运行；之后读取该请求的运行回执。
+report = pipeline.components.denoiser.runtime_optimization_report()
+```
+
+也可在已加载的空闲模型上安装并撤销，不修改环境变量：
+
+```python
+from worldfoundry.base_models.diffusion_model.optimizations.plugins import (
+    diffusion_acceleration_registry,
+    install_diffusion_accelerations,
+)
+
+model = pipeline.components.denoiser.model
+existing = getattr(model, "_worldfoundry_accelerations", None)
+if existing is not None:
+    existing.uninstall()
+session = install_diffusion_accelerations(model, {"easycache": {"threshold": 0.0}}, policy)
+# 请求由 native runner 的 finally 清理；直接调用 denoiser 时须调用 end_request。
+session.uninstall()
+
+registry = diffusion_acceleration_registry()
+# registry.register("custom_kernel", prepare_factory)
+# prepare_factory 只校验，返回 PreparedAcceleration；activate 返回可撤销 handle。
+```
+
+加载配置与手动安装任选一种；手动替换前应撤销已有 session。组件选项覆盖同名 runtime 选项。公共 native pipeline 的 load 参数也接受 `accelerations={...}`。
+
+| 插件 | 默认与边界 |
+| --- | --- |
+| `sana_block_fusion` | `backend=auto`，`min_elements=12582912`；小输入、autograd 或不合格布局保留 eager。`fuse_layer_norm=False`、`repack_tokens=False`。这两个额外选项改变数值调度，需要独立质量预算；本轮完整视频测试未通过。 |
+| `easycache` | 必须显式提供非负 `threshold`。在线学习 dense input/output 变化比例，累计预测 drift 后决定复用 `current_input + last_dense_transform`。本实现是 **embedded-token-block-stack** 变体，不是所有上游 raw-latent 变体的逐行移植。 |
+| `attention_policy` | 原生 Wan self/cross 分开绑定。Sol 仅 self；必须 BF16、head dim 128、无 mask、无 backward，`kv_splits=1`。参数非法或依赖不满足时失败，不偷偷切成 dense。 |
+| `selective_fp8` | 必须显式指定 `include` module-path glob，可选 `exclude`。默认 `min_features=1024`、`scaling=rowwise`、`use_fast_accum=False`；仅符合条件的原生 Wan/SANA block Linear。执行回执区分实际 scaled FP8 GEMM 与 dense fallback。 |
+| `wan_cross_kv_fusion` | 原生 Wan 文本 K/V packing。默认 `min_tokens=256`、`include_image=False`；小 context 使用原始独立投影。保留 canonical 参数，数值契约允许原生 GEMM reduction 的舍入差异。 |
+
+EasyCache 拒绝 streaming、camera/control 子图、offload、compile、CUDA Graph、SP、其他 feature cache、近似 processor 和 inplace residual。Resident 原生 Wan2.2 双 expert 现在有下文的受限 schedule 契约。条件必须由 tensor、mapping、list/tuple 和标量组成。cache 的 block callback 必须不修改输入。Scoped attention 同样拒绝未经验证的 Graph/SP/近似 processor 组合，Wan Sol 路径还拒绝 compile。
+
+Wan Sol 配置示例，先在隔离环境安装上游 provider：
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={
+        "dit_weight_dtype": "bf16",
+        "accelerations": {"attention_policy": {
+            "self": {"backend": "sol_attn", "tau": 1.0}, "cross": "torch",
+        }},
+    },
+)
+```
+
+验证环境为 `sol-attn 0.5.0`、PyTorch `2.10.0+cu128`、Triton `3.6.0`、CUTLASS DSL `4.8.0`、cuda-python `13.4.1` 和 apache-tvm-ffi `0.1.14.post1`。源码来自上述固定 Sol 分支的 `techniques/sparse_backends`。不要为了这个可选插件升级已有推理环境；当前通用探测至少要求 PyTorch 2.10、CUDA 12.8、Triton 3.6 与 sol-attn 0.5。
+
+此 Sol provider 使用 BF16 Q/K/V，与选择性 FP8 投影插件分别配置。默认 `compress_kv=True` 时，`tau=0` 仍按均值阈值路由，可能压缩 K/V，不能当作 dense attention。`compress_kv=False` 显式关闭压缩，但保留 Sol kernel 及其数值舍入；仍是需要完整生成验证的近似候选。
+
+## 选择性投影精度与 Cross-KV packing
+
+只选择 Wan FFN 投影，不改变 attention 或 normalization 的精度：
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={
+        "dit_weight_dtype": "bf16",
+        "accelerations": {"selective_fp8": {
+            "include": ["blocks.*.ffn.0", "blocks.*.ffn.2"],
+            "scaling": "rowwise", "use_fast_accum": False,
+        }},
+    },
+)
+```
+
+支持原生 WanModel、stateless Sana/SanaMS/SanaMSVideo 及其默认 block。选择必须匹配可用的普通 Linear；空匹配、共享参数存储、hook、自定义 forward 和未支持的 checkpoint graph 在修改前报错。CPU 或小 CUDA workload 可能执行保留的原始 dense 算子，回执会明确记录 fallback，不能据此报告 FP8 加速。实际 CUDA 低精度 GEMM 使用 `torch._scaled_mm`；它不是原生 packed SVDQuant kernel。
+
+保留原 dense 权重用于准确恢复，并额外存储 FP8 执行权重与 scale；该插件优化计算，不承诺权重显存减少。它拒绝通用量化、feature/static-KV cache、近似 attention、offload、compile、Graph 和 SP。默认 SANA 逐点融合可以作为组合候选，但完整生成的组合质量仍须验证。
+
+Wan K/V packing 可单独配置：
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={"accelerations": {"wan_cross_kv_fusion": {
+        "min_tokens": 256, "include_image": False,
+    }}},
+)
+```
+
+Adapter 保留原 K/V Parameter 和 checkpoint key，只新增派生 packed tensor。Wan2.2 5B 的 width=3072、30 blocks，仅文本 K/V packing 就额外增加约 **1.1 GiB** BF16 权重。默认 cross-attention 和 static-KV cache miss 共用同一投影入口；cache hit 保持已有复用。安装前必须使旧 static-KV 条目失效；撤销会释放 packed tensor 并清空可能包含融合舍入结果的 cache，保证下一次调用恢复原投影调度。
+
+普通参数修改、checkpoint assignment 和 dtype/device 转换通过源对象及版本刷新 packed 权重。原始 `.data` 修改需重新安装；权重或条件变化还需遵守已有 static-cache invalidation 契约。自定义 processor、带 hook 或覆盖 forward 的投影、训练、compile、capture、offload 和 SP 均拒绝。同一 cross K/V 被 `selective_fp8` 选择时，不论配置顺序，都在 activation 前判定冲突。回执分开记录 text/image packed calls 与 dense bypass。
+
+## 匹配的 Wan2.1 LightVAE
+
+显式 `lightvae-wan21` codec variant 使用 [LightX2V student checkpoint](https://huggingface.co/lightx2v/Autoencoders/resolve/main/lightvaew2_1.pth)：32,208,043 bytes，SHA256 `d5d6b094d4829fb03b6179be2cf4589baab21c9fea1ca70dcaa8c85ba8183ec9`。全部 **194** 个 key/shape 与原生 base24 架构匹配：24/48/96 特征通道、16 latent 通道、encoder 11 个 downsample block。沿用 Wan16 mean/std、BCTHW 布局、空间 8×/时间 4× 压缩。Teacher base96 或 Wan2.2 48-channel 权重会被严格拒绝。
+
+它使用不同的学习权重，是 codec 架构选择。即便实现与独立 student reference 一致，报告仍始终标为 **algorithmically approximate**。恢复 teacher 需要以 teacher 权重重建 codec。首版支持 FP32 resident CPU/CUDA inference；其他 build purpose、低精度/autocast、tiling、额外 temporal chunking、parallel decode、offload、量化、compile、Graph 和 SP 都拒绝。
+
+SANA-Video 480p recipe 默认使用 tiled codec，因此必须显式关闭 tiling：
+
+```python
+pipeline = NativeDiffusionPipeline.from_pretrained(
+    "sana-video-2b-480p",
+    policy=RuntimePolicy(device="cuda", dtype=torch.bfloat16),
+    checkpoint_overrides={"codec": "/path/to/lightvaew2_1.pth"},
+    component_options={"latent_encoder:codec": {
+        "variant": "lightvae-wan21", "tiled": False, "dtype": torch.float32,
+    }},
+)
+```
+
+Wan recipe 使用已有的 `vae` checkpoint override，SANA 使用 `codec`。独立 codec 调用可用 `load_wan_video_codec(path, variant="lightvae-wan21", device="cuda", dtype=torch.float32)`；没有全局 decoder 替换。CPU/H100 测试将官方 student 与独立 `reference_21.WanVAE_(dim=24)` 对照，覆盖 first/body cache、重复调用重置、encode/decode 和实际计数。架构与实现匹配不能代替 student-vs-teacher 视频质量门禁。
+
+## Resident 双 expert EasyCache
+
+原生 Wan2.2 routed denoiser 在首次 CFG 调用前准备不可变的完整 request schedule。单调 high-to-low schedule 将全局 step 映射到各 expert 的局部零起点 index 和 phase 长度，使 low-noise EasyCache 从零开始，warmup 与末尾 dense gate 按其自身 phase 计算。High/low 模型和 CFG branch 分别持有 residual 状态；非法 schedule、改变 timestep、重复或不连续调用、未完成 phase 都明确报错。
+
+两个独立原生 WanDenoiser expert 必须都启用 EasyCache。支持 resident eager、dense 单 rank CFG（`cfg_parallel_degree=1`、`cfg_gate_step=1.0`），不组合其他 cache、Graph、compile、SP、近似 attention 或 inplace residual。原生 runner 自动 prepare/finalize schedule；直接调用 denoiser 时须先 `prepare_request_schedule(request_id, schedule)`，最后 `end_request`。本地测试覆盖路由、phase warmup/末尾 gate、CFG/request 隔离和异常释放；它们不能证明真实 A14B 生成质量或速度。
+
+## 新增真实生成诊断
+
+`benchmarks/inference/native_plugins.py` 在原生 SANA/Wan 模型上评估显式 candidate JSON；`plugin_diagnostics.py` 集中质量与执行门禁。`lightvae.py` 用已有真实生成的相同 Wan16 latent 对照 teacher/student decoder，先以保存视频声明的 codec dtype 复现原 RGB，再独立比较 FP32 路径。
+
+`lightvae_encoder.py` 先验证 FP32 untiled teacher 能复现保存的原生 Wan RGB。Teacher 与 student 随后编码 **完全相同的 RGB**，再由不变的 teacher 解码两组 latent。质量基准是 teacher 的 encode/decode 结果，隔离 encoder 替换影响；不评估 student decoder 质量或相对原 RGB 的重建保真度。通过门禁的样本才进入至少三轮配对 resident FP32 encoder-only 计时，排除 decode 和 pilot hook。每个计时输出必须与自己的 pilot 一致，student encode 计数也必须增加。
+
+数值预算仍为有限值、最差 batch latent relative L2 ≤0.03、最差 batch 视频 PSNR ≥33 dB、SSIM ≥0.98。新 SSIM 门槛使用 **所有 frame 和 batch member 的最小值**；下文前轮视频诊断使用平均 SSIM，其数值是历史结果，不能当作新的逐帧认证。新候选须证明实际执行后才进入计时。原生计时还保存每轮新回执，拒绝 provider error、fallback/quarantine、provider 调用数或 scope 配置变化、插件未执行；逐模块 attention hook 仅用于不计时的 pilot。Wan 嵌套 runtime cache 报告与 SANA 顶层 cache 报告均被正确读取。共享 GPU 可以验证输出，但不认证速度或选出性能赢家。设备资格是计时前后采样，不是持续独占证明。
+
+历史原生 Wan1.3B 对照使用 320×576、41 帧、20 steps、CFG 6、shift 7 和 seed 42/43。这些投影、压缩 Sol 与 LightVAE decoder 记录来自共享 vendor normalization 修复之前，只适用于其记录的源码，不能认证当前实现的算法、质量或速度。脱敏记录保留原始 fingerprint，并明确列出未记录的 provenance 检查；事后审查不等于重新测量。斜杠两侧数值依此 seed 顺序排列：
+
+| 候选 | 质量结论 | 实测结果 |
+| --- | --- | --- |
+| Wan cross-KV fusion | 历史质量：两个 seed 通过，不认证当前版本 | 最终 latent 与解码 RGB 均与当时源码的 dense reference 逐位一致。 |
+| Selective FP8，全部 FFN 投影 | 两个 seed 均淘汰 | Latent relative L2 **0.1667/0.2554**；最小 frame SSIM **0.8752/0.7176**。 |
+| Selective FP8，仅 block 29 FFN | 两个 seed 均淘汰 | Latent relative L2 **0.1074/0.1533**；最小 frame SSIM **0.9455/0.8865**。 |
+| 默认压缩 Sol，tau 0/0.25/1 | 所有实测配置均淘汰 | Latent relative L2 **0.584–0.912**；最小 frame SSIM **0.202–0.482**。 |
+| 匹配 FP32 LightVAE decoder，相同真实 Wan latent | 两个 seed 均淘汰 | PSNR **37.704/34.978 dB** 达标，但最小 frame SSIM **0.979125/0.934550** 未达到 0.98。 |
+
+上述历史 decoder 对照中的 FP32 teacher 重新解码逐位复现保存的 Wan RGB，只评估 student decoder 质量，不建立端到端加速结论。之前的 SANA saved-RGB 对照混用了 tiled 与 untiled FP32 解码，不计入本次 LightVAE 证据。历史证据：[Wan 投影](/measurements/wan-projection-quality-2026-10-03.json)、[压缩 Sol](/measurements/wan-sol-compressed-quality-2026-10-03.json)、[LightVAE decoder](/measurements/lightvae-wan21-decoder-quality-2026-10-03.json)。
+
+已完成的原生插件诊断使用 normalization 修复后的源码 `0c56052d`，保留当前源码 manifest 并使用新的执行门禁。下列已完成记录均确认执行源码未变：
+
+| 候选 | 当前源码结论 | 证据与限制 |
+| --- | --- | --- |
+| Sol 不压缩，`compress_kv=False` | seed 42/43 均淘汰 | Latent relative L2 **0.055884/0.157324**；PSNR **33.049/25.868 dB**；最小 frame SSIM **0.964725/0.881227**。执行门禁通过且源码未变，但质量未达标，不进入计时。[记录](/measurements/wan-sol-uncompressed-2026-10-04.json)。 |
+| Wan cross-KV fusion | 两个 seed 逐位一致，实测收益很小 | 最终 latent 与 RGB 不变。每 seed 三轮配对计时，中位加速比 **1.001647×/1.001000×**，约 **0.10%–0.16%**。所有计时执行门禁与设备采样门禁通过。[记录](/measurements/wan-cache-quality-timing-2026-10-04.json)。 |
+| Wan EasyCache，阈值 0.025/0.05/0.1 | 未获得质量合格的缓存加速 | 0.025/0.05 在两个 seed 均无复用。0.1 的 seed 42 实际复用一次、跳过 30 次 block 调用。PSNR **33.571 dB** 达标，但 relative L2 **0.068931** 与最小 frame SSIM **0.955778** 未达标；seed 43 无复用。[记录](/measurements/wan-cache-quality-timing-2026-10-04.json)。 |
+| 压缩 Sol，tau 0/0.25/1 | 六个样本全部因质量淘汰 | 实际执行通过；relative L2 **0.5868–0.9148**，最小 frame SSIM **0.1898–0.4804**。不计时、不报告加速。[记录](/measurements/wan-sol-compressed-quality-2026-10-04.json)。 |
+| Selective FP8，五种投影选择 | 十个样本全部因质量淘汰 | 全部 FFN、block 29 FFN、全部 self-Q、全部 self-V、block 29 self-Q/K/V 均实际执行 scaled FP8 GEMM，dense fallback 为零。Relative L2 **0.0829–0.3455**，最小 frame SSIM **0.6589–0.9491**。[FFN](/measurements/wan-fp8-ffn-quality-2026-10-04.json)、[attention 投影](/measurements/wan-fp8-attention-projection-quality-2026-10-04.json)。 |
+| 匹配 LightVAE encoder | seed 42/43 均淘汰，不进入计时 | Relative L2 **0.074465/0.096864**，PSNR **37.388/36.518 dB**，最小 frame SSIM **0.979726/0.960829**。Encoder module、student counter 与公共 teacher decoder 的执行门禁均通过；源码与输入均未变。有效重跑使用诊断源码 `53285653`，其 manifest 范围修正未改变数值代码。[记录](/measurements/lightvae-wan21-encoder-quality-2026-10-04.json)。 |
+
+淘汰的候选均不产生加速结论。
+
+Cross-KV 计时只覆盖共享主机上的这两个样本。设备资格在每轮前后对被测 GPU 采样；同期其他实验使用不同 GPU，并共享 CPU 资源。三轮配对与 0.10%–0.16% 的中位变化不能建立通用性能推荐。
+
+较早 encoder 实验因无关 TUI 源码修改而失效，已排除；这里只使用已完成重跑的有效记录。
+
+质量结果只覆盖记录的 prompt、seed、分辨率和 schedule；安装成功或本地算子测试不会自动产生新的速度结论。使用新输出目录并保留源码/checkpoint hash、sample 和回执：
+
+```bash
+PYTHONPATH=. python benchmarks/inference/native_plugins.py \
+  --model sana-video-2b-480p --assets "$ASSETS" --candidates /path/to/candidates.json \
+  --quality-only --out /tmp/native-plugin-quality-new
+PYTHONPATH=. python benchmarks/inference/lightvae.py \
+  --teacher /path/to/Wan2.1_VAE.pth --student /path/to/lightvaew2_1.pth \
+  --reference /path/to/reference_42.pt --reference /path/to/reference_43.pt \
+  --saved-codec-dtype fp32 --quality-only --out /tmp/lightvae-quality-new
+PYTHONPATH=. python benchmarks/inference/lightvae_encoder.py \
+  --teacher /path/to/Wan2.1_VAE.pth --student /path/to/lightvaew2_1.pth \
+  --reference /path/to/reference_42.pt --reference /path/to/reference_43.pt \
+  --rounds 3 --out /tmp/lightvae-encoder-new
+```
+
+## 历史 H100 实测与被淘汰的配置
+
+| 测量范围 | 结果 | 正确性与限制 |
+| --- | --- | --- |
+| 官方 SANA-Video 2B block 0，32760 tokens，连续 BF16 输入，3 seeds | 单块 **1.040–1.043×**，glue **2.176–2.179×** | 输出逐位一致；输入是合成激活，不能代替视频质量。 |
+| 同一真实 block，native token strides，7920/32760 tokens，3 seeds | 单块 **1.021–1.022×**，glue **1.173–1.179×** | 输出逐位一致；实际仅 scale-shift 融合，residual 保留 eager。 |
+| 原生完整视频，320×576、41 帧、20 steps、CFG 6、shift 7、2 seeds | 安全融合 **1.008–1.011×** | 最终 latent 和 RGB 视频逐位一致。包含 prompt 编码、denoise 和 VAE；每 seed 3 轮交错 wall-time 配对，只代表当前测试样本。 |
+| Sol-Attn，BF16、8 heads、head 128，结构化合成输入 | 4096 tokens **0.720×**；8192 **2.950×**；32768 **7.763×** | relative L2 约 0.00017–0.00041；短序列更慢。尚无 native Wan 完整生成质量认证。 |
+| Sol-Attn，独立随机 Q/K/V | **淘汰，不报告加速收益** | relative L2 约 0.74–0.75，超过预设 0.01。 |
+| 完整 SANA，EasyCache threshold 0.1 | **淘汰，不报告加速收益** | 最终 latent relative L2 0.083/0.129，PSNR 30.75/27.34 dB，SSIM 0.947/0.889。 |
+
+视频候选共享固定门槛：有限值、latent relative L2 ≤0.03、PSNR ≥33 dB、SSIM ≥0.98。重排布局或完整 norm 融合都未通过。较低缓存阈值 0.025/0.05 在这两个 seed 上没有跳块；其组合耗时不能算作 EasyCache 的加速收益。候选选择要求所有 seed 的质量与执行门槛通过，并按配对 bootstrap 下界筛选，最终选择安全融合。
+
+小形状没有稳定收益，保持 eager 是既定策略。配对测量记录全部原始时间、运行环境和实际执行；三轮视频样本不能支撑普遍性能结论，也不等于 VBench/WorldScore 等语义质量认证。
+
+前轮专项回归 **236 passed、3 skipped**，覆盖原有 SANA/Wan 路径、GPU 数值边界、实际 checkpoint loader、请求/CFG 隔离、条件失效、撤销、训练策略与 dispatcher。两项 skip 是不适用于 image block 的 frame-aware 参数组合，另一项 Sol CUDA 测试在主环境缺少 provider；隔离 Sol 环境另跑 **9 passed**，包含实际 H100 CuTe 调用。这些是前轮计数，不是后续新增实现的仓库全量测试结论。
+
+后续校验分次记录如下：
+
+| 范围 | 已记录结果 | 限制 |
+| --- | --- | --- |
+| 相关 model/core 测试集 | **495 passed、2 skipped** | 在新增九项边界回归之前。 |
+| 新增边界回归 | **9 passed** | 单独专项执行。 |
+| 共享 kernel 合并检查 | **60 passed** | Normalization 与 kernel 集成回归。 |
+| 原生 benchmark 诊断 | **39 passed** | 质量、执行、计时淘汰与 provenance 门禁。 |
+| Encoder benchmark 诊断 | **38 passed** | CPU admission、回执、质量、计时和四项新增依赖 manifest 回归。 |
+| 隔离 Sol provider 检查 | **15 passed** | 包含 provider 环境中的实际 CUDA 执行。 |
+| 较早 public 路径 CPU 白名单 | **584 passed** | 历史选定范围，早于最近修改。 |
+
+这些测试集存在重叠，不相加，也不代表仓库全量通过；最终 release gate 仍待完成。
+
+原始证据：[连续 block](/measurements/sana-block-pointwise-2026-10-03.json)、[native strides block](/measurements/sana-block-strided-2026-10-03.json)、[完整视频候选](/measurements/sana-plugins-video-2026-10-03.json)、[Sol 算子](/measurements/sol-attention-2026-10-03.json)。视频记录含完整权重 hash；视频张量和 checkpoint 留在本地实验目录。
+
+```bash
+# 从仓库根目录运行；输出目录须为新目录。ASSETS 为既有本地 checkpoint 根。
+PYTHONPATH=. python benchmarks/inference/sana_block.py \
+  --checkpoint "$ASSETS/Efficient-Large-Model--SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth" \
+  --strided-input --grid 11,20,36 --grid 21,30,52 --out /tmp/sana-block-new
+PYTHONPATH=. python benchmarks/inference/sana_plugins.py \
+  --assets "$ASSETS" --out /tmp/sana-video-new
+# 在上述隔离 Sol 环境中执行：
+PYTHONPATH=. python benchmarks/inference/sol_attention.py --out /tmp/sol-attention-new
+```
+
+仍需真正 packed 的 SVDQuant checkpoint、校准与兼容 provider、完整 MHA 精度/kernel 调度、经过校准的原生 FP8 LightVAE，以及已验证的 cache/Graph/SP 组合。本地双 expert schedule 和匹配 student codec 缩小了缺口，但不代表完成了全部上游技术。Sol 的合成算子结果仍不能认证 native Wan 生成。

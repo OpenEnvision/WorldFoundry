@@ -108,6 +108,9 @@ class ModuleLoadSpec:
             Runtime policies are shared by every component in a recipe, so this
             explicit capability prevents a DiT-only option from being applied
             to text encoders and VAEs.
+        supports_acceleration_plugins: Apply model-scoped acceleration plugins
+            to a native DiT, after transforms and before compilation. Encoders
+            and VAEs sharing the runtime policy leave this capability disabled.
         vram_module_map: Required for ``OffloadMode.DISK`` and component
             offload; maps module types to AutoWrapped replacements.
         layer_container: Attribute name of the block list used by
@@ -126,6 +129,7 @@ class ModuleLoadSpec:
     layer_container: str | None = None
     vram_limit_gib: float | None = None
     post_load_hook: PostLoadHook | None = None
+    supports_acceleration_plugins: bool = False
 
 
 class NativeModuleLoader:
@@ -499,6 +503,17 @@ class NativeModuleLoader:
                     requested_mode=policy.offload.mode.value,
                     effective="resident",
                 )
+
+        if spec.supports_acceleration_plugins and policy.options.get("accelerations"):
+            from ..optimizations.plugins import install_diffusion_accelerations
+
+            session = install_diffusion_accelerations(module, policy.options["accelerations"], policy)
+            applied = getattr(module, "_worldfoundry_applied_optimizations", None)
+            if applied is not None:
+                applied.requested["accelerations"] = dict(policy.options["accelerations"])
+                applied.effective["accelerations"] = session.report()
+                if any(handle.details.get("approximate") for handle in session.handles):
+                    applied.quality_tier = "approximate"
 
         if shard_across_gpus:
             from worldfoundry.core.vram import enable_balanced_device_map

@@ -9,6 +9,8 @@ These optimizations are experimental. They may change, may not apply to every mo
 
 WorldFoundry only treats a technique as available when a public control exists and the main path consumes it. An accepted flag is not a speedup. After a forward, read `requested / effective / fallbacks` from `runtime_optimization_report()`.
 
+[Pluggable diffusion acceleration](/docs/guides/diffusion-acceleration) covers the Sol-Engine / FlashDreams comparison, native SANA/Wan adapters, removal and request isolation, and configurations accepted or rejected by complete video diagnostics.
+
 Most named knobs below are on the **native Wan 2.1 / Wan 2.2** pipelines (`Wan2p1*`, `Wan2p2*`, including VACE). Wan 2.5 / 2.6 / 2.7 are hosted APIs and have no local kernel controls. Other native recipes share only a subset (dtype, offload, sometimes attention or VAE tiling). Family runtimes (LTX, CogVideoX, and the rest) keep their own flags — do not copy Wan keys onto them.
 
 <Callout type="info" title="Accepted is not effective">

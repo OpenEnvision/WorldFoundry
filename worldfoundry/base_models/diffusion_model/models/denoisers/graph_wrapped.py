@@ -47,9 +47,14 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from contextvars import ContextVar
+from functools import wraps
 from threading import RLock
 from typing import Any
 
+from worldfoundry.core.acceleration.plugins import (
+    acceleration_runtime_scope,
+    register_acceleration_runtime,
+)
 from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
 
 _CUDA_GRAPH_STATEFUL_CONFLICTS = (
@@ -134,6 +139,17 @@ def resolve_teacache_threshold(context: Any) -> float | None:
     return float(raw)
 
 
+def acceleration_runtime_call(function):
+    """Guard a complete denoiser evaluation, including preparation and errors."""
+
+    @wraps(function)
+    def wrapped(self, model_input, *args, **kwargs):
+        with acceleration_runtime_scope(self.model, self, getattr(model_input, "request_id", None)):
+            return function(self, model_input, *args, **kwargs)
+
+    return wrapped
+
+
 class FeatureCacheDenoiserMixin:
     """Per-request, per-CFG-branch feature-cache ownership for a DiT.
 
@@ -153,7 +169,27 @@ class FeatureCacheDenoiserMixin:
     """
 
     _teacache_threshold: float | None = None
-    _feature_cache_config: Any = None
+
+    @property
+    def _feature_cache_config(self) -> Any:
+        config = self.__dict__.get("_configured_feature_cache")
+        model = getattr(self, "model", None)
+        plugin_config = getattr(model, "_worldfoundry_easycache_config", None)
+        if plugin_config is not None:
+            return plugin_config
+        if getattr(config, "algorithm", None) == "easycache":
+            return None
+        return config
+
+    @_feature_cache_config.setter
+    def _feature_cache_config(self, value: Any) -> None:
+        self.__dict__["_configured_feature_cache"] = value
+        model = getattr(self, "model", None)
+        if model is not None:
+            register_acceleration_runtime(model, self)
+        session = getattr(getattr(self, "model", None), "_worldfoundry_accelerations", None)
+        if session is not None:
+            session.bind_runtime(self)
 
     def _feature_cache_context_var(self) -> ContextVar[str | None]:
         context = self.__dict__.get("_feature_cache_current_request")
@@ -178,7 +214,7 @@ class FeatureCacheDenoiserMixin:
         request_id = getattr(model_input, "request_id", None)
         if not isinstance(request_id, str) or not request_id.strip():
             raise ValueError(
-                "Wan feature caching requires an explicit non-empty request_id; "
+                "feature caching requires an explicit non-empty request_id; "
                 "step/branch heuristics are not concurrency-safe"
             )
         return request_id
@@ -220,14 +256,27 @@ class FeatureCacheDenoiserMixin:
             return state
 
     def feature_cache_kwargs(self, model_input: Any) -> dict[str, Any]:
+        request_id = getattr(model_input, "request_id", None)
+        if isinstance(request_id, str) and request_id.strip():
+            self._feature_cache_context_var().set(request_id)
+        session = getattr(getattr(self, "model", None), "_worldfoundry_accelerations", None)
+        if session is not None:
+            session.bind_runtime(self)
         config = getattr(self, "_feature_cache_config", None)
         threshold = getattr(self, "_teacache_threshold", None)
         if config is None and threshold is None:
             return {}
+        if getattr(config, "algorithm", None) == "easycache":
+            model = getattr(self, "model", None)
+            if getattr(model, "training", False):
+                raise RuntimeError("EasyCache requires model.eval()")
+            if getattr(self, "_graph_runner", None) is not None or getattr(self, "inplace_residual", False):
+                raise RuntimeError("EasyCache has not been validated with CUDA Graph or inplace residual")
+            if threshold is not None:
+                raise RuntimeError("EasyCache and legacy TeaCache are exclusive")
         request_id = self._explicit_request_id(model_input)
         state = self._feature_request_state(request_id, create=True)
         assert state is not None
-        self._feature_cache_context_var().set(request_id)
         branch = str(model_input.branch)
         step = int(model_input.step_index)
         if step < 0:
@@ -249,6 +298,10 @@ class FeatureCacheDenoiserMixin:
                         threshold,
                         total_steps=model_input.total_steps,
                     )
+                elif config.algorithm == "easycache":
+                    from worldfoundry.core.acceleration.easycache import EasyCache
+
+                    cache = EasyCache(config, total_steps=model_input.total_steps)
                 else:
                     from ...optimizations.wan.feature_cache import (
                         build_wan_feature_cache,
@@ -266,6 +319,8 @@ class FeatureCacheDenoiserMixin:
             else:
                 previous_step = state["branch_steps"].get(branch)
                 if step == 0:
+                    if getattr(cache, "algorithm", None) == "easycache":
+                        raise ValueError("EasyCache branch steps must be unique and contiguous")
                     reset = getattr(cache, "reset", None)
                     if not callable(reset):
                         raise TypeError(
@@ -276,6 +331,8 @@ class FeatureCacheDenoiserMixin:
                     raise ValueError(
                         "feature-cache branch steps must be unique and contiguous"
                     )
+            if getattr(cache, "algorithm", None) == "easycache":
+                cache.observe_conditioning(model_input.conditioning)
             state["branch_steps"][branch] = step
             if step >= int(model_input.total_steps) - 1:
                 state["complete"] = True
@@ -479,6 +536,7 @@ class GraphWrappedDenoiserMixin:
         self._graph_runner = (
             InferenceCUDAGraphRunner(model, extra_key=extra_key) if enabled else None
         )
+        register_acceleration_runtime(model, self)
 
     def _run_network(self, *args: Any, **kwargs: Any) -> Any:
         if self._graph_runner is not None:
@@ -498,6 +556,7 @@ class GraphWrappedDenoiserMixin:
 
 
 __all__ = [
+    "acceleration_runtime_call",
     "FeatureCacheDenoiserMixin",
     "GraphWrappedDenoiserMixin",
     "resolve_cuda_graph_option",

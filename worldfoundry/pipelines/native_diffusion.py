@@ -61,6 +61,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
     NUM_INFERENCE_STEP_ALIASES: ClassVar[tuple[str, ...]] = ("infer_steps",)
     GUIDANCE_SCALE_ALIASES: ClassVar[tuple[str, ...]] = ("cfg_scale",)
     RUNTIME_POLICY_OPTION_KEYS: ClassVar[tuple[str, ...]] = (
+        "accelerations",
         "adacache",
         "approximate_attention",
         "blocktaylorseer",

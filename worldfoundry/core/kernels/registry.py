@@ -257,6 +257,7 @@ class KernelRegistry:
         fallback: KernelCallable,
         *args: Any,
         signature: tuple[object, ...],
+        backend: str | None = None,
         **kwargs: Any,
     ) -> Any:
         """Select a candidate or *fallback* for one workload *signature*.
@@ -266,7 +267,7 @@ class KernelRegistry:
         :class:`KeyboardInterrupt`, and :class:`SystemExit` always re-raise.
         """
 
-        requested = os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto").strip().casefold() or "auto"
+        requested = (backend if backend is not None else os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto")).strip().casefold() or "auto"
         failures: list[str] = []
         quarantined: list[str] = []
         if requested in {"torch", "pytorch", "native", "off", "disabled"}:

@@ -110,6 +110,32 @@ def _round_float32_to_bfloat16(value):
 
 
 @triton.jit
+def _round_float32_to_float16(value):
+    """Keep eager FP16 product rounding even if LLVM removes cast pairs."""
+
+    return tl.inline_asm_elementwise(
+        "{ .reg .b16 rounded; cvt.rn.f16.f32 rounded, $1; cvt.f32.f16 $0, rounded; }",
+        constraints="=f,f",
+        args=[value],
+        dtype=tl.float32,
+        is_pure=True,
+        pack=1,
+    )
+
+
+@triton.jit
+def _round_to_dtype(value, dtype: tl.constexpr):
+    """Materialize a PyTorch low-precision expression boundary in registers."""
+
+    if dtype == tl.bfloat16:
+        return _round_float32_to_bfloat16(value)
+    elif dtype == tl.float16:
+        return _round_float32_to_float16(value)
+    else:
+        return value
+
+
+@triton.jit
 def _residual_gate_kernel(
     residual_ptr,
     update_ptr,
@@ -152,7 +178,7 @@ def _residual_gate_kernel(
     if round_product_bf16:
         product = _round_float32_to_bfloat16(product)
     elif round_product_fp16:
-        product = product.to(tl.float16).to(tl.float32)
+        product = _round_float32_to_float16(product)
     tl.store(out_ptr + offsets, residual + product.to(tl.float32), mask=mask)
 
 
@@ -195,68 +221,11 @@ def _scale_shift_kernel(
     # Match ``x * (1 + scale) + shift`` expression boundaries.  Keeping the
     # vendor LayerNorm outside this kernel preserves its exact reduction order;
     # this kernel only removes one of the two following pointwise launches.
-    scale_factor = (1.0 + scale_input.to(tl.float32)).to(scale_input.dtype)
+    scale_factor = _round_to_dtype(1.0 + scale_input.to(tl.float32), scale_input.dtype)
     product = x_input.to(tl.float32) * scale_factor.to(tl.float32)
     if round_product:
-        product = product.to(x_input.dtype)
+        product = _round_to_dtype(product, x_input.dtype)
     tl.store(out_ptr + offsets, product.to(tl.float32) + shift_input.to(tl.float32), mask=mask)
-
-
-@triton.jit
-def _layer_norm_scale_shift_kernel(
-    x_ptr,
-    scale_ptr,
-    shift_ptr,
-    out_ptr,
-    rows,
-    eps,
-    features: tl.constexpr,
-    d0: tl.constexpr,
-    d1: tl.constexpr,
-    d2: tl.constexpr,
-    d3: tl.constexpr,
-    ss0: tl.constexpr,
-    ss1: tl.constexpr,
-    ss2: tl.constexpr,
-    ss3: tl.constexpr,
-    ss4: tl.constexpr,
-    hs0: tl.constexpr,
-    hs1: tl.constexpr,
-    hs2: tl.constexpr,
-    hs3: tl.constexpr,
-    hs4: tl.constexpr,
-    round_modulation: tl.constexpr,
-    block: tl.constexpr,
-):
-    """Affine-free LayerNorm then AdaLN; one program per row, features in *block*."""
-
-    row = tl.program_id(0)
-    cols = tl.arange(0, block)
-    mask = (row < rows) & (cols < features)
-    offsets = row * features + cols
-    x_input = tl.load(x_ptr + offsets, mask=mask, other=0.0)
-    x = x_input.to(tl.float32)
-    mean = tl.sum(x, axis=0) / features
-    centered = tl.where(mask, x - mean, 0.0)
-    variance = tl.sum(centered * centered, axis=0) / features
-    # LayerNorm returns the input dtype before the following AdaLN
-    # arithmetic. Preserve that rounding point for mixed fp16/bf16 + fp32
-    # modulation as used by Wan/LingBot.
-    normed = (centered * tl.rsqrt(variance + eps)).to(x_input.dtype)
-
-    scale_base = _broadcast_row_offset(row, d0, d1, d2, d3, ss0, ss1, ss2, ss3)
-    shift_base = _broadcast_row_offset(row, d0, d1, d2, d3, hs0, hs1, hs2, hs3)
-    scale_input = tl.load(scale_ptr + scale_base + cols * ss4, mask=mask, other=0.0)
-    shift_input = tl.load(shift_ptr + shift_base + cols * hs4, mask=mask, other=0.0)
-    # Preserve PyTorch's eager expression boundaries while keeping one launch:
-    # ``1 + scale`` and the following multiply each round when their promoted
-    # dtype is fp16/bf16. Mixed low-precision or fp32 modulation stays fp32.
-    scale_factor = (1.0 + scale_input.to(tl.float32)).to(scale_input.dtype)
-    modulated = normed.to(tl.float32) * scale_factor.to(tl.float32)
-    if round_modulation:
-        modulated = modulated.to(x_input.dtype)
-    output = modulated.to(tl.float32) + shift_input.to(tl.float32)
-    tl.store(out_ptr + offsets, output, mask=mask)
 
 
 @triton.jit
@@ -593,6 +562,7 @@ def residual_gate(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tens
         round_product_fp16=product_dtype == torch.float16,
         block=block,
         num_warps=_num_warps(block),
+        enable_fp_fusion=False,
     )
     return output
 
@@ -703,6 +673,7 @@ def scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor) -> to
         round_product=product_dtype in {torch.float16, torch.bfloat16},
         block=block,
         num_warps=4,
+        enable_fp_fusion=False,
     )
     return output
 
@@ -712,44 +683,20 @@ def layer_norm_scale_shift(
     scale: torch.Tensor,
     shift: torch.Tensor,
     eps: float,
+    *,
+    upcast: bool = False,
 ) -> torch.Tensor:
-    """Launch fused LayerNorm+AdaLN; *block* must cover the last dimension."""
+    """Preserve vendor LayerNorm bits, then launch one fused AdaLN kernel."""
 
-    rows = x.numel() // x.shape[-1]
-    features = int(x.shape[-1])
-    dims, scale_strides = _padded_outer_shape_and_strides(x, scale)
-    _, shift_strides = _padded_outer_shape_and_strides(x, shift)
-    block = triton.next_power_of_2(features)
-    modulation_dtype = torch.promote_types(x.dtype, scale.dtype)
-    output_dtype = torch.promote_types(x.dtype, torch.promote_types(scale.dtype, shift.dtype))
-    output = torch.empty_like(x, dtype=output_dtype)
-    _layer_norm_scale_shift_kernel[(rows,)](
-        x,
-        scale,
-        shift,
-        output,
-        rows,
-        float(eps),
-        features=features,
-        d0=dims[0],
-        d1=dims[1],
-        d2=dims[2],
-        d3=dims[3],
-        ss0=scale_strides[0],
-        ss1=scale_strides[1],
-        ss2=scale_strides[2],
-        ss3=scale_strides[3],
-        ss4=scale_strides[4],
-        hs0=shift_strides[0],
-        hs1=shift_strides[1],
-        hs2=shift_strides[2],
-        hs3=shift_strides[3],
-        hs4=shift_strides[4],
-        round_modulation=modulation_dtype in {torch.float16, torch.bfloat16},
-        block=block,
-        num_warps=_num_warps(block),
+    # A custom reduction can change even low-precision results near a rounding
+    # boundary. Keep the same vendor reduction, dtype, and optional upcast as
+    # the eager expression; only combine its following pointwise operations.
+    normalized = torch.nn.functional.layer_norm(
+        x.float() if upcast else x, (x.shape[-1],), weight=None, bias=None, eps=eps,
     )
-    return output
+    if upcast:
+        normalized = normalized.to(x.dtype)
+    return scale_shift(normalized, scale, shift)
 
 
 def rms_norm_scale_shift(

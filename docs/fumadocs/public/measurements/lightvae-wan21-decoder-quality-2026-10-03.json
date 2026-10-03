@@ -1,0 +1,513 @@
+{
+  "scope": "matched Wan2.1 teacher/student decode of identical real generated normalized latents; not end-to-end speed",
+  "budget": {
+    "latent_relative_l2_max": 0.03,
+    "video_psnr_min_db": 33.0,
+    "video_ssim_min": 0.98
+  },
+  "quality_aggregation": "minimum SSIM over all frames; worst batch video PSNR",
+  "runtime": {
+    "platform": "cuda",
+    "vendor": "nvidia",
+    "arch": "sm_90",
+    "device": "NVIDIA H100 80GB HBM3",
+    "device_index": 0,
+    "memory_bytes": 85017624576,
+    "driver_version": null,
+    "runtime_version": "12.1",
+    "torch_version": "2.5.1+cu121",
+    "python_version": "3.11.15",
+    "worldfoundry_version": "0.1.dev217+g20069cbf7.d20261003",
+    "worldfoundry_commit": "8ed2a4825732fd7d2083b51ad30aefeb20bc2152",
+    "system": "Linux",
+    "system_release": "5.10.0-218.0.0.mt20250120.565.mt2203sp4.x86_64"
+  },
+  "parameters": {
+    "teacher": "assets/Wan-AI--Wan2.1-T2V-1.3B/Wan2.1_VAE.pth",
+    "student": "local-assets/lightvaew2_1.pth",
+    "reference": [
+      "artifacts/wan_projection_followup_20261003/reference_42.pt",
+      "artifacts/wan_projection_followup_20261003/reference_43.pt"
+    ],
+    "saved_codec_dtype": "fp32",
+    "saved_codec_tiled": false,
+    "saved_tile_size": [
+      34,
+      34
+    ],
+    "saved_tile_stride": [
+      18,
+      16
+    ],
+    "out": "artifacts/lightvae_wan21_native_followup_20261003",
+    "rounds": 3,
+    "quality_only": true
+  },
+  "cases": [
+    {
+      "reference": "reference_42.pt",
+      "video_shape": [
+        1,
+        3,
+        41,
+        320,
+        576
+      ],
+      "latent_shape": [
+        1,
+        16,
+        11,
+        40,
+        72
+      ],
+      "saved_codec_matches_saved_rgb": true,
+      "saved_codec_dtype": "fp32",
+      "saved_codec_tiled": false,
+      "comparison_codec_dtype": "fp32",
+      "fp32_teacher_vs_saved_rgb": {
+        "finite": true,
+        "latent_relative_l2": 0.0,
+        "video_psnr_db": "infinity",
+        "video_ssim": 1.0,
+        "latent_bitwise_equal": true,
+        "video_bitwise_equal": true,
+        "passed": true
+      },
+      "quality": {
+        "finite": true,
+        "latent_relative_l2": 0.0,
+        "video_psnr_db": 37.70420702091762,
+        "video_ssim": 0.9791245460510254,
+        "latent_bitwise_equal": true,
+        "video_bitwise_equal": false,
+        "passed": false
+      },
+      "teacher_execution": {
+        "requested": {
+          "vae_weight_dtype": "torch.float32",
+          "vae_channels_last_3d": false,
+          "vae_channels_last": false,
+          "vae_decode_autocast": false,
+          "vae_spatial_tiling": false,
+          "vae_tile_size": [
+            34,
+            34
+          ],
+          "vae_tile_stride": [
+            18,
+            16
+          ],
+          "vae_temporal_chunk_size": false,
+          "vae_parallel_degree": 1,
+          "vae_offload": "none"
+        },
+        "effective": {
+          "vae_weight_dtype": "torch.float32",
+          "vae_channels_last_3d": "disabled",
+          "vae_channels_last_3d_conv3d": 0,
+          "vae_conv3d_count": 61,
+          "vae_channels_last": "disabled",
+          "vae_channels_last_conv2d": 0,
+          "vae_conv2d_count": 10,
+          "vae_decode": "dense",
+          "vae_decode_autocast": "disabled",
+          "vae_decode_autocast_context": "disabled",
+          "vae_spatial_tiles": 0,
+          "vae_parallel_degree": 1,
+          "vae_offload": "resident"
+        },
+        "fallbacks": [],
+        "quality_tier": "exact",
+        "runtime": {
+          "window_id": 1,
+          "vae_channels_last_3d_conv3d": 0,
+          "vae_conv3d_count": 61,
+          "vae_channels_last_conv2d": 0,
+          "vae_conv2d_count": 10,
+          "vae_decode_autocast_context": "disabled",
+          "decode_calls": 1,
+          "dense_decode_calls": 1,
+          "spatial_tiled_decode_calls": 0,
+          "temporal_chunked_decode_calls": 0,
+          "parallel_tiled_decode_calls": 0,
+          "last_spatial_tile_count": 0,
+          "single_spatial_tile_calls": 0,
+          "last_temporal_chunk_count": 0,
+          "single_temporal_chunk_calls": 0,
+          "lifetime": {
+            "decode_calls": 1,
+            "dense_decode_calls": 1,
+            "spatial_tiled_decode_calls": 0,
+            "temporal_chunked_decode_calls": 0,
+            "parallel_tiled_decode_calls": 0,
+            "single_spatial_tile_calls": 0,
+            "single_temporal_chunk_calls": 0
+          }
+        }
+      },
+      "student_execution": {
+        "requested": {
+          "vae_weight_dtype": "torch.float32",
+          "vae_channels_last_3d": false,
+          "vae_channels_last": false,
+          "vae_decode_autocast": false,
+          "vae_spatial_tiling": false,
+          "vae_tile_size": [
+            34,
+            34
+          ],
+          "vae_tile_stride": [
+            18,
+            16
+          ],
+          "vae_temporal_chunk_size": false,
+          "vae_parallel_degree": 1,
+          "vae_offload": "none",
+          "vae_variant": "lightvae-wan21",
+          "vae_base_dim": 24,
+          "vae_latent_channels": 16,
+          "vae_pruning_rate": 0.75
+        },
+        "effective": {
+          "vae_weight_dtype": "torch.float32",
+          "vae_channels_last_3d": "disabled",
+          "vae_channels_last_3d_conv3d": 0,
+          "vae_conv3d_count": 61,
+          "vae_channels_last": "disabled",
+          "vae_channels_last_conv2d": 0,
+          "vae_conv2d_count": 10,
+          "vae_decode": "dense",
+          "vae_decode_autocast": "disabled",
+          "vae_decode_autocast_context": "disabled",
+          "vae_spatial_tiles": 0,
+          "vae_parallel_degree": 1,
+          "vae_offload": "resident",
+          "vae_variant": "lightvae-wan21",
+          "vae_base_dim": 24,
+          "vae_latent_channels": 16,
+          "vae_pruning_rate": 0.75,
+          "vae_architecture": "native-wan21-base24-student"
+        },
+        "fallbacks": [],
+        "quality_tier": "algorithmically-approximate",
+        "runtime": {
+          "window_id": 1,
+          "vae_channels_last_3d_conv3d": 0,
+          "vae_conv3d_count": 61,
+          "vae_channels_last_conv2d": 0,
+          "vae_conv2d_count": 10,
+          "vae_decode_autocast_context": "disabled",
+          "decode_calls": 1,
+          "dense_decode_calls": 1,
+          "spatial_tiled_decode_calls": 0,
+          "temporal_chunked_decode_calls": 0,
+          "parallel_tiled_decode_calls": 0,
+          "last_spatial_tile_count": 0,
+          "single_spatial_tile_calls": 0,
+          "last_temporal_chunk_count": 0,
+          "single_temporal_chunk_calls": 0,
+          "lifetime": {
+            "decode_calls": 1,
+            "dense_decode_calls": 1,
+            "spatial_tiled_decode_calls": 0,
+            "temporal_chunked_decode_calls": 0,
+            "parallel_tiled_decode_calls": 0,
+            "single_spatial_tile_calls": 0,
+            "single_temporal_chunk_calls": 0,
+            "lightvae_encode_calls": 0,
+            "lightvae_decode_calls": 1
+          },
+          "lightvae_encode_calls": 0,
+          "lightvae_decode_calls": 1
+        }
+      },
+      "teacher_parameters": 126892531,
+      "student_parameters": 8035003,
+      "execution_gate": {
+        "passed": true
+      },
+      "status": "rejected_quality"
+    },
+    {
+      "reference": "reference_43.pt",
+      "video_shape": [
+        1,
+        3,
+        41,
+        320,
+        576
+      ],
+      "latent_shape": [
+        1,
+        16,
+        11,
+        40,
+        72
+      ],
+      "saved_codec_matches_saved_rgb": true,
+      "saved_codec_dtype": "fp32",
+      "saved_codec_tiled": false,
+      "comparison_codec_dtype": "fp32",
+      "fp32_teacher_vs_saved_rgb": {
+        "finite": true,
+        "latent_relative_l2": 0.0,
+        "video_psnr_db": "infinity",
+        "video_ssim": 1.0,
+        "latent_bitwise_equal": true,
+        "video_bitwise_equal": true,
+        "passed": true
+      },
+      "quality": {
+        "finite": true,
+        "latent_relative_l2": 0.0,
+        "video_psnr_db": 34.97788475075586,
+        "video_ssim": 0.9345499873161316,
+        "latent_bitwise_equal": true,
+        "video_bitwise_equal": false,
+        "passed": false
+      },
+      "teacher_execution": {
+        "requested": {
+          "vae_weight_dtype": "torch.float32",
+          "vae_channels_last_3d": false,
+          "vae_channels_last": false,
+          "vae_decode_autocast": false,
+          "vae_spatial_tiling": false,
+          "vae_tile_size": [
+            34,
+            34
+          ],
+          "vae_tile_stride": [
+            18,
+            16
+          ],
+          "vae_temporal_chunk_size": false,
+          "vae_parallel_degree": 1,
+          "vae_offload": "none"
+        },
+        "effective": {
+          "vae_weight_dtype": "torch.float32",
+          "vae_channels_last_3d": "disabled",
+          "vae_channels_last_3d_conv3d": 0,
+          "vae_conv3d_count": 61,
+          "vae_channels_last": "disabled",
+          "vae_channels_last_conv2d": 0,
+          "vae_conv2d_count": 10,
+          "vae_decode": "dense",
+          "vae_decode_autocast": "disabled",
+          "vae_decode_autocast_context": "disabled",
+          "vae_spatial_tiles": 0,
+          "vae_parallel_degree": 1,
+          "vae_offload": "resident"
+        },
+        "fallbacks": [],
+        "quality_tier": "exact",
+        "runtime": {
+          "window_id": 2,
+          "vae_channels_last_3d_conv3d": 0,
+          "vae_conv3d_count": 61,
+          "vae_channels_last_conv2d": 0,
+          "vae_conv2d_count": 10,
+          "vae_decode_autocast_context": "disabled",
+          "decode_calls": 1,
+          "dense_decode_calls": 1,
+          "spatial_tiled_decode_calls": 0,
+          "temporal_chunked_decode_calls": 0,
+          "parallel_tiled_decode_calls": 0,
+          "last_spatial_tile_count": 0,
+          "single_spatial_tile_calls": 0,
+          "last_temporal_chunk_count": 0,
+          "single_temporal_chunk_calls": 0,
+          "lifetime": {
+            "decode_calls": 2,
+            "dense_decode_calls": 2,
+            "spatial_tiled_decode_calls": 0,
+            "temporal_chunked_decode_calls": 0,
+            "parallel_tiled_decode_calls": 0,
+            "single_spatial_tile_calls": 0,
+            "single_temporal_chunk_calls": 0
+          }
+        }
+      },
+      "student_execution": {
+        "requested": {
+          "vae_weight_dtype": "torch.float32",
+          "vae_channels_last_3d": false,
+          "vae_channels_last": false,
+          "vae_decode_autocast": false,
+          "vae_spatial_tiling": false,
+          "vae_tile_size": [
+            34,
+            34
+          ],
+          "vae_tile_stride": [
+            18,
+            16
+          ],
+          "vae_temporal_chunk_size": false,
+          "vae_parallel_degree": 1,
+          "vae_offload": "none",
+          "vae_variant": "lightvae-wan21",
+          "vae_base_dim": 24,
+          "vae_latent_channels": 16,
+          "vae_pruning_rate": 0.75
+        },
+        "effective": {
+          "vae_weight_dtype": "torch.float32",
+          "vae_channels_last_3d": "disabled",
+          "vae_channels_last_3d_conv3d": 0,
+          "vae_conv3d_count": 61,
+          "vae_channels_last": "disabled",
+          "vae_channels_last_conv2d": 0,
+          "vae_conv2d_count": 10,
+          "vae_decode": "dense",
+          "vae_decode_autocast": "disabled",
+          "vae_decode_autocast_context": "disabled",
+          "vae_spatial_tiles": 0,
+          "vae_parallel_degree": 1,
+          "vae_offload": "resident",
+          "vae_variant": "lightvae-wan21",
+          "vae_base_dim": 24,
+          "vae_latent_channels": 16,
+          "vae_pruning_rate": 0.75,
+          "vae_architecture": "native-wan21-base24-student"
+        },
+        "fallbacks": [],
+        "quality_tier": "algorithmically-approximate",
+        "runtime": {
+          "window_id": 2,
+          "vae_channels_last_3d_conv3d": 0,
+          "vae_conv3d_count": 61,
+          "vae_channels_last_conv2d": 0,
+          "vae_conv2d_count": 10,
+          "vae_decode_autocast_context": "disabled",
+          "decode_calls": 1,
+          "dense_decode_calls": 1,
+          "spatial_tiled_decode_calls": 0,
+          "temporal_chunked_decode_calls": 0,
+          "parallel_tiled_decode_calls": 0,
+          "last_spatial_tile_count": 0,
+          "single_spatial_tile_calls": 0,
+          "last_temporal_chunk_count": 0,
+          "single_temporal_chunk_calls": 0,
+          "lifetime": {
+            "decode_calls": 2,
+            "dense_decode_calls": 2,
+            "spatial_tiled_decode_calls": 0,
+            "temporal_chunked_decode_calls": 0,
+            "parallel_tiled_decode_calls": 0,
+            "single_spatial_tile_calls": 0,
+            "single_temporal_chunk_calls": 0,
+            "lightvae_encode_calls": 0,
+            "lightvae_decode_calls": 2
+          },
+          "lightvae_encode_calls": 0,
+          "lightvae_decode_calls": 1
+        }
+      },
+      "teacher_parameters": 126892531,
+      "student_parameters": 8035003,
+      "execution_gate": {
+        "passed": true
+      },
+      "status": "rejected_quality"
+    }
+  ],
+  "status": "completed_diagnostic",
+  "files": [
+    {
+      "file": "assets/Wan-AI--Wan2.1-T2V-1.3B/Wan2.1_VAE.pth",
+      "bytes": 507609880,
+      "sha256": "38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981"
+    },
+    {
+      "file": "local-assets/lightvaew2_1.pth",
+      "bytes": 32208043,
+      "sha256": "d5d6b094d4829fb03b6179be2cf4589baab21c9fea1ca70dcaa8c85ba8183ec9"
+    },
+    {
+      "file": "artifacts/wan_projection_followup_20261003/reference_42.pt",
+      "bytes": 92714486,
+      "sha256": "cf916a102a8ed2b35ecb6e03d7a0f84ad02d9af5403185b4a8a25fa0e161281f"
+    },
+    {
+      "file": "artifacts/wan_projection_followup_20261003/reference_43.pt",
+      "bytes": 92714486,
+      "sha256": "7ed116b2c10d043c1386ab70e2680c65eefe5951c5134f48a850c52ddf579d81"
+    }
+  ],
+  "source_files": [
+    {
+      "file": "benchmarks/inference/lightvae.py",
+      "bytes": 9554,
+      "sha256": "15d66a85047b650d7423f78352a006ae98e1c8f51b0bd6373c27639b745e3c4b"
+    },
+    {
+      "file": "benchmarks/harness.py",
+      "bytes": 11286,
+      "sha256": "18661d3e8588fb2edd851081a4e2f57b659ec8fbc0df20d744afe3d6d046a208"
+    },
+    {
+      "file": "benchmarks/inference/plugin_diagnostics.py",
+      "bytes": 6299,
+      "sha256": "6c8de11ee1b9718dc3cabd2ca21429317df20b1ca36d3a0855f9a8431a56dbc7"
+    },
+    {
+      "file": "worldfoundry/base_models/diffusion_model/models/autoencoders/wan/model.py",
+      "bytes": 69899,
+      "sha256": "4e994ec2c49c9ad39fb6b8646f1dd35dd7aa099c602be8b12dee565817778917"
+    },
+    {
+      "file": "worldfoundry/base_models/diffusion_model/models/autoencoders/wan/component.py",
+      "bytes": 47490,
+      "sha256": "4e30f656ddd23380c816ed319b2016aa2d5b42a557aed18847894662a669597c"
+    },
+    {
+      "file": "worldfoundry/base_models/diffusion_model/models/autoencoders/wan/variants/light_21.py",
+      "bytes": 3306,
+      "sha256": "aa0d80682fde950d8d724e17f6795f25253af13b64c290b7d179cbb7765ee193"
+    }
+  ],
+  "publication": {
+    "format": "sanitized_measurement_summary_v1",
+    "raw_record": {
+      "label": "artifacts/lightvae_wan21_native_followup_20261003/results.json",
+      "bytes": 15515,
+      "sha256": "cfb93ccb16cffb66a3eea62aebf6be9df0182973aa118fb101b8c63bf2112a08",
+      "included_verbatim": false
+    },
+    "receipt_aggregation": {
+      "local_paths_labeled": 9
+    },
+    "notes": [
+      "Quality and execution results apply to the recorded source hashes and measured cases only.",
+      "The runtime commit is a HEAD identifier; source_files also describe uncommitted or untracked implementation at measurement time. The post-measurement review commit is not the measurement revision.",
+      "Original quality flags, execution gates, counters, fallback/error records and scope configuration remain unchanged; review does not retroactively apply newer admission gates.",
+      "Repeated kernel receipts are grouped by the entire canonical JSON receipt before redaction. All distinct receipt fields and multiplicities are retained; original dispatch ordering is discarded.",
+      "Absolute local paths and output locations are replaced with labeled relative locations. Process IDs and process identity fields are removed; foreign context entries, memory values and counts remain when recorded.",
+      "No timestamps, missing scope receipts, asset metadata hashes or end-of-run unchanged checks are reconstructed from later code.",
+      "The fixed quality budgets are retained; rejected configurations carry no validated speedup claim.",
+      "This compares teacher/student decoding of identical generated normalized latents in FP32, eager, resident, untiled mode. Latent relative L2=0 reports identical inputs and is not an encoder-quality result.",
+      "Teacher re-decoding matched saved RGB bitwise under the declared saved codec configuration. That validates the stored decoder reference, not encoder quality or complete generation speed.",
+      "Both student decoder cases failed the unchanged minimum-frame SSIM budget. Timing was not run; no decoder or end-to-end speedup is established."
+    ]
+  },
+  "post_measurement_review": {
+    "implementation_commit": "92727ca9d46327e6bc8a772ec42de1805bd6418e",
+    "measurement_validity": "recorded_source_only",
+    "review_is_measurement_rerun": false,
+    "original_runtime_and_source_fingerprints_preserved": true,
+    "provenance_limitations": {
+      "source_manifest_entries": 6,
+      "source_manifest_is_exhaustive": false,
+      "source_unchanged_recorded": false,
+      "inputs_unchanged_recorded": false,
+      "timestamps_recorded": false,
+      "asset_metadata_manifest_recorded": false,
+      "model_loading_core_source_recorded": false,
+      "runtime_fingerprint_helper_source_recorded": false,
+      "per_module_attention_scope_receipts_recorded": false,
+      "quality_only_requested": true
+    }
+  }
+}
