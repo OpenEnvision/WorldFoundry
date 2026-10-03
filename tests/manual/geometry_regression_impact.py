@@ -431,6 +431,54 @@ def relocation_proofs(
     return proofs
 
 
+def committed_case_changes(
+    source_root: Path, matrix: Path, changes: list[str], *, base: str | None, head: str,
+    history_root: Path | None = None,
+) -> set[str] | None:
+    """Narrow recipe edits only after inspecting both immutable Git blobs.
+
+    Missing history, dirty definitions, ambiguous JSON or changed case IDs keep
+    the full replay selection. Runtime dependencies are still selected separately.
+    """
+    if base is None or matrix.is_symlink() or not matrix.resolve().is_relative_to(source_root.resolve()):
+        return None
+    history = history_root or source_root
+    commits = [revision(history, ref + "^{commit}") for ref in (base, head)]
+    if not all(commits):
+        return None
+    path = matrix.relative_to(source_root).as_posix()
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Repeated JSON key in replay definitions")
+            result[key] = value
+        return result
+
+    def invalid_constant(value):
+        raise ValueError(f"Non-finite JSON constant: {value}")
+
+    try:
+        if changed_paths(history, *commits) != sorted(set(changes)):
+            return None
+        blobs = [subprocess.check_output(
+            ["git", "-C", str(history), "show", commit + ":" + path], stderr=subprocess.PIPE,
+        ) for commit in commits]
+        if matrix.read_bytes() != blobs[1]:
+            return None
+        before, after = [json.loads(blob, object_pairs_hook=unique_object, parse_constant=invalid_constant)
+                         for blob in blobs]
+        if not isinstance(before, dict) or not isinstance(after, dict) or before.keys() != after.keys():
+            return None
+        def canonical(value):
+            return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+        return {name for name in after if canonical(before[name]) != canonical(after[name])}
+    except (OSError, ValueError, TypeError, subprocess.CalledProcessError):
+        return None
+
+
 def select_cases(
     matrix: Path, dependencies: Path, source_root: Path, changes: list[str], *, evidence: Path | None = None,
     base: str | None = None, head: str = "HEAD", history_root: Path | None = None,
@@ -449,6 +497,10 @@ def select_cases(
         source_root, matrix, dependencies, changes, base=base, head=head, history_root=history_root,
     )
     verified_tools = {proof["path"] for proof in verification}
+    matrix_path = matrix.relative_to(source_root).as_posix()
+    edited_cases = committed_case_changes(
+        source_root, matrix, changes, base=base, head=head, history_root=history_root,
+    ) if matrix_path in changes else None
     proven_paths = {path for proof in proofs for path in (proof["old_path"], proof["new_path"]) if path}
     reasons = {name: [] for name in cases}
     graph_errors = {}
@@ -469,7 +521,11 @@ def select_cases(
         if path in verified_tools:
             continue
         matched = False
-        if matches(path, policy["shared_paths"]) or path == matrix.relative_to(source_root).as_posix():
+        if path == matrix_path and edited_cases is not None:
+            for name in edited_cases:
+                reasons[name].append({"path": path, "kind": "committed_case_definition"})
+            matched = True
+        elif matches(path, policy["shared_paths"]) or path == matrix_path:
             for name in cases:
                 reasons[name].append({"path": path, "kind": "shared_component_or_case_matrix"})
             matched = True

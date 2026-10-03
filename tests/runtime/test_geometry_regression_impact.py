@@ -111,6 +111,91 @@ def test_shared_and_parent_package_initializers_select_every_case(project, path)
     assert impact.select_cases(matrix, policy, root, [path])["selected_cases"] == ["a", "b"]
 
 
+@pytest.mark.parametrize("field,value", [
+    ("load", {"checkpoint_path": "/weights/model.safetensors"}),
+    ("call", {"num_frames": 17}),
+    ("sequence", [{"name": "a", "call": {"seed": 42}, "outputs": ["video"]}]),
+    ("assets", {"input": "/inputs/image.png"}),
+    ("array_contracts", {"video": {"shape": [1, 3, 17, 256, 448]}}),
+    ("scope", "short real checkpoint replay"),
+])
+def test_committed_case_edit_requires_its_replay_and_preserves_other_cases(project, field, value):
+    root, matrix, policy = project
+    base = git(root, "rev-parse", "HEAD")
+    cases = json.loads(matrix.read_text())
+    cases["a"][field] = value
+    matrix.write_text(json.dumps(cases))
+    git(root, "add", "matrix.json")
+    git(root, "commit", "-qm", "change one replay recipe")
+    plan = impact.select_cases(matrix, policy, root, ["matrix.json"], base=base)
+    assert plan["status"] == "planned"
+    assert plan["selected_cases"] == ["a"]
+
+
+def test_committed_matrix_formatting_has_no_numerical_changes(project):
+    root, matrix, policy = project
+    base = git(root, "rev-parse", "HEAD")
+    matrix.write_text(json.dumps(json.loads(matrix.read_text()), sort_keys=True, indent=4))
+    git(root, "add", "matrix.json")
+    git(root, "commit", "-qm", "format recipes")
+    plan = impact.select_cases(matrix, policy, root, ["matrix.json"], base=base)
+    assert plan["status"] == "no_inference_changes"
+    assert plan["selected_cases"] == []
+
+
+@pytest.mark.parametrize("old_value,new_value", [(True, 1), (1, 1.0), (False, 0)])
+def test_case_diff_preserves_json_value_types(project, old_value, new_value):
+    root, matrix, policy = project
+    cases = json.loads(matrix.read_text())
+    cases["a"]["deterministic"] = old_value
+    matrix.write_text(json.dumps(cases))
+    git(root, "add", "matrix.json")
+    git(root, "commit", "-qm", "typed case")
+    base = git(root, "rev-parse", "HEAD")
+    cases["a"]["deterministic"] = new_value
+    matrix.write_text(json.dumps(cases))
+    git(root, "add", "matrix.json")
+    git(root, "commit", "-qm", "change JSON value type")
+    assert impact.select_cases(matrix, policy, root, ["matrix.json"], base=base)["selected_cases"] == ["a"]
+
+
+@pytest.mark.parametrize("failure", ["missing_base", "dirty_matrix", "omitted_change", "duplicate_base_key"])
+def test_unproven_case_edit_keeps_conservative_full_replay(project, failure):
+    root, matrix, policy = project
+    if failure == "duplicate_base_key":
+        matrix.write_text(matrix.read_text().replace('"a": {', '"a": {}, "a": {', 1))
+        git(root, "add", "matrix.json")
+        git(root, "commit", "-qm", "ambiguous historical definition")
+    base = git(root, "rev-parse", "HEAD")
+    cases = json.loads(matrix.read_text())
+    cases["a"]["call"] = {"seed": 43}
+    matrix.write_text(json.dumps(cases))
+    if failure == "omitted_change":
+        (root / "worldfoundry/models/b.py").write_text("CHANGED = True\n")
+        git(root, "add", "worldfoundry/models/b.py")
+    git(root, "add", "matrix.json")
+    git(root, "commit", "-qm", "edit recipe")
+    if failure == "dirty_matrix":
+        cases["b"]["call"] = {"seed": 44}
+        matrix.write_text(json.dumps(cases))
+    if failure == "missing_base":
+        base = "0" * 40
+    assert impact.select_cases(matrix, policy, root, ["matrix.json"], base=base)["selected_cases"] == ["a", "b"]
+
+
+def test_case_edit_cannot_hide_an_independent_model_change(project):
+    root, matrix, policy = project
+    base = git(root, "rev-parse", "HEAD")
+    cases = json.loads(matrix.read_text())
+    cases["a"]["call"] = {"seed": 43}
+    matrix.write_text(json.dumps(cases))
+    (root / "worldfoundry/models/b.py").write_text("CHANGED = True\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "recipe and independent model")
+    changes = impact.changed_paths(root, base, "HEAD")
+    assert impact.select_cases(matrix, policy, root, changes, base=base)["selected_cases"] == ["a", "b"]
+
+
 def test_docs_need_cpu_gates_without_claiming_inference_passed(project):
     root, matrix, policy = project
     plan = impact.select_cases(matrix, policy, root, ["docs/validation.md"])
