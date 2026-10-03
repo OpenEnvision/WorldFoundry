@@ -37,7 +37,6 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from worldfoundry.core.nn.blocks.layers import DropPath
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules import (
     CachedGLUMBConvTemp,
@@ -45,6 +44,15 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules
     GLUMBConv,
     GLUMBConvTemp,
     Mlp,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.sana.block_ops import (
+    gated_residual,
+    modulated_norm,
+    run_sana_blocks,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import (
+    is_triton_module_available,
+    is_xformers_available,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks import (
     CachedCausalAttention,
@@ -64,18 +72,14 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks i
     WanRotaryPosEmbed,
     WanRotaryTemporalPosEmbed,
     WindowAttention,
-    t2i_modulate,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_multi_scale import (
     Sana,
     get_2d_sincos_pos_embed,
 )
-from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import (
-    is_triton_module_available,
-    is_xformers_available,
-)
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.linear import BlockHook
 from worldfoundry.core.distributed.collectives.generic import get_rank
+from worldfoundry.core.nn.blocks.layers import DropPath
 
 _triton_modules_available = False
 if is_triton_module_available():
@@ -93,6 +97,8 @@ if _xformers_available:
 
 class SanaVideoMSBlock(nn.Module):
     """Video SanaMS block: 3-D RoPE self-attn + caption cross-attn + temporal FFN."""
+
+    _worldfoundry_block_fusion = None
 
     def __init__(
         self,
@@ -271,14 +277,12 @@ class SanaVideoMSBlock(nn.Module):
         }
         if chunk_index is not None:
             self_attn_kwargs["chunk_index"] = chunk_index[:]  # NOTE: important, copy the list
-        x = x + self.drop_path(
-            (
-                gate_msa
-                * self.attn(
-                    t2i_modulate(self.norm1(x).reshape(B, num_frames, -1, C), shift_msa, scale_msa).reshape(B, N, C),
-                    **self_attn_kwargs,
-                ).reshape(B, num_frames, -1, C)
-            ).reshape(B, N, C)
+        x_sa_in = modulated_norm(
+            x, self.norm1, shift_msa, scale_msa, frames=num_frames, policy=self._worldfoundry_block_fusion
+        )
+        attn_out = self.attn(x_sa_in, **self_attn_kwargs).reshape(B, N, C)
+        x = gated_residual(
+            x, attn_out, gate_msa, self.drop_path, frames=num_frames, policy=self._worldfoundry_block_fusion
         )
 
         if self.flash_attn_additional:
@@ -294,14 +298,12 @@ class SanaVideoMSBlock(nn.Module):
         }
         if chunk_index is not None:
             mlp_kwargs["chunk_index"] = chunk_index[:]  # NOTE: important, copy the list
-        x = x + self.drop_path(
-            (
-                gate_mlp
-                * self.mlp(
-                    t2i_modulate(self.norm2(x).reshape(B, num_frames, -1, C), shift_mlp, scale_mlp).reshape(B, N, C),
-                    **mlp_kwargs,
-                ).reshape(B, num_frames, -1, C)
-            ).reshape(B, N, C)
+        x_mlp_in = modulated_norm(
+            x, self.norm2, shift_mlp, scale_mlp, frames=num_frames, policy=self._worldfoundry_block_fusion
+        )
+        mlp_out = self.mlp(x_mlp_in, **mlp_kwargs).reshape(B, N, C)
+        x = gated_residual(
+            x, mlp_out, gate_mlp, self.drop_path, frames=num_frames, policy=self._worldfoundry_block_fusion
         )
 
         return x
@@ -340,7 +342,7 @@ class SanaVideoMSBlock(nn.Module):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.scale_shift_table[None] + t.reshape(B, 6, -1)
         ).chunk(6, dim=1)
-        x_sa_in = t2i_modulate(self.norm1(x), shift_msa, scale_msa)
+        x_sa_in = modulated_norm(x, self.norm1, shift_msa, scale_msa, policy=self._worldfoundry_block_fusion)
         self_attn_kwargs = {
             "HW": THW,
             "rotary_emb": rotary_emb,
@@ -362,7 +364,7 @@ class SanaVideoMSBlock(nn.Module):
         if self.flash_attn_additional:
             x_sa = x_sa + self.learnable_fa_scale * self.flash_attn_additional(x_sa_in, rotary_emb=rotary_emb, HW=THW)
 
-        x = x + self.drop_path(gate_msa * x_sa)
+        x = gated_residual(x, x_sa, gate_msa, self.drop_path, policy=self._worldfoundry_block_fusion)
 
         if self.cross_attn_image_embeds:
             x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds", None))
@@ -381,10 +383,12 @@ class SanaVideoMSBlock(nn.Module):
         if kv_cache is not None:
             mlp_kwargs["kv_cache"] = kv_cache
 
-        mlp_out = self.mlp(t2i_modulate(self.norm2(x), shift_mlp, scale_mlp), **mlp_kwargs)
+        mlp_out = self.mlp(
+            modulated_norm(x, self.norm2, shift_mlp, scale_mlp, policy=self._worldfoundry_block_fusion), **mlp_kwargs
+        )
         if kv_cache is not None:
             mlp_out, kv_cache = mlp_out
-        x = x + self.drop_path(gate_mlp * mlp_out)
+        x = gated_residual(x, mlp_out, gate_mlp, self.drop_path, policy=self._worldfoundry_block_fusion)
 
         intermediate_feats["x_ffn"] = x
 
@@ -783,16 +787,9 @@ class SanaMSVideo(Sana):
         else:
             raise ValueError(f"Attention type is not available due to _xformers_available={_xformers_available}.")
 
-        for i, block in enumerate(self.blocks):
-            x = block(
-                x,
-                y,
-                t0,
-                y_lens,
-                (self.f, self.h, self.w),
-                image_pos_embed,
-                **kwargs,
-            )
+        x = run_sana_blocks(
+            self.blocks, x, y, t0, y_lens, (self.f, self.h, self.w), image_pos_embed, **kwargs,
+        )
 
         x = self.final_layer(x, t)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)

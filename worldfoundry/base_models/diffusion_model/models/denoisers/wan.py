@@ -115,6 +115,7 @@ WAN22_TI2V_5B_CONFIG = {
 
 _WAN_DENOISER_OPTION_KEYS = frozenset(
     {
+        "accelerations",
         "adacache",
         "blocktaylorseer",
         "cuda_graph",
@@ -501,6 +502,10 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             raise ValueError("Wan TeaCache threshold must be non-negative")
         if teacache_threshold is not None and feature_cache_config is not None:
             raise ValueError("Wan legacy TeaCache threshold and feature_cache_config are exclusive")
+        if getattr(model, "_worldfoundry_easycache_config", None) is not None and (
+            teacache_threshold is not None or feature_cache_config is not None
+        ):
+            raise ValueError("EasyCache and existing feature-cache configurations are exclusive")
         self.model = model
         self.compute_dtype = compute_dtype
         self.reference_condition_key = reference_condition_key
@@ -1093,6 +1098,18 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             fallbacks = list(snapshot.fallbacks)
             quality_tier = snapshot.quality_tier
 
+        acceleration_session = getattr(self.model, "_worldfoundry_accelerations", None)
+        if acceleration_session is not None or "accelerations" in effective:
+            effective["accelerations"] = (
+                acceleration_session.report()
+                if acceleration_session is not None
+                else {"installed": [], "execution_verified": False}
+            )
+            if acceleration_session is not None and any(
+                handle.details.get("approximate") for handle in acceleration_session.handles
+            ):
+                quality_tier = "approximate"
+
         autocast_requested = bool(
             self.manage_autocast
             and self.compute_dtype in {torch.float16, torch.bfloat16}
@@ -1509,6 +1526,11 @@ class Wan22DualExpertDenoiser:
             raise ValueError("Wan2.2 A14B boundary_ratio must be in (0, 1)")
         if int(num_train_timesteps) <= 0:
             raise ValueError("Wan2.2 A14B num_train_timesteps must be positive")
+        if any(
+            getattr(getattr(expert, "_feature_cache_config", None), "algorithm", None) == "easycache"
+            for expert in (high_noise, low_noise)
+        ):
+            raise ValueError("EasyCache currently requires a single-expert Wan schedule")
         self.high_noise = high_noise
         self.low_noise = low_noise
         self.boundary_ratio = boundary
@@ -1613,6 +1635,11 @@ class Wan22DualExpertDenoiser:
         raise ValueError("one Wan2.2 inference call cannot mix high- and low-noise experts")
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
+        if any(
+            getattr(getattr(expert, "_feature_cache_config", None), "algorithm", None) == "easycache"
+            for expert in (self.high_noise, self.low_noise)
+        ):
+            raise ValueError("EasyCache currently requires a single-expert Wan schedule")
         expert = self.expert_for_timestep(model_input.timestep)
         denoiser = self.high_noise if expert == "high-noise" else self.low_noise
         request_id = model_input.request_id
@@ -2115,6 +2142,15 @@ def _build_wan22_dual_expert_denoiser(
     config: dict[str, object],
     channel_condition_key: str | None = None,
 ) -> Wan22DualExpertDenoiser:
+    from ...optimizations.plugins import acceleration_policy
+
+    accelerations = acceleration_policy(context).options.get("accelerations", {})
+    if (
+        isinstance(accelerations, Mapping)
+        and accelerations.get("easycache") is not None
+        and accelerations.get("easycache") is not False
+    ):
+        raise ValueError("EasyCache currently requires a single-expert Wan schedule")
     expert_options = {
         key: value
         for key, value in context.component_options.items()
@@ -2192,6 +2228,8 @@ def _build_wan_denoiser(
     reference_condition_key: str | None = None,
     channel_condition_key: str | None = None,
 ) -> WanDenoiser:
+    from ...optimizations.plugins import acceleration_policy
+
     validate_cuda_graph_options(context)
     feature_cache_config = resolve_wan_feature_cache(context)
     from worldfoundry.core.vram import AutoWrappedLinear, AutoWrappedModule
@@ -2318,6 +2356,7 @@ def _build_wan_denoiser(
                 resolve_approximate_attention_state
             ),
             supports_approximate_attention=True,
+            supports_acceleration_plugins=True,
             vram_module_map={
                 torch.nn.Embedding: AutoWrappedModule,
                 torch.nn.Linear: AutoWrappedLinear,
@@ -2330,7 +2369,7 @@ def _build_wan_denoiser(
             post_load_hook=merge_training_adapter if adapter_path is not None else None,
         ),
         context.require_checkpoint("weights"),
-        replace(context.policy, dtype=weight_dtype),
+        replace(acceleration_policy(context), dtype=weight_dtype),
     )
     if not isinstance(model, WanModel):
         raise TypeError(f"expected WanModel, got {type(model).__name__}")

@@ -32,11 +32,19 @@ import os
 
 import torch
 import torch.nn as nn
-from worldfoundry.core.nn.blocks.layers import DropPath
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules import DWMlp, GLUMBConv, Mlp
 from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules_linear import (
     GLUMBConvLinear,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.sana.block_ops import (
+    gated_residual,
+    modulated_norm,
+    run_sana_blocks,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import (
+    is_triton_module_available,
+    is_xformers_available,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana import Sana, get_2d_sincos_pos_embed
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks import (
@@ -49,12 +57,8 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks i
     PatchEmbedMS,
     RopePosEmbed,
     T2IFinalLayer,
-    t2i_modulate,
 )
-from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import (
-    is_triton_module_available,
-    is_xformers_available,
-)
+from worldfoundry.core.nn.blocks.layers import DropPath
 
 _triton_modules_available = False
 if is_triton_module_available():
@@ -72,6 +76,8 @@ if _xformers_available:
 
 class SanaMSBlock(nn.Module):
     """SanaMS block: adaLN-single self-attn (LiteLA / Flash / Triton) + caption cross-attn + FFN."""
+
+    _worldfoundry_block_fusion = None
 
     def __init__(
         self,
@@ -190,11 +196,17 @@ class SanaMSBlock(nn.Module):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.scale_shift_table[None] + t.reshape(B, 6, -1)
         ).chunk(6, dim=1)
-        x = x + self.drop_path(
-            gate_msa * self.attn(t2i_modulate(self.norm1(x), shift_msa, scale_msa), HW=HW, rotary_emb=image_rotary_emb)
+        attn_out = self.attn(
+            modulated_norm(x, self.norm1, shift_msa, scale_msa, policy=self._worldfoundry_block_fusion),
+            HW=HW,
+            rotary_emb=image_rotary_emb,
         )
+        x = gated_residual(x, attn_out, gate_msa, self.drop_path, policy=self._worldfoundry_block_fusion)
         x = x + self.cross_attn(x, y, mask)
-        x = x + self.drop_path(gate_mlp * self.mlp(t2i_modulate(self.norm2(x), shift_mlp, scale_mlp), HW=HW))
+        mlp_out = self.mlp(
+            modulated_norm(x, self.norm2, shift_mlp, scale_mlp, policy=self._worldfoundry_block_fusion), HW=HW
+        )
+        x = gated_residual(x, mlp_out, gate_mlp, self.drop_path, policy=self._worldfoundry_block_fusion)
 
         return x
 
@@ -446,8 +458,7 @@ class SanaMS(Sana):
         else:
             y_lens = None
 
-        for block in self.blocks:
-            x = block(x, y, t0, y_lens, (self.h, self.w), image_pos_embed, **kwargs)
+        x = run_sana_blocks(self.blocks, x, y, t0, y_lens, (self.h, self.w), image_pos_embed, **kwargs)
 
         x = self.final_layer(x, t)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)

@@ -590,6 +590,7 @@ def attention_forward(
     scale=None,
     compatibility_mode=False,
     backend: str | None = None,
+    backend_options: dict | None = None,
 ):
     """Dispatch QKV Attention across qualified backends for this device, dtype, and shape.
 
@@ -626,9 +627,27 @@ def attention_forward(
         ``clear_attention_dispatch_cache``.
     """
     preferred = ATTENTION_IMPLEMENTATION if backend is None else normalize_attention_backend(backend)
+    if backend_options and preferred != "sol_attn":
+        raise ValueError("backend_options are currently supported only for explicit Sol-Attn")
     # Validate before compatibility/mask short-circuiting. An explicit sparse
     # request must never look successful merely because it silently took SDPA.
     require_generic_attention_backend(preferred)
+    if preferred == "sol_attn":
+        if compatibility_mode or attn_mask is not None:
+            raise ValueError("Sol-Attn does not support masks or compatibility-mode fallback")
+        from worldfoundry.core.attention.backends.sol import sol_attention
+
+        q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, "b s n d", dims)
+        try:
+            output = sol_attention(q, k, v, scale=scale, **(backend_options or {}))
+        except Exception:
+            _record_provider_runtime("sol_attn", attempts=1, errors=1)
+            raise
+        if torch.compiler.is_compiling():
+            _record_compiled_provider_graph_trace("sol_attn")
+        else:
+            _record_provider_runtime("sol_attn", attempts=1, successes=1)
+        return rearrange_out(output, out_pattern, "b s n d", dims)
     if preferred in {"cudnn_fp8", "triton_tma"}:
         if compatibility_mode or attn_mask is not None:
             raise ValueError(f"Explicit {preferred} does not support attention masks or compatibility-mode fallback")
@@ -1071,6 +1090,7 @@ def packed_sequence_attention(
     compatibility_mode: bool = False,
     scale=None,
     backend: str | None = None,
+    backend_options: dict | None = None,
 ):
     """Apply the shared dispatcher to flattened packed-sequence Q/K/V.
 
@@ -1103,6 +1123,7 @@ def packed_sequence_attention(
         scale=scale,
         compatibility_mode=compatibility_mode,
         backend=backend,
+        backend_options=backend_options,
     )
 
 

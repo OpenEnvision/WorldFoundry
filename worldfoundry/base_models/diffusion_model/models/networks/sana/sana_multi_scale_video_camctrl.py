@@ -40,13 +40,14 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from worldfoundry.core.nn.blocks.layers import DropPath
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.basic_modules import (
     GLUMBConv,
     GLUMBConvTemp,
     Mlp,
 )
+from worldfoundry.base_models.diffusion_model.models.networks.sana.block_ops import gated_residual, modulated_norm
+from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import is_xformers_available
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks import (
     CaptionEmbedder,
     CausalWanRotaryPosEmbed,
@@ -60,24 +61,23 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks i
     WanRotaryPosEmbed,
     WanRotaryTemporalPosEmbed,
     WindowAttention,
-    t2i_modulate,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_multi_scale import (
     Sana,
     get_2d_sincos_pos_embed,
 )
-from worldfoundry.base_models.diffusion_model.models.networks.sana.temporal_mask import (
-    create_block_mask_cached,
-    generate_temporal_head_mask_mod,
-)
-from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import is_xformers_available
 from worldfoundry.base_models.diffusion_model.models.networks.sana.selection import (
     resolve_attention_block,
     resolve_ffn_block,
 )
+from worldfoundry.base_models.diffusion_model.models.networks.sana.temporal_mask import (
+    create_block_mask_cached,
+    generate_temporal_head_mask_mod,
+)
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.linear import BlockHook
-from worldfoundry.core.model_loading.checkpoints import load_weights_only, require_tensor
 from worldfoundry.core.distributed.collectives.generic import get_rank
+from worldfoundry.core.model_loading.checkpoints import load_weights_only, require_tensor
+from worldfoundry.core.nn.blocks.layers import DropPath
 
 from .sana_camctrl_blocks import (
     _maybe_drop_cam_branch,
@@ -161,6 +161,8 @@ class FP32NormProxy(nn.Module):
 
 class SanaVideoMSCamCtrlBlock(nn.Module):
     """CamCtrl video block: GDN/UCPE (or softmax) self-attn + caption cross-attn + FFN."""
+
+    _worldfoundry_block_fusion = None
 
     def __init__(
         self,
@@ -452,8 +454,9 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         if chunk_size is not None:
             self_attn_kwargs["chunk_size"] = chunk_size
 
-        x_norm1 = self.norm1(x).reshape(B, num_frames, -1, C)
-        x_msa_in = t2i_modulate(x_norm1, shift_msa, scale_msa).reshape(B, N, C)
+        x_msa_in = modulated_norm(
+            x, self.norm1, shift_msa, scale_msa, frames=num_frames, policy=self._worldfoundry_block_fusion
+        )
         if frame_token_mask is not None:
             x_msa_in = x_msa_in * frame_token_mask
         attn_out = self.attn(x_msa_in, **self_attn_kwargs).reshape(B, num_frames, -1, C)
@@ -501,8 +504,9 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         if chunk_size is not None:
             mlp_kwargs["chunk_size"] = chunk_size
 
-        x_norm2 = self.norm2(x).reshape(B, num_frames, -1, C)
-        x_mlp_in = t2i_modulate(x_norm2, shift_mlp, scale_mlp).reshape(B, N, C)
+        x_mlp_in = modulated_norm(
+            x, self.norm2, shift_mlp, scale_mlp, frames=num_frames, policy=self._worldfoundry_block_fusion
+        )
         if frame_token_mask is not None:
             x_mlp_in = x_mlp_in * frame_token_mask
         mlp_out = self.mlp(x_mlp_in, **mlp_kwargs).reshape(B, num_frames, -1, C)
@@ -565,7 +569,7 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.scale_shift_table[None] + t.reshape(B, 6, -1)
         ).chunk(6, dim=1)
-        x_sa_in = t2i_modulate(self.norm1(x), shift_msa, scale_msa)
+        x_sa_in = modulated_norm(x, self.norm1, shift_msa, scale_msa, policy=self._worldfoundry_block_fusion)
         if frame_token_mask is not None:
             x_sa_in = x_sa_in * frame_token_mask
         self_attn_kwargs = {
@@ -602,7 +606,7 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
             if frame_token_mask is not None:
                 x_sa = x_sa * frame_token_mask
 
-        x = x + self.drop_path(gate_msa * x_sa)
+        x = gated_residual(x, x_sa, gate_msa, self.drop_path, policy=self._worldfoundry_block_fusion)
         if frame_token_mask is not None:
             x = x * frame_token_mask
 
@@ -641,13 +645,13 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         if chunk_size is not None:
             mlp_kwargs["chunk_size"] = chunk_size
 
-        x_mlp_in = t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)
+        x_mlp_in = modulated_norm(x, self.norm2, shift_mlp, scale_mlp, policy=self._worldfoundry_block_fusion)
         if frame_token_mask is not None:
             x_mlp_in = x_mlp_in * frame_token_mask
         mlp_out = self.mlp(x_mlp_in, **mlp_kwargs)
         if frame_token_mask is not None:
             mlp_out = mlp_out * frame_token_mask
-        x = x + self.drop_path(gate_mlp * mlp_out)
+        x = gated_residual(x, mlp_out, gate_mlp, self.drop_path, policy=self._worldfoundry_block_fusion)
         if frame_token_mask is not None:
             x = x * frame_token_mask
 

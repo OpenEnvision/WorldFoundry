@@ -107,6 +107,11 @@ def apply_attention_policy(
 
     raw_backend = backend.value if isinstance(backend, AttentionBackend) else str(backend)
     requested = normalize_attention_backend(raw_backend)
+    if requested == "sol_attn":
+        raise ValueError(
+            "Sol-Attn must target self-attention explicitly; "
+            "use accelerations={'attention_policy': {'self': 'sol_attn'}}"
+        )
     # A generic load policy owns no per-layer sparse metadata or extra
     # checkpoint projections. Model-specific systems must be installed by the
     # corresponding graph factory, never bound to every set_attention_backend
@@ -149,7 +154,7 @@ def apply_attention_policy(
         requested_backend=requested,
         effective_backend=effective,
         configured_modules=configured,
-        approximate=effective in {"sage_attention", "sage_attention_3", "cudnn_fp8"},
+        approximate=effective in {"sage_attention", "sage_attention_3", "cudnn_fp8", "sol_attn"},
         reason=reason,
     )
 

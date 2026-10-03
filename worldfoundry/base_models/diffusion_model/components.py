@@ -135,6 +135,7 @@ class ComponentBuildContext:
 # RuntimePolicy.options keys forbidden on a training build (inference accelerators / wrappers).
 _TRAINING_FORBIDDEN_OPTIONS = frozenset(
     {
+        "accelerations",
         "adacache",
         "block_swap",
         "cache_skip",
@@ -182,8 +183,8 @@ def validate_runtime_policy_for_purpose(policy: RuntimePolicy, purpose: BuildPur
         errors.append(f"offload={policy.offload.mode.value}")
     if policy.quantization.mode is not QuantizationMode.NONE:
         errors.append(f"quantization={policy.quantization.mode.value}")
-    if policy.attention is AttentionBackend.SAGE:
-        errors.append("attention=sage")
+    if policy.attention in {AttentionBackend.SAGE, AttentionBackend.SOL_ATTN}:
+        errors.append(f"attention={policy.attention.value}")
     enabled_options = sorted(key for key in _TRAINING_FORBIDDEN_OPTIONS if bool(policy.options.get(key)))
     if enabled_options:
         errors.append(f"inference-only options={enabled_options}")

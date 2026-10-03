@@ -55,6 +55,7 @@ class AttentionBackend(str, Enum):
     SAGE = "sage"
     SAGE_ATTENTION_3 = "sage_attention_3"
     XFORMERS = "xformers"
+    SOL_ATTN = "sol_attn"
 
     @classmethod
     def _missing_(cls, value: object) -> "AttentionBackend | None":
@@ -62,6 +63,8 @@ class AttentionBackend(str, Enum):
 
         normalized = str(value).strip().lower().replace("-", "_")
         aliases = {
+            "sol": cls.SOL_ATTN,
+            "sol_attention": cls.SOL_ATTN,
             "default": cls.AUTO,
             "torch_sdpa": cls.TORCH,
             "math": cls.TORCH,

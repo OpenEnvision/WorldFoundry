@@ -18,6 +18,7 @@ from ...components import ComponentBuildContext
 from ...contracts import DenoiserInput, DenoiserOutput
 from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.sana.normalization import RMSNorm
+from .graph_wrapped import FeatureCacheDenoiserMixin
 
 
 def _base_image_config(
@@ -288,7 +289,7 @@ def _sana_streaming_state_dict_converter(
     return streaming_convert
 
 
-class SanaDenoiser:
+class SanaDenoiser(FeatureCacheDenoiserMixin):
     """Adapt one Sana checkpoint graph to the framework denoiser contract."""
 
     _DATA_INFO_KEYS = frozenset(
@@ -306,6 +307,17 @@ class SanaDenoiser:
     def __init__(self, model: nn.Module, *, output_scale: float = 1.0) -> None:
         self.model = model
         self.output_scale = float(output_scale)
+        self._feature_cache_config = getattr(model, "_worldfoundry_easycache_config", None)
+
+    def end_request(self, request_id: str, *, error: BaseException | None = None) -> None:
+        self.end_feature_cache_request(request_id, error=error)
+
+    def runtime_optimization_report(self, request_id: str | None = None) -> dict[str, object]:
+        session = getattr(self.model, "_worldfoundry_accelerations", None)
+        return {
+            "accelerations": session.report() if session is not None else {"installed": []},
+            "feature_cache": self.feature_cache_report(request_id),
+        }
 
     def streaming_cache_layout(self) -> tuple[bool, ...]:
         """Describe cache semantics without exposing Sana blocks to the runner."""
@@ -412,6 +424,7 @@ class SanaDenoiser:
         }
         if return_log_variance:
             kwargs["return_logvar"] = True
+        kwargs.update(self.feature_cache_kwargs(model_input))
         sample = self.model(
             latents,
             timestep,
@@ -485,6 +498,8 @@ def _build(
     output_scale: float = 1.0,
     state_dict_converter=None,
 ) -> SanaDenoiser:
+    from ...optimizations.plugins import acceleration_policy
+
     converter = state_dict_converter or _sana_state_dict_converter(
         input_size=int(config["input_size"]),
         patch_size=config["patch_size"],  # type: ignore[arg-type]
@@ -497,9 +512,10 @@ def _build(
             state_dict_converter=converter,
             vram_module_map=_module_map(),
             layer_container="blocks",
+            supports_acceleration_plugins=True,
         ),
         context.require_checkpoint("weights"),
-        context.policy,
+        acceleration_policy(context),
     )
     _prepare_sana_execution_tensors(
         model,

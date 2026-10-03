@@ -96,6 +96,7 @@ class AttentionModule(nn.Module):
             k: Key tokens, same layout as ``q``.
             v: Value tokens, same layout as ``q``.
         """
+        options = getattr(self, "_worldfoundry_attention_options", None)
         x = flash_attention(
             q=q,
             k=k,
@@ -103,6 +104,7 @@ class AttentionModule(nn.Module):
             num_heads=self.num_heads,
             compatibility_mode=self.compatibility_mode,
             backend=self.attention_backend,
+            **({"backend_options": options} if options else {}),
         )
         return x
 
