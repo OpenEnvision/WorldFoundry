@@ -154,10 +154,26 @@
       "worldfoundry/pipelines/cosmos/pipeline_cosmos_predict2p5.py",
       "worldfoundry/base_models/diffusion_model/**"
     ],
+    "cosmos-transfer25": [
+      "worldfoundry/pipelines/cosmos/pipeline_cosmos_transfer2p5.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "gamma-world": [
+      "worldfoundry/pipelines/gamma_world/**",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "oasis-500m": [
+      "worldfoundry/synthesis/visual_generation/open_oasis/**",
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/runtime_manifest.py",
+      "worldfoundry/operators/world_model_runtime_operator.py"
+    ],
     "matrix-game2": [
       "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_2.py",
       "worldfoundry/synthesis/visual_generation/matrix_game/**",
-      "worldfoundry/operators/matrix_game_2_operator.py"
+      "worldfoundry/operators/matrix_game_2_operator.py",
+      "tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py",
+      "tests/synthesis/mg2_historical_reference.py"
     ],
     "dreamx-world": [
       "worldfoundry/pipelines/dreamx_world/**",
@@ -259,6 +275,15 @@
     ],
     "cosmos-predict25-2b-short": [
       "cosmos25"
+    ],
+    "cosmos-transfer25-2b-edge-short": [
+      "cosmos-transfer25"
+    ],
+    "gamma-world-causal-few-step-189f": [
+      "gamma-world"
+    ],
+    "oasis500m-video-short": [
+      "oasis-500m"
     ],
     "matrix-game2-controls-short": [
       "matrix-game2"

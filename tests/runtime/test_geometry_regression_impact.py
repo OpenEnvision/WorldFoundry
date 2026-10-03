@@ -15,6 +15,21 @@ impact = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(impact)
 
 
+@pytest.mark.parametrize("path", [
+    "tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py",
+    "tests/synthesis/mg2_historical_reference.py",
+])
+def test_mg2_numerical_contract_changes_require_real_model_replay(path):
+    root = TOOLS.parents[1]
+    plan = impact.select_cases(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json", root, [path],
+    )
+    assert plan["status"] == "planned"
+    assert plan["selected_cases"] == ["matrix-game2-controls-short"]
+    assert not plan["uncovered_paths"]
+
+
 def git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
 
@@ -180,3 +195,35 @@ def test_public_matrix_has_complete_declarations_and_known_hy2_path():
     assert not plan["graph_errors"]
     assert plan["status"] == "planned"
     assert "hyworldmirror-2" in plan["selected_cases"]
+
+
+@pytest.mark.parametrize("path,case_id", [
+    ("worldfoundry/pipelines/cosmos/pipeline_cosmos_transfer2p5.py", "cosmos-transfer25-2b-edge-short"),
+    ("worldfoundry/pipelines/gamma_world/pipeline_gamma_world.py", "gamma-world-causal-few-step-189f"),
+    ("worldfoundry/synthesis/visual_generation/open_oasis/utils.py", "oasis500m-video-short"),
+])
+def test_public_world_model_changes_have_their_own_replay_case(path, case_id):
+    root = TOOLS.parents[1]
+    plan = impact.select_cases(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+        root,
+        [path],
+    )
+    assert plan["status"] == "planned"
+    assert not plan["uncovered_paths"] and not plan["graph_errors"]
+    assert case_id in plan["selected_cases"]
+    assert any(reason["path"] == path and reason.get("components") for reason in plan["reasons"][case_id])
+
+
+def test_public_matrix_still_rejects_an_unintegrated_world_model():
+    root = TOOLS.parents[1]
+    path = "worldfoundry/pipelines/unintegrated_world/pipeline_world.py"
+    plan = impact.select_cases(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+        root,
+        [path],
+    )
+    assert plan["status"] == "uncovered"
+    assert plan["uncovered_paths"] == [path]

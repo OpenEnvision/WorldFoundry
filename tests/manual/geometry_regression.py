@@ -344,6 +344,9 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
                             collect_arrays(data[name], arrays, key + "." + name)
                 elif path.suffix == ".npy":
                     collect_arrays(np.load(path, allow_pickle=False), arrays, key)
+                elif path.suffix.lower() in {".mp4", ".webm", ".mov", ".mkv"}:
+                    decoded = exported_arrays(output_dir, [str(path)])
+                    arrays.update({name.replace("export.", "artifact.", 1): value for name, value in decoded.items()})
                 else:
                     raise ValueError(f"Unsupported numerical artifact: {path}")
         validate_arrays(arrays, resolved["required_outputs"])

@@ -2295,6 +2295,449 @@
     ],
     "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
   },
+  "cosmos-transfer25-2b-edge-short": {
+    "id": "cosmos-transfer25-2b-edge-short",
+    "model_id": "cosmos-transfer2.5-2b-controlled-video",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_transfer2p5:CosmosTransfer2p5Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/nvidia--Cosmos-Transfer2.5-2B",
+      "device": "cuda",
+      "text_encoder_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "vae_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4",
+          "control_video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+          "controlnet_variant": "edge",
+          "control_is_preprocessed": false,
+          "control_context_scale": 1.0
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true,
+          "control_video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+          "controlnet_variant": "edge",
+          "control_is_preprocessed": false,
+          "control_context_scale": 1.0
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": -1,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "control_video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+          "controlnet_variant": "edge",
+          "control_is_preprocessed": false,
+          "control_context_scale": 1.0
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "num_frames must be positive"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "control_video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+          "controlnet_variant": "edge",
+          "control_is_preprocessed": false,
+          "control_context_scale": 1.0
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/nvidia--Cosmos-Transfer2.5-2B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B"
+    },
+    "required_outputs": [
+      "a.video",
+      "a.latents",
+      "b.video",
+      "b.latents",
+      "repeat.video",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "b.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "repeat.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          17,
+          256,
+          448,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      },
+      "a.latents": {
+        "shape": [
+          1,
+          16,
+          24,
+          32,
+          56
+        ]
+      },
+      "b.latents": {
+        "shape": [
+          1,
+          16,
+          24,
+          32,
+          56
+        ]
+      },
+      "repeat.latents": {
+        "shape": [
+          1,
+          16,
+          24,
+          32,
+          56
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "scope": "Edge-controlled 17-frame A/B/A replay and recovery after invalid frame count; the released weights sample a minimum 93-frame window (24 latent frames) before cropping RGB. Only the general/edge 2B checkpoint is declared; other control variants are outside this case."
+  },
+  "gamma-world-causal-few-step-189f": {
+    "id": "gamma-world-causal-few-step-189f",
+    "model_id": "gamma-world-causal-few-step",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.gamma_world.pipeline_gamma_world:GammaWorldPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Gamma-World",
+      "text_encoder_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "device": "cuda",
+      "mode": "causal_few_step",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "block"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Gamma-World/causal-few-step/model.safetensors",
+      "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Gamma-World/tokenizer.pth",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "first-frame": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat/first_frame.png",
+      "prompt": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat/prompt.txt",
+      "left-actions": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat/action_left.json",
+      "right-actions": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat/action_right.json"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat",
+          "num_frames": 189,
+          "height": 320,
+          "width": 480,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "n_players": 2,
+          "seed": 42,
+          "fps": 16,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat",
+          "num_frames": 17,
+          "height": 320,
+          "width": 480,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "n_players": 2,
+          "seed": 42,
+          "fps": 16,
+          "return_dict": true
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "require num_frames=189 per view"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat",
+          "num_frames": 189,
+          "height": 320,
+          "width": 480,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "n_players": 2,
+          "seed": 42,
+          "fps": 16,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          189,
+          320,
+          960
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          189,
+          320,
+          960
+        ],
+        "dtype": "float32"
+      },
+      "a.latents": {
+        "shape": [
+          1,
+          16,
+          96,
+          40,
+          60
+        ]
+      },
+      "repeat.latents": {
+        "shape": [
+          1,
+          16,
+          96,
+          40,
+          60
+        ]
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          189,
+          320,
+          960,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/a.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      }
+    ],
+    "scope": "Released four-step causal checkpoint, official buildHouse_flat two-player sample, mandatory 189 RGB frames per view, invalid short request and exact replay. Causal and bidirectional variants and long-horizon quality are outside this case."
+  },
+  "oasis500m-video-short": {
+    "id": "oasis500m-video-short",
+    "model_id": "oasis-500m",
+    "seed": 0,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:Oasis500MPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/oasis500m.safetensors",
+      "vae_ckpt": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/vit-l-20.safetensors",
+      "device": "cuda"
+    },
+    "call": {
+      "video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/open-oasis/context.mp4",
+      "actions_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/open-oasis/forward.one_hot_actions.json",
+      "num_frames": 6,
+      "ddim_steps": 4,
+      "fps": 20,
+      "return_dict": true,
+      "output_path": "${OUTPUT_DIR}/export/rollout.mp4"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/oasis500m.safetensors",
+      "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/vit-l-20.safetensors",
+      "context-video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/open-oasis/context.mp4",
+      "actions": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/open-oasis/forward.one_hot_actions.json"
+    },
+    "output_arrays": [
+      "export/rollout.mp4"
+    ],
+    "export_artifacts": [
+      "export/rollout.mp4"
+    ],
+    "required_outputs": [
+      "artifact.export/rollout.mp4.frames",
+      "artifact.export/rollout.mp4.fps"
+    ],
+    "array_contracts": {
+      "artifact.export/rollout.mp4.frames": {
+        "shape": [
+          6,
+          360,
+          640,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.export/rollout.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          20,
+          1
+        ]
+      }
+    },
+    "scope": "Official subprocess generator with its fixed seed 0, one prompt frame read from a longer video, a short 25-column forward-action stream held through six output frames, four DDIM steps, fully decoded RGB and fps. Latents and long-horizon quality are outside this case."
+  },
   "matrix-game2-controls-short": {
     "id": "matrix-game2-controls-short",
     "model_id": "matrix-game-2",

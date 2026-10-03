@@ -198,6 +198,56 @@ def test_undecodable_video_or_unknown_fps_cannot_pass(monkeypatch, tmp_path, rat
         replay.exported_arrays(root, [str(root / "clip.mp4")])
 
 
+@pytest.mark.parametrize("failure", [None, "missing_video", "empty_video", "unknown_fps", "wrong_length"])
+def test_path_only_video_inference_requires_decoded_numerical_evidence(monkeypatch, tmp_path, failure):
+    source = tmp_path / "source"
+    source.mkdir()
+    module_file = source / "pipeline.py"
+    module_file.write_text("# isolated artifact-only fixture\n")
+
+    class Pipeline:
+        @classmethod
+        def from_pretrained(cls, **kwargs):
+            return cls()
+
+        def __call__(self, output_path):
+            if failure != "missing_video":
+                Path(output_path).write_bytes(b"decoder fixture")
+            return {"artifact_path": output_path}
+
+    monkeypatch.setitem(sys.modules, "artifact_test_pipeline", SimpleNamespace(__file__=str(module_file), Pipeline=Pipeline))
+    torch = SimpleNamespace(manual_seed=lambda seed: None, cuda=SimpleNamespace(is_available=lambda: False))
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    monkeypatch.setattr(replay, "runtime_metadata", lambda torch: {"torch": "fixture"})
+    fake_video_decoder(monkeypatch, rate=None if failure == "unknown_fps" else Fraction(16),
+                       frames=0 if failure == "empty_video" else (2 if failure == "wrong_length" else 3))
+    weights = tmp_path / "weights"
+    weights.write_text("pinned asset")
+    case = {
+        "id": "artifact-only", "target": "artifact_test_pipeline:Pipeline", "load": {},
+        "assets": {"checkpoint": str(weights)}, "call": {"output_path": "${OUTPUT_DIR}/clip.mp4"},
+        "output_arrays": ["clip.mp4"], "export_artifacts": ["clip.mp4"],
+        "required_outputs": ["artifact.clip.mp4.frames", "artifact.clip.mp4.fps"],
+        "array_contracts": {"artifact.clip.mp4.frames": {"shape": [3, 2, 4, 3], "dtype": "uint8"},
+                            "artifact.clip.mp4.fps": {"values": [16, 1]}},
+    }
+    recipe = tmp_path / "case.json"
+    recipe.write_text(json.dumps(case))
+    run = tmp_path / "run"
+    manifest = replay.run_case(recipe, source, run)
+    assert manifest["status"] == ("passed" if failure is None else "failed")
+    if failure is None:
+        with np.load(run / "arrays.npz", allow_pickle=False) as arrays:
+            assert set(arrays.files) == set(case["required_outputs"])
+            np.testing.assert_array_equal(arrays["artifact.clip.mp4.frames"], np.full((3, 2, 4, 3), 7, dtype=np.uint8))
+            np.testing.assert_array_equal(arrays["artifact.clip.mp4.fps"], [16, 1])
+        candidate = tmp_path / "candidate"
+        assert replay.run_case(recipe, source, candidate)["status"] == "passed"
+        assert replay.compare_runs(run, candidate)["status"] == "passed"
+    else:
+        assert not (run / "arrays.npz").exists()
+
+
 def test_run_case_saves_sequence_evidence_without_requiring_torch(monkeypatch, tmp_path):
     source = tmp_path / "source"
     source.mkdir()

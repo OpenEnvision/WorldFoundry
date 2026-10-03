@@ -122,6 +122,7 @@ global-exclude test_*.py *_test.py test_*.cpp *_test.cpp
 # Publish first-party test sources and fixtures in sdists, after the upstream
 # QA exclusions above. Wheels continue to contain only worldfoundry packages.
 recursive-include tests *.py *.md *.sh *.yaml *.yml *.json *.jsonl
+include docs/fumadocs/public/measurements/mg2-conditioned-trajectory-2026-10-03.json
 # First-party packaging helper exercised by the published license tests.
 include thirdparty/fastvideo-kernel/build_backend.py
 include .github/workflows/ci.yml
