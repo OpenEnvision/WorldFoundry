@@ -1,10 +1,10 @@
 """Module for the MatrixGame2 operator implementation."""
 
-from .base_operator import BaseOperator
-
-import torch
 import random
 
+import torch
+
+from .base_operator import BaseOperator
 
 # The official implementation draws every segment length from the singleton
 # list ``[12]``, so segments are always 12 frames long.
@@ -377,15 +377,15 @@ class MatrixGame2Operator(BaseOperator):
                            device: str = "cuda",
                            weight_dtype = torch.bfloat16,):
         """Process perception inputs like images, videos, and reference frames."""
-        if self.frame_process is None:
-            from torchvision.transforms import v2
+        from torchvision.transforms import v2
 
+        if self.frame_process is None:
             self.frame_process = v2.Compose([
-                v2.Resize(size=(resize_H, resize_W), antialias=True),
                 v2.ToTensor(),
                 v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
             ])
         image = resizecrop(input_image, resize_H, resize_W)
+        image = v2.Resize(size=(resize_H, resize_W), antialias=True)(image)
         image = self.frame_process(image)[None, :, None, :, :].to(dtype=weight_dtype, device=device)
 
         padding_video = torch.zeros_like(image).repeat(1, 1, 4 * (num_output_frames - 1), 1, 1)

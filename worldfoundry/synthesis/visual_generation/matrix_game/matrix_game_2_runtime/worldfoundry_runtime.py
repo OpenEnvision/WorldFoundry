@@ -350,7 +350,7 @@ class MatrixGame2Runtime:
                 for name in ("conv2d_total", "conv2d_converted", "conv3d_total", "conv3d_converted")
             }
 
-        vae = get_wanx_vae_wrapper(model_root, torch.float16)
+        vae = get_wanx_vae_wrapper(model_root, weight_dtype)
         vae.requires_grad_(False)
         vae.eval()
         vae = vae.to(device, weight_dtype)

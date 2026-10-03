@@ -455,6 +455,10 @@ make test-mg2-checkpoint-contracts PYTHON=python3 \
 # Full 30-layer model, original schedule/resolution; two exact trajectories.
 make test-mg2-trajectory-contracts PYTHON=python3 \
   MG2_CHECKPOINT_ROOT=/checkpoints/Matrix-Game-2.0
+
+# Real image VAE/CLIP conditioning, three seeds, and 141 frames for each QKV strategy.
+make test-mg2-conditioned-trajectory-contracts PYTHON=python3 \
+  MG2_CHECKPOINT_ROOT=/checkpoints/Matrix-Game-2.0
 ```
 
 The checkpoint gate records full checkpoint, source, tensor and input hashes.
@@ -476,6 +480,28 @@ flow, x0, final latent, generator cache, recurrent VAE cache and decoded pixel
 must match exactly. [Recorded short-trajectory evidence](/measurements/mg2-trajectory-2026-10-03.json)
 uses seeded image latents and visual embeddings; it excludes FP8, public-prompt
 quality, long-horizon stability and performance.
+
+The real-image conditioning gate also exercises public perception, VAE and CLIP
+encoding, realtime configuration and generation. Image VAE weights convert
+directly from the checkpoint to the requested dtype, avoiding an intermediate
+FP16 rounding step. Resize reads the current request's canvas on every call;
+the normalization transform can be reused across sizes.
+
+Realtime blank conditioning cannot safely repeat the tail after only 15 latent
+frames. The encoder's temporal receptive field is 113 RGB frames. Layer-by-layer
+analysis places the first latent independent of the seed image and startup at
+index 29. Three stable trailing latents require at least 32 latents, or 33 after
+alignment to three-frame blocks: 129 RGB frames. Smaller prefetch settings are
+raised to that minimum. The actual encoder structure determines the bound and
+unknown temporal layers are rejected. The additional encoding occurs during
+configuration; subsequent generation reuses the stable blank condition.
+
+The new gate runs three seeds with both packed and split QKV at 352×640 using
+the original schedule. Each trajectory generates 141 RGB frames and crosses ten
+cache rollovers. Every model step, cache and pixel must equal an independent
+directly encoded baseline bitwise. [Real conditioned trajectory evidence](/measurements/mg2-conditioned-trajectory-2026-10-03.json)
+records checkpoint, source and input hashes. This does not certify public-prompt
+quality, arbitrary durations or FP8.
 
 Two upstream techniques require further model-specific work. Its native FP8
 LightVAE is a calibrated OmniDreams encoder with 11 downsample blocks and

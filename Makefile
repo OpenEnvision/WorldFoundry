@@ -1,6 +1,6 @@
 .PHONY: help install-core install-dev test test-infer test-infer-tensors test-infer-contracts test-infer-cuda-contracts test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
 .PHONY: test-infer-video-tensors plan-inference replay-inference coverage-inference verify-inference
-.PHONY: test-mg2-checkpoint-contracts test-mg2-trajectory-contracts
+.PHONY: test-mg2-checkpoint-contracts test-mg2-trajectory-contracts test-mg2-conditioned-trajectory-contracts
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -14,6 +14,9 @@ TEST_ARGS ?=
 VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
 STREAMING_CPU_CONTRACTS = \
 	tests/synthesis/test_base_synthesis_lazy_grad.py \
+	tests/synthesis/test_matrix_game_2_encoder_precision.py \
+	tests/synthesis/test_matrix_game_2_conditioning.py \
+	tests/operators/test_matrix_game_2_perception.py \
 	tests/base_models/test_flashdreams_sana_wm_streaming.py \
 	tests/base_models/test_flashdreams_fastvideo_causal_wan.py \
 	tests/base_models/diffusion_model/test_causal_attention_padding.py \
@@ -69,6 +72,8 @@ MG2_CHECKPOINT_REPORT ?= tmp/mg2-checkpoint-contracts.json
 MG2_CHECKPOINT_JUNIT ?= tmp/mg2-checkpoint-contracts.xml
 MG2_TRAJECTORY_REPORT ?= tmp/mg2-trajectory-contracts.json
 MG2_TRAJECTORY_JUNIT ?= tmp/mg2-trajectory-contracts.xml
+MG2_CONDITIONED_TRAJECTORY_REPORT ?= tmp/mg2-conditioned-trajectory-contracts.json
+MG2_CONDITIONED_TRAJECTORY_JUNIT ?= tmp/mg2-conditioned-trajectory-contracts.xml
 GEOMETRY_MATRIX ?= tests/manual/geometry_regression_cases.json
 GEOMETRY_REFERENCE ?=
 GEOMETRY_CANDIDATE ?=
@@ -116,6 +121,7 @@ help:
 		'  make test-infer-cuda-contracts  Run CUDA/FP8 graph, cache, attention and transport checks on SM90+; requires Torch, Triton, nvidia-cudnn-frontend and cuda-bindings; rejects skips.' \
 		'  make test-mg2-checkpoint-contracts  Validate real MG2 block/cache, FP8 FFN and streaming VAE pixels using MG2_CHECKPOINT_ROOT; no generation quality or speed certification.' \
 		'  make test-mg2-trajectory-contracts  Require bitwise parity of full MG2 denoise/refresh, rolling caches and 45 decoded frames for packed/split QKV and decode overlap.' \
+		'  make test-mg2-conditioned-trajectory-contracts  Check real image VAE/CLIP conditioning and six 141-frame bitwise trajectories using local MG2 weights.' \
 		'  make test-geometry     Audit real 3D replays against accepted references; requires GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE.' \
 		'  make plan-geometry     Select affected short 3D cases from GEOMETRY_BASE to HEAD without GPU/weights.' \
 		'  make replay-geometry   Replay selected or all cases using a private GEOMETRY_PROFILE; optional GEOMETRY_REPLAY_PLAN.' \
@@ -195,6 +201,13 @@ test-mg2-trajectory-contracts:
 	mkdir -p "$(dir $(MG2_TRAJECTORY_JUNIT))"
 	WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_TRAJECTORY_REPORT="$(MG2_TRAJECTORY_REPORT)" PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(MG2_TRAJECTORY_JUNIT)" tests/synthesis/test_matrix_game_2_checkpoint_trajectory.py $(TEST_ARGS)
 	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); assert len(cases) == 2 and all(all(case.find(tag) is None for tag in ("skipped", "failure", "error")) for case in cases), "Both full-checkpoint trajectories must execute and pass"; print("Trajectory gate: 2 bitwise contracts passed without skips")' "$(MG2_TRAJECTORY_JUNIT)"
+
+test-mg2-conditioned-trajectory-contracts:
+	@test -n "$(MG2_CHECKPOINT_ROOT)" || { printf '%s\n' 'Set MG2_CHECKPOINT_ROOT to existing local Matrix-Game-2.0 weights.' >&2; exit 2; }
+	$(PYTHON) -c 'import torch; assert torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9, "Conditioned trajectory contracts require an SM90+ CUDA device"'
+	mkdir -p "$(dir $(MG2_CONDITIONED_TRAJECTORY_JUNIT))"
+	OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 WORLDFOUNDRY_MG2_CHECKPOINT_ROOT="$(MG2_CHECKPOINT_ROOT)" WORLDFOUNDRY_MG2_CONDITIONED_TRAJECTORY_REPORT="$(MG2_CONDITIONED_TRAJECTORY_REPORT)" WORLDFOUNDRY_MATRIX_REALTIME_CONDITION_BLOCKS=5 WORLDFOUNDRY_MATRIX_REALTIME_WARMUP_DECODER=1 PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q --strict-markers --junitxml="$(MG2_CONDITIONED_TRAJECTORY_JUNIT)" tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py $(TEST_ARGS)
+	$(PYTHON) -c 'import sys, xml.etree.ElementTree as ET; cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase")); assert len(cases) == 6 and all(all(case.find(tag) is None for tag in ("skipped", "failure", "error")) for case in cases), "All six real-image checkpoint trajectories must execute and pass"; print("Conditioned trajectory gate: 6 bitwise contracts passed without skips")' "$(MG2_CONDITIONED_TRAJECTORY_JUNIT)"
 
 test-geometry:
 	@test -n "$(GEOMETRY_REFERENCE)" -a -n "$(GEOMETRY_CANDIDATE)" || { printf '%s\n' 'Set GEOMETRY_REFERENCE and GEOMETRY_CANDIDATE to completed real-checkpoint run directories.' >&2; exit 2; }

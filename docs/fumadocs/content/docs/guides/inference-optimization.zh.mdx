@@ -430,6 +430,10 @@ make test-mg2-checkpoint-contracts PYTHON=python3 \
 # 完整 30 层模型，保留原始 schedule 和分辨率，两条精确轨迹。
 make test-mg2-trajectory-contracts PYTHON=python3 \
   MG2_CHECKPOINT_ROOT=/checkpoints/Matrix-Game-2.0
+
+# 真实图像 VAE/CLIP 条件，三个 seed，各验证 packed/split 的 141 帧轨迹。
+make test-mg2-conditioned-trajectory-contracts PYTHON=python3 \
+  MG2_CHECKPOINT_ROOT=/checkpoints/Matrix-Game-2.0
 ```
 
 Checkpoint 门禁记录完整权重文件、源码、tensor 和输入 hash。它运行一个真实
@@ -448,6 +452,23 @@ window 和全部 30 层保持不变。4 个 block 产生 45 帧 RGB，覆盖两�
 循环 VAE cache 和解码像素都必须零误差。[短轨迹证据](/measurements/mg2-trajectory-2026-10-03.json)
 使用固定 seed 的图像 latent 和视觉 embedding；不涵盖 FP8、公共 prompt 质量、
 长程稳定性或性能。
+
+真实图像条件门禁补充覆盖公开 perception、VAE 和 CLIP 编码，以及实时配置与生成。
+图像 VAE 从原始 checkpoint 直接转换到请求的 dtype，避免 FP16 中转改变 BF16 或
+FP32 权重。图像 Resize 每次读取当前请求的画布尺寸，归一化 transform 可以复用。
+
+实时 blank conditioning 不能在默认 15 latent 后直接重复尾块。encoder 的因果
+时间依赖范围为 113 RGB 帧，逐层推导得到 latent index 29 起才排除种子图像和
+初始化边界。最后三个 latent 都处于稳态至少需要 32 latent，按三帧块对齐后
+预取下限为 33 latent，即 129 RGB 帧；较小的预取设置也会提高到该下限。
+实际 encoder 结构决定此下限，未知时间层会被拒绝。增加的编码工作发生在
+配置阶段，后续生成复用稳定的 blank 条件。
+
+新门禁使用三个 seed，各运行 packed/split 两种策略，保留 352×640 分辨率和
+原始 schedule，每条轨迹生成 141 RGB 帧并覆盖十次缓存 rollover。每步输出、
+所有缓存和像素都必须与独立的直接编码基线逐位相同。
+[真实条件轨迹证据](/measurements/mg2-conditioned-trajectory-2026-10-03.json)
+记录权重、源码和输入 hash；仍不代表公共 prompt 质量、任意时长或 FP8 认证。
 
 上游的两项技术仍需模型专属工作。其原生 FP8 LightVAE 是经过校准的 OmniDreams
 encoder，固定 11 个 downsample block 和 24/48/96 特征宽度；MG2 的完整 Wan2.1
