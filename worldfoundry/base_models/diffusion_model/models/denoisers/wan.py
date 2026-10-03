@@ -679,6 +679,9 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         )
 
         reset_quantization_runtime_window(self.model)
+        acceleration_session = getattr(self.model, "_worldfoundry_accelerations", None)
+        if acceleration_session is not None:
+            acceleration_session.reset_request_window()
     def _begin_request_optimization_state(self, model_input: DenoiserInput) -> None:
         """Open one explicit request window exactly once, regardless of CFG order."""
 

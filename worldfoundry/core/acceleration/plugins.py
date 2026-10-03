@@ -159,6 +159,8 @@ class AccelerationHandle:
     name: str
     details: Mapping[str, Any]
     undo: Callable[[], None] = field(repr=False)
+    runtime_report: Callable[[], Mapping[str, Any]] | None = field(default=None, repr=False)
+    reset_request_window: Callable[[], None] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -182,9 +184,21 @@ class AccelerationSession:
 
     def report(self) -> dict[str, Any]:
         return {
-            "installed": [{"name": item.name, **deepcopy(dict(item.details))} for item in self.handles],
+            "installed": [
+                {
+                    "name": item.name,
+                    **deepcopy(dict(item.details)),
+                    **({"runtime": deepcopy(dict(item.runtime_report()))} if item.runtime_report else {}),
+                }
+                for item in self.handles
+            ],
             "execution_verified": False,
         }
+
+    def reset_request_window(self) -> None:
+        for handle in self.handles:
+            if handle.reset_request_window is not None:
+                handle.reset_request_window()
 
     def uninstall(self) -> None:
         """Restore original attributes; compiled/captured models must be rebuilt."""

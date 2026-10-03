@@ -1,0 +1,401 @@
+{
+  "scope": "Calibration provenance for independent native SVDQuant and FP8 encoder diagnostics. Tensor artifacts remain local.",
+  "calibration_data": "Two real Wan generations from boat/city prompts with seeds 11/12; evaluation uses fox prompt and seeds 42/43.",
+  "svdquant_format": "worldfoundry-svdquant-v1; independent packed W4A4 with INT8 register dot, not Nunchaku binary-compatible",
+  "fp8_margin": 2.0,
+  "rank": 32,
+  "artifacts": [
+    {
+      "artifact": "lightvae-fp8-early_residual.pt",
+      "kind": "lightvae_fp8",
+      "sha256": "4de4958acd37e650ae17dec161d2e1a8ca333b4723409f85174d1dde7cfa67cd",
+      "bytes": 192788,
+      "modules": [
+        "model.encoder.downsamples.0.residual.6"
+      ],
+      "calibration_commit": "183147e331c40e09b827a6e6f41fc0ec5c162204",
+      "calibration_geometry": [
+        17,
+        320,
+        576
+      ],
+      "source_unchanged": true,
+      "inputs_unchanged": true,
+      "seeds": [
+        11,
+        12
+      ],
+      "subset_of_sha256": "ef06939009d0338fa80b504017813eaf7911143d6df7d63aea5704972bcf52b8",
+      "input_hashes": [
+        {
+          "file": "lightvaew2_1.pth",
+          "sha256": "d5d6b094d4829fb03b6179be2cf4589baab21c9fea1ca70dcaa8c85ba8183ec9",
+          "bytes": 32208043
+        },
+        {
+          "file": "calibration_11.pt",
+          "sha256": "425fdc4a25c657313c08f7ae50aae220e4aa522d6f6defa3c38c785ecf8c0112",
+          "bytes": 38524418
+        },
+        {
+          "file": "calibration_12.pt",
+          "sha256": "2bdfda7c7dcd6fa673df6e6afd1bad63a3200c81fa788d43f82752e3091c17b9",
+          "bytes": 38524418
+        }
+      ],
+      "observed_calls": {
+        "model.encoder.downsamples.0.residual.6": 10
+      }
+    },
+    {
+      "artifact": "lightvae-fp8-middle_projection.pt",
+      "kind": "lightvae_fp8",
+      "sha256": "48cc9e18cdc9c006b7e7f636d06280e96b8ee36b8e9b8e848f4ba630483f9785",
+      "bytes": 186964,
+      "modules": [
+        "model.encoder.middle.1.proj"
+      ],
+      "calibration_commit": "183147e331c40e09b827a6e6f41fc0ec5c162204",
+      "calibration_geometry": [
+        17,
+        320,
+        576
+      ],
+      "source_unchanged": true,
+      "inputs_unchanged": true,
+      "seeds": [
+        11,
+        12
+      ],
+      "subset_of_sha256": "ef06939009d0338fa80b504017813eaf7911143d6df7d63aea5704972bcf52b8",
+      "input_hashes": [
+        {
+          "file": "lightvaew2_1.pth",
+          "sha256": "d5d6b094d4829fb03b6179be2cf4589baab21c9fea1ca70dcaa8c85ba8183ec9",
+          "bytes": 32208043
+        },
+        {
+          "file": "calibration_11.pt",
+          "sha256": "425fdc4a25c657313c08f7ae50aae220e4aa522d6f6defa3c38c785ecf8c0112",
+          "bytes": 38524418
+        },
+        {
+          "file": "calibration_12.pt",
+          "sha256": "2bdfda7c7dcd6fa673df6e6afd1bad63a3200c81fa788d43f82752e3091c17b9",
+          "bytes": 38524418
+        }
+      ],
+      "observed_calls": {
+        "model.encoder.middle.1.proj": 10
+      }
+    },
+    {
+      "artifact": "lightvae-fp8.pt",
+      "kind": "lightvae_fp8",
+      "sha256": "ef06939009d0338fa80b504017813eaf7911143d6df7d63aea5704972bcf52b8",
+      "bytes": 3647030,
+      "modules": [
+        "model.encoder.conv1",
+        "model.encoder.downsamples.0.residual.2",
+        "model.encoder.downsamples.0.residual.6",
+        "model.encoder.downsamples.1.residual.2",
+        "model.encoder.downsamples.1.residual.6",
+        "model.encoder.downsamples.2.resample.1",
+        "model.encoder.downsamples.3.residual.2",
+        "model.encoder.downsamples.3.residual.6",
+        "model.encoder.downsamples.3.shortcut",
+        "model.encoder.downsamples.4.residual.2",
+        "model.encoder.downsamples.4.residual.6",
+        "model.encoder.downsamples.5.resample.1",
+        "model.encoder.downsamples.5.time_conv",
+        "model.encoder.downsamples.6.residual.2",
+        "model.encoder.downsamples.6.residual.6",
+        "model.encoder.downsamples.6.shortcut",
+        "model.encoder.downsamples.7.residual.2",
+        "model.encoder.downsamples.7.residual.6",
+        "model.encoder.downsamples.8.resample.1",
+        "model.encoder.downsamples.8.time_conv",
+        "model.encoder.downsamples.9.residual.2",
+        "model.encoder.downsamples.9.residual.6",
+        "model.encoder.downsamples.10.residual.2",
+        "model.encoder.downsamples.10.residual.6",
+        "model.encoder.middle.0.residual.2",
+        "model.encoder.middle.0.residual.6",
+        "model.encoder.middle.1.to_qkv",
+        "model.encoder.middle.1.proj",
+        "model.encoder.middle.2.residual.2",
+        "model.encoder.middle.2.residual.6",
+        "model.encoder.head.2",
+        "model.conv1"
+      ],
+      "calibration_commit": "183147e331c40e09b827a6e6f41fc0ec5c162204",
+      "calibration_geometry": [
+        17,
+        320,
+        576
+      ],
+      "source_unchanged": true,
+      "inputs_unchanged": true,
+      "seeds": [
+        11,
+        12
+      ],
+      "subset_of_sha256": null,
+      "input_hashes": [
+        {
+          "file": "lightvaew2_1.pth",
+          "sha256": "d5d6b094d4829fb03b6179be2cf4589baab21c9fea1ca70dcaa8c85ba8183ec9",
+          "bytes": 32208043
+        },
+        {
+          "file": "calibration_11.pt",
+          "sha256": "425fdc4a25c657313c08f7ae50aae220e4aa522d6f6defa3c38c785ecf8c0112",
+          "bytes": 38524418
+        },
+        {
+          "file": "calibration_12.pt",
+          "sha256": "2bdfda7c7dcd6fa673df6e6afd1bad63a3200c81fa788d43f82752e3091c17b9",
+          "bytes": 38524418
+        }
+      ],
+      "observed_calls": {
+        "model.encoder.conv1": 10,
+        "model.encoder.downsamples.0.residual.2": 10,
+        "model.encoder.downsamples.0.residual.6": 10,
+        "model.encoder.downsamples.1.residual.2": 10,
+        "model.encoder.downsamples.1.residual.6": 10,
+        "model.encoder.downsamples.2.resample.1": 10,
+        "model.encoder.downsamples.3.residual.2": 10,
+        "model.encoder.downsamples.3.residual.6": 10,
+        "model.encoder.downsamples.3.shortcut": 10,
+        "model.encoder.downsamples.4.residual.2": 10,
+        "model.encoder.downsamples.4.residual.6": 10,
+        "model.encoder.downsamples.5.resample.1": 10,
+        "model.encoder.downsamples.5.time_conv": 8,
+        "model.encoder.downsamples.6.residual.2": 10,
+        "model.encoder.downsamples.6.residual.6": 10,
+        "model.encoder.downsamples.6.shortcut": 10,
+        "model.encoder.downsamples.7.residual.2": 10,
+        "model.encoder.downsamples.7.residual.6": 10,
+        "model.encoder.downsamples.8.resample.1": 10,
+        "model.encoder.downsamples.8.time_conv": 8,
+        "model.encoder.downsamples.9.residual.2": 10,
+        "model.encoder.downsamples.9.residual.6": 10,
+        "model.encoder.downsamples.10.residual.2": 10,
+        "model.encoder.downsamples.10.residual.6": 10,
+        "model.encoder.middle.0.residual.2": 10,
+        "model.encoder.middle.0.residual.6": 10,
+        "model.encoder.middle.1.to_qkv": 10,
+        "model.encoder.middle.1.proj": 10,
+        "model.encoder.middle.2.residual.2": 10,
+        "model.encoder.middle.2.residual.6": 10,
+        "model.encoder.head.2": 10,
+        "model.conv1": 2
+      }
+    },
+    {
+      "artifact": "svdquant-last-block.pt",
+      "kind": "svdquant",
+      "sha256": "b8c34184e9811d35f4a60043c2a659c979ca03f264a748b8aded2df98cebae76",
+      "bytes": 18390392,
+      "modules": [
+        "blocks.29.ffn.0",
+        "blocks.29.ffn.2"
+      ],
+      "calibration_commit": "c1a368c2b60550ccd9500bd807a934befefda914",
+      "calibration_geometry": [
+        17,
+        320,
+        576
+      ],
+      "source_unchanged": true,
+      "inputs_unchanged": true,
+      "seeds": [
+        11,
+        12
+      ],
+      "subset_of_sha256": "db2dd553a5924b68ab81e76fce91b7337b272235bc75d45f839e55bc359a2d3f",
+      "input_hashes": [
+        {
+          "file": "diffusion_pytorch_model.safetensors",
+          "sha256": "96b6b242ca1c2f24e9d02cd6596066fab6d310e2d7538f33ae267cb18d957e8f",
+          "bytes": 5676070424
+        },
+        {
+          "file": "models_t5_umt5-xxl-enc-bf16.pth",
+          "sha256": "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5afe36745b746fd81d",
+          "bytes": 11361920418
+        },
+        {
+          "file": "Wan2.1_VAE.pth",
+          "sha256": "38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981",
+          "bytes": 507609880
+        }
+      ],
+      "observed_calls": {
+        "blocks.29.ffn.0": 80,
+        "blocks.29.ffn.2": 80
+      }
+    },
+    {
+      "artifact": "svdquant.pt",
+      "kind": "svdquant",
+      "sha256": "db2dd553a5924b68ab81e76fce91b7337b272235bc75d45f839e55bc359a2d3f",
+      "bytes": 546626714,
+      "modules": [
+        "blocks.0.ffn.0",
+        "blocks.0.ffn.2",
+        "blocks.1.ffn.0",
+        "blocks.1.ffn.2",
+        "blocks.2.ffn.0",
+        "blocks.2.ffn.2",
+        "blocks.3.ffn.0",
+        "blocks.3.ffn.2",
+        "blocks.4.ffn.0",
+        "blocks.4.ffn.2",
+        "blocks.5.ffn.0",
+        "blocks.5.ffn.2",
+        "blocks.6.ffn.0",
+        "blocks.6.ffn.2",
+        "blocks.7.ffn.0",
+        "blocks.7.ffn.2",
+        "blocks.8.ffn.0",
+        "blocks.8.ffn.2",
+        "blocks.9.ffn.0",
+        "blocks.9.ffn.2",
+        "blocks.10.ffn.0",
+        "blocks.10.ffn.2",
+        "blocks.11.ffn.0",
+        "blocks.11.ffn.2",
+        "blocks.12.ffn.0",
+        "blocks.12.ffn.2",
+        "blocks.13.ffn.0",
+        "blocks.13.ffn.2",
+        "blocks.14.ffn.0",
+        "blocks.14.ffn.2",
+        "blocks.15.ffn.0",
+        "blocks.15.ffn.2",
+        "blocks.16.ffn.0",
+        "blocks.16.ffn.2",
+        "blocks.17.ffn.0",
+        "blocks.17.ffn.2",
+        "blocks.18.ffn.0",
+        "blocks.18.ffn.2",
+        "blocks.19.ffn.0",
+        "blocks.19.ffn.2",
+        "blocks.20.ffn.0",
+        "blocks.20.ffn.2",
+        "blocks.21.ffn.0",
+        "blocks.21.ffn.2",
+        "blocks.22.ffn.0",
+        "blocks.22.ffn.2",
+        "blocks.23.ffn.0",
+        "blocks.23.ffn.2",
+        "blocks.24.ffn.0",
+        "blocks.24.ffn.2",
+        "blocks.25.ffn.0",
+        "blocks.25.ffn.2",
+        "blocks.26.ffn.0",
+        "blocks.26.ffn.2",
+        "blocks.27.ffn.0",
+        "blocks.27.ffn.2",
+        "blocks.28.ffn.0",
+        "blocks.28.ffn.2",
+        "blocks.29.ffn.0",
+        "blocks.29.ffn.2"
+      ],
+      "calibration_commit": "c1a368c2b60550ccd9500bd807a934befefda914",
+      "calibration_geometry": [
+        17,
+        320,
+        576
+      ],
+      "source_unchanged": true,
+      "inputs_unchanged": true,
+      "seeds": [
+        11,
+        12
+      ],
+      "subset_of_sha256": null,
+      "input_hashes": [
+        {
+          "file": "diffusion_pytorch_model.safetensors",
+          "sha256": "96b6b242ca1c2f24e9d02cd6596066fab6d310e2d7538f33ae267cb18d957e8f",
+          "bytes": 5676070424
+        },
+        {
+          "file": "models_t5_umt5-xxl-enc-bf16.pth",
+          "sha256": "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5afe36745b746fd81d",
+          "bytes": 11361920418
+        },
+        {
+          "file": "Wan2.1_VAE.pth",
+          "sha256": "38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981",
+          "bytes": 507609880
+        }
+      ],
+      "observed_calls": {
+        "blocks.0.ffn.0": 80,
+        "blocks.0.ffn.2": 80,
+        "blocks.1.ffn.0": 80,
+        "blocks.1.ffn.2": 80,
+        "blocks.2.ffn.0": 80,
+        "blocks.2.ffn.2": 80,
+        "blocks.3.ffn.0": 80,
+        "blocks.3.ffn.2": 80,
+        "blocks.4.ffn.0": 80,
+        "blocks.4.ffn.2": 80,
+        "blocks.5.ffn.0": 80,
+        "blocks.5.ffn.2": 80,
+        "blocks.6.ffn.0": 80,
+        "blocks.6.ffn.2": 80,
+        "blocks.7.ffn.0": 80,
+        "blocks.7.ffn.2": 80,
+        "blocks.8.ffn.0": 80,
+        "blocks.8.ffn.2": 80,
+        "blocks.9.ffn.0": 80,
+        "blocks.9.ffn.2": 80,
+        "blocks.10.ffn.0": 80,
+        "blocks.10.ffn.2": 80,
+        "blocks.11.ffn.0": 80,
+        "blocks.11.ffn.2": 80,
+        "blocks.12.ffn.0": 80,
+        "blocks.12.ffn.2": 80,
+        "blocks.13.ffn.0": 80,
+        "blocks.13.ffn.2": 80,
+        "blocks.14.ffn.0": 80,
+        "blocks.14.ffn.2": 80,
+        "blocks.15.ffn.0": 80,
+        "blocks.15.ffn.2": 80,
+        "blocks.16.ffn.0": 80,
+        "blocks.16.ffn.2": 80,
+        "blocks.17.ffn.0": 80,
+        "blocks.17.ffn.2": 80,
+        "blocks.18.ffn.0": 80,
+        "blocks.18.ffn.2": 80,
+        "blocks.19.ffn.0": 80,
+        "blocks.19.ffn.2": 80,
+        "blocks.20.ffn.0": 80,
+        "blocks.20.ffn.2": 80,
+        "blocks.21.ffn.0": 80,
+        "blocks.21.ffn.2": 80,
+        "blocks.22.ffn.0": 80,
+        "blocks.22.ffn.2": 80,
+        "blocks.23.ffn.0": 80,
+        "blocks.23.ffn.2": 80,
+        "blocks.24.ffn.0": 80,
+        "blocks.24.ffn.2": 80,
+        "blocks.25.ffn.0": 80,
+        "blocks.25.ffn.2": 80,
+        "blocks.26.ffn.0": 80,
+        "blocks.26.ffn.2": 80,
+        "blocks.27.ffn.0": 80,
+        "blocks.27.ffn.2": 80,
+        "blocks.28.ffn.0": 80,
+        "blocks.28.ffn.2": 80,
+        "blocks.29.ffn.0": 80,
+        "blocks.29.ffn.2": 80
+      }
+    }
+  ]
+}
