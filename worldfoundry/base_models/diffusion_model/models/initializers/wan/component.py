@@ -33,7 +33,6 @@ import torch
 from ....components import ComponentBuildContext
 from ....contracts import DiffusionRequest, LatentEncoder, LatentInitialization
 
-
 # Internal semantic proof consumed by the Wan TI2V denoiser.  The initializer
 # knows whether an image was supplied without inspecting a CUDA tensor; the
 # denoiser can therefore retain a scalar timestep for all-noise T2V requests
@@ -509,7 +508,9 @@ class WanVaceLatentInitializer(WanTextToVideoLatentInitializer):
             )
         if request.batch_size != 1:
             raise ValueError("Wan VACE media conditioning currently requires batch size one")
-        frames = torch.from_numpy(coerce_video_frames(value)[..., :3]).permute(0, 3, 1, 2).float()
+        frames = torch.from_numpy(
+            coerce_video_frames(value, max_frames=request.num_frames)[..., :3]
+        ).permute(0, 3, 1, 2).float()
         frames = WanVaceLatentInitializer._fit_frames(frames, request.num_frames)
         frames = torch.nn.functional.interpolate(
             frames,
@@ -530,8 +531,8 @@ class WanVaceLatentInitializer(WanTextToVideoLatentInitializer):
         dtype: torch.dtype,
     ) -> torch.Tensor:
         from worldfoundry.core import load_pil_image
-        from worldfoundry.core.media.types import IMAGE_EXTENSIONS
         from worldfoundry.core.media.codecs.video import coerce_video_frames
+        from worldfoundry.core.media.types import IMAGE_EXTENSIONS
 
         value = request.inputs.get("vace_mask", request.inputs.get("mask"))
         if value is None:
@@ -551,7 +552,7 @@ class WanVaceLatentInitializer(WanTextToVideoLatentInitializer):
             array = np.asarray(load_pil_image(value, first_sequence_item=False), dtype=np.uint8)
             arrays = array[None]
         else:
-            arrays = coerce_video_frames(value)
+            arrays = coerce_video_frames(value, max_frames=request.num_frames)
         frames = torch.from_numpy(np.ascontiguousarray(arrays)).float()
         if frames.shape[-1] > 1:
             frames = frames[..., :3].mean(dim=-1, keepdim=True)

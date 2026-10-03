@@ -209,6 +209,7 @@ _EXPORT_MODULES = {
     "read_text_uri": "worldfoundry.core.io",
     "read_text_tail": "worldfoundry.core.execution.process",
     "read_video": "worldfoundry.core.io",
+    "read_video_window_rgb": "worldfoundry.core.io",
     "resize_video_tensor_to_resolution": "worldfoundry.core.io",
     "HF_URI_SCHEME": "worldfoundry.core.io",
     "hf_download_or_fpath": "worldfoundry.core.io",

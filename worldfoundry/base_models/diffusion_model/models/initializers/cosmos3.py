@@ -64,7 +64,7 @@ class Cosmos3LatentInitializer(MultiStageLatentInitializer):
 
     @staticmethod
     def _video_tensor(value, *, height, width, num_frames, device, dtype) -> torch.Tensor:
-        frames = torch.from_numpy(coerce_video_frames(value)).permute(0, 3, 1, 2).float()
+        frames = torch.from_numpy(coerce_video_frames(value, max_frames=num_frames)).permute(0, 3, 1, 2).float()
         frames = functional.interpolate(frames, (height, width), mode="bilinear", align_corners=False)
         if len(frames) < num_frames:
             frames = torch.cat((frames, frames[-1:].expand(num_frames - len(frames), -1, -1, -1)))

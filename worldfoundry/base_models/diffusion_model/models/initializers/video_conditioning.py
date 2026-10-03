@@ -63,7 +63,9 @@ def prepare_video_conditioning_pixels(
                 f"{list(allowed_latent_frames)}, got {latent_frames}"
             )
         physical_frames = temporal_compression * (latent_frames - 1) + 1
-        frames = torch.from_numpy(coerce_video_frames(video)).permute(0, 3, 1, 2)
+        frames = torch.from_numpy(
+            coerce_video_frames(video, max_frames=physical_frames, from_end=True)
+        ).permute(0, 3, 1, 2)
         if len(frames) < physical_frames:
             raise ValueError(
                 f"{owner} video conditioning requires at least {physical_frames} input frames"

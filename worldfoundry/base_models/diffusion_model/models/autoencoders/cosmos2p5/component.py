@@ -107,7 +107,7 @@ class Cosmos25VideoCodec:
             return None
         if request.batch_size != 1:
             raise ValueError("Cosmos Transfer2.5 control video currently requires batch size 1")
-        frame_array = coerce_video_frames(control)
+        frame_array = coerce_video_frames(control, max_frames=request.num_frames)
         if not len(frame_array):
             raise ValueError("Cosmos Transfer2.5 control video cannot be empty")
         control_is_preprocessed = bool(

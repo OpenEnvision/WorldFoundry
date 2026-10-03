@@ -4,16 +4,16 @@ Action format derived from VPT https://github.com/openai/Video-Pre-Training
 """
 
 import json
-import math
 from pathlib import Path
+from typing import Mapping, Sequence
 
 import av
 import torch
-from torch import nn
+from einops import rearrange
 from torchvision.io import read_image, read_video
 from torchvision.transforms.functional import resize
-from einops import rearrange
-from typing import Mapping, Sequence
+
+from worldfoundry.core.media.codecs.video import read_video_window_rgb
 
 
 def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
@@ -117,10 +117,13 @@ def load_prompt(path, video_offset=None, n_prompt_frames=1):
         # add frame dimension
         prompt = rearrange(prompt, "c h w -> 1 c h w")
     elif path.lower().split(".")[-1] in VIDEO_EXTENSIONS:
-        prompt = read_video(path, pts_unit="sec")[0]
-        if video_offset is not None:
-            prompt = prompt[video_offset:]
-        prompt = prompt[:n_prompt_frames]
+        if video_offset is not None and video_offset < 0:
+            # Retain the existing Python-slice semantics for offsets from EOF.
+            prompt = read_video(path, pts_unit="sec")[0][video_offset:][:n_prompt_frames]
+        else:
+            prompt = torch.from_numpy(read_video_window_rgb(
+                path, start_frame=video_offset or 0, frame_count=n_prompt_frames,
+            ))
         prompt = rearrange(prompt, "t h w c -> t c h w")
     else:
         raise ValueError(f"unrecognized prompt file extension; expected one in {IMAGE_EXTENSIONS} or {VIDEO_EXTENSIONS}")

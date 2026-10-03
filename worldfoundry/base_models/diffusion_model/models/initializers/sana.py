@@ -165,7 +165,7 @@ class SanaVideoToVideoInitializer(SanaNoiseInitializer):
             raise ValueError("SANA-Streaming requires request.inputs['video']")
         if request.batch_size != 1:
             raise ValueError("SANA-Streaming currently requires prompt batch size 1")
-        source_frames = coerce_video_frames(value)
+        source_frames = coerce_video_frames(value, max_frames=request.num_frames)
         if source_frames.shape[0] < request.num_frames:
             raise ValueError(
                 "SANA-Streaming source video has "

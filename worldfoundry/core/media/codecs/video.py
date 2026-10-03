@@ -24,11 +24,15 @@ import threading
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from worldfoundry.core.observability.nvtx import nvtx_range
-
-from worldfoundry.core.media.types import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from worldfoundry.core.io.filesystem.storage import (
+    local_path_for_uri,
+    parse_uri_scheme,
+    uri_to_local_path,
+    write_binary_uri,
+)
 from worldfoundry.core.io.paths import scratch_directory
-from worldfoundry.core.io.filesystem.storage import local_path_for_uri, parse_uri_scheme, uri_to_local_path, write_binary_uri
+from worldfoundry.core.media.types import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from worldfoundry.core.observability.nvtx import nvtx_range
 
 # ──────────────────────────────────────────────────────────────────────────
 # FFmpeg / decode — explicit path → ImageIO bundle → PATH; never import cv2 here
@@ -141,7 +145,13 @@ def read_image_as_video_tensor(
     return video.unsqueeze(0).permute(0, 2, 1, 3, 4)
 
 
-def video_tensor_to_uint8_frames(video_tensor, *, value_range: str | tuple[float, float] = "auto") -> "object":
+def video_tensor_to_uint8_frames(
+    video_tensor,
+    *,
+    value_range: str | tuple[float, float] = "auto",
+    max_frames: int | None = None,
+    from_end: bool = False,
+) -> "object":
     """Convert a normalized torch video tensor to uint8 THWC frames.
 
     ``value_range="auto"`` treats tensors with negative values as ``[-1, 1]``
@@ -152,6 +162,7 @@ def video_tensor_to_uint8_frames(video_tensor, *, value_range: str | tuple[float
 
     if not torch.is_tensor(video_tensor):
         raise TypeError(f"Expected torch.Tensor, got {type(video_tensor)}")
+    max_frames = _validate_frame_limit(max_frames, from_end)
     # Normalize on the source device, then transfer the compact uint8 result.
     # Moving a decoded CUDA video to CPU first used to copy four bytes per
     # channel and run clamp/scale on the host.  The final artifact only needs
@@ -183,6 +194,10 @@ def video_tensor_to_uint8_frames(video_tensor, *, value_range: str | tuple[float
         low, high = value_range
     if high <= low:
         raise ValueError("value_range high bound must be larger than low bound.")
+    # Range inference must see the original input, but only selected frames
+    # need conversion and the CUDA-to-host copy.
+    if max_frames is not None:
+        video = video[-max_frames:] if from_end else video[:max_frames]
     video = (
         (video.clamp(float(low), float(high)) - float(low))
         * (255.0 / (float(high) - float(low)))
@@ -190,8 +205,31 @@ def video_tensor_to_uint8_frames(video_tensor, *, value_range: str | tuple[float
     return video.contiguous().cpu().numpy()
 
 
-def coerce_video_frames(video_input):
-    """Normalize common video inputs into a uint8 THWC numpy array."""
+def _validate_frame_limit(max_frames: int | None, from_end: bool) -> int | None:
+    import operator
+
+    if not isinstance(from_end, bool):
+        raise TypeError("from_end must be a bool")
+    if max_frames is None:
+        if from_end:
+            raise ValueError("from_end requires max_frames")
+        return None
+    if isinstance(max_frames, bool):
+        raise TypeError("max_frames must be an integer")
+    max_frames = operator.index(max_frames)
+    if max_frames < 1:
+        raise ValueError("max_frames must be positive")
+    return max_frames
+
+
+def coerce_video_frames(video_input, *, max_frames: int | None = None, from_end: bool = False):
+    """Normalize video inputs to uint8 THWC, optionally keeping a prefix/tail.
+
+    File inputs use the same ImageIO decoder as the full reader. Prefix reads
+    stop early; tail reads retain only the requested frame count while reading
+    to EOF. Array/tensor inputs retain whole-input range detection before
+    slicing, so truncation does not change automatic value normalization.
+    """
 
     import os
 
@@ -199,11 +237,16 @@ def coerce_video_frames(video_input):
     import torch
     from PIL import Image
 
+    max_frames = _validate_frame_limit(max_frames, from_end)
     if isinstance(video_input, (str, os.PathLike)):
-        return load_video_frames(str(video_input))
+        if max_frames is None:
+            return load_video_frames(str(video_input))
+        return load_video_frames(str(video_input), max_frames=max_frames, from_end=from_end)
 
     if torch.is_tensor(video_input):
-        return video_tensor_to_uint8_frames(video_input)
+        if max_frames is None:
+            return video_tensor_to_uint8_frames(video_input)
+        return video_tensor_to_uint8_frames(video_input, max_frames=max_frames, from_end=from_end)
 
     if isinstance(video_input, np.ndarray):
         video = video_input
@@ -235,25 +278,45 @@ def coerce_video_frames(video_input):
         raise ValueError(f"Unable to infer channel layout for video shape {tuple(video.shape)}")
 
     if converted.dtype != np.uint8:
+        normalized_range = np.issubdtype(converted.dtype, np.floating) and converted.max() <= 1.0
+        if max_frames is not None:
+            converted = converted[-max_frames:] if from_end else converted[:max_frames]
         if np.issubdtype(converted.dtype, np.floating):
-            if converted.max() <= 1.0:
+            if normalized_range:
                 converted = np.clip(converted * 255.0, 0, 255)
             else:
                 converted = np.clip(converted, 0, 255)
         else:
             converted = np.clip(converted, 0, 255)
-        converted = converted.astype(np.uint8)
-    return converted
+        return converted.astype(np.uint8)
+    if max_frames is None:
+        return converted
+    return converted[-max_frames:] if from_end else converted[:max_frames]
 
 
-def load_video_frames(video_path: str | Path):
-    """Decode a local or remote video into a uint8 THWC numpy array."""
+def load_video_frames(video_path: str | Path, *, max_frames: int | None = None, from_end: bool = False):
+    """Decode a video, optionally bounding its prefix/tail without changing RGB conversion."""
 
     import imageio
     import numpy as np
 
+    max_frames = _validate_frame_limit(max_frames, from_end)
     with local_path_for_uri(video_path) as local_path:
-        frames = imageio.mimread(str(local_path), memtest=False)
+        if max_frames is None:
+            frames = imageio.mimread(str(local_path), memtest=False)
+        else:
+            from collections import deque
+
+            frames = deque(maxlen=max_frames)
+            reader = imageio.get_reader(str(local_path), mode="I")
+            try:
+                for frame in reader:
+                    # Some readers reuse a frame buffer on their next read.
+                    frames.append(np.array(frame, copy=True))
+                    if not from_end and len(frames) == max_frames:
+                        break
+            finally:
+                reader.close()
     if len(frames) == 0:
         raise ValueError(f"No frames found in video: {video_path}")
     arrays = []
@@ -263,6 +326,48 @@ def load_video_frames(video_path: str | Path):
             array = np.clip(array, 0, 255).astype(np.uint8)
         arrays.append(array)
     return np.stack(arrays, axis=0)
+
+
+def read_video_window_rgb(
+    video_path: str | Path,
+    *,
+    start_frame: int = 0,
+    frame_count: int,
+):
+    """Decode up to ``frame_count`` RGB frames without decoding the tail.
+
+    Frame offsets are decoded sequentially from the beginning, preserving
+    PyAV/torchvision frame ordering and RGB conversion, including variable
+    frame-rate inputs. A window that reaches EOF returns its available frames;
+    an empty window raises ``ValueError``. The decoder and any temporary local
+    copy of a remote input are closed even when decoding fails.
+    """
+
+    import operator
+
+    import av
+    import numpy as np
+
+    if isinstance(start_frame, bool) or isinstance(frame_count, bool):
+        raise TypeError("start_frame and frame_count must be integers")
+    start_frame = operator.index(start_frame)
+    frame_count = operator.index(frame_count)
+    if start_frame < 0:
+        raise ValueError("start_frame must be non-negative")
+    if frame_count < 1:
+        raise ValueError("frame_count must be positive")
+    frames = []
+    with local_path_for_uri(video_path) as local_path:
+        with av.open(str(local_path)) as container:
+            for index, frame in enumerate(container.decode(video=0)):
+                if index < start_frame:
+                    continue
+                frames.append(frame.to_rgb().to_ndarray())
+                if len(frames) == frame_count:
+                    break
+    if not frames:
+        raise ValueError(f"No frames found in video window starting at {start_frame}: {video_path}")
+    return np.stack(frames, axis=0)
 
 
 def get_video_details(video_path: str | Path) -> tuple[int, float, float]:
@@ -992,6 +1097,7 @@ __all__ = [
     "probe_video_metadata",
     "read_image_as_video_tensor",
     "read_video",
+    "read_video_window_rgb",
     "resize_video_tensor_to_resolution",
     "sample_video_frames",
     "save_image_or_video_tensor",

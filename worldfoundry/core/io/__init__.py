@@ -272,6 +272,7 @@ _EXPORT_MODULES = {
     "sync_directory": "worldfoundry.core.io.filesystem.integrity",
     "text_sha256": "worldfoundry.core.io.filesystem.integrity",
     "read_video": "worldfoundry.core.media.codecs.video",
+    "read_video_window_rgb": "worldfoundry.core.media.codecs.video",
     "register_callable": "worldfoundry.core.configuration.hydra_utils",
     "register_class": "worldfoundry.core.configuration.hydra_utils",
     "register_omegaconf_resolvers": "worldfoundry.core.configuration.hydra_utils",
