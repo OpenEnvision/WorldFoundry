@@ -386,6 +386,7 @@ def test_mha_gate_requires_every_projection_and_real_quantized_calls(failure):
             }
         }
     }
+    evidence["denoiser"] = {"effective": evidence["denoiser"]}
     if failure == "missing_projection":
         runtime["blocks.0.self_attn"]["projections"].pop("o")
     elif failure == "missing_module":
@@ -428,7 +429,7 @@ def test_svdquant_gate_requires_packed_execution_in_every_selected_layer():
         "layer_reports": [{"module": "a", "native_packed_int4_calls": 2}],
     }
     installed = {"name": "svdquant", "modules": ["a", "b"]}
-    evidence = {"quantization": report, "denoiser": {"accelerations": {"installed": [installed]}}}
+    evidence = {"quantization": report, "denoiser": {"effective": {"accelerations": {"installed": [installed]}}}}
     assert not qualify_execution(options, evidence)["passed"]
     report["layer_reports"].append({"module": "b", "native_packed_int4_calls": 0})
     assert not qualify_execution(options, evidence)["passed"]

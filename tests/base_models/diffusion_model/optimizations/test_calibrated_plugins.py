@@ -55,6 +55,14 @@ def test_mha_canonical_paths_restore(fusion, image):
     report = session.report()["installed"][0]["runtime"]
     assert all(value["calls"] == 1 for value in report.values())
     assert report["blocks.0.cross_attn"]["sdpa_calls"] == (2 if image else 1)
+    from benchmarks.inference.plugin_diagnostics import qualify_execution
+    from worldfoundry.base_models.diffusion_model.models.denoisers.wan import WanDenoiser
+
+    runtime = WanDenoiser(model, compute_dtype=torch.float32, manage_autocast=False)
+    assert qualify_execution(
+        {"optimized_mha": {"self": {"fusion": fusion}, "cross": {"fusion": fusion}}},
+        {"denoiser": runtime.runtime_optimization_report()},
+    )["passed"]
     session.reset_request_window()
     assert all(value["calls"] == 0 for value in session.report()["installed"][0]["runtime"].values())
     with pytest.raises(RuntimeError, match="placement"):

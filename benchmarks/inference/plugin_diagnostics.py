@@ -108,14 +108,16 @@ def qualify_execution(options, evidence):
                 and not counters.get("fallback_reasons")
             )
             if name == "svdquant":
-                installed = evidence.get("denoiser", {}).get("accelerations", {}).get("installed", [])
+                installed = (
+                    evidence.get("denoiser", {}).get("effective", {}).get("accelerations", {}).get("installed", [])
+                )
                 requested = [item for item in installed if item.get("name") == name]
                 layers = counters.get("layer_reports", [])
                 expected = requested[0].get("modules", []) if len(requested) == 1 else []
                 checks[name] &= bool(expected) and {item.get("module") for item in layers} == set(expected)
                 checks[name] &= all(item.get("native_packed_int4_calls", 0) > 0 for item in layers)
         elif name == "optimized_mha":
-            installed = evidence.get("denoiser", {}).get("accelerations", {}).get("installed", [])
+            installed = evidence.get("denoiser", {}).get("effective", {}).get("accelerations", {}).get("installed", [])
             reports = [item for item in installed if item.get("name") == name]
             checks[name] = len(reports) == 1
             if reports:
