@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 import types
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -18,9 +20,12 @@ def test_strict_renderer_matches_cpu_and_repeats(monkeypatch):
     trajectory = types.ModuleType(trajectory_name)
     trajectory.generate_traj_txt = None
     monkeypatch.setitem(sys.modules, trajectory_name, trajectory)
-    from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.scripts.render_point_cloud import (
-        render_batch,
-    )
+    source = (Path(__file__).resolve().parents[2]
+              / "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/scripts/render_point_cloud.py")
+    spec = importlib.util.spec_from_file_location("inspatio_renderer_gpu_contract", source)
+    renderer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(renderer)
+    render_batch = renderer.render_batch
 
     previous = torch.are_deterministic_algorithms_enabled()
     warn_only = torch.is_deterministic_algorithms_warn_only_enabled()

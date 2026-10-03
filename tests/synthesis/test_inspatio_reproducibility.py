@@ -133,6 +133,7 @@ def test_unrequested_leaf_initialization_preserves_rng(monkeypatch):
 
 @pytest.mark.parametrize("leaf", ["caption", "depth", "render"])
 def test_leaf_entrypoints_initialize_before_work(monkeypatch, tmp_path, leaf):
+    monkeypatch.setattr(sys, "path", list(sys.path))
     module_name = f"inspatio_leaf_{leaf}"
     calls = []
     if leaf == "caption":
