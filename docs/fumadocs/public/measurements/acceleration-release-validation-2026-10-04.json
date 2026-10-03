@@ -1,0 +1,59 @@
+{
+  "report_kind": "release_acceleration_scoped_regression_v1",
+  "recorded_at_utc": "2026-10-03T17:11:23.267920+00:00",
+  "branch": "release/public-inference-20260909",
+  "tested_release_commit": "a2a26b9ce34c072c0d968061cb4c457efb5ebc6a",
+  "status": "passed",
+  "suites": [
+    {
+      "suite": "public_cpu_whitelist",
+      "passed": 584,
+      "skipped": 0,
+      "pytest_summary": "584 passed, 9 warnings, 4 subtests passed in 145.64s (0:02:25)",
+      "raw_log_sha256": "337ac642de727c4e7e1bedbb22d3be4c768782ab0e64bcc67b05b025182dfcc0",
+      "raw_log_bytes": 3290
+    },
+    {
+      "suite": "targeted_model_core_and_diagnostics",
+      "passed": 620,
+      "skipped": 2,
+      "pytest_summary": "620 passed, 2 skipped, 4 warnings in 83.22s (0:01:23)",
+      "raw_log_sha256": "3acc68f4c4ea6ee17bacb0eee626ab5ce66fc4c6ec8fe36adfcff9ff4c0c673c",
+      "raw_log_bytes": 2804
+    },
+    {
+      "suite": "isolated_sol_real_cuda",
+      "passed": 15,
+      "skipped": 0,
+      "pytest_summary": "15 passed, 12 warnings in 20.55s",
+      "raw_log_sha256": "0dee48684994f6221e52c9f7aae4a7387102217fcbdfea063cfdf3f8c57c5a72",
+      "raw_log_bytes": 3808
+    }
+  ],
+  "scope_notes": [
+    "Public CPU checks use the repository default pytest whitelist, not every repository test.",
+    "Targeted model/core/diagnostics checks exercise CUDA in the unified Torch 2.5.1+cu121 environment; its two skips require the separate Sol provider.",
+    "The isolated Torch 2.10.0+cu128 Sol suite executes the actual H100 provider and covers those optional CUDA paths.",
+    "These suites overlap and their pass counts must not be summed.",
+    "This validates the recorded release code. Documentation-only updates after testing do not replace the tested commit or measurement source fingerprints."
+  ],
+  "test_paths": {
+    "public_cpu_whitelist": "repository default testpaths; PYTHONPATH=. CUDA_VISIBLE_DEVICES=empty; pytest -q",
+    "targeted_model_core_and_diagnostics": [
+      "tests/core/acceleration/test_plugins.py",
+      "tests/core/test_sol_attention.py",
+      "tests/core/test_diffusion_rounding.py",
+      "tests/core/test_kernel_dispatch_receipt.py",
+      "tests/base_models/diffusion_model/optimizations",
+      "tests/base_models/diffusion_model/models/denoisers",
+      "tests/base_models/diffusion_model/models/autoencoders",
+      "tests/base_models/diffusion_model/loaders/test_module_acceleration_plugins.py",
+      "tests/base_models/test_wan22_a14b_inference.py",
+      "tests/benchmarks/test_plugin_diagnostics.py",
+      "tests/benchmarks/test_lightvae_encoder.py"
+    ],
+    "isolated_sol_real_cuda": [
+      "tests/core/test_sol_attention.py"
+    ]
+  }
+}
