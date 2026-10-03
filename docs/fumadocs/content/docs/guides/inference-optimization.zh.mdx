@@ -9,6 +9,8 @@ description: WorldFoundry 推理加速哪些可以开、哪些组合会被拒绝
 
 WorldFoundry 只把「有公开开关、且主链会消费」的技术算作可用。参数被接受不等于加速。forward 之后读 `runtime_optimization_report()` 里的 `requested / effective / fallbacks`。
 
+[可插拔 diffusion 加速](/zh/docs/guides/diffusion-acceleration)补充 Sol-Engine / FlashDreams 对照、原生 SANA/Wan 插件、撤销与请求隔离，以及完整视频测试通过和淘汰的配置。
+
 下面点名的开关，主要针对 **原生 Wan 2.1 / Wan 2.2** 管线（`Wan2p1*`、`Wan2p2*`，含 VACE）。Wan 2.5 / 2.6 / 2.7 是托管 API，没有本地 kernel 开关。其他原生 recipe 只共享一部分（dtype、offload，有的还有 attention 或 VAE tiling）。家族 runtime（LTX、CogVideoX 等）用自己的参数，不要把 Wan 的 key 抄过去。
 
 <Callout type="info" title="接受 ≠ 生效">

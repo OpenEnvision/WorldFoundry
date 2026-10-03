@@ -1,0 +1,139 @@
+---
+title: 可插拔 diffusion 加速
+description: 对照 Sol-Engine 与 FlashDreams，说明原生插件、正确性边界和 H100 实测。
+---
+
+WorldFoundry 的原生加速插件默认关闭。先确认 checkpoint、执行路径和误差预算，再测实际执行与总耗时。2026-10-03 的完整 SANA 视频测试中，安全融合保持最终 latent 和视频逐位一致，端到端收益约 **0.8%–1.1%**。更激进的缓存和融合配置未通过固定质量门槛。
+
+## 上游对照
+
+对照固定版本：[FlashDreams `91c906b`](https://github.com/NVIDIA/flashdreams/tree/91c906b69992f63fb19907a25cd805fb783d314a) 与 [Sana Sol-Engine `670482d`](https://github.com/NVlabs/Sana/tree/670482d8a857d578ac8a2ea89b052d0fb47badba)。已有能力按真实消费入口区分；可选依赖或同名开关不能证明执行和性能。
+
+| 技术 | 上游路径 | WorldFoundry 既有集成与本轮变化 |
+| --- | --- | --- |
+| Attention kernel | FlashDreams 的 Triton FA2/TMA、cuDNN、原生 FP8；Sol 的 Flash/cuDNN 与 Sol-Attn | 已有 SDPA、FA2/3/4、Sage/Sage3、xFormers、TMA、原生 cuDNN FP8。新增共享 Sol-Attn dispatcher 和 Wan self/cross 独立选择。 |
+| 块内融合 | AdaLN、residual gate、QK norm/RoPE、投影与 FFN glue | 已有公共 kernel、Wan QKV/RoPE 和部分 FFN 融合。新增 SANA 可撤销适配器，默认仅逐点融合，保持 norm 和 token strides。 |
+| 不变量与历史缓存 | 文本 cross-KV、streaming KV、稳定缓存布局 | 已有 Wan 文本 cross-KV 和多种自回归缓存。各模型的 raw KV、旋转后 KV、递推状态仍有不同语义。 |
+| Feature cache | Sol 使用 EasyCache、TeaCache 和模型专属控制器 | 已有 Tea/Ada/Mag/Taylor/block cache，主要用于 Wan。新增原生 EasyCache，支持 stateless SanaMS/SanaMSVideo 和单 expert WanModel。 |
+| 量化 | FlashDreams 可分别量化投影与 attention；Sol 文档覆盖 FP8、SVDQuant/Nunchaku 等 | 已有 FP8、INT8、INT4、NVFP4 等路径；部分低位模式仍反量化后做 dense GEMM。原生 Wan/SANA 的通用 SVDQuant/Nunchaku 和完整 MHA 精度调度仍待实现。 |
+| Compile、Graph、并行 | regional compile、稳定形状 capture、模型专属并行与流水 | 已有 compile/cache、CUDA Graph、SP/CFG/VAE 并行和 offload。新增插件不解除已有 cache/Graph/SP 禁用条件。 |
+| 组合搜索 | Sol 的模型、硬件与质量预算搜索 | 已有算子 autotune。本轮新增真实 SANA 的固定候选搜索；它只选择当前 prompt、seed、几何和设备上的合格配置。 |
+
+HyperFlow 先前已向上游转发 `--sol-attn`，WorldGen 也已有可选 Flux/Nunchaku 路径；这些不等于共享原生 Wan/SANA 已完成集成。FlashDreams 的 OmniDreams LightVAE、完整 optimized MHA 和 steady-state Graph 还需要匹配权重、量化校准或模型专属生命周期。
+
+上游依据：[FlashDreams accelerated](https://github.com/NVIDIA/flashdreams/blob/91c906b69992f63fb19907a25cd805fb783d314a/docs/source/developer_guides/flashdreams_accelerated.md)、[Sol kernel](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/kernel.md)、[cache](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/cache.md)、[quant](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/quant.md)、[Sol-Attn](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/sparse/sol_attn.md)。EasyCache 控制器依据[上游算法](https://github.com/H-EmbodVis/EasyCache/tree/bfc63232cfae8c77e2dccf9d72b8f2f56bd995b8)独立实现。
+
+## 代码与生命周期
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| 通用安装器 | `core/acceleration/plugins.py` | registry、计划、冲突检测、整组安装、失败回滚、撤销 |
+| 请求状态 | `core/acceleration/easycache.py` | 在线误差估计、条件快照、dense/hit 决策、执行回执 |
+| 模型适配器 | `base_models/diffusion_model/optimizations/plugins.py` | checkpoint graph、能力和组合校验；只安装模型局部属性 |
+| SANA 运算入口 | `models/networks/sana/block_ops.py` | norm/modulation/residual；保留训练、DropPath 和自定义 norm 语义 |
+| Sol provider | `core/attention/backends/sol.py` | 可选依赖的执行边界、dtype/shape/参数检查 |
+| 验证与测量 | `tests/core/acceleration/`、模型测试、`benchmarks/inference/` | 默认输出、请求隔离、撤销、CUDA 执行与配对测量 |
+
+前五行路径以 `worldfoundry/` 为根；模型入口位于 `worldfoundry/base_models/diffusion_model/` 下。
+
+安装器先准备全部计划，再修改模型；冲突或任一安装失败会撤销已完成的修改。内置插件不增加 checkpoint 参数或改变 state-dict key。插件只能在模型空闲时切换，必须先于 compile/capture 安装；已编译模型需要重建。撤销检查所有绑定 denoiser 的活跃缓存请求。
+
+EasyCache 按显式 `request_id` 和 CFG 分支隔离，正常结束和异常退出均释放张量，只留下有界 JSON 回执。条件快照能够检测 inference tensor 的原地修改，并使旧 residual 失效。阈值 `0.0` 执行全部原始块并直接返回 dense 输出。
+
+模型加载器只在声明 `supports_acceleration_plugins` 的 DiT 上应用共享配置。assembler 检查 denoiser 的安装回执，拒绝接收了插件选项却没有安装的路径。安装回执始终标为 `execution_verified=False`；实际 kernel 和跳过块数另行验证。
+
+## 使用方式
+
+```python
+import torch
+from worldfoundry.base_models.diffusion_model.pipeline import NativeDiffusionPipeline
+from worldfoundry.core.model_loading.policy import RuntimePolicy
+
+policy = RuntimePolicy(
+    device="cuda",
+    dtype=torch.bfloat16,
+    options={"accelerations": {"sana_block_fusion": True}},
+)
+pipeline = NativeDiffusionPipeline.from_pretrained("sana-video-2b-480p", policy=policy)
+# 按常规 DiffusionRequest 运行；之后读取该请求的运行回执。
+report = pipeline.components.denoiser.runtime_optimization_report()
+```
+
+也可在已加载的空闲模型上安装并撤销，不修改环境变量：
+
+```python
+from worldfoundry.base_models.diffusion_model.optimizations.plugins import (
+    diffusion_acceleration_registry,
+    install_diffusion_accelerations,
+)
+
+model = pipeline.components.denoiser.model
+existing = getattr(model, "_worldfoundry_accelerations", None)
+if existing is not None:
+    existing.uninstall()
+session = install_diffusion_accelerations(model, {"easycache": {"threshold": 0.0}}, policy)
+# 请求由 native runner 的 finally 清理；直接调用 denoiser 时须调用 end_request。
+session.uninstall()
+
+registry = diffusion_acceleration_registry()
+# registry.register("custom_kernel", prepare_factory)
+# prepare_factory 只校验，返回 PreparedAcceleration；activate 返回可撤销 handle。
+```
+
+加载配置与手动安装任选一种；手动替换前应撤销已有 session。组件选项覆盖同名 runtime 选项。公共 native pipeline 的 load 参数也接受 `accelerations={...}`。
+
+| 插件 | 默认与边界 |
+| --- | --- |
+| `sana_block_fusion` | `backend=auto`，`min_elements=12582912`；小输入、autograd 或不合格布局保留 eager。`fuse_layer_norm=False`、`repack_tokens=False`。这两个额外选项改变数值调度，需要独立质量预算；本轮完整视频测试未通过。 |
+| `easycache` | 必须显式提供非负 `threshold`。在线学习 dense input/output 变化比例，累计预测 drift 后决定复用 `current_input + last_dense_transform`。本实现是 **embedded-token-block-stack** 变体，不是所有上游 raw-latent 变体的逐行移植。 |
+| `attention_policy` | 原生 Wan self/cross 分开绑定。Sol 仅 self；必须 BF16、head dim 128、无 mask、无 backward，`kv_splits=1`。参数非法或依赖不满足时失败，不偷偷切成 dense。 |
+
+EasyCache 当前拒绝 streaming、camera/control 子图、双 expert Wan schedule、offload、compile、CUDA Graph、SP、其他 feature cache、近似 processor 和 inplace residual。条件必须由 tensor、mapping、list/tuple 和标量组成。cache 的 block callback 必须不修改输入。Scoped attention 同样拒绝未经验证的 Graph/SP/近似 processor 组合，Wan Sol 路径还拒绝 compile。
+
+Wan Sol 配置示例，先在隔离环境安装上游 provider：
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={
+        "dit_weight_dtype": "bf16",
+        "accelerations": {"attention_policy": {
+            "self": {"backend": "sol_attn", "tau": 1.0}, "cross": "torch",
+        }},
+    },
+)
+```
+
+验证环境为 `sol-attn 0.5.0`、PyTorch `2.10.0+cu128`、Triton `3.6.0`、CUTLASS DSL `4.8.0`、cuda-python `13.4.1` 和 apache-tvm-ffi `0.1.14.post1`。源码来自上述固定 Sol 分支的 `techniques/sparse_backends`。不要为了这个可选插件升级已有推理环境；当前通用探测至少要求 PyTorch 2.10、CUDA 12.8、Triton 3.6 与 sol-attn 0.5。
+
+## H100 实测与被淘汰的配置
+
+| 测量范围 | 结果 | 正确性与限制 |
+| --- | --- | --- |
+| 官方 SANA-Video 2B block 0，32760 tokens，连续 BF16 输入，3 seeds | 单块 **1.040–1.043×**，glue **2.176–2.179×** | 输出逐位一致；输入是合成激活，不能代替视频质量。 |
+| 同一真实 block，native token strides，7920/32760 tokens，3 seeds | 单块 **1.021–1.022×**，glue **1.173–1.179×** | 输出逐位一致；实际仅 scale-shift 融合，residual 保留 eager。 |
+| 原生完整视频，320×576、41 帧、20 steps、CFG 6、shift 7、2 seeds | 安全融合 **1.008–1.011×** | 最终 latent 和 RGB 视频逐位一致。包含 prompt 编码、denoise 和 VAE；每 seed 3 轮交错 wall-time 配对，只代表当前测试样本。 |
+| Sol-Attn，BF16、8 heads、head 128，结构化合成输入 | 4096 tokens **0.720×**；8192 **2.950×**；32768 **7.763×** | relative L2 约 0.00017–0.00041；短序列更慢。尚无 native Wan 完整生成质量认证。 |
+| Sol-Attn，独立随机 Q/K/V | **淘汰，不报告加速收益** | relative L2 约 0.74–0.75，超过预设 0.01。 |
+| 完整 SANA，EasyCache threshold 0.1 | **淘汰，不报告加速收益** | 最终 latent relative L2 0.083/0.129，PSNR 30.75/27.34 dB，SSIM 0.947/0.889。 |
+
+视频候选共享固定门槛：有限值、latent relative L2 ≤0.03、PSNR ≥33 dB、SSIM ≥0.98。重排布局或完整 norm 融合都未通过。较低缓存阈值 0.025/0.05 在这两个 seed 上没有跳块；其组合耗时不能算作 EasyCache 的加速收益。候选选择要求所有 seed 的质量与执行门槛通过，并按配对 bootstrap 下界筛选，最终选择安全融合。
+
+小形状没有稳定收益，保持 eager 是既定策略。配对测量记录全部原始时间、运行环境和实际执行；三轮视频样本不能支撑普遍性能结论，也不等于 VBench/WorldScore 等语义质量认证。
+
+最终专项回归 **236 passed、3 skipped**，覆盖原有 SANA/Wan 路径、GPU 数值边界、实际 checkpoint loader、请求/CFG 隔离、条件失效、撤销、训练策略与 dispatcher。两项 skip 是不适用于 image block 的 frame-aware 参数组合，另一项 Sol CUDA 测试在主环境缺少 provider；隔离 Sol 环境另跑 **9 passed**，包含实际 H100 CuTe 调用。这不是仓库全量测试结论；旧 `tests/test_sana_integration.py` 仍引用已移除的包路径。
+
+原始证据：[连续 block](/measurements/sana-block-pointwise-2026-10-03.json)、[native strides block](/measurements/sana-block-strided-2026-10-03.json)、[完整视频候选](/measurements/sana-plugins-video-2026-10-03.json)、[Sol 算子](/measurements/sol-attention-2026-10-03.json)。视频记录含完整权重 hash；视频张量和 checkpoint 留在本地实验目录。
+
+```bash
+# 从仓库根目录运行；输出目录须为新目录。ASSETS 为既有本地 checkpoint 根。
+PYTHONPATH=. python benchmarks/inference/sana_block.py \
+  --checkpoint "$ASSETS/Efficient-Large-Model--SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth" \
+  --strided-input --grid 11,20,36 --grid 21,30,52 --out /tmp/sana-block-new
+PYTHONPATH=. python benchmarks/inference/sana_plugins.py \
+  --assets "$ASSETS" --out /tmp/sana-video-new
+# 在上述隔离 Sol 环境中执行：
+PYTHONPATH=. python benchmarks/inference/sol_attention.py --out /tmp/sol-attention-new
+```
+
+后续应分别补原生量化 checkpoint/provider、完整 MHA 调度和双 expert/cache/Graph/SP 生命周期，再用各模型的真实生成质量与性能验证。当前插件 registry 提供接入和撤销契约，这些模型专属工作仍需要完成。

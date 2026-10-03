@@ -1,0 +1,997 @@
+{
+  "schema_version": 1,
+  "scope": "real checkpoint block; synthetic inputs; no semantic or end-to-end certification",
+  "publication_certified": false,
+  "checkpoint": "checkpoint/Efficient-Large-Model--SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth",
+  "block": 0,
+  "dtype": "bfloat16",
+  "candidate": "auto",
+  "thresholds": {
+    "finite": true,
+    "relative_l2_max": 0.005
+  },
+  "runtime": {
+    "platform": "cuda",
+    "vendor": "nvidia",
+    "arch": "sm_90",
+    "device": "NVIDIA H100 80GB HBM3",
+    "device_index": 0,
+    "memory_bytes": 85017624576,
+    "driver_version": null,
+    "runtime_version": "12.1",
+    "torch_version": "2.5.1+cu121",
+    "python_version": "3.11.15",
+    "worldfoundry_version": "0.1.dev217+g20069cbf7.d20261003",
+    "worldfoundry_commit": "f4569b57b3ea5b5e2bb97e37cb8a4633d78a0cfc",
+    "system": "Linux",
+    "system_release": "5.10.0-218.0.0.mt20250120.565.mt2203sp4.x86_64"
+  },
+  "parameters": {
+    "checkpoint": "checkpoint/Efficient-Large-Model--SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth",
+    "out": "<fresh-output-directory>",
+    "grid": [
+      [
+        11,
+        20,
+        36
+      ],
+      [
+        21,
+        30,
+        52
+      ]
+    ],
+    "block": 0,
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "candidate": "auto",
+    "fuse_layer_norm": false,
+    "strided_input": true,
+    "warmup": 3,
+    "iters": 3,
+    "rounds": 8
+  },
+  "cases": [
+    {
+      "grid": [
+        11,
+        20,
+        36
+      ],
+      "seed": 42,
+      "tokens": 7920,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 0.9999998807907104,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": false,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": false,
+            "failures": [],
+            "quarantined": [],
+            "reason": "no accelerated candidate completed"
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": false,
+            "failures": [],
+            "quarantined": [],
+            "reason": "no accelerated candidate completed"
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_7920_seed42",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 6.635546684265137,
+          "p10_ms": 6.600000953674316,
+          "p90_ms": 6.640765889485676,
+          "mad_over_median": 0.0005835114887806981,
+          "raw_ms": [
+            6.646783828735352,
+            6.597514470418294,
+            6.601066589355469,
+            6.638186772664388,
+            6.638111750284831,
+            6.635210673014323,
+            6.63588269551595,
+            6.630442937215169
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 6.495861371358236,
+          "p10_ms": 6.467595799763997,
+          "p90_ms": 6.513840929667156,
+          "mad_over_median": 0.0014351421314831388,
+          "raw_ms": [
+            6.5293121337890625,
+            6.458762486775716,
+            6.471381505330403,
+            6.488565444946289,
+            6.507210413614909,
+            6.502133051554362,
+            6.492586771647136,
+            6.499135971069336
+          ]
+        },
+        "speedup_median": 1.0215037398308415,
+        "speedup_ci95": [
+          1.0200397834555488,
+          1.0228298965541671
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_7920_seed42",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.48348267873128253,
+          "p10_ms": 0.4829301277796427,
+          "p90_ms": 0.48975679874420164,
+          "mad_over_median": 0.001147261005782684,
+          "raw_ms": [
+            0.4893440008163452,
+            0.4907199939092,
+            0.4851093292236328,
+            0.48292267322540283,
+            0.48315731684366864,
+            0.4829333225886027,
+            0.4836053450902303,
+            0.4833600123723348
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.41128532091776526,
+          "p10_ms": 0.40979305903116864,
+          "p90_ms": 0.41756160656611124,
+          "mad_over_median": 0.0023081863831639253,
+          "raw_ms": [
+            0.4233706792195638,
+            0.4117013216018677,
+            0.411135991414388,
+            0.4150720040003459,
+            0.40969598293304443,
+            0.4114346504211426,
+            0.40983466307322186,
+            0.4108373324076335
+          ]
+        },
+        "speedup_median": 1.1755408086347745,
+        "speedup_ci95": [
+          1.1672821140940428,
+          1.184260016682942
+        ]
+      }
+    },
+    {
+      "grid": [
+        11,
+        20,
+        36
+      ],
+      "seed": 43,
+      "tokens": 7920,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 1.0,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": "cached torch selection"
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": "cached torch selection"
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_7920_seed43",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 6.63148276011149,
+          "p10_ms": 6.606652895609538,
+          "p90_ms": 6.638506762186687,
+          "mad_over_median": 0.0009851951798109351,
+          "raw_ms": [
+            6.631296157836914,
+            6.604256312052409,
+            6.607680002848308,
+            6.637941360473633,
+            6.63809076944987,
+            6.631669362386067,
+            6.631082534790039,
+            6.639477411905925
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 6.494661331176758,
+          "p10_ms": 6.470551681518554,
+          "p90_ms": 6.513993644714356,
+          "mad_over_median": 0.0015512149078742217,
+          "raw_ms": [
+            6.47210693359375,
+            6.466922760009766,
+            6.496298472086589,
+            6.498559951782227,
+            6.5211842854817705,
+            6.493024190266927,
+            6.51091194152832,
+            6.4909013112386065
+          ]
+        },
+        "speedup_median": 1.0210667534391578,
+        "speedup_ci95": [
+          1.0178246944011073,
+          1.0231394804142164
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_7920_seed43",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.48332800467809045,
+          "p10_ms": 0.4826506535212199,
+          "p90_ms": 0.4843231995900472,
+          "mad_over_median": 0.0013241831658595436,
+          "raw_ms": [
+            0.4843200047810872,
+            0.48394668102264404,
+            0.48261332511901855,
+            0.4843306541442871,
+            0.48292267322540283,
+            0.483733336130778,
+            0.4826666514078776,
+            0.48289068539937335
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.41022932529449463,
+          "p10_ms": 0.40938026110331216,
+          "p90_ms": 0.4178719917933146,
+          "mad_over_median": 0.0018721378521137505,
+          "raw_ms": [
+            0.4100053310394287,
+            0.41199998060862225,
+            0.40983466307322186,
+            0.4315733512242635,
+            0.4095466534296672,
+            0.411082665125529,
+            0.4089920123418172,
+            0.41045331954956055
+          ]
+        },
+        "speedup_median": 1.178189795015556,
+        "speedup_ci95": [
+          1.174627921845383,
+          1.1806079549125468
+        ]
+      }
+    },
+    {
+      "grid": [
+        11,
+        20,
+        36
+      ],
+      "seed": 44,
+      "tokens": 7920,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 1.0000001192092896,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": "cached torch selection"
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": "cached torch selection"
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_7920_seed44",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 6.6408478418986,
+          "p10_ms": 6.634134674072266,
+          "p90_ms": 6.651632118225098,
+          "mad_over_median": 0.0005726102271097227,
+          "raw_ms": [
+            6.643360137939453,
+            6.641685485839844,
+            6.640895843505859,
+            6.635616302490234,
+            6.6709334055582685,
+            6.635754903157552,
+            6.640799840291341,
+            6.630677541097005
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 6.505818684895833,
+          "p10_ms": 6.494473457336426,
+          "p90_ms": 6.5110676447550455,
+          "mad_over_median": 0.000853385906921809,
+          "raw_ms": [
+            6.510613123575847,
+            6.49949836730957,
+            6.508202870686849,
+            6.5091094970703125,
+            6.497823715209961,
+            6.486656188964844,
+            6.503434499104817,
+            6.512128194173177
+          ]
+        },
+        "speedup_median": 1.020755136831012,
+        "speedup_ci95": [
+          1.0194353475658784,
+          1.0221342882942261
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_7920_seed44",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.484010656674703,
+          "p10_ms": 0.48181014458338417,
+          "p90_ms": 0.4851114749908447,
+          "mad_over_median": 0.002556457532584496,
+          "raw_ms": [
+            0.4846293528874715,
+            0.4849066734313965,
+            0.48181335131327313,
+            0.48558934529622394,
+            0.4822719891866048,
+            0.48391465346018475,
+            0.4818026622136434,
+            0.4841066598892212
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.41045866409937537,
+          "p10_ms": 0.40990078846613565,
+          "p90_ms": 0.4106837232907613,
+          "mad_over_median": 0.0006106763516503419,
+          "raw_ms": [
+            0.4105173349380493,
+            0.410645325978597,
+            0.4100159804026286,
+            0.4106026490529378,
+            0.40963200728098553,
+            0.4103999932607015,
+            0.4100159804026286,
+            0.4107733170191447
+          ]
+        },
+        "speedup_median": 1.1791946400661677,
+        "speedup_ci95": [
+          1.1751087136656009,
+          1.1809019642642693
+        ]
+      }
+    },
+    {
+      "grid": [
+        21,
+        30,
+        52
+      ],
+      "seed": 42,
+      "tokens": 32760,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 1.0,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": false,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": false,
+            "failures": [],
+            "quarantined": [],
+            "reason": "no accelerated candidate completed"
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": false,
+            "failures": [],
+            "quarantined": [],
+            "reason": "no accelerated candidate completed"
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_32760_seed42",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 25.730901082356773,
+          "p10_ms": 25.712339274088542,
+          "p90_ms": 25.739377593994142,
+          "mad_over_median": 0.0001728636318440805,
+          "raw_ms": [
+            25.736244201660156,
+            25.727498372395832,
+            25.71398417154948,
+            25.70850118001302,
+            25.734453837076824,
+            25.746688842773438,
+            25.73096466064453,
+            25.73083750406901
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 25.171035766601562,
+          "p10_ms": 25.138690948486328,
+          "p90_ms": 25.189779154459636,
+          "mad_over_median": 0.0006892542414596429,
+          "raw_ms": [
+            25.150965372721355,
+            25.12488555908203,
+            25.172075907389324,
+            25.144607543945312,
+            25.199381510416668,
+            25.18566385904948,
+            25.175381978352863,
+            25.1699956258138
+          ]
+        },
+        "speedup_median": 1.0222424425020313,
+        "speedup_ci95": [
+          1.0217864052950678,
+          1.0231904962040799
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_32760_seed42",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 1.8866559664408364,
+          "p10_ms": 1.8852213382720948,
+          "p90_ms": 1.8880959828694661,
+          "mad_over_median": 0.0004890136011409588,
+          "raw_ms": [
+            1.8891414006551106,
+            1.8861759503682454,
+            1.8854613304138184,
+            1.887466589609782,
+            1.8858027458190918,
+            1.8871359825134277,
+            1.884661356608073,
+            1.8876479466756184
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 1.6087199846903484,
+          "p10_ms": 1.6079978307088216,
+          "p90_ms": 1.6101322809855143,
+          "mad_over_median": 0.00019893903790580884,
+          "raw_ms": [
+            1.6072959899902344,
+            1.6088959376017253,
+            1.6096426645914714,
+            1.6086613337198894,
+            1.6087786356608074,
+            1.608298619588216,
+            1.6085012753804524,
+            1.6112747192382812
+          ]
+        },
+        "speedup_median": 1.1727684024538216,
+        "speedup_ci95": [
+          1.171774520612729,
+          1.173488589587609
+        ]
+      }
+    },
+    {
+      "grid": [
+        21,
+        30,
+        52
+      ],
+      "seed": 43,
+      "tokens": 32760,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 1.0,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": "cached torch selection"
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": "cached torch selection"
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_32760_seed43",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 25.737018585205078,
+          "p10_ms": 25.728652445475262,
+          "p90_ms": 25.743370819091794,
+          "mad_over_median": 0.0001125470994542585,
+          "raw_ms": [
+            25.73943583170573,
+            25.72899119059245,
+            25.727862040201824,
+            25.740394592285156,
+            25.73784637451172,
+            25.750315348307293,
+            25.735679626464844,
+            25.736190795898438
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 25.17957941691081,
+          "p10_ms": 25.171625264485677,
+          "p90_ms": 25.20875473022461,
+          "mad_over_median": 0.00033658170448918847,
+          "raw_ms": [
+            25.199445088704426,
+            25.17425028483073,
+            25.172406514485676,
+            25.16980234781901,
+            25.22308349609375,
+            25.180437723795574,
+            25.202613830566406,
+            25.178721110026043
+          ]
+        },
+        "speedup_median": 1.0221385416755566,
+        "speedup_ci95": [
+          1.0212043384956575,
+          1.0224701279157418
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_32760_seed43",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 1.8855466842651367,
+          "p10_ms": 1.8836255232493082,
+          "p90_ms": 1.8862528165181478,
+          "mad_over_median": 0.0003054919254539008,
+          "raw_ms": [
+            1.886506716410319,
+            1.884991963704427,
+            1.8833492596944172,
+            1.8859413464864094,
+            1.885152022043864,
+            1.886090596516927,
+            1.8837439219156902,
+            1.8861440022786458
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 1.6060639222462973,
+          "p10_ms": 1.6048298358917237,
+          "p90_ms": 1.6065375963846842,
+          "mad_over_median": 0.0002523632956686887,
+          "raw_ms": [
+            1.6057705879211426,
+            1.6065600713094075,
+            1.604874610900879,
+            1.6065279642740886,
+            1.6057173411051433,
+            1.606357256571452,
+            1.6047253608703613,
+            1.606357256571452
+          ]
+        },
+        "speedup_median": 1.1740172094943426,
+        "speedup_ci95": [
+          1.173444965069775,
+          1.1745703967331296
+        ]
+      }
+    },
+    {
+      "grid": [
+        21,
+        30,
+        52
+      ],
+      "seed": 44,
+      "tokens": 32760,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 1.0,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": "cached torch selection"
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "torch",
+            "backend": "torch",
+            "accelerated": false,
+            "fallback": true,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": "cached torch selection"
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_32760_seed44",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 25.744857788085938,
+          "p10_ms": 25.73924992879232,
+          "p90_ms": 25.77248687744141,
+          "mad_over_median": 0.00023198979778317778,
+          "raw_ms": [
+            25.745577494303387,
+            25.768768310546875,
+            25.781163533528645,
+            25.76458740234375,
+            25.739796956380207,
+            25.74413808186849,
+            25.73797353108724,
+            25.74084218343099
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 25.188886006673176,
+          "p10_ms": 25.182461547851563,
+          "p90_ms": 25.230646006266277,
+          "mad_over_median": 0.00025937252042543626,
+          "raw_ms": [
+            25.1820805867513,
+            25.190038045247395,
+            25.22210184733073,
+            25.250582377115887,
+            25.187733968098957,
+            25.18560028076172,
+            25.197738647460938,
+            25.18262481689453
+          ]
+        },
+        "speedup_median": 1.0220721067722276,
+        "speedup_ci95": [
+          1.021510259716992,
+          1.0228915815911883
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_32760_seed44",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 1.8855146567026773,
+          "p10_ms": 1.8847797393798829,
+          "p90_ms": 1.888536485036214,
+          "mad_over_median": 0.0003139690958140448,
+          "raw_ms": [
+            1.8896640141805012,
+            1.8846079508463542,
+            1.8857173919677734,
+            1.884991963704427,
+            1.888053258260091,
+            1.8857280413309734,
+            1.8853119214375813,
+            1.8848533630371094
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 1.6064746379852295,
+          "p10_ms": 1.605624548594157,
+          "p90_ms": 1.607256539662679,
+          "mad_over_median": 0.0002988009030712661,
+          "raw_ms": [
+            1.6066773732503254,
+            1.6066239674886067,
+            1.6054080327351887,
+            1.6063253084818523,
+            1.6060372988382976,
+            1.6078613599141438,
+            1.6057173411051433,
+            1.6069973309834797
+          ]
+        },
+        "speedup_median": 1.1736971204646016,
+        "speedup_ci95": [
+          1.1730896537440385,
+          1.1751485827506694
+        ]
+      }
+    }
+  ],
+  "status": "completed_diagnostic",
+  "block_weights_sha256": "ea23e1119181497534381a4de9b6f03cf0c52370164349e444fb6225045174b7",
+  "evidence_origin": "benchmarks/results/sana_block_h100_strided_20261003/results.json",
+  "source_state": "Acceleration implementation was uncommitted at measurement time; runtime.worldfoundry_commit records the then-current HEAD.",
+  "post_measurement_review": {
+    "implementation_commit": "9bfe87097af3f8fb26ae27fc9d376afb728b4d3e",
+    "note": "Implementation commit identified after measurement for code review and reproduction. This metadata does not replace or reinterpret the recorded runtime fingerprint."
+  }
+}
