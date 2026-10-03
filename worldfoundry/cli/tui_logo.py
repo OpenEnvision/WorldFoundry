@@ -31,7 +31,7 @@ def logo_cell_aspect_ratio() -> float:
 
 
 class BrandLogo(Vertical):
-    """Show the original bitmap, with a fine dot fallback for text-only terminals."""
+    """Show the original bitmap, with a continuous block fallback for text-only terminals."""
 
     DEFAULT_CSS = """
     BrandLogo {

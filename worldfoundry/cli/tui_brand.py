@@ -16,9 +16,16 @@ PRODUCT_NAME = "WorldFoundry"
 PRODUCT_TAGLINE = "Model · Benchmark · Studio"
 LOGO_BACKGROUND = "#ffffff"
 
-_BRAILLE_DOTS = (
-    (0, 0, 0), (1, 0, 1), (2, 0, 2), (0, 1, 3),
-    (1, 1, 4), (2, 1, 5), (3, 0, 6), (3, 1, 7),
+# Use the long-established block elements supported by ordinary terminal fonts.
+# Each mask covers an 8 x 8 sample of one character cell.
+_BLOCK_MASKS = tuple(
+    (char, tuple(y * 8 + x for y in range(8) for x in range(8) if predicate(x, y)))
+    for char, predicate in (
+        *((char, lambda x, y, n=n: y >= 8 - n) for n, char in enumerate("▁▂▃▄▅▆▇", 1)),
+        *((char, lambda x, y, n=n: x < n) for n, char in enumerate("▏▎▍▌▋▊▉", 1)),
+        *((char, lambda x, y, bits=bits: bits & (1 << ((y // 4) * 2 + x // 4)))
+          for bits, char in enumerate(" ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█") if bits not in (0, 15)),
+    )
 )
 
 
@@ -85,38 +92,49 @@ def _resize_for_cells(
     return canvas
 
 
-def render_logo_braille(
-    image: Image.Image, *, width_chars: int = 56, dark: bool = True, cell_aspect_ratio: float = 0.5,
+def _fit_block(colors: list[tuple[int, int, int]]) -> str:
+    """Choose a glyph and two source-derived colors with the least RGB error."""
+    total = tuple(sum(color[channel] for color in colors) for channel in range(3))
+    if all(color == colors[0] for color in colors):
+        return f"[on {_rgb_to_hex(*colors[0])}] [/]"
+
+    best_score = -1.0
+    best_glyph = " "
+    best_foreground = best_background = colors[0]
+    for glyph, mask in _BLOCK_MASKS:
+        count = len(mask)
+        foreground = tuple(sum(colors[index][channel] for index in mask) for channel in range(3))
+        background = tuple(total[channel] - foreground[channel] for channel in range(3))
+        # The omitted squared-pixel term is constant for every glyph in this cell.
+        score = sum(foreground[channel] ** 2 / count + background[channel] ** 2 / (64 - count)
+                    for channel in range(3))
+        if score > best_score:
+            best_score = score
+            best_glyph = glyph
+            best_foreground = tuple(round(value / count) for value in foreground)
+            best_background = tuple(round(value / (64 - count)) for value in background)
+    return f"[{_rgb_to_hex(*best_foreground)} on {_rgb_to_hex(*best_background)}]{best_glyph}[/]"
+
+
+def render_logo_blocks(
+    image: Image.Image, *, width_chars: int = 56, cell_aspect_ratio: float = 0.5,
 ) -> str:
-    """Sample the original artwork at eight dots per cell on its white background."""
+    """Approximate the original bitmap with continuous blocks and sampled colors.
+
+    Fractional blocks retain fine edges; quadrants retain the wing separations
+    and lettering. Both foreground and background come from the source image.
+    """
     resized = _resize_for_cells(
-        image, width_chars, pixels_per_column=2, pixels_per_row=4, cell_aspect_ratio=cell_aspect_ratio,
+        image, width_chars, pixels_per_column=8, pixels_per_row=8, cell_aspect_ratio=cell_aspect_ratio,
     )
     pixels = resized.load()
-    lines: list[str] = []
-    for row in range(0, resized.height, 4):
-        parts: list[str] = []
-        for column in range(width_chars):
-            bits = 0
-            colors: list[tuple[int, int, int]] = []
-            accent: list[tuple[int, int, int]] = []
-            for dy, dx, bit in _BRAILLE_DOTS:
-                color = pixels[column * 2 + dx, row + dy]
-                red, green, blue = color
-                if min(color) >= 225:
-                    continue
-                bits |= 1 << bit
-                colors.append(color)
-                if red > green + 20 and red > blue + 20:
-                    accent.append(color)
-            if not bits:
-                parts.append("[on #ffffff] [/]")
-                continue
-            visible_colors = accent or colors
-            average = tuple(sum(c[channel] for c in visible_colors) // len(visible_colors) for channel in range(3))
-            parts.append(f"[{_rgb_to_hex(*average)} on #ffffff]{chr(0x2800 + bits)}[/]")
-        lines.append("".join(parts))
-    return "\n".join(lines)
+    return "\n".join(
+        "".join(
+            _fit_block([pixels[column + dx, row + dy] for dy in range(8) for dx in range(8)])
+            for column in range(0, resized.width, 8)
+        )
+        for row in range(0, resized.height, 8)
+    )
 
 
 def render_logo_halfblocks(
@@ -143,8 +161,8 @@ def render_brand_logo(
     cell_aspect_ratio: float = 0.5,
 ) -> str:
     """Render the complete official image for terminals with text-only output."""
-    return render_logo_braille(
-        brand_logo_image(), width_chars=width_chars, dark=False, cell_aspect_ratio=cell_aspect_ratio,
+    return render_logo_blocks(
+        brand_logo_image(), width_chars=width_chars, cell_aspect_ratio=cell_aspect_ratio,
     )
 
 
