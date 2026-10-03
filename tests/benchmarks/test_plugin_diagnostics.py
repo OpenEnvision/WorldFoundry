@@ -348,3 +348,89 @@ def test_ambiguous_or_shared_device_cannot_qualify_performance(monkeypatch, outp
         "benchmarks.inference.plugin_diagnostics.subprocess.check_output", lambda *args, **kwargs: output
     )
     assert cuda_device_admission()["timing_qualified"] is qualified
+
+
+@pytest.mark.parametrize("failure", [None, "missing_projection", "missing_module", "missing_calls", "fallback"])
+def test_mha_gate_requires_every_projection_and_real_quantized_calls(failure):
+    options = {"optimized_mha": {"self": {"fusion": "qkv", "projection_precision": "fp8_e4m3"}}}
+    projection = {
+        "calls": 4,
+        "precision": "fp8_e4m3",
+        "quantization": {
+            "low_precision_kernel_calls": 4,
+            "dense_compute_calls": 0,
+            "dense_fallback_calls": 0,
+        },
+    }
+    runtime = {
+        "blocks.0.self_attn": {
+            "calls": 4,
+            "sdpa_calls": 4,
+            "projections": {
+                "qkv": projection,
+                "o": {"calls": 4, "precision": "native", "quantization": None},
+            },
+        }
+    }
+    evidence = {
+        "denoiser": {
+            "accelerations": {
+                "installed": [
+                    {
+                        "name": "optimized_mha",
+                        "modules": list(runtime),
+                        "runtime": runtime,
+                        "projection_modules": {"blocks.0.self_attn": ["qkv", "o"]},
+                    }
+                ]
+            }
+        }
+    }
+    if failure == "missing_projection":
+        runtime["blocks.0.self_attn"]["projections"].pop("o")
+    elif failure == "missing_module":
+        runtime.clear()
+    elif failure == "missing_calls":
+        projection["calls"] = 0
+    elif failure == "fallback":
+        projection["quantization"]["dense_fallback_calls"] = 1
+    assert qualify_execution(options, evidence)["passed"] is (failure is None)
+
+
+@pytest.mark.parametrize("failure", [None, "unexecuted", "missing", "clipped", "fallback"])
+def test_fp8_codec_gate_rejects_incomplete_execution(failure):
+    from benchmarks.inference.lightvae_fp8 import qualify_encoder
+
+    receipt = {
+        "enabled": True,
+        "layers": {"conv": {"kernel_calls": 2}},
+        "clipped_input_operands": 0,
+        "dense_fallback_calls": 0,
+    }
+    if failure == "unexecuted":
+        receipt["layers"]["conv"]["kernel_calls"] = 0
+    elif failure == "missing":
+        receipt["layers"].clear()
+    elif failure == "clipped":
+        receipt["clipped_input_operands"] = 1
+    elif failure == "fallback":
+        receipt["dense_fallback_calls"] = 1
+    assert qualify_encoder(receipt, ["conv"])["passed"] is (failure is None)
+
+
+def test_svdquant_gate_requires_packed_execution_in_every_selected_layer():
+    options = {"svdquant": {"artifact": "offline.pt"}}
+    report = {
+        "low_precision_kernel_calls": 2,
+        "dense_compute_calls": 0,
+        "dense_fallback_calls": 0,
+        "fallback_reasons": [],
+        "layer_reports": [{"module": "a", "native_packed_int4_calls": 2}],
+    }
+    installed = {"name": "svdquant", "modules": ["a", "b"]}
+    evidence = {"quantization": report, "denoiser": {"accelerations": {"installed": [installed]}}}
+    assert not qualify_execution(options, evidence)["passed"]
+    report["layer_reports"].append({"module": "b", "native_packed_int4_calls": 0})
+    assert not qualify_execution(options, evidence)["passed"]
+    report["layer_reports"][1]["native_packed_int4_calls"] = 2
+    assert qualify_execution(options, evidence)["passed"]

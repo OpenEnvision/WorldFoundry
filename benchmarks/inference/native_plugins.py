@@ -174,6 +174,15 @@ def main():
     save()
     try:
         record["weights"] = file_manifest(weights, assets)
+        calibration_paths = sorted(
+            {
+                Path(config["artifact"]).resolve()
+                for options in candidates.values()
+                for config in options.values()
+                if isinstance(config, dict) and "artifact" in config
+            }
+        )
+        record["calibration_files"] = file_manifest(calibration_paths, Path("/"))
         metadata = sorted(
             path
             for path in Path(overrides["tokenizer"]).rglob("*")
@@ -281,6 +290,7 @@ def main():
                     "evidence": evidence,
                 }
                 record["cases"].append(row)
+                pilot_tensors = {"sample": candidate.sample.cpu(), "latents": candidate.latents.cpu()}
                 del candidate
                 print(
                     json.dumps({"seed": seed, "candidate": name, "quality": quality, "execution_gate": gate}),
@@ -303,12 +313,21 @@ def main():
                         timed_options = options if enabled else {}
                         output, elapsed, timed_evidence = generate(request, timed_options)
                         (candidate_times if enabled else reference_times).append(elapsed)
+                        expected = (
+                            pilot_tensors if enabled else {"sample": reference.sample, "latents": reference.latents}
+                        )
+                        output_matches = all(
+                            getattr(output, field).dtype == value.dtype
+                            and torch.equal(getattr(output, field).cpu(), value.cpu())
+                            for field, value in expected.items()
+                        )
                         del output
                         devices.append(cuda_device_admission())
                         timing_receipts.append(
                             {
                                 "round": round_index,
                                 "candidate_enabled": enabled,
+                                "output_matches_pilot": output_matches,
                                 "evidence": timed_evidence,
                                 "execution_gate": _qualify_timed_execution(
                                     timed_options, timed_evidence, evidence if enabled else reference_evidence
@@ -321,7 +340,9 @@ def main():
                     timing_device_samples=devices,
                     timing_execution_receipts=timing_receipts,
                 )
-                if not all(item["execution_gate"]["passed"] for item in timing_receipts):
+                if not all(
+                    item["execution_gate"]["passed"] and item["output_matches_pilot"] for item in timing_receipts
+                ):
                     row["status"] = "rejected_timing_execution"
                 elif not all(item["timing_qualified"] for item in devices):
                     row["status"] = "rejected_shared_device_timing"
@@ -336,6 +357,11 @@ def main():
         record["source_unchanged"] = file_manifest(source_paths, repo) == record["source_files"]
         if not record["source_unchanged"]:
             raise RuntimeError("execution source changed during diagnostics")
+        record["calibration_unchanged"] = record["calibration_files"] == file_manifest(calibration_paths, Path("/"))
+        record["weights_unchanged"] = record["weights"] == file_manifest(weights, assets)
+        record["asset_metadata_unchanged"] = record["asset_metadata"] == file_manifest(metadata, assets)
+        if not all(record[key] for key in ("calibration_unchanged", "weights_unchanged", "asset_metadata_unchanged")):
+            raise RuntimeError("diagnostic weights, calibration or asset metadata changed")
         eligible = {}
         for name in candidates:
             rows = [row for row in record["cases"] if row["candidate"] == name]

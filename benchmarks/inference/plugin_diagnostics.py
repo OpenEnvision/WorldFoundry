@@ -99,7 +99,7 @@ def qualify_execution(options, evidence):
         if name == "sana_block_fusion":
             op = "layer_norm_scale_shift" if values.get("fuse_layer_norm", False) else "scale_shift"
             checks[name] = op in accelerated
-        elif name == "selective_fp8":
+        elif name in {"selective_fp8", "svdquant"}:
             counters = evidence.get("quantization") or {}
             checks[name] = (
                 int(counters.get("low_precision_kernel_calls", 0)) > 0
@@ -107,6 +107,39 @@ def qualify_execution(options, evidence):
                 and int(counters.get("dense_fallback_calls", -1)) == 0
                 and not counters.get("fallback_reasons")
             )
+            if name == "svdquant":
+                installed = evidence.get("denoiser", {}).get("accelerations", {}).get("installed", [])
+                requested = [item for item in installed if item.get("name") == name]
+                layers = counters.get("layer_reports", [])
+                expected = requested[0].get("modules", []) if len(requested) == 1 else []
+                checks[name] &= bool(expected) and {item.get("module") for item in layers} == set(expected)
+                checks[name] &= all(item.get("native_packed_int4_calls", 0) > 0 for item in layers)
+        elif name == "optimized_mha":
+            installed = evidence.get("denoiser", {}).get("accelerations", {}).get("installed", [])
+            reports = [item for item in installed if item.get("name") == name]
+            checks[name] = len(reports) == 1
+            if reports:
+                report = reports[0]
+                runtime = report.get("runtime", {})
+                checks[name] &= bool(runtime) and set(runtime) == set(report.get("modules", []))
+                for path, module in runtime.items():
+                    projections = module.get("projections", {})
+                    expected = report.get("projection_modules", {}).get(path, [])
+                    checks[name] &= bool(expected) and set(projections) == set(expected)
+                    image = any(key.endswith("_img") for key in expected)
+                    checks[name] &= module.get("calls", 0) > 0 and module.get("sdpa_calls", 0) == module.get(
+                        "calls", 0
+                    ) * (2 if image else 1)
+                    for projection in projections.values():
+                        checks[name] &= projection.get("calls", 0) == module.get("calls", 0) > 0
+                        quantization = projection.get("quantization")
+                        if projection.get("precision") != "native":
+                            checks[name] &= bool(quantization) and (
+                                quantization.get("low_precision_kernel_calls", 0) == projection["calls"]
+                                and quantization.get("dense_compute_calls", -1) == 0
+                                and quantization.get("dense_fallback_calls", -1) == 0
+                                and not quantization.get("last_fallback_reason")
+                            )
         elif name == "easycache":
             denoiser = evidence.get("denoiser", {})
             runtime = denoiser.get("runtime") or {}

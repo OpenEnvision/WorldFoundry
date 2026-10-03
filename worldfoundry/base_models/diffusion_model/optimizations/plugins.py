@@ -131,14 +131,18 @@ def _easycache(model: Any, options: Mapping[str, Any], policy: Any) -> PreparedA
 def diffusion_acceleration_registry() -> AccelerationRegistry:
     """Return an extensible registry without loading optional provider packages."""
     from .kv_fusion import prepare_wan_cross_kv_fusion
+    from .mha import prepare_optimized_mha
     from .precision import prepare_selective_fp8
+    from .svdquant import prepare_svdquant
 
     registry = AccelerationRegistry()
     registry.register("sana_block_fusion", _sana_block_fusion)
     registry.register("easycache", _easycache)
     registry.register("attention_policy", _attention_policy)
     registry.register("selective_fp8", prepare_selective_fp8)
+    registry.register("svdquant", prepare_svdquant)
     registry.register("wan_cross_kv_fusion", prepare_wan_cross_kv_fusion)
+    registry.register("optimized_mha", prepare_optimized_mha)
     return registry
 
 

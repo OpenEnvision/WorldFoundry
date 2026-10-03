@@ -583,6 +583,7 @@ NVIDIA FlashDreams
   Attention source files at the reference commit:
     flashdreams/flashdreams/accelerated/multi_head_attention/cudnn/native_fp8.py
     flashdreams/flashdreams/accelerated/multi_head_attention/triton/flash_attention_2_tma_kernel.py
+    flashdreams/flashdreams/accelerated/multi_head_attention/triton/flash_attention_2_kernel.py
 
 nvidia-vfx
   License: NVIDIA proprietary terms

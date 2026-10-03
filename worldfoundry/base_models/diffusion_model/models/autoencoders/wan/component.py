@@ -824,17 +824,28 @@ class Wan21LightVAECodec(WanVideoDecoder):
     @torch.no_grad()
     def encode(self, images: torch.Tensor) -> torch.Tensor:
         self._validate_execution()
-        output = super().encode(images)
+        from worldfoundry.core.acceleration.plugins import acceleration_runtime_scope
+
+        with acceleration_runtime_scope(self.vae, self):
+            for state in getattr(self.vae, "_worldfoundry_fp8_codec", {}).values():
+                state.reset_request_window()
+            output = super().encode(images)
         self._lightvae_encode_calls += 1
         return output
 
     @torch.no_grad()
     def decode(self, latents: torch.Tensor, request: DiffusionRequest | None = None) -> torch.Tensor:
         self._validate_execution()
-        return super().decode(latents, request)
+        from worldfoundry.core.acceleration.plugins import acceleration_runtime_scope
+
+        with acceleration_runtime_scope(self.vae, self):
+            return super().decode(latents, request)
 
     def runtime_optimization_report(self) -> dict[str, object]:
         report = super().runtime_optimization_report()
+        from ....optimizations.lightvae_fp8 import lightvae_fp8_report
+
+        report["fp8_encoder"] = lightvae_fp8_report(self.vae)
         for key in ("requested", "effective"):
             report[key].update(
                 {
@@ -914,6 +925,9 @@ def _load_wan_video_decoder(
 
     module_class, state_dict_converter = _select_wan_codec_variant(module_class, state_dict_converter, variant)
     requested_offload = policy.offload.mode.value
+    fp8_calibration = policy.options.get("vae_fp8_calibration")
+    if fp8_calibration is not None and variant != "lightvae-wan21":
+        raise ValueError("vae_fp8_calibration requires the explicit lightvae-wan21 variant")
     weight_dtype = _resolve_vae_weight_dtype(policy)
     if variant == "lightvae-wan21":
         _validate_lightvae_policy(
@@ -969,7 +983,7 @@ def _load_wan_video_decoder(
     if len(tile_size) != 2 or len(tile_stride) != 2:
         raise ValueError("Wan VAE tile_size and tile_stride must contain two values")
     codec_class = Wan21LightVAECodec if variant == "lightvae-wan21" else WanVideoDecoder
-    return codec_class(
+    codec = codec_class(
         vae,
         device=policy.device,
         tiled=bool(tiled),
@@ -988,6 +1002,11 @@ def _load_wan_video_decoder(
         channels_last_effective=layout_report.conv2d_converted,
         conv2d_count=layout_report.conv2d_total,
     )
+    if fp8_calibration is not None:
+        from ....optimizations.lightvae_fp8 import install_lightvae_fp8
+
+        install_lightvae_fp8(vae, fp8_calibration).bind_runtime(codec)
+    return codec
 
 
 def _build_wan_video_decoder(
@@ -1020,7 +1039,16 @@ def _build_wan_video_decoder(
     )
     return _load_wan_video_decoder(
         context.require_checkpoint("weights"),
-        replace(context.policy, dtype=codec_dtype),
+        replace(
+            context.policy,
+            dtype=codec_dtype,
+            options={
+                **context.policy.options,
+                "vae_fp8_calibration": context.component_options.get(
+                    "fp8_calibration", context.policy.options.get("vae_fp8_calibration")
+                ),
+            },
+        ),
         module_class=module_class,
         state_dict_converter=state_dict_converter,
         tiled=bool(
@@ -1063,6 +1091,7 @@ def load_wan_video_codec(
     dtype: torch.dtype = torch.float32,
     chunk_duration: int = 81,
     variant: str | None = None,
+    fp8_calibration: str | Path | None = None,
 ) -> WanVideoDecoder:
     """Load Wan16 teacher or an explicitly matched ``lightvae-wan21`` student."""
 
@@ -1077,7 +1106,7 @@ def load_wan_video_codec(
         checkpoint = CheckpointSpec(source=source)
     return _load_wan_video_decoder(
         checkpoint,
-        RuntimePolicy(device=device, dtype=dtype),
+        RuntimePolicy(device=device, dtype=dtype, options={"vae_fp8_calibration": fp8_calibration}),
         module_class=WanVideoVAE,
         chunk_duration=chunk_duration,
         variant=variant,
