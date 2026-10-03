@@ -44,6 +44,20 @@ def test_pointer_fa2_executes_unequal_sequence_lengths(quantized):
     assert relative < (0.06 if quantized else 0.006)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+@pytest.mark.parametrize("quantized", [False, True])
+def test_pointer_fa2_wan_head_width_and_fused_projection_strides(quantized):
+    torch.manual_seed(42)
+    q, k = [torch.randn(1, 3600, 1536, device="cuda", dtype=torch.bfloat16) for _ in range(2)]
+    v = torch.randn(1, 3600, 4608, device="cuda", dtype=torch.bfloat16)[..., 3072:]
+    with torch.no_grad():
+        output = scheduled_sdpa(
+            q, k, v, num_heads=12, schedule=MHASchedule(sdpa_backend="fa2", quantized_sdpa=quantized)
+        )
+        reference = scheduled_sdpa(q, k, v, num_heads=12, schedule=MHASchedule())
+    assert (output.float() - reference.float()).norm() / reference.float().norm() < (0.08 if quantized else 0.006)
+
+
 @pytest.mark.parametrize("failure", ["heads", "width", "dtype", "empty"])
 def test_schedule_rejects_inconsistent_projection_geometry(failure):
     q, k, v = [torch.ones(1, 3, 64) for _ in range(3)]

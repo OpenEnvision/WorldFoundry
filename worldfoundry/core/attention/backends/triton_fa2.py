@@ -22,6 +22,7 @@ import math
 import torch
 import triton
 import triton.language as tl
+from packaging.version import Version
 from torch import Tensor
 
 _ATTENTION_CONFIGS = [
@@ -43,6 +44,11 @@ _ATTENTION_CONFIGS = [
         (128, 128, 8, 3),
     )
 ]
+if Version(triton.__version__) < Version("3.5"):
+    # Triton 3.1 aborts the process in Hopper SharedEncodingAttr for some
+    # upstream autotuning tiles at Wan's head_dim=128. Use the validated tile
+    # on older compilers; even attempting the bad tile cannot be caught in Python.
+    _ATTENTION_CONFIGS = [triton.Config({"BLOCK_M": 64, "BLOCK_N": 64}, num_warps=4, num_stages=3)]
 """Candidate query/key tile geometries for FlashAttention autotuning.
 
 ``BLOCK_M`` controls query rows and the FP32 output-accumulator footprint;
@@ -82,11 +88,14 @@ def _prune_attention_configs(
     if head_dim > 128:
         maximum_block_m = min(maximum_block_m, 64)
     maximum_block_n = min(128, max(32, int(triton.next_power_of_2(key_length))))
-    return [
+    selected = [
         config
         for config in configs
         if config.kwargs["BLOCK_M"] <= maximum_block_m and config.kwargs["BLOCK_N"] <= maximum_block_n
     ]
+    # A fixed compatibility tile can exceed a short sequence. Masked loads and
+    # stores preserve its semantics, so retain that tile instead of an empty set.
+    return selected or [min(configs, key=lambda config: config.kwargs["BLOCK_M"] * config.kwargs["BLOCK_N"])]
 
 
 # Cache the winning tile by logical geometry and sequence strides. Pointer values
