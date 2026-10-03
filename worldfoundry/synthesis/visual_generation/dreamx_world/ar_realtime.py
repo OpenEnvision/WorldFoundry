@@ -19,12 +19,13 @@ import torch
 from PIL import Image
 from safetensors.torch import load_file
 
-from worldfoundry.core.geometry.transforms import euler_angles_to_rotation_matrix_zyx
 from worldfoundry.core.execution.realtime.contracts import DEFAULT_REALTIME_CONTROLS, RealtimeSpec
+from worldfoundry.core.geometry.transforms import euler_angles_to_rotation_matrix_zyx
 from worldfoundry.runtime.local_checkpoint_cache import stage_checkpoint_for_realtime
 
 from .checkpoints import enforce_offline_model_loading, resolve_checkpoint
 from .realtime import _frame_keys, _resize_cover
+
 NATIVE_FPS = 16
 HEIGHT = 704
 WIDTH = 1280
@@ -141,6 +142,7 @@ class DreamXWorldARRealtimeSession:
         self._kv_cache: list[dict[str, torch.Tensor]] | None = None
         self._crossattn_cache: list[dict[str, Any]] | None = None
         self._prompt_cache: dict[str, dict[str, torch.Tensor]] = {}
+        self._prompt = ""
         self._conditional_dict: dict[str, torch.Tensor] | None = None
         self._initial_latent: torch.Tensor | None = None
         self._configured = False
@@ -381,6 +383,7 @@ class DreamXWorldARRealtimeSession:
         tensor = tensor.unsqueeze(0).unsqueeze(2).to(device=self.device, dtype=self.dtype)
         self._initial_latent = self.vae.encode_to_latent(tensor)
         self._conditional_dict = self._encode_prompt(prompt)
+        self._prompt = prompt
         self._initialize_caches()
         self._seed = int(seed)
         self._configured = True
@@ -402,8 +405,10 @@ class DreamXWorldARRealtimeSession:
     ) -> dict[str, Any]:
         if not self._configured or self._conditional_dict is None or self._initial_latent is None:
             raise RuntimeError("DreamX-World AR realtime session is not configured.")
-        if prompt is not None and str(prompt).strip():
-            self._conditional_dict = self._encode_prompt(str(prompt).strip())
+        updated_prompt = str(prompt).strip() if prompt is not None else ""
+        if updated_prompt and updated_prompt != self._prompt:
+            self._conditional_dict = self._encode_prompt(updated_prompt)
+            self._prompt = updated_prompt
             for cache in self._crossattn_cache or ():
                 cache["is_init"] = False
         started = time.perf_counter()
@@ -511,6 +516,7 @@ class DreamXWorldARRealtimeSession:
         return FIRST_PIXEL_FRAMES if self._first_block else STEADY_PIXEL_FRAMES
 
     def reset(self) -> None:
+        self._prompt = ""
         self._conditional_dict = None
         self._initial_latent = None
         self._configured = False

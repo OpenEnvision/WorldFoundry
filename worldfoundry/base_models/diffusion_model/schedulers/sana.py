@@ -8,6 +8,7 @@ adapters.  Unknown ``scheduler_options`` keys raise :exc:`ValueError`.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import torch
 from torch import Tensor
@@ -25,6 +26,13 @@ def build_sana_flow_match_scheduler(context: ComponentBuildContext) -> WanFlowMa
         num_train_timesteps=int(context.component_options.get("num_train_timesteps", 1000)),
         shift=float(context.component_options.get("shift", 3.0)),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _SanaDPMSchedulerStep(SchedulerStep):
+    """Retain the multistep history owned by this sampling request."""
+
+    solver: FlowDPMSolverMultistepScheduler
 
 
 class SanaFlowDPMScheduler:
@@ -54,18 +62,20 @@ class SanaFlowDPMScheduler:
         unsupported = set(sampling.scheduler_options) - {"shift"}
         if unsupported:
             raise ValueError(f"unsupported SanaFlowDPMScheduler options: {sorted(unsupported)}")
-        self.solver.set_timesteps(
+        solver = FlowDPMSolverMultistepScheduler(**dict(self.solver.config))
+        solver.set_timesteps(
             sampling.num_inference_steps,
             device=device,
             shift=float(sampling.scheduler_options.get("shift", self.shift)),
         )
-        timesteps = self.solver.timesteps
+        timesteps = solver.timesteps
         terminal = torch.zeros((), device=device, dtype=timesteps.dtype)
         return tuple(
-            SchedulerStep(
+            _SanaDPMSchedulerStep(
                 index=index,
                 timestep=timestep,
                 next_timestep=(timesteps[index + 1] if index + 1 < len(timesteps) else terminal),
+                solver=solver,
             )
             for index, timestep in enumerate(timesteps)
         )
@@ -83,7 +93,9 @@ class SanaFlowDPMScheduler:
         *,
         generator: torch.Generator,
     ) -> Tensor:
-        return self.solver.step(
+        if not isinstance(step, _SanaDPMSchedulerStep):
+            raise TypeError("Sana DPM requires a step returned by its schedule")
+        return step.solver.step(
             model_output,
             step.timestep,
             latents,
@@ -99,6 +111,13 @@ def build_sana_flow_dpm_scheduler(context: ComponentBuildContext) -> SanaFlowDPM
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _LongLiveSchedulerStep(SchedulerStep):
+    """Retain the training sigma table owned by this sampling request."""
+
+    sigma_table: Tensor
+
+
 class SanaLongLiveScheduler:
     """Released four-step flow x0 prediction with fresh noise between steps.
 
@@ -111,7 +130,6 @@ class SanaLongLiveScheduler:
 
     def __init__(self, *, shift: float = 7.0) -> None:
         self.shift = float(shift)
-        self._sigmas: Tensor | None = None
 
     def schedule(self, sampling, *, device, dtype):
         if sampling.num_inference_steps != len(self.TIMESTEPS):
@@ -125,15 +143,16 @@ class SanaLongLiveScheduler:
         if shift <= 0:
             raise ValueError("LongLive shift must be positive")
         sigma = torch.linspace(1.0, 0.0, 1001)[:-1]
-        self._sigmas = (shift * sigma / (1.0 + (shift - 1.0) * sigma)).to(device)
+        sigma_table = (shift * sigma / (1.0 + (shift - 1.0) * sigma)).to(device)
         return tuple(
-            SchedulerStep(
+            _LongLiveSchedulerStep(
                 index=index,
                 timestep=torch.tensor(value, device=device, dtype=dtype),
                 next_timestep=torch.tensor(
                     self.TIMESTEPS[index + 1] if index + 1 < len(self.TIMESTEPS) else 0,
                     device=device, dtype=torch.float32,
                 ),
+                sigma_table=sigma_table,
             )
             for index, value in enumerate(self.TIMESTEPS)
         )
@@ -143,9 +162,9 @@ class SanaLongLiveScheduler:
         return latents
 
     def step(self, model_output, step, latents, *, generator):
-        if self._sigmas is None:
-            raise RuntimeError("LongLive schedule must be initialized before stepping")
-        table = self._sigmas
+        if not isinstance(step, _LongLiveSchedulerStep):
+            raise TypeError("LongLive requires a step returned by its schedule")
+        table = step.sigma_table
         times = table * 1000.0
         index = (times.double() - step.timestep.double()).abs().argmin()
         clean = (latents.double() - table[index].double() * model_output.double()).to(model_output.dtype)

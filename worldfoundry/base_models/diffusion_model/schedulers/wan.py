@@ -15,12 +15,16 @@ Unsupported keys in ``SamplingConfig.scheduler_options`` raise
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
 
 from ..components import ComponentBuildContext
 from ..contracts import SamplingConfig, SchedulerStep
+
+if TYPE_CHECKING:
+    from .flow_unipc import FlowUniPCMultistepScheduler
 
 
 def _validate_schedule_values(
@@ -392,6 +396,13 @@ def build_fastvideo_causal_wan_self_forcing_scheduler(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _WanUniPCSchedulerStep(SchedulerStep):
+    """Retain the multistep history owned by this sampling request."""
+
+    solver: FlowUniPCMultistepScheduler
+
+
 class WanFlowUniPCScheduler:
     """Native scheduler-contract adapter for Wan's canonical UniPC solver."""
 
@@ -421,6 +432,8 @@ class WanFlowUniPCScheduler:
         device: torch.device,
         dtype: torch.dtype,
     ) -> tuple[SchedulerStep, ...]:
+        from .flow_unipc import FlowUniPCMultistepScheduler
+
         del dtype
         unsupported = set(sampling.scheduler_options) - {"shift", "use_karras_sigma"}
         if unsupported:
@@ -440,19 +453,21 @@ class WanFlowUniPCScheduler:
             if effective_karras_sigma and not self.karras_steps_are_intervals
             else sampling.num_inference_steps
         )
-        self.solver.set_timesteps(
+        solver = FlowUniPCMultistepScheduler(**dict(self.solver.config))
+        solver.set_timesteps(
             solver_steps,
             device=device,
             shift=float(sampling.scheduler_options.get("shift", self.shift)),
             use_kerras_sigma=effective_karras_sigma,
         )
-        timesteps = self.solver.timesteps
+        timesteps = solver.timesteps
         terminal = torch.zeros((), device=device, dtype=timesteps.dtype)
         return tuple(
-            SchedulerStep(
+            _WanUniPCSchedulerStep(
                 index=index,
                 timestep=timestep,
                 next_timestep=(timesteps[index + 1] if index + 1 < len(timesteps) else terminal),
+                solver=solver,
             )
             for index, timestep in enumerate(timesteps)
         )
@@ -475,7 +490,9 @@ class WanFlowUniPCScheduler:
         *,
         generator: torch.Generator,
     ) -> Tensor:
-        return self.solver.step(
+        if not isinstance(step, _WanUniPCSchedulerStep):
+            raise TypeError("Wan UniPC requires a step returned by its schedule")
+        return step.solver.step(
             model_output,
             step.timestep,
             latents,
