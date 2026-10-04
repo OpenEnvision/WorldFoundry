@@ -21,9 +21,9 @@ from pathlib import Path
 import pytest
 import torch
 
-from worldfoundry.core.model_loading.checkpoints import load as checkpoint_load
 from worldfoundry.core.io.assets import cache as io_cache
 from worldfoundry.core.io.formats.serialization import write_json
+from worldfoundry.core.model_loading.checkpoints import load as checkpoint_load
 
 
 def _tiny_state_dict() -> dict[str, torch.Tensor]:
@@ -121,6 +121,70 @@ class TestShardedIndexCacheSelfHeal:
         # The cache slot must have been rebuilt into a loadable file.
         healed = checkpoint_load._load_checkpoint_from_local(str(cache_file), ".safetensors")
         assert torch.equal(healed["b.weight"], tensors["b.weight"])
+
+    @pytest.mark.parametrize("error_type", (torch.OutOfMemoryError, PermissionError, ValueError))
+    def test_runtime_load_failure_preserves_cache(self, sharded_checkpoint, monkeypatch, error_type) -> None:
+        index_path, cache_dir, _ = sharded_checkpoint
+        checkpoint_load.load_single_checkpoint(index_path, local_cache_dir=str(cache_dir))
+        cache_file = Path(checkpoint_load._sharded_safetensors_merge_cache_path(index_path, str(cache_dir)))
+        original = cache_file.read_bytes()
+        error = error_type("cannot load onto the requested device")
+        calls = []
+
+        def fail_load(*args):
+            calls.append(args)
+            raise error
+
+        monkeypatch.setattr(checkpoint_load, "_load_checkpoint_from_local", fail_load)
+        with pytest.raises(error_type) as raised:
+            checkpoint_load.load_single_checkpoint(index_path, local_cache_dir=str(cache_dir))
+        assert raised.value is error
+        assert len(calls) == 1
+        assert cache_file.read_bytes() == original
+
+    def test_invalid_safetensors_device_preserves_cache(self, sharded_checkpoint) -> None:
+        from safetensors import SafetensorError
+
+        index_path, cache_dir, _ = sharded_checkpoint
+        checkpoint_load.load_single_checkpoint(index_path, local_cache_dir=str(cache_dir))
+        cache_file = Path(checkpoint_load._sharded_safetensors_merge_cache_path(index_path, str(cache_dir)))
+        original = cache_file.read_bytes()
+        with pytest.raises(SafetensorError, match="device"):
+            checkpoint_load.load_single_checkpoint(index_path, local_cache_dir=str(cache_dir), map_location="invalid")
+        assert cache_file.read_bytes() == original
+
+
+@pytest.mark.parametrize("cached", (False, True))
+def test_hf_cache_space_is_required_only_for_download(tmp_path, monkeypatch, cached) -> None:
+    import huggingface_hub
+
+    path = tmp_path / "model.safetensors"
+    path.write_bytes(b"cached weights")
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda **kwargs: str(path) if cached else None)
+    downloads = []
+
+    def download(**kwargs):
+        downloads.append(kwargs)
+        return str(path)
+
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
+
+    def full_disk(*args, **kwargs):
+        from worldfoundry.core.io.filesystem.disk import DiskSpaceError
+
+        raise DiskSpaceError("insufficient download space")
+
+    monkeypatch.setattr(checkpoint_load, "ensure_free_disk", full_disk)
+    url = "https://huggingface.co/test/model/resolve/main/model.safetensors"
+    if cached:
+        assert checkpoint_load._download_checkpoint_from_huggingface_url(url, checkpoint_min_free_gb=200) == str(path)
+        assert len(downloads) == 1
+    else:
+        from worldfoundry.core.io.filesystem.disk import DiskSpaceError
+
+        with pytest.raises(DiskSpaceError):
+            checkpoint_load._download_checkpoint_from_huggingface_url(url, checkpoint_min_free_gb=200)
+        assert not downloads
 
 
 class TestIoCachePopulate:
