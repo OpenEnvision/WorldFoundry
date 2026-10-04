@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 
 from benchmarks.inference.native_plugins import _assets
-from benchmarks.inference.plugin_diagnostics import file_manifest
+from benchmarks.inference.plugin_diagnostics import file_metadata
 from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.component import load_wan_video_codec
 from worldfoundry.base_models.diffusion_model.optimizations.lightvae_fp8 import lightvae_encoder_convolutions
@@ -24,15 +24,6 @@ from worldfoundry.core.acceleration.quantization.fp8_conv import calibrate_fp8_c
 from worldfoundry.core.acceleration.quantization.svdquant import calibrate_svdquant
 from worldfoundry.core.model_loading.policy import RuntimePolicy
 from worldfoundry.runtime.performance import capture_runtime_fingerprint
-
-
-def execution_sources(repo):
-    paths = set((repo / "worldfoundry/core").rglob("*.py"))
-    paths.update((repo / "worldfoundry/base_models/diffusion_model").rglob("*.py"))
-    paths.update((repo / "worldfoundry/runtime").rglob("*.py"))
-    paths.update((repo / "benchmarks/inference").glob("*.py"))
-    paths.add(repo / "benchmarks/harness.py")
-    return sorted(paths)
 
 
 def main():
@@ -59,22 +50,18 @@ def main():
         args.save_references.mkdir(parents=True, exist_ok=False)
     if min(args.height, args.width, args.frames, args.steps) <= 0 or args.frames < 5:
         parser.error("positive geometry and at least five frames required")
-    repo = Path(__file__).resolve().parents[2]
-    sources = execution_sources(repo)
-    source_manifest = file_manifest(sources, repo)
     policy = RuntimePolicy(device="cuda", dtype=torch.bfloat16, options={"dit_weight_dtype": "bf16"})
     metadata = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "kind": args.kind,
         "runtime": capture_runtime_fingerprint(device_index=0).to_dict(),
-        "source_files": source_manifest,
         "geometry": [args.frames, args.height, args.width],
     }
     if args.kind == "svdquant":
         if args.assets is None:
             parser.error("SVDQuant calibration requires --assets")
         overrides, weights = _assets(args.model, args.assets.resolve())
-        inputs = file_manifest(weights, args.assets.resolve())
+        inputs = file_metadata(weights, args.assets.resolve())
         pipeline = NativeDiffusionPipeline.from_pretrained(args.model, policy=policy, checkpoint_overrides=overrides)
         model = pipeline.components.denoiser.model
         _, selected = select_native_projections(model, ProjectionSelection(args.include, min_features=16), policy)
@@ -108,13 +95,13 @@ def main():
         observer.validate()
         states = {name: calibrate_svdquant(module, observer.maxima[name], rank=args.rank) for name, module in selected}
         metadata.update(model=args.model, seeds=[11, 12], prompts=prompts, rank=args.rank)
-        if inputs != file_manifest(weights, args.assets.resolve()):
+        if inputs != file_metadata(weights, args.assets.resolve()):
             raise RuntimeError("checkpoint files changed during calibration")
     else:
         if args.checkpoint is None or not args.reference:
             parser.error("codec calibration requires --checkpoint and --reference")
         paths = [args.checkpoint, *args.reference]
-        inputs = file_manifest(paths, Path("/"))
+        inputs = file_metadata(paths, Path("/"))
         codec = load_wan_video_codec(args.checkpoint, variant="lightvae-wan21")
         available = lightvae_encoder_convolutions(codec.vae)
         selected = {
@@ -133,11 +120,9 @@ def main():
                 codec.encode(pixels[:, :, : args.frames, : args.height, : args.width].to("cuda", torch.float32))
         observer.validate()
         states = {name: calibrate_fp8_convolution(module, observer.maxima[name]) for name, module in selected.items()}
-        if inputs != file_manifest(paths, Path("/")):
+        if inputs != file_metadata(paths, Path("/")):
             raise RuntimeError("codec calibration input files changed")
-    if source_manifest != file_manifest(sources, repo):
-        raise RuntimeError("execution source changed during calibration")
-    metadata.update(inputs=inputs, source_unchanged=True, inputs_unchanged=True, observed_calls=observer.calls)
+    metadata.update(inputs=inputs, inputs_unchanged=True, observed_calls=observer.calls)
     save_calibration(args.out, kind=args.kind, states=states, metadata=metadata)
     print(f"Saved {len(states)} checkpoint-bound {args.kind} module states to {args.out}", flush=True)
 

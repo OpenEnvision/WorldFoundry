@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
 import os
 import subprocess
@@ -177,18 +176,18 @@ def qualify_execution(options, evidence):
     return {"passed": bool(checks) and all(checks.values()), "plugins": checks}
 
 
-def file_manifest(paths, root):
+def file_metadata(paths, root):
+    """Record input identity and detect ordinary edits without reading weights.
+
+    Calibration providers separately validate their parameter digests. Source
+    revisions are recorded by capture_runtime_fingerprint.
+    """
+    root = root.resolve()
     rows = []
     for path in paths:
-        before = path.stat()
-        hasher = hashlib.sha256()
-        with path.open("rb") as source:
-            while chunk := source.read(8 * 1024**2):
-                hasher.update(chunk)
-        after = path.stat()
-        if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns):
-            raise RuntimeError(f"file changed during hashing: {path}")
-        rows.append({"file": path.relative_to(root).as_posix(), "bytes": before.st_size, "sha256": hasher.hexdigest()})
+        path = path.resolve()
+        stat = path.stat()
+        rows.append({"file": path.relative_to(root).as_posix(), "bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns})
     return rows
 
 

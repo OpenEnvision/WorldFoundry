@@ -26,6 +26,48 @@ def _model(image=False):
     ).eval()
 
 
+@pytest.mark.parametrize("plugin", ["optimized_mha", "selective_fp8"])
+def test_parent_hooks_preserve_outputs_across_install_and_uninstall(plugin):
+    model = _model()
+    value = torch.randn(1, 3, 128)
+    if plugin == "optimized_mha":
+        parent = model.blocks[0].self_attn
+        freqs = torch.polar(torch.ones(3, 1, 64), torch.randn(3, 1, 64))
+        inputs = (value, freqs)
+        options = {plugin: {"self": {"fusion": "qkv"}}}
+    else:
+        parent = model.blocks[0].ffn
+        inputs = (value,)
+        options = {plugin: {"include": ["blocks.0.ffn.0"], "min_features": 16}}
+    observed = []
+
+    def observe(module, args, output):
+        observed.append(output.shape)
+        return output + 0.25
+
+    pre = parent.register_forward_pre_hook(lambda module, args: (args[0] * 0.5, *args[1:]))
+    post = parent.register_forward_hook(observe)
+    with torch.no_grad():
+        expected = parent(*inputs)
+        session = install_diffusion_accelerations(model, options, RuntimePolicy(device="cpu", dtype=torch.float32))
+        torch.testing.assert_close(parent(*inputs), expected, atol=3e-6, rtol=3e-5)
+        session.uninstall()
+        torch.testing.assert_close(parent(*inputs), expected, atol=0, rtol=0)
+    assert observed == [expected.shape] * 3
+    pre.remove()
+    post.remove()
+
+
+def test_mha_rejects_hooks_on_bypassed_projections():
+    model = _model()
+    attention = model.blocks[0].self_attn
+    original = attention.processor
+    attention.q.register_forward_hook(lambda module, args, output: output + 1)
+    with pytest.raises(ValueError, match="hooks on the replaced projection"):
+        install_diffusion_accelerations(model, {"optimized_mha": {"self": {"fusion": "qkv"}}})
+    assert attention.processor is original
+
+
 @pytest.mark.parametrize("fusion", ["none", "kv", "qkv"])
 @pytest.mark.parametrize("image", [False, True])
 def test_mha_canonical_paths_restore(fusion, image):

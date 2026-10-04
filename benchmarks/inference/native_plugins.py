@@ -23,7 +23,7 @@ from benchmarks.inference.plugin_diagnostics import (
     attention_scope_receipts,
     compare_generation,
     cuda_device_admission,
-    file_manifest,
+    file_metadata,
     qualify_execution,
 )
 from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
@@ -173,7 +173,7 @@ def main():
 
     save()
     try:
-        record["weights"] = file_manifest(weights, assets)
+        record["weights"] = file_metadata(weights, assets)
         calibration_paths = sorted(
             {
                 Path(config["artifact"]).resolve()
@@ -182,23 +182,13 @@ def main():
                 if isinstance(config, dict) and "artifact" in config
             }
         )
-        record["calibration_files"] = file_manifest(calibration_paths, Path("/"))
+        record["calibration_files"] = file_metadata(calibration_paths, Path("/"))
         metadata = sorted(
             path
             for path in Path(overrides["tokenizer"]).rglob("*")
             if path.is_file() and path.suffix in {".json", ".model", ".txt"}
         )
-        record["asset_metadata"] = file_manifest(metadata, assets)
-        repo = Path(__file__).resolve().parents[2]
-        source_paths = [Path(__file__).resolve(), Path(__file__).with_name("plugin_diagnostics.py")]
-        source_paths += [repo / "benchmarks/harness.py"]
-        source_paths += sorted((repo / "worldfoundry/core/acceleration").rglob("*.py"))
-        source_paths += sorted((repo / "worldfoundry/core/attention").rglob("*.py"))
-        source_paths += sorted((repo / "worldfoundry/core/kernels").rglob("*.py"))
-        source_paths += sorted((repo / "worldfoundry/core/model_loading").rglob("*.py"))
-        source_paths += [repo / "worldfoundry/runtime/performance.py"]
-        source_paths += sorted((repo / "worldfoundry/base_models/diffusion_model").rglob("*.py"))
-        record["source_files"] = file_manifest(source_paths, repo)
+        record["asset_metadata"] = file_metadata(metadata, assets)
         save()
         pipeline = NativeDiffusionPipeline.from_pretrained(args.model, policy=policy, checkpoint_overrides=overrides)
         denoiser = pipeline.components.denoiser
@@ -296,14 +286,14 @@ def main():
                     json.dumps({"seed": seed, "candidate": name, "quality": quality, "execution_gate": gate}),
                     flush=True,
                 )
-                if not quality["passed"] or not gate["passed"]:
-                    row["status"] = "rejected_quality" if not quality["passed"] else "rejected_execution"
+                if not quality["finite"] or not gate["passed"]:
+                    row["status"] = "rejected_nonfinite" if not quality["finite"] else "rejected_execution"
                     save()
                     continue
                 admission = cuda_device_admission()
                 row["device_admission"] = admission
                 if args.quality_only or not admission["timing_qualified"]:
-                    row["status"] = "quality_and_execution_passed_timing_unqualified"
+                    row["status"] = "not_timed"
                     save()
                     continue
                 reference_times, candidate_times, devices, timing_receipts = [], [], [], []
@@ -348,18 +338,15 @@ def main():
                     row["status"] = "rejected_shared_device_timing"
                 else:
                     row.update(
-                        status="qualified_for_test_case",
+                        status="qualified_for_test_case" if quality["passed"] else "measured_quality_tradeoff",
                         speedup_median=statistics.median(reference_times) / statistics.median(candidate_times),
                         speedup_ci95=list(_paired_bootstrap_ci(reference_times, candidate_times)),
                     )
                 save()
             del reference
-        record["source_unchanged"] = file_manifest(source_paths, repo) == record["source_files"]
-        if not record["source_unchanged"]:
-            raise RuntimeError("execution source changed during diagnostics")
-        record["calibration_unchanged"] = record["calibration_files"] == file_manifest(calibration_paths, Path("/"))
-        record["weights_unchanged"] = record["weights"] == file_manifest(weights, assets)
-        record["asset_metadata_unchanged"] = record["asset_metadata"] == file_manifest(metadata, assets)
+        record["calibration_unchanged"] = record["calibration_files"] == file_metadata(calibration_paths, Path("/"))
+        record["weights_unchanged"] = record["weights"] == file_metadata(weights, assets)
+        record["asset_metadata_unchanged"] = record["asset_metadata"] == file_metadata(metadata, assets)
         if not all(record[key] for key in ("calibration_unchanged", "weights_unchanged", "asset_metadata_unchanged")):
             raise RuntimeError("diagnostic weights, calibration or asset metadata changed")
         eligible = {}

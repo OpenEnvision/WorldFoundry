@@ -9,7 +9,7 @@ from benchmarks.inference.plugin_diagnostics import (
     attention_scope_receipts,
     compare_generation,
     cuda_device_admission,
-    file_manifest,
+    file_metadata,
     qualify_execution,
 )
 
@@ -224,37 +224,30 @@ def test_timed_dense_reference_cannot_hide_provider_fallback():
     assert not _qualify_timed_execution({}, timed, pilot)["passed"]
 
 
-@pytest.mark.parametrize(
-    "dependency",
-    [
-        "worldfoundry/core/attention/backends/native.py",
-        "worldfoundry/core/model_loading/checkpoints/load.py",
-        "worldfoundry/core/vram/model.py",
-        "worldfoundry/base_models/diffusion_model/loaders/module.py",
-    ],
-)
-def test_lightvae_manifest_detects_shared_execution_source_changes(tmp_path, monkeypatch, dependency):
-    from benchmarks.inference import lightvae
+@pytest.mark.parametrize("relative", [False, True])
+def test_input_metadata_detects_changes_without_reading_file_contents(tmp_path, monkeypatch, relative):
+    from pathlib import Path
 
-    script = tmp_path / "benchmarks/inference/lightvae.py"
-    for relative in (
-        "benchmarks/inference/lightvae.py",
-        "benchmarks/inference/plugin_diagnostics.py",
-        "benchmarks/harness.py",
-        "worldfoundry/runtime/performance.py",
-        dependency,
-    ):
-        path = tmp_path / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("original implementation\n")
-    monkeypatch.setattr(lightvae, "__file__", str(script))
-    paths = lightvae._execution_source_paths(tmp_path)
-    before = file_manifest(paths, tmp_path)
-    (tmp_path / dependency).write_text("changed implementation\n")
-    assert file_manifest(paths, tmp_path) != before
+    monkeypatch.chdir(tmp_path)
+    root = Path(".") if relative else tmp_path
+    weight = root / "weights.bin"
+    weight.write_bytes(b"weights")
+
+    def unexpected_read(*args, **kwargs):
+        raise AssertionError("metadata collection must not read weight contents")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", unexpected_read)
+        before = file_metadata([weight], root)
+    weight.write_bytes(b"updated weights")
+    after = file_metadata([weight], root)
+    assert before != after
+    assert before[0]["bytes"] == 7 and after[0]["bytes"] == 15
+    assert "sha256" not in after[0]
 
 
-def test_native_cli_rejects_timing_fallback_after_successful_pilot(tmp_path, monkeypatch):
+@pytest.mark.parametrize("mode", ["timing_fallback", "quality_tradeoff", "nonfinite"])
+def test_native_cli_separates_timing_execution_from_quality(tmp_path, monkeypatch, mode):
     import json
 
     from benchmarks.inference import native_plugins
@@ -268,13 +261,20 @@ def test_native_cli_rejects_timing_fallback_after_successful_pilot(tmp_path, mon
 
         def __call__(self, request):
             self.candidate_calls += int(self.enabled)
-            return _output()
+            output = _output()
+            if self.enabled and mode == "quality_tradeoff":
+                output.latents *= 1.1
+            elif self.enabled and mode == "nonfinite":
+                output.latents.fill_(float("nan"))
+            return output
 
         def runtime_optimization_report(self):
             return {
                 "runtime": {
                     "feature_cache": {
-                        "skipped_block_calls": int(self.enabled and self.candidate_calls == 1),
+                        "skipped_block_calls": int(
+                            self.enabled and (self.candidate_calls == 1 or mode != "timing_fallback")
+                        ),
                     }
                 }
             }
@@ -308,7 +308,7 @@ def test_native_cli_rejects_timing_fallback_after_successful_pilot(tmp_path, mon
         ],
     )
     monkeypatch.setattr(native_plugins, "_assets", lambda *args: ({"tokenizer": str(tmp_path)}, []))
-    monkeypatch.setattr(native_plugins, "file_manifest", lambda *args: [])
+    monkeypatch.setattr(native_plugins, "file_metadata", lambda *args: [])
     monkeypatch.setattr(native_plugins, "capture_runtime_fingerprint", lambda **kwargs: SimpleNamespace(to_dict=dict))
     monkeypatch.setattr(native_plugins, "cuda_device_admission", lambda: {"timing_qualified": True})
     monkeypatch.setattr(native_plugins, "install_diffusion_accelerations", install)
@@ -321,14 +321,26 @@ def test_native_cli_rejects_timing_fallback_after_successful_pilot(tmp_path, mon
     result = json.loads((output / "results.json").read_text())
     row = result["cases"][0]
     assert row["execution_gate"]["passed"]
-    assert row["status"] == "rejected_timing_execution"
-    assert "speedup_median" not in row
     assert result["selection"] == "no_validated_speedup"
-    assert len(row["timing_execution_receipts"]) == 6
-    assert all(
-        receipt["execution_gate"]["passed"] is not receipt["candidate_enabled"]
-        for receipt in row["timing_execution_receipts"]
-    )
+    if mode == "nonfinite":
+        assert row["status"] == "rejected_nonfinite"
+        assert "speedup_median" not in row
+        assert pipeline.candidate_calls == 1
+    elif mode == "quality_tradeoff":
+        assert row["status"] == "measured_quality_tradeoff"
+        assert not row["quality"]["passed"]
+        assert row["quality"]["video_bitwise_equal"]
+        assert "speedup_median" in row
+        assert pipeline.candidate_calls == 4
+    else:
+        assert row["status"] == "rejected_timing_execution"
+        assert "speedup_median" not in row
+        assert all(
+            receipt["execution_gate"]["passed"] is not receipt["candidate_enabled"]
+            for receipt in row["timing_execution_receipts"]
+        )
+    if mode != "nonfinite":
+        assert len(row["timing_execution_receipts"]) == 6
 
 
 @pytest.mark.parametrize(
@@ -416,7 +428,7 @@ def test_fp8_codec_gate_rejects_incomplete_execution(failure):
         receipt["clipped_input_operands"] = 1
     elif failure == "fallback":
         receipt["dense_fallback_calls"] = 1
-    assert qualify_encoder(receipt, ["conv"])["passed"] is (failure is None)
+    assert qualify_encoder(receipt, ["conv"])["passed"] is (failure in (None, "clipped"))
 
 
 def test_svdquant_gate_requires_packed_execution_in_every_selected_layer():

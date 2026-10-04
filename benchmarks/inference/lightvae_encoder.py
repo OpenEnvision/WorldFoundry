@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import torch
 
 from benchmarks.harness import _paired_bootstrap_ci
-from benchmarks.inference.plugin_diagnostics import BUDGET, compare_generation, cuda_device_admission, file_manifest
+from benchmarks.inference.plugin_diagnostics import BUDGET, compare_generation, cuda_device_admission, file_metadata
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.component import (
     Wan21LightVAECodec,
     WanVideoDecoder,
@@ -67,32 +67,6 @@ def _load_reference(path):
     if bool((pixels.abs() > 1).any()):
         raise ValueError("saved RGB must be normalized to [-1, 1]")
     return payload
-
-
-def _source_paths(repo):
-    """Cover codec computation, loading and diagnostics without unrelated UI."""
-    paths = [
-        repo / "benchmarks/inference/lightvae_encoder.py",
-        repo / "benchmarks/inference/plugin_diagnostics.py",
-        repo / "benchmarks/harness.py",
-        repo / "worldfoundry/runtime/performance.py",
-    ]
-    # Codec loading traverses converters, policy, IO, VRAM and shared attention
-    # implementations. Preserve full coverage of those execution source trees.
-    paths += sorted((repo / "worldfoundry/core").rglob("*.py"))
-    paths += sorted((repo / "worldfoundry/base_models/diffusion_model").rglob("*.py"))
-    paths += [
-        path
-        for parent in (
-            "benchmarks",
-            "benchmarks/inference",
-            "worldfoundry",
-            "worldfoundry/base_models",
-            "worldfoundry/runtime",
-        )
-        if (path := repo / parent / "__init__.py").is_file()
-    ]
-    return sorted(set(paths))
 
 
 def _validate_codec(codec, *, student):
@@ -223,12 +197,12 @@ def _measure_encode(codec, pixels, pilot_latents, *, student):
 
 
 def _time_case(teacher, student, pixels, reference, candidate, row, *, rounds, quality_only):
-    if not row["quality"]["passed"] or not row["execution_gate"]["passed"]:
-        row["status"] = "rejected_quality" if not row["quality"]["passed"] else "rejected_execution"
+    if not row["quality"]["finite"] or not row["execution_gate"]["passed"]:
+        row["status"] = "rejected_nonfinite" if not row["quality"]["finite"] else "rejected_execution"
         return
     row["device_admission"] = cuda_device_admission()
     if quality_only or not row["device_admission"]["timing_qualified"]:
-        row["status"] = "quality_passed_timing_unqualified"
+        row["status"] = "not_timed"
         return
     if rounds < 3:
         raise ValueError("performance diagnostics need at least three paired rounds")
@@ -257,7 +231,7 @@ def _time_case(teacher, student, pixels, reference, candidate, row, *, rounds, q
         row["status"] = "rejected_timing_execution"
     else:
         row.update(
-            status="qualified_for_test_case",
+            status="qualified_for_test_case" if row["quality"]["passed"] else "measured_quality_tradeoff",
             speedup_median=statistics.median(teacher_times) / statistics.median(student_times),
             speedup_ci95=list(_paired_bootstrap_ci(teacher_times, student_times)),
         )
@@ -266,9 +240,7 @@ def _time_case(teacher, student, pixels, reference, candidate, row, *, rounds, q
 def main(argv=None):
     args = _parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=False)
-    repo = Path(__file__).resolve().parents[2]
     paths = [path.resolve() for path in (args.teacher, args.student, *args.reference)]
-    source_paths = _source_paths(repo)
     record = {
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "scope": "matched Wan21 encoder diagnostic on real saved RGB; common native teacher decode; not end-to-end speed",
@@ -276,8 +248,6 @@ def main(argv=None):
         "quality_aggregation": "worst batch latent relative L2 and video PSNR; minimum SSIM over every frame",
         "timing_scope": "paired resident FP32 untiled encoder-only wall time; decode, loading and pilot hooks excluded",
         "timing_receipts": "pilot encoder module hooks; every timed output must match its pilot and student count advance",
-        "source_manifest_scope": "diagnostic helpers, runtime performance, complete core and diffusion-model Python trees, "
-        "and parent package initializers",
         "parameters": vars(args)
         | {key: str(getattr(args, key)) for key in ("teacher", "student", "out")}
         | {"reference": [str(path) for path in args.reference]},
@@ -292,8 +262,7 @@ def main(argv=None):
 
     save()
     try:
-        record["files"] = file_manifest(paths, Path("/"))
-        record["source_files"] = file_manifest(source_paths, repo)
+        record["files"] = file_metadata(paths, Path("/"))
         save()
         torch.cuda.init()
         record["runtime"] = capture_runtime_fingerprint(device_index=0).to_dict()
@@ -324,14 +293,11 @@ def main(argv=None):
         raise
     finally:
         try:
-            if "source_files" in record:
-                record["source_files_after"] = file_manifest(_source_paths(repo), repo)
-                record["source_unchanged"] = record["source_files_after"] == record["source_files"]
             if "files" in record:
-                record["files_after"] = file_manifest(paths, Path("/"))
+                record["files_after"] = file_metadata(paths, Path("/"))
                 record["inputs_unchanged"] = record["files_after"] == record["files"]
-            if not record.get("source_unchanged", True) or not record.get("inputs_unchanged", True):
-                raise RuntimeError("source or inputs changed during diagnostics")
+            if not record.get("inputs_unchanged", True):
+                raise RuntimeError("inputs changed during diagnostics")
         except BaseException as error:
             already_failed = record["status"] == "failed"
             record.update(status="failed", manifest_verification_error=repr(error))

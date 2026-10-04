@@ -175,10 +175,12 @@ def select_native_projections(model, config, policy):
                 raise ValueError(
                     f"projection quantization projection {path!r} requires the native default attention processor"
                 )
+        # Replacing or bypassing this Linear would drop its hooks. Parent
+        # modules remain in the call path, so their observation hooks survive.
+        if child._forward_hooks or child._forward_pre_hooks or child._backward_hooks:
+            raise ValueError(f"projection quantization projection {path!r} has hooks on the replaced projection")
         for ancestor_path in ("", *[".".join(path.split(".")[:index]) for index in range(1, len(path.split(".")) + 1)]):
             ancestor = modules[ancestor_path]
-            if ancestor._forward_hooks or ancestor._forward_pre_hooks or ancestor._backward_hooks:
-                raise ValueError(f"projection quantization projection {path!r} has hooks in its call path")
             if any(token in type(ancestor).__name__ for token in ("Triton", "Cached", "Causal", "PAG")):
                 raise ValueError(
                     f"projection quantization projection {path!r} belongs to an unsupported fused/stateful graph"

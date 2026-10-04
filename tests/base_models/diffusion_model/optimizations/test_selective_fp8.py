@@ -182,7 +182,6 @@ def test_plain_native_eval_graph_required():
     "kind",
     [
         "hook",
-        "parent_hook",
         "custom_forward",
         "parametrization",
         "shared_weight",
@@ -196,8 +195,6 @@ def test_unsafe_projection_graphs_are_rejected(kind):
     original = model.blocks[0].self_attn.q
     if kind == "hook":
         original.register_forward_pre_hook(lambda module, args: args)
-    elif kind == "parent_hook":
-        model.blocks[0].register_forward_hook(lambda module, args, result: result)
     elif kind == "custom_forward":
         original.forward = lambda value: value
     elif kind == "parametrization":
