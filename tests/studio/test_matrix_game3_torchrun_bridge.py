@@ -112,6 +112,33 @@ def test_resident_torchrun_control_group_outlives_idle_ui_sessions(monkeypatch):
     assert timeout.days >= 365
 
 
+@pytest.mark.parametrize("error_type", (TypeError, RuntimeError))
+def test_control_group_failure_is_reported_without_retry(monkeypatch, error_type):
+    _enable_torchrun(monkeypatch, world_size=4)
+    error = error_type("control group initialization failed")
+    calls = []
+    group = object()
+
+    def new_group(*, ranks, backend, timeout):
+        calls.append((ranks, backend, timeout))
+        if len(calls) == 1:
+            raise error
+        return group
+
+    dist = SimpleNamespace(is_available=lambda: True, is_initialized=lambda: True, new_group=new_group)
+    monkeypatch.setattr(execution, "_torch_dist", lambda: dist)
+    monkeypatch.setattr(execution, "_TORCHRUN_CONTROL_GROUP", None)
+
+    with pytest.raises(error_type) as raised:
+        execution._torchrun_control_group()
+    assert raised.value is error
+    assert len(calls) == 1
+    assert execution._TORCHRUN_CONTROL_GROUP is None
+    assert not execution._TORCHRUN_CONTROL_GROUP_CREATING
+    # An explicit later initialization remains possible after failure cleanup.
+    assert execution._torchrun_control_group() is group
+
+
 def test_shutdown_rejects_control_group_created_by_an_older_generation(monkeypatch):
     _enable_torchrun(monkeypatch, world_size=4)
     creation_started = threading.Event()

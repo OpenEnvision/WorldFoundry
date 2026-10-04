@@ -488,25 +488,11 @@ def _torchrun_control_group() -> Any:
             or not dist.is_initialized()
         ):
             return None
-        ranks = list(range(_torchrun_world_size()))
-        timeout = timedelta(days=365)
-        try:
-            created_group = dist.new_group(
-                ranks=ranks,
-                backend="gloo",
-                timeout=timeout,
-            )
-        except TypeError:
-            try:
-                created_group = dist.new_group(
-                    ranks,
-                    backend="gloo",
-                    timeout=timeout,
-                )
-            except TypeError:
-                created_group = dist.new_group(ranks, backend="gloo")
-        except Exception:
-            created_group = None
+        created_group = dist.new_group(
+            ranks=list(range(_torchrun_world_size())),
+            backend="gloo",
+            timeout=timedelta(days=365),
+        )
     finally:
         with _TORCHRUN_CONTROL_GROUP_CONDITION:
             _TORCHRUN_CONTROL_GROUP_CREATING = False
