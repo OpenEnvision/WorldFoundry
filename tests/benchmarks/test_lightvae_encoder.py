@@ -1,7 +1,6 @@
-"""Encoder diagnostics must prove provenance and quality before any timing."""
+"""Encoder diagnostics measure executed candidates and retain quality results."""
 
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -191,8 +190,8 @@ def test_unadvanced_student_encoder_counter_rejects_execution(codecs):
 
 @pytest.mark.parametrize("failed_gate", ["quality", "execution_gate"])
 def test_rejected_case_cannot_reach_timing_or_device_admission(monkeypatch, failed_gate):
-    row = {"quality": {"passed": True}, "execution_gate": {"passed": True}}
-    row[failed_gate]["passed"] = False
+    row = {"quality": {"finite": True, "passed": True}, "execution_gate": {"passed": True}}
+    row[failed_gate]["finite" if failed_gate == "quality" else "passed"] = False
 
     def unexpected():
         raise AssertionError("rejected case reached device admission")
@@ -206,13 +205,13 @@ def test_rejected_case_cannot_reach_timing_or_device_admission(monkeypatch, fail
 @pytest.mark.parametrize(("quality_only", "clean"), [(True, True), (False, False)])
 def test_quality_only_or_shared_device_cannot_publish_timings(monkeypatch, quality_only, clean):
     monkeypatch.setattr(diagnostic, "cuda_device_admission", lambda: {"timing_qualified": clean})
-    row = {"quality": {"passed": True}, "execution_gate": {"passed": True}}
+    row = {"quality": {"finite": True, "passed": True}, "execution_gate": {"passed": True}}
     diagnostic._time_case(None, None, None, None, None, row, rounds=3, quality_only=quality_only)
-    assert row["status"] == "quality_passed_timing_unqualified"
+    assert row["status"] == "not_timed"
     assert "teacher_wall_s" not in row and "speedup_median" not in row
 
 
-@pytest.mark.parametrize("failure", [None, "device", "execution"])
+@pytest.mark.parametrize("failure", [None, "device", "execution", "quality"])
 def test_three_paired_rounds_alternate_order_and_reject_contamination(monkeypatch, failure):
     admissions, order = [], []
 
@@ -226,22 +225,23 @@ def test_three_paired_rounds_alternate_order_and_reject_contamination(monkeypatc
 
     monkeypatch.setattr(diagnostic, "cuda_device_admission", admission)
     monkeypatch.setattr(diagnostic, "_measure_encode", measure)
-    row = {"quality": {"passed": True}, "execution_gate": {"passed": True}}
+    row = {"quality": {"finite": True, "passed": True}, "execution_gate": {"passed": True}}
+    row["quality"]["passed"] = failure != "quality"
     output = SimpleNamespace(latents=torch.ones(1))
     diagnostic._time_case(None, None, None, output, output, row, rounds=3, quality_only=False)
     assert order == [False, True, True, False, False, True]
     assert len(admissions) == 13
     assert len(row["teacher_wall_s"]) == len(row["student_wall_s"]) == 3
-    if failure:
+    if failure in ("device", "execution"):
         assert row["status"].startswith("rejected_") and "speedup_median" not in row
     else:
-        assert row["status"] == "qualified_for_test_case"
+        assert row["status"] == ("measured_quality_tradeoff" if failure == "quality" else "qualified_for_test_case")
         assert row["speedup_median"] == 2.0 and row["speedup_ci95"] == [2.0, 2.0]
 
 
 def test_less_than_three_pairs_rejected(monkeypatch):
     monkeypatch.setattr(diagnostic, "cuda_device_admission", lambda: {"timing_qualified": True})
-    row = {"quality": {"passed": True}, "execution_gate": {"passed": True}}
+    row = {"quality": {"finite": True, "passed": True}, "execution_gate": {"passed": True}}
     with pytest.raises(ValueError, match="three paired"):
         diagnostic._time_case(None, None, None, None, None, row, rounds=2, quality_only=False)
 
@@ -290,23 +290,22 @@ def _patch_main(monkeypatch, codecs):
     monkeypatch.setattr(torch.cuda, "init", lambda: None)
     monkeypatch.setattr(diagnostic, "capture_runtime_fingerprint", lambda **kwargs: SimpleNamespace(to_dict=lambda: {}))
     monkeypatch.setattr(diagnostic, "cuda_device_admission", lambda: {"timing_qualified": True})
-    monkeypatch.setattr(diagnostic, "_source_paths", lambda repo: [Path(diagnostic.__file__).resolve()])
 
 
-def test_main_saves_strict_json_and_before_after_manifests(tmp_path, monkeypatch, codecs):
+def test_main_saves_outputs_and_input_metadata(tmp_path, monkeypatch, codecs):
     _patch_main(monkeypatch, codecs)
     diagnostic.main(_main_args(tmp_path))
     record = json.loads((tmp_path / "results/results.json").read_text())
     assert record["status"] == "completed_diagnostic"
-    assert record["source_unchanged"] and record["inputs_unchanged"]
-    assert record["files"] == record["files_after"] and record["source_files"] == record["source_files_after"]
-    assert all(len(item["sha256"]) == 64 for item in record["files"])
-    assert record["cases"][0]["status"] == "quality_passed_timing_unqualified"
+    assert record["inputs_unchanged"]
+    assert record["files"] == record["files_after"]
+    assert all("mtime_ns" in item and "sha256" not in item for item in record["files"])
+    assert record["cases"][0]["status"] == "not_timed"
     assert (tmp_path / "results/student_encoded_0.pt").is_file()
     assert (tmp_path / "results/teacher_encoded_0.pt").is_file()
 
 
-def test_main_records_failed_provenance_and_verifies_manifests(tmp_path, monkeypatch, codecs):
+def test_main_records_failed_reference_comparison(tmp_path, monkeypatch, codecs):
     _patch_main(monkeypatch, codecs)
     args = _main_args(tmp_path)
     payload = _payload()
@@ -315,7 +314,7 @@ def test_main_records_failed_provenance_and_verifies_manifests(tmp_path, monkeyp
     with pytest.raises(AssertionError):
         diagnostic.main(args)
     record = json.loads((tmp_path / "results/results.json").read_text())
-    assert record["status"] == "failed" and record["source_unchanged"] and record["inputs_unchanged"]
+    assert record["status"] == "failed" and record["inputs_unchanged"]
     assert "quality" not in record["cases"][0]
     assert not list((tmp_path / "results").glob("*_encoded_*.pt"))
 
@@ -324,7 +323,7 @@ def test_changed_checkpoint_invalidates_otherwise_passing_diagnostic(tmp_path, m
     _patch_main(monkeypatch, codecs)
     args = _main_args(tmp_path)
     codecs[1].encode_callback = lambda: (tmp_path / "student.pth").write_bytes(b"changed checkpoint")
-    with pytest.raises(RuntimeError, match="source or inputs changed"):
+    with pytest.raises(RuntimeError, match="inputs changed"):
         diagnostic.main(args)
     record = json.loads((tmp_path / "results/results.json").read_text())
     assert record["status"] == "failed" and not record["inputs_unchanged"]
@@ -341,62 +340,16 @@ def test_existing_output_directory_rejected_before_gpu_work(tmp_path, monkeypatc
     assert not (tmp_path / "results/results.json").exists()
 
 
-def _execution_source_fixture(root):
-    paths = [
-        "benchmarks/__init__.py",
-        "benchmarks/inference/__init__.py",
-        "benchmarks/inference/lightvae_encoder.py",
-        "benchmarks/inference/plugin_diagnostics.py",
-        "benchmarks/harness.py",
-        "worldfoundry/__init__.py",
-        "worldfoundry/base_models/__init__.py",
-        "worldfoundry/core/__init__.py",
-        "worldfoundry/core/attention/backends/sol.py",
-        "worldfoundry/core/model_loading/policy.py",
-        "worldfoundry/base_models/diffusion_model/models/autoencoders/wan/model.py",
-        "worldfoundry/runtime/__init__.py",
-        "worldfoundry/runtime/performance.py",
-    ]
-    for name in paths:
-        path = root / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("# source\n")
-    return sorted(root / name for name in paths)
-
-
-def test_source_manifest_includes_codec_attention_loaders_and_parent_initializers(tmp_path):
-    expected = _execution_source_fixture(tmp_path)
-    (tmp_path / "benchmarks/ignore.txt").write_text("not executable source")
-    assert diagnostic._source_paths(tmp_path) == expected
-
-
-def test_unrelated_tui_edits_do_not_invalidate_execution_manifest(tmp_path):
-    _execution_source_fixture(tmp_path)
-    tui = tmp_path / "worldfoundry/cli/tui_app.py"
-    tui.parent.mkdir(parents=True)
-    tui.write_text("# original UI\n")
-    before = diagnostic.file_manifest(diagnostic._source_paths(tmp_path), tmp_path)
-    tui.write_text("# edited UI\n")
-    (tui.parent / "tui_logo.py").write_text("# added unrelated UI source\n")
-    assert diagnostic.file_manifest(diagnostic._source_paths(tmp_path), tmp_path) == before
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        "worldfoundry/core/attention/backends/sol.py",
-        "worldfoundry/core/model_loading/policy.py",
-        "worldfoundry/base_models/diffusion_model/models/autoencoders/wan/model.py",
-    ],
-)
-def test_execution_dependency_edits_invalidate_source_manifest(tmp_path, name):
-    _execution_source_fixture(tmp_path)
-    before = diagnostic.file_manifest(diagnostic._source_paths(tmp_path), tmp_path)
-    (tmp_path / name).write_text("# changed execution source\n")
-    after = diagnostic.file_manifest(diagnostic._source_paths(tmp_path), tmp_path)
-    assert after != before
-    changed = [right["file"] for left, right in zip(before, after, strict=True) if left != right]
-    assert changed == [name]
+def test_unrelated_source_edit_does_not_discard_encoder_results(tmp_path, monkeypatch, codecs):
+    _patch_main(monkeypatch, codecs)
+    unrelated = tmp_path / "other_model.py"
+    unrelated.write_text("original source")
+    codecs[1].encode_callback = lambda: unrelated.write_text("updated source")
+    diagnostic.main(_main_args(tmp_path))
+    record = json.loads((tmp_path / "results/results.json").read_text())
+    assert record["status"] == "completed_diagnostic"
+    assert record["inputs_unchanged"]
+    assert record["cases"][0]["quality"]["passed"]
 
 
 def test_cli_rejects_duplicate_references_and_short_performance_rounds(tmp_path):

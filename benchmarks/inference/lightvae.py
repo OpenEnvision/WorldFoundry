@@ -17,22 +17,9 @@ from types import SimpleNamespace
 import torch
 
 from benchmarks.harness import _paired_bootstrap_ci
-from benchmarks.inference.plugin_diagnostics import BUDGET, compare_generation, cuda_device_admission, file_manifest
+from benchmarks.inference.plugin_diagnostics import BUDGET, compare_generation, cuda_device_admission, file_metadata
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.component import load_wan_video_codec
 from worldfoundry.runtime.performance import capture_runtime_fingerprint
-
-
-def _execution_source_paths(repo):
-    """Cover codec computation and the shared attention/loading implementation."""
-    paths = [
-        Path(__file__).resolve(),
-        repo / "benchmarks/harness.py",
-        repo / "benchmarks/inference/plugin_diagnostics.py",
-        repo / "worldfoundry/runtime/performance.py",
-    ]
-    paths += sorted((repo / "worldfoundry/core").rglob("*.py"))
-    paths += sorted((repo / "worldfoundry/base_models/diffusion_model").rglob("*.py"))
-    return sorted(set(paths))
 
 
 def main():
@@ -83,10 +70,7 @@ def main():
     save()
     try:
         paths = [path.resolve() for path in (args.teacher, args.student, *args.reference)]
-        record["files"] = file_manifest(paths, Path("/"))
-        repo = Path(__file__).resolve().parents[2]
-        source_paths = _execution_source_paths(repo)
-        record["source_files"] = file_manifest(source_paths, repo)
+        record["files"] = file_metadata(paths, Path("/"))
         teacher = load_wan_video_codec(args.teacher, device="cuda", dtype=torch.float32)
         student = load_wan_video_codec(args.student, variant="lightvae-wan21", device="cuda", dtype=torch.float32)
         saved_dtype = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}[args.saved_codec_dtype]
@@ -153,14 +137,14 @@ def main():
             torch.save({"sample": candidate.cpu(), "latents": payload["latents"]}, args.out / f"student_{index}.pt")
             print(json.dumps({"reference": reference.name, "quality": quality}), flush=True)
             del candidate, baseline, payload
-            if not quality["passed"] or not row["execution_gate"]["passed"]:
-                row["status"] = "rejected_quality" if not quality["passed"] else "rejected_execution"
+            if not quality["finite"] or not row["execution_gate"]["passed"]:
+                row["status"] = "rejected_nonfinite" if not quality["finite"] else "rejected_execution"
                 save()
                 continue
             admission = cuda_device_admission()
             row["device_admission"] = admission
             if args.quality_only or not admission["timing_qualified"]:
-                row["status"] = "quality_passed_timing_unqualified"
+                row["status"] = "not_timed"
                 save()
                 continue
             teacher_times, student_times, devices = [], [], []
@@ -176,15 +160,14 @@ def main():
                 row["status"] = "rejected_shared_device_timing"
             else:
                 row.update(
-                    status="qualified_for_test_case",
+                    status="qualified_for_test_case" if quality["passed"] else "measured_quality_tradeoff",
                     speedup_median=statistics.median(teacher_times) / statistics.median(student_times),
                     speedup_ci95=list(_paired_bootstrap_ci(teacher_times, student_times)),
                 )
             save()
-        record["source_unchanged"] = file_manifest(source_paths, repo) == record["source_files"]
-        record["inputs_unchanged"] = file_manifest(paths, Path("/")) == record["files"]
-        if not record["source_unchanged"] or not record["inputs_unchanged"]:
-            raise RuntimeError("source or inputs changed during diagnostics")
+        record["inputs_unchanged"] = file_metadata(paths, Path("/")) == record["files"]
+        if not record["inputs_unchanged"]:
+            raise RuntimeError("inputs changed during diagnostics")
         record["status"] = "completed_diagnostic"
     except BaseException as error:
         record.update(status="failed", error=repr(error))

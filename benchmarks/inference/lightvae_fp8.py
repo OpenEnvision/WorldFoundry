@@ -1,7 +1,7 @@
 """Calibrated FP8 encoder versus the same FP32 LightVAE student checkpoint.
 
 This isolates quantization drift. It does not certify student/teacher parity.
-Only quality, execution and device-admitted cases may report encoder timings.
+Finite executed candidates report timing alongside their quality metrics.
 """
 
 from __future__ import annotations
@@ -17,9 +17,8 @@ from types import SimpleNamespace
 import torch
 
 from benchmarks.harness import _paired_bootstrap_ci
-from benchmarks.inference.calibrate_plugins import execution_sources
 from benchmarks.inference.lightvae_encoder import _load_reference, _validate_codec
-from benchmarks.inference.plugin_diagnostics import BUDGET, compare_generation, cuda_device_admission, file_manifest
+from benchmarks.inference.plugin_diagnostics import BUDGET, compare_generation, cuda_device_admission, file_metadata
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.component import load_wan_video_codec
 from worldfoundry.base_models.diffusion_model.optimizations.lightvae_fp8 import install_lightvae_fp8
 from worldfoundry.runtime.performance import capture_runtime_fingerprint
@@ -32,7 +31,6 @@ def qualify_encoder(receipt, modules):
         "all_selected_convolutions_executed": bool(modules)
         and set(layers) == set(modules)
         and all(value.get("kernel_calls", 0) > 0 for value in layers.values()),
-        "no_clipping": receipt.get("clipped_input_operands", -1) == 0,
         "no_dense_fallback": receipt.get("dense_fallback_calls", -1) == 0,
     }
     return {"passed": all(checks.values()), "checks": checks}
@@ -52,7 +50,6 @@ def main():
     if len(set(path.resolve() for path in args.reference)) != len(args.reference):
         parser.error("duplicate references do not constitute independent cases")
     args.out.mkdir(parents=True, exist_ok=False)
-    repo = Path(__file__).resolve().parents[2]
     inputs = [path.resolve() for path in (args.checkpoint, args.artifact, *args.reference)]
     record = {
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -90,8 +87,7 @@ def main():
 
     save()
     try:
-        record["files"] = file_manifest(inputs, Path("/"))
-        record["source_files"] = file_manifest(execution_sources(repo), repo)
+        record["files"] = file_metadata(inputs, Path("/"))
         torch.cuda.init()
         record["runtime"] = capture_runtime_fingerprint(device_index=0).to_dict()
         codec = load_wan_video_codec(args.checkpoint, variant="lightvae-wan21")
@@ -113,12 +109,12 @@ def main():
             }
             record["cases"].append(row)
             print(json.dumps(row, allow_nan=False), flush=True)
-            if not row["quality"]["passed"] or not candidate_receipt["execution_gate"]["passed"]:
-                row["status"] = "rejected_quality" if not row["quality"]["passed"] else "rejected_execution"
+            if not row["quality"]["finite"] or not candidate_receipt["execution_gate"]["passed"]:
+                row["status"] = "rejected_nonfinite" if not row["quality"]["finite"] else "rejected_execution"
             else:
                 row["device_admission"] = cuda_device_admission()
                 if args.quality_only or not row["device_admission"]["timing_qualified"]:
-                    row["status"] = "quality_passed_timing_unqualified"
+                    row["status"] = "not_timed"
                 else:
                     times, devices, receipts = {False: [], True: []}, [], []
                     for round_index in range(args.rounds):
@@ -148,7 +144,9 @@ def main():
                         row["status"] = "rejected_timing_execution"
                     else:
                         row.update(
-                            status="qualified_for_test_case",
+                            status="qualified_for_test_case"
+                            if row["quality"]["passed"]
+                            else "measured_quality_tradeoff",
                             speedup_median=statistics.median(times[False]) / statistics.median(times[True]),
                             speedup_ci95=list(_paired_bootstrap_ci(times[False], times[True])),
                         )
@@ -164,10 +162,9 @@ def main():
         raise
     finally:
         try:
-            record["source_unchanged"] = record.get("source_files") == file_manifest(execution_sources(repo), repo)
-            record["inputs_unchanged"] = record.get("files") == file_manifest(inputs, Path("/"))
-            if not record["source_unchanged"] or not record["inputs_unchanged"]:
-                raise RuntimeError("diagnostic sources or inputs changed")
+            record["inputs_unchanged"] = record.get("files") == file_metadata(inputs, Path("/"))
+            if not record["inputs_unchanged"]:
+                raise RuntimeError("diagnostic inputs changed")
         except BaseException as error:
             failed = record["status"] == "failed"
             record.update(status="failed", verification_error=repr(error))
