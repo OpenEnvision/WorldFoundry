@@ -65,6 +65,7 @@ def test_deterministic_export_preserves_rng_and_rejects_bad_state():
         calibrate_svdquant(source, torch.ones(128), rank=17)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 def test_packed_integer_kernel_matches_independent_groupwise_reference(dtype):

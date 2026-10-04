@@ -23,6 +23,7 @@ def test_schedule_rejects_ambiguous_or_unsupported_options(options):
         MHASchedule(**options)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize("quantized", [False, True])
 def test_pointer_fa2_executes_unequal_sequence_lengths(quantized):
@@ -44,6 +45,7 @@ def test_pointer_fa2_executes_unequal_sequence_lengths(quantized):
     assert relative < (0.06 if quantized else 0.006)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize("quantized", [False, True])
 def test_pointer_fa2_wan_head_width_and_fused_projection_strides(quantized):
@@ -74,6 +76,7 @@ def test_schedule_rejects_inconsistent_projection_geometry(failure):
         scheduled_sdpa(q, k, v, num_heads=heads, schedule=MHASchedule())
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize("provider", ["tma", "cudnn", "cudnn_fp8"])
 def test_optional_schedule_provider_matches_torch(provider):
@@ -103,6 +106,7 @@ def test_optional_schedule_provider_matches_torch(provider):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize("precision", ["fp8_e4m3", "fp8_e5m2", "int8"])
 def test_scheduled_projection_uses_real_low_precision_kernel(precision, monkeypatch):
@@ -124,6 +128,7 @@ def test_scheduled_projection_uses_real_low_precision_kernel(precision, monkeypa
     assert report["dense_compute_calls"] == report["dense_fallback_calls"] == 0
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize("bias", [True, False])
 def test_e5m2_masked_gemm_matches_independent_quantized_reference(bias):

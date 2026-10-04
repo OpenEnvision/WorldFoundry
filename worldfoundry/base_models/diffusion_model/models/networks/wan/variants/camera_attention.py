@@ -74,7 +74,7 @@ def flash_attention(
     deterministic:  bool. If True, slightly slower and uses more memory.
     dtype:          torch.dtype. Apply when dtype of q/k/v is not float16/bfloat16.
     """
-    if not (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE):
+    if q.device.type != 'cuda' or not (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE):
         return _worldfoundry_flash_attention(
             q=q,
             k=k,
@@ -213,7 +213,7 @@ def attention(
         dtype: The dtype.
         fa_version: The fa version.
     """
-    if SAGEATTN_AVAILABLE:
+    if SAGEATTN_AVAILABLE and q.device.type == 'cuda':
         # print("Using sageattention")
         attn_mask = None
 
@@ -228,7 +228,7 @@ def attention(
         out = out.transpose(1, 2).contiguous().to(og_dtype)
         return out
     
-    elif FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
+    elif q.device.type != 'cuda' or FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
         return flash_attention(
             q=q,
             k=k,

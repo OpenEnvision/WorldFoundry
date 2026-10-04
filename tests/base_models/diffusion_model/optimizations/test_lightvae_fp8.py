@@ -1,5 +1,6 @@
 """Calibrated convolution replacement preserves causal state and codec ownership."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -15,9 +16,10 @@ from worldfoundry.core.acceleration.quantization.calibration import ChannelObser
 from worldfoundry.core.acceleration.quantization.fp8_conv import calibrate_fp8_convolution
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 def test_matched_codec_quantized_encoder_restores_cache_checkpoint_and_owner(tmp_path):
-    checkpoint = Path("/tmp/worldfoundry-lightvae21/lightvaew2_1.pth")
+    checkpoint = Path(os.environ.get("WORLDFOUNDRY_LIGHTVAE21_CHECKPOINT", "/tmp/worldfoundry-lightvae21/lightvaew2_1.pth"))
     if not checkpoint.is_file():
         pytest.skip("matched LightVAE21 checkpoint required")
     codec = load_wan_video_codec(checkpoint, variant="lightvae-wan21")

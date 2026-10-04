@@ -23,6 +23,7 @@ def test_fp8_state_binds_geometry_and_weights():
         calibrate_fp8_convolution(source, torch.ones(3), margin=float("nan"))
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize("dimensions", [2, 3])
 def test_fp8_implicit_gemm_matches_reference(dimensions):

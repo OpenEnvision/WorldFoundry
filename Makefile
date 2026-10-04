@@ -50,7 +50,12 @@ STREAMING_CPU_CONTRACTS = \
 DIFFUSION_ACCELERATION_CPU_CONTRACTS = \
 	tests/core/acceleration/test_plugins.py \
 	tests/core/acceleration/test_easycache.py \
+	tests/core/acceleration/test_fp8_conv.py \
+	tests/core/acceleration/test_svdquant.py \
+	tests/core/attention/test_mha_schedule.py \
 	tests/core/test_sol_attention.py \
+	tests/base_models/diffusion_model/test_camera_attention_dispatch.py \
+	tests/base_models/diffusion_model/optimizations/test_calibrated_plugins.py \
 	tests/base_models/diffusion_model/optimizations/test_selective_fp8.py \
 	tests/base_models/diffusion_model/optimizations/test_kv_fusion.py \
 	tests/base_models/diffusion_model/optimizations/test_plugin_lifecycle.py \
@@ -85,6 +90,13 @@ INFER_CUDA_CONTRACTS = \
 	tests/base_models/diffusion_model/optimizations/test_selective_fp8.py::test_real_cuda_scaled_mm_receipts_layout_and_exact_removal \
 	tests/base_models/diffusion_model/optimizations/test_kv_fusion.py::test_cuda_bf16_real_native_cross_attention_is_finite_and_close \
 	tests/base_models/diffusion_model/optimizations/test_acceleration_plugins.py::test_sana_cuda_default_fusion_keeps_native_strides_and_output \
+	tests/core/acceleration/test_fp8_conv.py::test_fp8_implicit_gemm_matches_reference \
+	tests/core/acceleration/test_svdquant.py::test_packed_integer_kernel_matches_independent_groupwise_reference \
+	tests/core/attention/test_mha_schedule.py::test_pointer_fa2_executes_unequal_sequence_lengths \
+	tests/core/attention/test_mha_schedule.py::test_pointer_fa2_wan_head_width_and_fused_projection_strides \
+	tests/core/attention/test_mha_schedule.py::test_optional_schedule_provider_matches_torch \
+	tests/core/attention/test_mha_schedule.py::test_scheduled_projection_uses_real_low_precision_kernel \
+	tests/core/attention/test_mha_schedule.py::test_e5m2_masked_gemm_matches_independent_quantized_reference \
 	tests/core/attention/test_kv_arena.py::test_cuda_long_sequence_attention_and_stream_ownership \
 	tests/core/attention/test_kv_arena.py::test_cuda_graph_replay_reads_updated_current_segment \
 	tests/core/attention/test_gqa_storage.py::test_efficient_cuda_gqa_matches_math \
@@ -241,7 +253,7 @@ test-infer-sol-cuda-contracts:
 test-lightvae-checkpoint-contracts:
 	@test -f "$(LIGHTVAE21_CHECKPOINT)" || { printf '%s\n' 'Set LIGHTVAE21_CHECKPOINT to the matched Wan2.1 student checkpoint.' >&2; exit 2; }
 	$(PYTHON) -c 'import sys, torch; torch.cuda.is_available() or sys.exit("LightVAE checkpoint contracts require CPU and CUDA execution")'
-	OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 WORLDFOUNDRY_LIGHTVAE21_CHECKPOINT="$(LIGHTVAE21_CHECKPOINT)" PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/lightvae-checkpoint-selection.json --junit "$(LIGHTVAE21_CHECKPOINT_JUNIT)" --test tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py -- $(TEST_ARGS)
+	OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 WORLDFOUNDRY_LIGHTVAE21_CHECKPOINT="$(LIGHTVAE21_CHECKPOINT)" PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/lightvae-checkpoint-selection.json --junit "$(LIGHTVAE21_CHECKPOINT_JUNIT)" --test tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py --test tests/base_models/diffusion_model/optimizations/test_lightvae_fp8.py -- $(TEST_ARGS)
 
 # Local checkpoint evidence is opt-in and independent of the public small-tensor gate.
 test-mg2-checkpoint-contracts:
