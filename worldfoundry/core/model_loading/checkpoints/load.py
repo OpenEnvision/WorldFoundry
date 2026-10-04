@@ -37,6 +37,7 @@ from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 import torch
+from safetensors import SafetensorError, safe_open
 from safetensors.torch import load as load_safetensors
 from safetensors.torch import load_file as load_safetensors_file
 from safetensors.torch import save_file as save_safetensors
@@ -44,7 +45,6 @@ from torch.distributed.checkpoint import FileSystemReader
 from torch.distributed.checkpoint import load as dcp_load
 from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
 
-from worldfoundry.core.model_loading.checkpoints.safe_loading import tensor_state_dict
 from worldfoundry.core.io.filesystem.disk import (
     CACHE_MIN_FREE_ENV,
     cache_min_free_bytes,
@@ -53,6 +53,7 @@ from worldfoundry.core.io.filesystem.disk import (
     ensure_free_disk,
 )
 from worldfoundry.core.io.filesystem.integrity import sync_directory
+from worldfoundry.core.model_loading.checkpoints.safe_loading import tensor_state_dict
 from worldfoundry.core.observability.logging_setup import get_logger
 
 # huggingface_hub, loguru, and boto3 (via io.s3_filesystem) are imported
@@ -400,7 +401,16 @@ def _load_sharded_safetensors_index_checkpoint(
         logger.info(f"Loading merged sharded checkpoint from cache: {cache_path}")
         try:
             return _load_checkpoint_from_local(cache_path, ".safetensors", map_location)
-        except Exception as exc:
+        except SafetensorError as exc:
+            # SafetensorError also covers unsupported devices. Only a malformed
+            # CPU-readable file warrants deleting and rebuilding the cache.
+            try:
+                with safe_open(cache_path, framework="pt", device="cpu"):
+                    pass
+            except SafetensorError:
+                pass
+            else:
+                raise
             logger.warning(
                 f"Discarding unreadable merged checkpoint cache {cache_path} ({exc}); "
                 f"rebuilding from {checkpoint_path}"
@@ -553,6 +563,7 @@ def _download_checkpoint_from_huggingface_url(
         "filename": filename,
         "revision": revision,
     }
+    min_bytes = 0
     if not _is_hf_file_cached(
         repo_id=repo_id,
         filename=filename,
@@ -564,10 +575,10 @@ def _download_checkpoint_from_huggingface_url(
             min_free_gb=checkpoint_min_free_gb,
             settings=settings,
         )
-    min_bytes = _preflight_hf_cache(
-        label="Hugging Face checkpoint cache",
-        settings=settings,
-    )
+        min_bytes = _preflight_hf_cache(
+            label="Hugging Face checkpoint cache",
+            settings=settings,
+        )
     try:
         local_path = hf_hub_download(
             repo_id=repo_id,

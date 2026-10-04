@@ -83,8 +83,7 @@ def _publish_lock(cache_root: Path, target_name: str) -> Iterator[None]:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def _enabled(source: Path) -> bool:
-    del source
+def _enabled() -> bool:
     raw = os.getenv("WORLDFOUNDRY_REALTIME_STAGE_CHECKPOINT", "0").strip().lower()
     if raw in {"0", "false", "no", "off"}:
         return False
@@ -282,6 +281,8 @@ def stage_checkpoint_for_realtime(
     """
 
     resolved = Path(source).expanduser().resolve()
+    if not _enabled():
+        return resolved
     required = _validated_relative_paths(required_paths, parameter="required_paths")
     included = tuple(
         sorted(_validated_relative_paths(include_paths, parameter="include_paths"))
@@ -289,8 +290,6 @@ def stage_checkpoint_for_realtime(
     for relative in (*required, *included):
         parameter = "required_paths" if relative in required else "include_paths"
         _resolved_relative(resolved, relative, parameter=parameter)
-    if not _enabled(resolved):
-        return resolved
     cache_root_value = os.getenv("WORLDFOUNDRY_REALTIME_LOCAL_CHECKPOINT_CACHE")
     if not cache_root_value:
         raise ValueError(

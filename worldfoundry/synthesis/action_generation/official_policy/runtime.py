@@ -11,6 +11,22 @@ from typing import Any, Mapping, Sequence
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
 
+def _call_policy_method(method: Any, payload: Mapping[str, Any], *, unpack: bool = False) -> Any:
+    """Select the supported payload signature before executing a stateful policy."""
+    args, kwargs = ((), dict(payload)) if unpack else ((payload,), {})
+    try:
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        # Opaque callables use the backend's normal calling convention.
+        return method(*args, **kwargs)
+    try:
+        signature.bind(*args, **kwargs)
+    except TypeError:
+        args, kwargs = ((payload,), {}) if unpack else ((), dict(payload))
+        signature.bind(*args, **kwargs)
+    return method(*args, **kwargs)
+
+
 def _jsonable(value: Any) -> Any:
     """
     Converts various Python types into a JSON-serializable format.
@@ -678,11 +694,7 @@ class OfficialPolicyRuntime:
                 return getattr(output, "action", output)
             method = getattr(model, self.config.predict_method, None)
             if callable(method):
-                # Fallback to model's predict method, trying both dict and kwargs.
-                try:
-                    return method(batch)
-                except TypeError:
-                    return method(**batch)
+                return _call_policy_method(method, batch)
             raise RuntimeError(
                 f"{self.config.model_id} custom policy loaded, but no processor.select_action "
                 f"or {self.config.predict_method} method is available."
@@ -699,10 +711,7 @@ class OfficialPolicyRuntime:
             # Try configured predict method or 'get_action'.
             method = getattr(model, self.config.predict_method, None) or getattr(model, "get_action", None)
             if callable(method):
-                try:
-                    return method(**inputs)
-                except TypeError:
-                    return method(inputs)
+                return _call_policy_method(method, inputs, unpack=True)
             raise RuntimeError(
                 f"{self.config.model_id} HF model loaded, but exposes neither "
                 f"{self.config.predict_method} nor get_action."
@@ -748,10 +757,7 @@ class OfficialPolicyRuntime:
             "task": instruction,
             "action_context": list(action_context),
         }
-        try:
-            return method(payload)
-        except TypeError:
-            return method(**payload)
+        return _call_policy_method(method, payload)
 
     def predict_action(
         self,
