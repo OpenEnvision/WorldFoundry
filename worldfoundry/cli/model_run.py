@@ -347,10 +347,7 @@ def _runtime_profile_id(value: Any) -> str:
 
 @lru_cache(maxsize=1)
 def _runtime_profile_paths_by_stem() -> Mapping[str, tuple[Any, ...]]:
-    try:
-        from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_RUNTIME_PROFILES_ROOT
-    except Exception:
-        return {}
+    from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_RUNTIME_PROFILES_ROOT
     paths: dict[str, list[Any]] = {}
     for path in DEFAULT_RUNTIME_PROFILES_ROOT.rglob("*.y*ml"):
         if path.is_file():
@@ -368,17 +365,11 @@ def _load_catalog_runtime_profile(entry: Any, variant: Any | None) -> tuple[Any 
             getattr(entry, "model_id", None),
         )
     )
-    try:
-        from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile_manifests
-    except Exception:
-        return None, candidates[0] if candidates else ""
+    from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile_manifests
     paths_by_stem = _runtime_profile_paths_by_stem()
     for candidate in candidates:
         for path in paths_by_stem.get(_normalise(candidate), ()):
-            try:
-                profiles = load_runtime_profile_manifests(path)
-            except Exception:
-                continue
+            profiles = load_runtime_profile_manifests(path)
             exact = next(
                 (
                     profile
