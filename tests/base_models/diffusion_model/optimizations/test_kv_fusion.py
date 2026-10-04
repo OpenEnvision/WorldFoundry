@@ -210,6 +210,7 @@ def test_inference_parameters_without_mutation_versions_are_rejected():
         prepare_wan_cross_kv_fusion(attention, {}, None)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
 def test_cuda_bf16_real_native_cross_attention_is_finite_and_close():
     attention = _attention(True, "cuda", torch.bfloat16)

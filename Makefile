@@ -1,6 +1,7 @@
 .PHONY: help install-core install-dev test test-infer test-infer-tensors test-infer-contracts test-infer-cuda-contracts test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
 .PHONY: test-infer-video-tensors plan-inference replay-inference coverage-inference verify-inference
 .PHONY: test-mg2-checkpoint-contracts test-mg2-trajectory-contracts test-mg2-conditioned-trajectory-contracts
+.PHONY: test-infer-sol-cuda-contracts test-lightvae-checkpoint-contracts
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -46,7 +47,30 @@ STREAMING_CPU_CONTRACTS = \
 	tests/studio_visualization/test_realtime_shutdown_ownership.py \
 	tests/studio_visualization/test_world_realtime.py \
 	tests/runtime/test_inference_benchmark_correctness.py
-INFER_TENSOR_CONTRACTS = tests/synthesis/test_inspatio_v15_tensors.py tests/synthesis/test_inspatio_reproducibility.py tests/synthesis/test_inspatio_python_orchestration.py tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py tests/core/test_diffusion_rounding.py tests/core/test_kernel_dispatch_receipt.py tests/core/test_diffusion_mutating_kernel.py $(VIDEO_TENSOR_CONTRACTS) $(STREAMING_CPU_CONTRACTS)
+DIFFUSION_ACCELERATION_CPU_CONTRACTS = \
+	tests/core/acceleration/test_plugins.py \
+	tests/core/acceleration/test_easycache.py \
+	tests/core/test_sol_attention.py \
+	tests/base_models/diffusion_model/optimizations/test_selective_fp8.py \
+	tests/base_models/diffusion_model/optimizations/test_kv_fusion.py \
+	tests/base_models/diffusion_model/optimizations/test_plugin_lifecycle.py \
+	tests/base_models/diffusion_model/optimizations/test_acceleration_plugins.py \
+	tests/base_models/diffusion_model/optimizations/test_wan_dual_easycache.py \
+	tests/base_models/diffusion_model/optimizations/test_wan_feature_cache_config.py \
+	tests/base_models/diffusion_model/models/denoisers \
+	tests/base_models/diffusion_model/loaders/test_module_acceleration_plugins.py \
+	tests/base_models/test_wan22_a14b_inference.py \
+	tests/benchmarks/test_plugin_diagnostics.py \
+	tests/benchmarks/test_lightvae_encoder.py \
+	tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py::test_default_teacher_and_explicit_student_geometry_remain_distinct \
+	tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py::test_strict_converter_accepts_only_all_matched_student_keys_and_shapes \
+	tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py::test_teacher_and_48_channel_checkpoint_rejected \
+	tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py::test_non_inference_student_build_rejected_before_checkpoint_read \
+	tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py::test_wan22_and_unknown_variant_rejected_before_loading_or_preview \
+	tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py::test_unvalidated_student_options_rejected_before_loading \
+	tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py::test_student_tiling_and_parallel_are_explicitly_unvalidated \
+	tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py::test_student_compile_offload_and_lower_precision_rejected
+INFER_TENSOR_CONTRACTS = tests/synthesis/test_inspatio_v15_tensors.py tests/synthesis/test_inspatio_reproducibility.py tests/synthesis/test_inspatio_python_orchestration.py tests/core/execution tests/core/model_loading/test_checkpoint_roundtrip.py tests/core/geometry/test_geometry_conventions.py tests/runtime/test_geometry_regression.py tests/synthesis/test_dreamx_world_backend_policy.py tests/core/test_diffusion_rounding.py tests/core/test_kernel_dispatch_receipt.py tests/core/test_diffusion_mutating_kernel.py $(VIDEO_TENSOR_CONTRACTS) $(STREAMING_CPU_CONTRACTS) $(DIFFUSION_ACCELERATION_CPU_CONTRACTS)
 # Select numerical CUDA nodes explicitly: older CUDA tests do not all carry the gpu marker.
 INFER_CUDA_CONTRACTS = \
 	tests/synthesis/test_inspatio_renderer_gpu.py::test_strict_renderer_matches_cpu_and_repeats \
@@ -58,6 +82,9 @@ INFER_CUDA_CONTRACTS = \
 	tests/core/test_diffusion_rounding.py::test_eager_rounding_and_explicit_model_backend \
 	tests/core/test_diffusion_rounding.py::test_rounding_with_strided_modulation_across_supported_ranks \
 	tests/core/test_diffusion_rounding.py::test_layer_norm_modulation_preserves_vendor_bits_and_upcast \
+	tests/base_models/diffusion_model/optimizations/test_selective_fp8.py::test_real_cuda_scaled_mm_receipts_layout_and_exact_removal \
+	tests/base_models/diffusion_model/optimizations/test_kv_fusion.py::test_cuda_bf16_real_native_cross_attention_is_finite_and_close \
+	tests/base_models/diffusion_model/optimizations/test_acceleration_plugins.py::test_sana_cuda_default_fusion_keeps_native_strides_and_output \
 	tests/core/attention/test_kv_arena.py::test_cuda_long_sequence_attention_and_stream_ownership \
 	tests/core/attention/test_kv_arena.py::test_cuda_graph_replay_reads_updated_current_segment \
 	tests/core/attention/test_gqa_storage.py::test_efficient_cuda_gqa_matches_math \
@@ -81,6 +108,12 @@ INFER_CUDA_CONTRACTS = \
 	tests/core/attention/test_triton_tma_cuda.py \
 	tests/core/attention/test_block_kv_cuda_graph.py
 INFER_CUDA_REPORT ?= tmp/inference-cuda-contracts.xml
+INFER_SOL_CUDA_CONTRACTS = \
+	tests/core/test_sol_attention.py::test_sol_cuda_executes_with_receipt_and_validates_shape \
+	tests/core/test_sol_attention.py::test_uncompressed_cuda_path_matches_upstream_sink_and_preserves_scale
+INFER_SOL_CUDA_REPORT ?= tmp/inference-sol-cuda-contracts.xml
+LIGHTVAE21_CHECKPOINT ?= $(WORLDFOUNDRY_LIGHTVAE21_CHECKPOINT)
+LIGHTVAE21_CHECKPOINT_JUNIT ?= tmp/lightvae-checkpoint-contracts.xml
 MG2_CHECKPOINT_ROOT ?=
 MG2_CHECKPOINT_REPORT ?= tmp/mg2-checkpoint-contracts.json
 MG2_CHECKPOINT_JUNIT ?= tmp/mg2-checkpoint-contracts.xml
@@ -133,6 +166,8 @@ help:
 		'  make test-infer-video-tensors  Check real small video operators, sampler math and resident request isolation with CPU Torch and einops.' \
 		'  make test-infer-contracts  Test checkpoint, geometry, serializer and execution contracts in a model environment.' \
 		'  make test-infer-cuda-contracts  Run CUDA/FP8 graph, cache, attention and transport checks on SM90+; requires Torch, Triton, nvidia-cudnn-frontend and cuda-bindings; rejects skips.' \
+		'  make test-infer-sol-cuda-contracts  Require real compressed and uncompressed Sol-Attn execution in its supported CUDA environment; rejects skips.' \
+		'  make test-lightvae-checkpoint-contracts  Validate matched student encode/decode and causal caches with LIGHTVAE21_CHECKPOINT on CPU and CUDA; rejects skips.' \
 		'  make test-mg2-checkpoint-contracts  Validate real MG2 block/cache, FP8 FFN and streaming VAE pixels using MG2_CHECKPOINT_ROOT; no generation quality or speed certification.' \
 		'  make test-mg2-trajectory-contracts  Require bitwise parity of full MG2 denoise/refresh, rolling caches and 45 decoded frames for packed/split QKV and decode overlap.' \
 		'  make test-mg2-conditioned-trajectory-contracts  Check real image VAE/CLIP conditioning and six 141-frame bitwise trajectories using local MG2 weights.' \
@@ -198,6 +233,15 @@ test-infer-contracts:
 test-infer-cuda-contracts:
 	$(PYTHON) -c 'import sys, torch; torch.cuda.is_available() or sys.exit("CUDA contract tests require an available GPU")'
 	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/inference-cuda-selection.json --junit "$(INFER_CUDA_REPORT)" $(foreach test,$(INFER_CUDA_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
+
+test-infer-sol-cuda-contracts:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -c 'import sys; from worldfoundry.core.attention.backends.probe import probe_attention_backends; probe_attention_backends("cuda")["sol_attn"].usable or sys.exit("Sol-Attn contracts require its supported CUDA runtime and provider")'
+	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/inference-sol-cuda-selection.json --junit "$(INFER_SOL_CUDA_REPORT)" $(foreach test,$(INFER_SOL_CUDA_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
+
+test-lightvae-checkpoint-contracts:
+	@test -f "$(LIGHTVAE21_CHECKPOINT)" || { printf '%s\n' 'Set LIGHTVAE21_CHECKPOINT to the matched Wan2.1 student checkpoint.' >&2; exit 2; }
+	$(PYTHON) -c 'import sys, torch; torch.cuda.is_available() or sys.exit("LightVAE checkpoint contracts require CPU and CUDA execution")'
+	OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 WORLDFOUNDRY_LIGHTVAE21_CHECKPOINT="$(LIGHTVAE21_CHECKPOINT)" PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/lightvae-checkpoint-selection.json --junit "$(LIGHTVAE21_CHECKPOINT_JUNIT)" --test tests/base_models/diffusion_model/models/autoencoders/test_lightvae_wan21.py -- $(TEST_ARGS)
 
 # Local checkpoint evidence is opt-in and independent of the public small-tensor gate.
 test-mg2-checkpoint-contracts:

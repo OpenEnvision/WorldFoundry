@@ -195,7 +195,7 @@ jobs:
           python -m pip install "torch==2.9.0+cpu" --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -e ".[test]" \
             "safetensors>=0.4" "einops>=0.7,<0.9" "omegaconf>=2.3,<3" "triton==3.5.0" \
-            "transformers>=4.57,<4.58" ftfy regex opencv-python-headless "aiohttp>=3.10,<4"
+            "transformers>=4.57,<4.58" ftfy regex opencv-python-headless "aiohttp>=3.10,<4" scikit-image
       - name: Run inference tensors and streaming contracts without model weights
         run: make test-infer-tensors
       - name: Publish inference contract results
