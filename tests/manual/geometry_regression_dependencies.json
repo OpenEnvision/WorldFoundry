@@ -216,6 +216,18 @@
     "ati-wan21": [
       "worldfoundry/pipelines/ati/**",
       "worldfoundry/synthesis/visual_generation/ati/**"
+    ],
+    "alayaworld": [
+      "worldfoundry/pipelines/alayaworld/**",
+      "worldfoundry/synthesis/visual_generation/alayaworld/**",
+      "worldfoundry/base_models/diffusion_model/models/networks/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/autoencoders/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/encoders/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/representations/ltx/**"
+    ],
+    "diamond": [
+      "worldfoundry/synthesis/visual_generation/diamond/**",
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py"
     ]
   },
   "cases": {
@@ -352,6 +364,17 @@
     ],
     "ati-wan21-14b-tracks-short": [
       "ati-wan21"
+    ],
+    "dreamx-world5b-cam-short": [
+      "dreamx-world",
+      "wan-diffusion"
+    ],
+    "alayaworld-spatial-two-chunks-short": [
+      "alayaworld",
+      "depth-anything-v3"
+    ],
+    "diamond-csgo-conditioned-short": [
+      "diamond"
     ]
   },
   "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",

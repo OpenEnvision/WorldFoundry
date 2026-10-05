@@ -3428,5 +3428,296 @@
       "pred.mp4"
     ],
     "scope": "Own ATI checkpoint and quantized dense point-track input; official 81-frame resampling, four denoising steps at reduced area. Does not certify full-resolution trajectory adherence."
+  },
+  "dreamx-world5b-cam-short": {
+    "id": "dreamx-world5b-cam-short",
+    "model_id": "dreamx-world-5b-cam",
+    "seed": 44,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.dreamx_world.pipeline_dreamx_world:DreamXWorld5BCamPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/GD-ML--DreamX-World-5B-Cam",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "device": "cuda"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/GD-ML--DreamX-World-5B-Cam",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "input": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}"
+    },
+    "sequence": [
+      {
+        "name": "configure",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 44,
+          "fps": 16,
+          "num_frames": 5,
+          "height": 704,
+          "width": 1280,
+          "num_inference_steps": 8,
+          "guidance_scale": 5.0
+        },
+        "outputs": []
+      },
+      {
+        "name": "first",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "forward"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "continue",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "camera_r"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "reset",
+        "method": "reset_realtime",
+        "outputs": []
+      },
+      {
+        "name": "configure_repeat",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 44,
+          "fps": 16,
+          "num_frames": 5,
+          "height": 704,
+          "width": 1280,
+          "num_inference_steps": 8,
+          "guidance_scale": 5.0
+        },
+        "outputs": []
+      },
+      {
+        "name": "repeat",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "forward"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "reset_other",
+        "method": "reset_realtime",
+        "outputs": []
+      },
+      {
+        "name": "configure_other",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 44,
+          "fps": 16,
+          "num_frames": 5,
+          "height": 704,
+          "width": 1280,
+          "num_inference_steps": 8,
+          "guidance_scale": 5.0
+        },
+        "outputs": []
+      },
+      {
+        "name": "other",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "left"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "first.frames",
+      "continue.frames",
+      "repeat.frames",
+      "other.frames"
+    ],
+    "array_contracts": {
+      "first.frames": {
+        "shape": [
+          4,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "continue.frames": {
+        "shape": [
+          4,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "repeat.frames": {
+        "shape": [
+          4,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "other.frames": {
+        "shape": [
+          4,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "comparisons": [
+      {
+        "left": "first.frames",
+        "right": "repeat.frames",
+        "relation": "equal"
+      },
+      {
+        "left": "first.frames",
+        "right": "other.frames",
+        "relation": "different"
+      }
+    ],
+    "scope": "Released camera-conditioned 5B checkpoint; a four-frame window, continuation, reset/replay and changed camera translation at native resolution. Eight sampling steps; not default-recipe or long-horizon quality."
+  },
+  "alayaworld-spatial-two-chunks-short": {
+    "id": "alayaworld-spatial-two-chunks-short",
+    "model_id": "alayaworld",
+    "seed": 45,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.alayaworld.pipeline_alayaworld:AlayaWorldPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/AlayaWorld/merged_infer.safetensors",
+      "device": "cuda",
+      "gemma_root": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/gemma-3-12b-it-qat-q4_0-unquantized",
+      "da3_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "compile_mode": null,
+      "context_parallel": false
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic abandoned room. Stable scene geometry and lighting.",
+      "seed": 45,
+      "rounds": 2,
+      "num_frames": 64,
+      "height": 544,
+      "width": 960,
+      "sampling_steps": 4,
+      "fps": 24,
+      "camera_trajectory": "w*64",
+      "return_dict": true,
+      "output_path": "${OUTPUT_DIR}/export/alayaworld.mp4"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/AlayaWorld/merged_infer.safetensors",
+      "text_encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/gemma-3-12b-it-qat-q4_0-unquantized",
+      "depth_model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "result.video",
+      "export.export/alayaworld.mp4.frames",
+      "export.export/alayaworld.mp4.fps"
+    ],
+    "export_artifacts": [
+      "export/alayaworld.mp4"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "shape": [
+          64,
+          544,
+          960,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Released AlayaWorld checkpoint and Gemma/DA3 components; two native 32-frame chunks with spatial-memory retrieval and all four sampling steps. Single GPU; not long-horizon or multi-rank quality."
+  },
+  "diamond-csgo-conditioned-short": {
+    "id": "diamond-csgo-conditioned-short",
+    "model_id": "diamond-csgo",
+    "seed": 46,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:DIAMONDCsgoPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond/csgo/model/csgo.pt",
+      "device": "cuda",
+      "pretrained_dir": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond",
+      "spawn_id": 0,
+      "variant": "csgo",
+      "sampler": "higher_quality"
+    },
+    "call": {
+      "prompt": "",
+      "headless_steps": 6,
+      "action": "forward",
+      "fps": 16,
+      "seed": 46,
+      "output_path": "${OUTPUT_DIR}/export/diamond-csgo.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond/csgo/model/csgo.pt",
+      "spawn": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond/csgo/spawn/0",
+      "config": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond/csgo/config"
+    },
+    "required_outputs": [
+      "export.export/diamond-csgo.mp4.frames",
+      "export.export/diamond-csgo.mp4.fps"
+    ],
+    "scope": "Released CS:GO dynamics/upsampling checkpoint, pinned spawn observations/actions and six conditioned headless steps. Exact exported RGB frames and frame rate; not real-game interaction or long-horizon quality.",
+    "export_artifacts": [
+      "export/diamond-csgo.mp4"
+    ],
+    "array_contracts": {
+      "export.export/diamond-csgo.mp4.frames": {
+        "shape": [
+          7,
+          150,
+          280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/diamond-csgo.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64"
+      }
+    }
   }
 }

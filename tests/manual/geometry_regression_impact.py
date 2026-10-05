@@ -146,51 +146,135 @@ class ImportGraph:
                 module = path[:-3].replace("/", ".")
                 self.modules[module.removesuffix(".__init__")] = path
         self.cache = {}
+        self.trees = {}
+        self.lazy_modules = set()
+
+    def tree(self, name: str):
+        if name not in self.trees:
+            path = self.root / self.modules[name]
+            if not path.resolve().is_relative_to(self.root):
+                raise ValueError(f"Import escapes source tree: {name}")
+            self.trees[name] = ast.parse(path.read_text(), filename=str(path))
+            if any(getattr(node, "name", None) in {"_component_pipeline_class", "WorldModelRuntimeSpec"}
+                   for node in self.trees[name].body):
+                self.lazy_modules.add(name)
+        return self.trees[name]
+
+    def model_id(self, name: str, symbol: str | None) -> str | None:
+        """Read a concrete pipeline identity without importing its runtime."""
+        for node in self.tree(name).body:
+            if isinstance(node, ast.ClassDef) and node.name == symbol:
+                for member in node.body:
+                    targets = (member.targets if isinstance(member, ast.Assign) else
+                               [member.target] if isinstance(member, ast.AnnAssign) else [])
+                    if any(isinstance(target, ast.Name) and target.id == "MODEL_ID" for target in targets):
+                        if isinstance(member.value, ast.Constant) and isinstance(member.value.value, str):
+                            return member.value.value
+        return None
+
+    def lazy_literals(self, name: str, symbol: str | None, model_id: str | None) -> tuple[set[int], list[str]]:
+        """Resolve data-only runtime records and separately constructed pipeline classes.
+
+        Literal adapter paths are not executed when a metadata table is read.
+        Unknown class identities and dynamic declarations retain all targets.
+        """
+        tree = self.tree(name)
+        excluded, selected = set(), []
+        factory = next((node for node in tree.body if isinstance(node, ast.FunctionDef)
+                        and node.name == "_component_pipeline_class"), None)
+        declarative_factory = (factory is not None and all(
+            isinstance(node.func, ast.Name) and node.func.id == "type"
+            for node in ast.walk(factory) if isinstance(node, ast.Call)
+        ))
+        record = next((node for node in tree.body if isinstance(node, ast.ClassDef)
+                       and node.name == "WorldModelRuntimeSpec"), None)
+        data_record = record is not None and not any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) for node in record.body
+        )
+        for statement in tree.body:
+            targets = (statement.targets if isinstance(statement, ast.Assign) else
+                       [statement.target] if isinstance(statement, ast.AnnAssign) else [])
+            value = getattr(statement, "value", None)
+            if (declarative_factory and isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                    and value.func.id == "_component_pipeline_class"):
+                literals = [node for node in ast.walk(value) if isinstance(node, ast.Constant)
+                            and isinstance(node.value, str) and node.value.startswith("worldfoundry.")]
+                excluded.update(id(node) for node in literals)
+                if symbol is None or any(isinstance(target, ast.Name) and target.id == symbol for target in targets):
+                    selected.extend(node.value for node in literals)
+            if (data_record and isinstance(value, ast.Dict)
+                    and any(isinstance(target, ast.Name) and target.id == "WORLD_MODEL_RUNTIME_SPECS"
+                            for target in targets)
+                    and all(isinstance(key, ast.Constant) and isinstance(key.value, str)
+                            and isinstance(entry, ast.Call) and isinstance(entry.func, ast.Name)
+                            and entry.func.id == "WorldModelRuntimeSpec"
+                            for key, entry in zip(value.keys, value.values))):
+                metadata_only = symbol in {"WORLD_MODEL_RUNTIME_SPECS", "WorldModelRuntimeSpec", "runtime_spec"}
+                keys = {key.value for key in value.keys}
+                for key, entry in zip(value.keys, value.values):
+                    literals = [node for node in ast.walk(entry) if isinstance(node, ast.Constant)
+                                and isinstance(node.value, str) and node.value.startswith("worldfoundry.")]
+                    excluded.update(id(node) for node in literals)
+                    if not metadata_only and (model_id not in keys or key.value == model_id):
+                        selected.extend(node.value for node in literals)
+        return excluded, selected
 
     def imports(self, name: str) -> set[str]:
-        if name in self.cache:
-            return self.cache[name]
+        return {module for module, _ in self.import_targets(name, None, None)}
+
+    def import_targets(self, name: str, symbol: str | None, model_id: str | None) -> set[tuple[str, str | None]]:
+        tree = self.tree(name)
+        key = (name, symbol, model_id) if name in self.lazy_modules else (name, None, None)
+        if key in self.cache:
+            return self.cache[key]
         path = self.root / self.modules[name]
-        if not path.resolve().is_relative_to(self.root):
-            raise ValueError(f"Import escapes source tree: {name}")
-        tree = ast.parse(path.read_text(), filename=str(path))
+        excluded, selected = self.lazy_literals(name, symbol, model_id) if name in self.lazy_modules else (set(), [])
+        dynamic_loader = any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                             and node.func.attr == "import_module" and node.args
+                             and not isinstance(node.args[0], ast.Constant) for node in ast.walk(tree))
         package = name if path.name == "__init__.py" else name.rpartition(".")[0]
         imports = set()
         # Importing a module also executes any non-namespace parent __init__.
         parts = name.split(".")
-        imports.update(".".join(parts[:index]) for index in range(1, len(parts)))
+        imports.update((".".join(parts[:index]), None) for index in range(1, len(parts)))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                imports.update(alias.name for alias in node.names)
+                imports.update((alias.name, None) for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
                 if node.level:
                     prefix = package.split(".")[: len(package.split(".")) - node.level + 1]
                     base = ".".join([*prefix, *([node.module] if node.module else [])])
                 else:
                     base = node.module or ""
-                imports.add(base)
-                imports.update(base + "." + alias.name for alias in node.names)
-            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                imports.update((base, None if alias.name == "*" else alias.name) for alias in node.names)
+                if dynamic_loader and any(alias.name == "WORLD_MODEL_RUNTIME_SPECS" for alias in node.names):
+                    imports.add((base, None))
+                imports.update((base + "." + alias.name, None) for alias in node.names)
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in excluded:
                 # Includes import_module literals and lazy facade tables.
-                module = node.value.partition(":")[0]
+                module, _, attribute = node.value.partition(":")
                 if re.fullmatch(r"worldfoundry(?:\.[a-zA-Z_]\w*)+", module):
-                    imports.add(module)
-        result = {item for item in imports if item in self.modules and item != name}
-        self.cache[name] = result
+                    imports.add((module, attribute or None))
+        for target in selected:
+            module, _, attribute = target.partition(":")
+            imports.add((module, attribute or None))
+        result = {(module, attribute) for module, attribute in imports if module in self.modules and module != name}
+        self.cache[key] = result
         return result
 
     def closure(self, target: str) -> set[str]:
-        target = target.partition(":")[0]
-        if target not in self.modules:
+        name, _, symbol = target.partition(":")
+        if name not in self.modules:
             raise ValueError(f"Case target has no tracked implementation: {target}")
-        seen, pending = set(), [target]
+        model_id = self.model_id(name, symbol or None)
+        seen, pending = set(), [(name, symbol or None)]
         while pending:
-            name = pending.pop()
-            if name in seen:
+            item = pending.pop()
+            if item in seen:
                 continue
-            seen.add(name)
-            pending.extend(self.imports(name) - seen)
-        return {self.modules[name] for name in seen}
+            seen.add(item)
+            pending.extend(self.import_targets(*item, model_id) - seen)
+        return {self.modules[module] for module, _ in seen}
 
 
 def matches(path: str, patterns: list[str]) -> bool:

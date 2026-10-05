@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -124,6 +126,104 @@ def test_changed_export_and_missing_export_cannot_pass(tmp_path):
     assert replay.compare_runs(reference, candidate)["status"] == "failed"
     (candidate / "depth.npy").unlink()
     with pytest.raises(ValueError, match="Missing or empty exported"):
+        replay.compare_runs(reference, candidate)
+
+
+@pytest.fixture
+def artifact_pipeline(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    module = ModuleType("artifact_replay_fixture")
+    module.__file__ = str(source / "artifact_replay_fixture.py")
+    Path(module.__file__).write_text("# Artifact-only pipeline fixture.\n")
+
+    class Pipeline:
+        pixel = 19
+        mode = "numeric"
+
+        @classmethod
+        def from_pretrained(cls):
+            return cls()
+
+        def __call__(self, output):
+            path = Path(output)
+            path.parent.mkdir(parents=True)
+            if self.mode == "empty":
+                path.touch()
+            elif self.mode == "nonnumeric":
+                np.save(path, np.array(["preview"]))
+            elif self.mode == "wrong_shape":
+                np.save(path, np.full((1, 3), self.pixel, dtype=np.uint8))
+            elif self.mode == "numeric":
+                np.save(path, np.full((2, 3), self.pixel, dtype=np.uint8))
+            return {"artifact": str(path)}
+
+    module.Pipeline = Pipeline
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setitem(
+        sys.modules, "torch", SimpleNamespace(manual_seed=lambda seed: None, cuda=SimpleNamespace(is_available=lambda: False))
+    )
+    monkeypatch.setattr(replay, "runtime_metadata", lambda torch: {"torch": "fixture"})
+    monkeypatch.setattr(sys, "path", sys.path.copy())
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
+    asset = source / "input.txt"
+    asset.write_text("fixed input")
+    case_file = tmp_path / "case.json"
+    case_file.write_text(json.dumps({
+        "id": "artifact-only", "seed": 42,
+        "assets": {"input": str(asset)},
+        "target": "artifact_replay_fixture:Pipeline", "load": {},
+        "call": {"output": "${OUTPUT_DIR}/export/frames.npy"},
+        "export_artifacts": ["export/frames.npy"],
+        "required_outputs": ["export.export/frames.npy"],
+        "array_contracts": {"export.export/frames.npy": {"shape": [2, 3], "dtype": "uint8"}},
+    }))
+    return case_file, source, Pipeline
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_artifact_only_inference_is_validated_and_compared(tmp_path, artifact_pipeline, changed):
+    case_file, source, pipeline = artifact_pipeline
+    reference, candidate = tmp_path / "reference", tmp_path / "candidate"
+    assert replay.run_case(case_file, source, reference)["status"] == "passed"
+    pipeline.pixel += int(changed)
+    assert replay.run_case(case_file, source, candidate)["status"] == "passed"
+    with np.load(candidate / "arrays.npz", allow_pickle=False) as arrays:
+        assert arrays.files == []
+    report = replay.compare_runs(reference, candidate, atol=100)
+    assert report["status"] == ("failed" if changed else "passed")
+    assert report["outputs"]["export.export/frames.npy"]["passed"] is (not changed)
+
+
+@pytest.mark.parametrize("mode, error", [
+    ("missing", "Missing exported artifacts"),
+    ("empty", "Missing or empty exported artifact"),
+    ("nonnumeric", "Inference returned no numerical outputs"),
+    ("wrong_shape", "Contracted output shape changed"),
+])
+def test_artifact_only_inference_rejects_invalid_exports(tmp_path, artifact_pipeline, mode, error):
+    case_file, source, pipeline = artifact_pipeline
+    pipeline.mode = mode
+    result = replay.run_case(case_file, source, tmp_path / "invalid")
+    assert result["status"] == "failed"
+    assert error in result["error"]
+
+
+def test_artifact_only_inference_still_requires_declared_outputs(tmp_path, artifact_pipeline):
+    case_file, source, _ = artifact_pipeline
+    case = json.loads(case_file.read_text())
+    case["required_outputs"].append("result.depth")
+    case_file.write_text(json.dumps(case))
+    result = replay.run_case(case_file, source, tmp_path / "missing-output")
+    assert result["status"] == "failed"
+    assert "Missing required output: result.depth" in result["error"]
+
+
+def test_comparison_without_in_memory_or_exported_values_cannot_pass(tmp_path):
+    reference = write_run(tmp_path / "reference", {})
+    candidate = write_run(tmp_path / "candidate", {})
+    with pytest.raises(ValueError, match="Numerical output keys differ or are empty"):
         replay.compare_runs(reference, candidate)
 
 

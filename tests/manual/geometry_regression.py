@@ -349,7 +349,6 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
                     arrays.update({name.replace("export.", "artifact.", 1): value for name, value in decoded.items()})
                 else:
                     raise ValueError(f"Unsupported numerical artifact: {path}")
-        validate_arrays(arrays, resolved["required_outputs"])
         exports = exported_arrays(output_dir, manifest.get("exported_files", []))
         validate_arrays({**arrays, **exports}, resolved["required_outputs"])
         validate_contracts({**arrays, **exports}, resolved.get("array_contracts", {}), resolved.get("comparisons", []))
@@ -409,10 +408,12 @@ def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: flo
         np.load(reference / "arrays.npz", allow_pickle=False) as left,
         np.load(candidate / "arrays.npz", allow_pickle=False) as right,
     ):
-        if set(left.files) != set(right.files) or not left.files:
+        if set(left.files) != set(right.files):
             raise ValueError("Numerical output keys differ or are empty")
         arrays_a = {**dict(left), **exported_arrays(reference, exports_a)}
         arrays_b = {**dict(right), **exported_arrays(candidate, exports_b)}
+        if not arrays_a or not arrays_b:
+            raise ValueError("Numerical output keys differ or are empty")
         if arrays_a.keys() != arrays_b.keys():
             raise ValueError("Exported numerical fields differ")
         for key in sorted(arrays_a):
