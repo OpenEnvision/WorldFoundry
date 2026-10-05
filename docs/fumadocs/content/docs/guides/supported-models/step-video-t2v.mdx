@@ -1,39 +1,50 @@
 ---
 title: "Step-Video-T2V"
-description: "Step-Video-T2V is StepFun's large open text-to-video model (30B parameters upstream, MIT weights at stepfun-ai/stepvideo-t2v). In WorldFoundry the public pipeline is assembled from native role-based components with the shared diffusion run…"
+description: "Step-Video-T2V from StepFun: text-to-video and video-generation; Verified."
+modelId: "step-video-t2v"
 pageSource: generated
 ---
 
-**Publisher:** StepFun · Company
-text → video
-
 Step-Video-T2V is StepFun's large open text-to-video model (30B parameters upstream, MIT weights at stepfun-ai/stepvideo-t2v). In WorldFoundry the public pipeline is assembled from native role-based components with the shared diffusion runner — DiT, Step-LLM text encoder, CLIP, scheduler, latent initialization, and VAE decoding all execute in-process.
 
-**Catalog status:** Runner verified
+<ModelPaperFigures modelId="step-video-t2v" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2502.10248](https://arxiv.org/abs/2502.10248).
 
-- [Paper](https://arxiv.org/abs/2502.10248)
-- [GitHub](https://github.com/stepfun-ai/Step-Video-T2V)
-- [Upstream README](https://github.com/stepfun-ai/Step-Video-T2V#readme)
+Code: [stepfun-ai/Step-Video-T2V](https://github.com/stepfun-ai/Step-Video-T2V).
 
 <ModelCommandBuilder modelId="step-video-t2v" locale="en" />
 
-## Architecture
+## What it is for
+
+Pick `step-video-t2v` when you want this family's text-to-video line in WorldFoundry: a prompt in, a generated clip out. Use it as the catalog T2V start rather than an editor or a world-model stepper.
 
 Upstream: a 30B DiT with a deeply compressed Video-VAE (16x16 spatial, 8x temporal) and bilingual text encoders. This repository re-assembles the native pipeline in-process; the former xFuser and caption/VAE HTTP-service runtime is not a backend. A checkpoint-backed 204-frame GPU artifact is verified for one prompt.
 
+Catalog tasks include text-to-video and video-generation. Catalog aliases include `step-video`, `stepvideo-t2v`, and `step_video_t2v`. Documented modalities: text in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard open T2V quality suite).
+
 ## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `frames`, `fps`, and `height`; artifacts `generated_video` and `step_video_t2v.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `StepVideoT2VPipeline`.
+
+Family status: **Verified**.
+
+Recorded `interactive-video` defaults: frames=204, fps=25, height=544, width=992.
 
 A checkpoint-backed 204-frame GPU artifact at 992x544 and 50 steps is verified for one prompt. Use id step-video-t2v. At 30B scale plan for serious VRAM or multi-GPU setups.
 
-## Evaluation benchmarks
+## Running in WorldFoundry
 
-- [VBench](/docs/evaluation/benchmark-hub/vbench) — Standard open T2V quality suite.
+The catalog launch is `worldfoundry-eval run step-video-t2v --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-## Readiness and limitations
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-- The 204-frame result covers one prompt; benchmark scores and official pixel parity are not yet measured.
-- 30B scale demands datacenter GPUs; single consumer cards are not viable.
+Recorded weight repositories include `stepfun-ai/stepvideo-t2v`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh step-video-t2v`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include mit; status: **Verified**.
 
 <ModelRelatedRecipes modelId="step-video-t2v" locale="en" />

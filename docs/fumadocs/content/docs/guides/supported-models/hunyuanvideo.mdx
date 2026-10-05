@@ -68,7 +68,7 @@ WorldFoundry's native T2V recipe (`HunyuanVideoT2VPipeline`) defaults to **720×
 
 ## In WorldFoundry
 
-Both T2V and I2V are declarative native-diffusion recipes assembled by the shared runner — not the upstream CLI. Launch `worldfoundry-eval run hunyuanvideo-t2v --pipeline.task-profile text-to-video` or the `hunyuanvideo-i2v` sibling. Checkpoints are `tencent/HunyuanVideo` and `tencent/HunyuanVideo-I2V` (license `other` on the cards). Integration is recorded; runner and demo parity are still pending, so a successful command is not the same as a checkpoint-backed GPU artifact in this workspace. Use the unified environment (`worldfoundry-unified-cu128`) and stage weights locally. Official 720p / 129-frame jobs want an 80 GB class GPU; plan down from there only if you accept the paper's 540p / FP8 trade-offs.
+Both T2V and I2V are declarative native-diffusion recipes assembled by the shared runner — not the upstream CLI. Launch `worldfoundry-eval run hunyuanvideo-t2v` or the `hunyuanvideo-i2v` sibling. Checkpoints are `tencent/HunyuanVideo` and `tencent/HunyuanVideo-I2V` (license `other` on the cards). Integration is recorded; runner and demo parity are still pending, so a successful command is not the same as a checkpoint-backed GPU artifact in this workspace. Use the unified environment (`worldfoundry-unified-cu128`) and stage weights locally. Official 720p / 129-frame jobs want an 80 GB class GPU; plan down from there only if you accept the paper's 540p / FP8 trade-offs.
 
 ## Minimal eval
 

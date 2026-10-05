@@ -107,7 +107,7 @@ Suggested 8-GPU split: GPUs 0–1 QwenVL, 2 SAM3, 3–4 DA3, 5–7 scoring worke
 
 Vendor `evaluate_pipelines.py` writes `batch_manifests/<domain>_<pipeline>_{all,pending}.jsonl` and `batch_logs/<domain>_<pipeline>/` (`summary_latest.jsonl`, `score_summary.json`, `score_cases.csv`). Useful flags: `--list-pipelines`, `--limit N`, `--dry-run`, `--no-summarize`, `--skip-pair gaming:lingbot-world`. WorldFoundry `--run-official --dry-run` is the verified path; a scored 1,000-video triathlon is not claimed.
 
-Lower-level vendor tools (debug only): `make_manifest.py`, `batch_scheduler.py`, `summarize_scores.py`, `scripts/score_video_physical_3d.py`.
+Lower-level vendor tools (debug only): `make_manifest.py`, `batch_scheduler.py`, `summarize_scores.py`, `scripts/score_video_physical_3d.py`. These paths are relative to `worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/`.
 
 Physical-track internals in the vendored tree: SAM3 masks / boxes on GT and generated video, then DA3 centroids in 3D for mechanics; thermotics question bank; material heuristics (color mix, dissolve, flammability, hardness / deformation) optionally mixed with a VLM. Drive them through the official runner, not those folder scripts.
 

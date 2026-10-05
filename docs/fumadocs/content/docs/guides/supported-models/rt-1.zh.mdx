@@ -1,35 +1,48 @@
 ---
 title: "RT-1"
-description: "RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 的树内 SavedModel 适配器已用官方权重和传入的合成 512 维向量完成离线 GPU 动作结构验证；任务语义编码仍未核验。"
+description: "RT-1（Google Research）：视觉-语言-动作（VLA）、VLA 策略执行；Runner 一致性待确认。"
+modelId: "rt-1"
 pageSource: generated
 ---
 
-**发表机构:** 谷歌研究院（Google Research） · 企业
-
 RT-1（Robotics Transformer 1）是谷歌研究院开创性的大规模机器人 transformer，在 13 万条真实机器人示范上训练，从图像与指令输出离散化动作。WorldFoundry 的树内 SavedModel 适配器已用官方权重和传入的合成 512 维向量完成离线 GPU 动作结构验证；任务语义编码仍未核验。
 
-**目录状态:** 运行时已移植
+<ModelPaperFigures modelId="rt-1" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2212.06817](https://arxiv.org/abs/2212.06817)。
 
-- [项目主页](https://robotics-transformer.github.io/)
-- [论文](https://arxiv.org/abs/2212.06817)
-- [GitHub](https://github.com/google-research/robotics_transformer)
-- [上游 README](https://github.com/google-research/robotics_transformer#readme)
+项目页：[robotics-transformer.github.io](https://robotics-transformer.github.io/)。代码：[google-research/robotics_transformer](https://github.com/google-research/robotics_transformer)。
 
 <ModelCommandBuilder modelId="rt-1" locale="zh" />
 
-## 架构
+## 用来做什么
 
-EfficientNet-B3 图像 token 化配 FiLM 语言条件、TokenLearner 压缩与 decoder-only transformer，输出离散化动作 token——以 TensorFlow SavedModel 提供。
+需要 catalog 上的 VLA 策略时选 `rt-1`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+
+EfficientNet-B3 图像 token 化配 FiLM 语言条件、TokenLearner 压缩与 decoder-only transformer，输出离散化动作 token——以 TensorFlow SavedModel 提供。该模型由谷歌研究院（Google Research）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 策略执行、机器人策略、robotics_transformer。别名包括 `rt1`、`robotics-transformer`。
 
 ## 运行时契约
 
-传入图像、指令以及由兼容编码器生成的 512 维 language_embedding。发布的 SavedModel 不会自行把指令文本编码成该向量；WorldFoundry 对只有文本的推理明确报错，不会默默使用零向量。GPU 推理需要兼容的 TensorFlow/CuDNN 环境。
+必填 `input_path`、`language_embedding`；可选 `prompt`、`plan_only`；产物 `rt1_action_trace.json`。
 
-## 就绪状态与限制
+CLI task profile：`vla`。绑定的 pipeline 类是 `RT1Pipeline`。
 
-- 仅输入文本还需要另行准备与 checkpoint 兼容的语言编码器；离线动作结构验证不代表任务成功。
-- 仓库未记录许可证。
+系列状态：**Runner 一致性待确认**。
+
+传入图像、指令以及由兼容编码器生成的 512 维 language_embedding。 发布的 SavedModel 不会自行把指令文本编码成该向量；WorldFoundry 对只有文本的推理明确报错，不会默默使用零向量。 GPU 推理需要兼容的 TensorFlow/CuDNN 环境。
+
+仅输入文本还需要另行准备与 checkpoint 兼容的语言编码器；离线动作结构验证不代表任务成功。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run rt-1 --pipeline.task-profile vla` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CPU）。
+
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh rt-1`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="rt-1" locale="zh" />

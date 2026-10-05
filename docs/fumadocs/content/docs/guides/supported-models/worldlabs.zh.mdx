@@ -27,9 +27,9 @@ catalog 记录的任务包括 世界生成、assets、托管 API。
 
 ## 运行时契约
 
-本卡片未记录输入、旋钮或产物。
+可选 `prompt`、`input_path`、`prompt_type`、`image_azimuths`、`disable_recaption`。
 
-记录的任务 profile：`world-generation`、`assets`、`hosted-api`。绑定的 pipeline 类是 `WorldLabsPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `WorldLabsPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -39,11 +39,11 @@ Hosted API Studio pipeline is available; users must provide their own provider A
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run worldlabs --pipeline.task-profile world-generation` 调托管接口。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run worldlabs --pipeline.task-profile default` 调托管接口。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境未记录。
 
-就位权重用 `bash scripts/inference/prepare_model_infer.sh worldlabs`。
+准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh worldlabs`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

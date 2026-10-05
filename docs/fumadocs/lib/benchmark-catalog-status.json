@@ -368,6 +368,39 @@
     "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
+  "harnesseval-w": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": [
+      "world-model",
+      "video-generation"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "metrics": [
+      "overall_macro",
+      "overall_core_macro",
+      "overall_observation_macro",
+      "observation_quality_macro",
+      "observation_physical_plausibility_macro",
+      "exploratory_transition",
+      "intentional_transition",
+      "physical_transition",
+      "drift_resistance",
+      "return_revisit_consistency",
+      "offscreen_evolution"
+    ],
+    "name": "HarnessEval-W",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "Official Python scoring for six world-transition and persistence families, with a VLM judge",
+    "summaryZh": "官方 Python 评分覆盖六类世界状态转移与持久性任务，使用 VLM 裁判",
+    "verificationStatus": "full_suite_pending"
+  },
   "ipv-bench": {
     "aliases": [],
     "badges": [

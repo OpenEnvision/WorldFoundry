@@ -33,7 +33,7 @@ Recorded evaluation entry points include [WorldArena](/docs/evaluation/benchmark
 
 Required `prompt` and `input_views` for official-style history inference; pass three directories with four numbered PNG frames each. Set `input_mode` to `explicit-three-view` (the default). Three individual image paths or one image in `synthetic-three-view` mode exercise only smoke paths. Artifact: `genie-envisioner.mp4`.
 
-Recorded task profiles: `robotics-world-model`, `image-to-video`, `action-conditioned-video`, and `robot-multiview-video`. WorldFoundry binds `GenieEnvisionerPipeline`.
+CLI task profiles: `robot-multiview-video`. WorldFoundry binds `GenieEnvisionerPipeline`.
 
 The published GE-base-fast `sample_0` configuration has passed real GPU inference and video comparison. Other configurations and action-quality parity remain pending.
 
@@ -47,7 +47,7 @@ The catalog launch is `worldfoundry-eval run genie-envisioner --pipeline.task-pr
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `agibot-world/Genie-Envisioner` and `Lightricks/LTX-Video`. Stage assets with `bash scripts/inference/prepare_model_infer.sh genie-envisioner`.
+Recorded weight repositories include `agibot-world/Genie-Envisioner` and `Lightricks/LTX-Video`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh genie-envisioner`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Published GE-base-fast video sample verified; action-quality parity pending**.
 

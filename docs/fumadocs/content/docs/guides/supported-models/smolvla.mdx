@@ -15,7 +15,7 @@ Two variants are recorded. **`smolvla-libero`** (`HuggingFaceVLA/smolvla_libero`
 
 ## What it is for
 
-Roll out the LIBERO specialist: required `image`, `prompt`, and `state` in; `action_trace` / `smolvla_action_trace.json` out through `SmolVLAPipeline`. Two official cameras (`observation.images.image`, `observation.images.image2`). The action contract is a continuous chunk of shape **50×7**. Default launch is `worldfoundry-eval run smolvla-libero --pipeline.task-profile vla.policy_rollout`.
+Roll out the LIBERO specialist: required `image`, `prompt`, and `state` in; `action_trace` / `smolvla_action_trace.json` out through `SmolVLAPipeline`. Two official cameras (`observation.images.image`, `observation.images.image2`). The action contract is a continuous chunk of shape **50×7**. Default launch is `worldfoundry-eval run smolvla-libero`.
 
 Score the LIBERO specialist on [LIBERO](/docs/evaluation/benchmark-hub/libero). That is the matching suite, not an ingested WorldFoundry rank. Do not send `smolvla-base` through the same rollout.
 

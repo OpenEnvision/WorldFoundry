@@ -1,32 +1,46 @@
 ---
 title: "HappyOyster"
-description: "HappyOyster is a commercial world-model API product recorded by its product site (happyoyster.cn) rather than a code repository."
+description: "HappyOyster from HappyOyster (commercial product): world-model and api-product; Runner parity pending."
+modelId: "happyoyster"
 pageSource: generated
 ---
 
-**Publisher:** HappyOyster (commercial product) · Company
-
 HappyOyster is a commercial world-model API product recorded by its product site (happyoyster.cn) rather than a code repository. In this catalog only the API route metadata is registered — WorldFoundry tracks the product for landscape completeness, and no runnable API client or generation pipeline is registered.
 
-**Catalog status:** Runtime ported
+<ModelPaperFigures modelId="happyoyster" locale="en" />
 
-## Upstream sources
-
-- [Project](https://www.happyoyster.cn)
+Project page: [happyoyster.cn](https://www.happyoyster.cn).
 
 <ModelCommandBuilder modelId="happyoyster" locale="en" />
 
-## Architecture
+## What it is for
 
-This is a hosted commercial product: the vendor has not published its architecture and this repository does not record it. Only the world-model/API-product task tags are recorded.
+Pick `happyoyster` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+This is a hosted commercial product: the vendor has not published its architecture and this repository does not record it. Only the world-model/API-product task tags are recorded. It is published by HappyOyster (commercial product).
+
+Catalog tasks include world-model, api-product, and world-generation.
 
 ## Runtime contract
 
+Artifacts `generated_world` and `happyoyster_runtime_plan.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `HappyOysterPipeline`.
+
+Family status: **Runner parity pending**.
+
 API credentials and endpoint are runtime-gated. Real usage would require a vendor account; the current entry emits a runtime plan only.
 
-## Readiness and limitations
+HappyOyster API route is registered; API credentials/endpoint are runtime-gated.
 
-- No runnable API client is registered — metadata-only entry.
-- Vendor architecture, pricing, and quality are not recorded in this repository.
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run happyoyster --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh happyoyster`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="happyoyster" locale="en" />

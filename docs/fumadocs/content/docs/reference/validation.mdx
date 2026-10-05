@@ -490,7 +490,8 @@ export WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT=/absolute/path/to/checkpoints
 export WORLDFOUNDRY_REGRESSION_INPUT_IMAGE=/absolute/path/to/accepted-image.png
 # The multiview cases use frame-0.png, frame-16.png, and frame-32.png.
 export WORLDFOUNDRY_REGRESSION_INPUT_ROOT=/absolute/path/to/accepted-sequence
-export CUDA_VISIBLE_DEVICES=0
+# Set REGRESSION_GPU_ID to an available GPU index or UUID from nvidia-smi.
+export CUDA_VISIBLE_DEVICES="${REGRESSION_GPU_ID}"
 
 # Run all three commands in the same model-specific Python environment.
 python tests/manual/geometry_regression.py run \

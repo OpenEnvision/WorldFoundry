@@ -27,9 +27,9 @@ Not [VGGT-World](/docs/guides/supported-models/vggt-world) and [Infinite VGGT](/
 
 ## Runtime contract
 
-Inputs, knobs, and artifacts are not recorded on this card.
+Optional `input_path`, `interactions`, `fps`, `height`, and `width`.
 
-Recorded task profiles: `3d-reconstruction`, `3dgs`, and `point-cloud`. WorldFoundry binds `VGGTPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `VGGTPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -39,11 +39,11 @@ In-tree VGGT two-stage 3DGS pipeline is registered; distinct from vggt-omega and
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run vggt --pipeline.task-profile 3d-reconstruction` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run vggt --pipeline.task-profile interactive-video` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 The environment profile is not recorded.
 
-Recorded weight repositories include `facebook/VGGT-1B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh vggt`.
+Recorded weight repositories include `facebook/VGGT-1B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vggt`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

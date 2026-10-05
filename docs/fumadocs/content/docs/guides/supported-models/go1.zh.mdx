@@ -17,7 +17,7 @@ GO-1 是 **AgiBot World**（智元联合 OpenDriveLab）的旗舰策略：通用
 
 ## 用来做什么
 
-启动 `worldfoundry-eval run go1 --pipeline.task-profile vla`。必填：`image`、`prompt`、`state`、`control_frequency`。相机：`cam_high`、`cam_right_wrist`、`cam_left_wrist`。策略族：`latent_planner_conditioned_diffusion`。动作表示：`checkpoint_defined_action_chunk`。产物：`go1_action_trace.json`。这**不是** [Genie Envisioner](/zh/docs/guides/supported-models/genie-envisioner)（世界视频），也**不是** [Galaxea G0Plus](/zh/docs/guides/supported-models/galaxea-vla)。
+启动 `worldfoundry-eval run go1`。必填：`image`、`prompt`、`state`、`control_frequency`。相机：`cam_high`、`cam_right_wrist`、`cam_left_wrist`。策略族：`latent_planner_conditioned_diffusion`。动作表示：`checkpoint_defined_action_chunk`。产物：`go1_action_trace.json`。这**不是** [Genie Envisioner](/zh/docs/guides/supported-models/genie-envisioner)（世界视频），也**不是** [Galaxea G0Plus](/zh/docs/guides/supported-models/galaxea-vla)。
 
 ## 运行时契约
 默认 `agibot_pretrain` 契约：**3** 路相机、`control_frequency` **30**、动作块 **30**，维度 `checkpoint_defined`。catalog 示例本体（这里没有 GPU 验证）：

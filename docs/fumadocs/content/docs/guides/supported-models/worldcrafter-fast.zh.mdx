@@ -1,36 +1,46 @@
 ---
 title: "WorldCrafter Fast"
-description: "WorldCrafter Fast 是来自 Tencentarc 的世界模型。Catalog 将它记录为文生视频、图生视频、相机可控视频生成、世界模型任务。"
+description: "WorldCrafter Fast（Tencentarc）：文生视频、图生视频；已验证。"
+modelId: "worldcrafter-fast"
 pageSource: generated
 ---
 
-text · image → video
-
 WorldCrafter Fast 是来自 Tencentarc 的世界模型。Catalog 将它记录为文生视频、图生视频、相机可控视频生成、世界模型任务。
 
-WorldFoundry 记录了到 worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline pipeline 的绑定（runner：worldfoundry.pipeline）。
+<ModelPaperFigures modelId="worldcrafter-fast" locale="zh" />
 
-它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。
+记录论文为[arXiv 2609.24984](https://arxiv.org/abs/2609.24984)。
 
-权重来自 Hugging Face 仓库 TencentARC/WorldCrafter-Fast，固定在 revision 51320c3eb。
-
-该路径已记录 WorldFoundry runner parity 产物。
-
-**目录状态:** Runner 已验证
-
-## 上游来源
-
-- [项目主页](https://drexubery.github.io/WorldCrafter/)
-- [论文](https://arxiv.org/abs/2609.24984)
-- [GitHub](https://github.com/TencentARC/WorldCrafter)
-- [上游 README](https://github.com/TencentARC/WorldCrafter#readme)
+项目页：[drexubery.github.io/WorldCrafter](https://drexubery.github.io/WorldCrafter/)。代码：[TencentARC/WorldCrafter](https://github.com/TencentARC/WorldCrafter)。
 
 <ModelCommandBuilder modelId="worldcrafter-fast" locale="zh" />
 
-## 就绪状态与限制
+## 用来做什么
 
-- 原生 Demo 证据未记录。
-- 已在本地 H100 上使用发布权重验证 640×384 的双片段图生视频和文生视频推理，包含严格权重加载、裁剪前输出有限性检查、完整解码与画面检查。
-- 共享 Transformer 的上游数值检查已通过；Base 从中断点恢复的裁剪前输出与连续运行完全一致。长时程画面质量尚未确立。
+需要相机可控视频时选 `worldcrafter-fast`：相机轨迹进、受控视频出。视角必须跟随路径时，用它而不是无约束 T2V。
+
+catalog 记录的任务包括 文生视频、图生视频、相机可控视频、世界模型。模态上，它接受文本、图像，输出视频。
+
+## 运行时契约
+
+可选 `prompt`、`image`、`actions`、`seed`、`frames`；产物 `worldcrafter.mp4`。
+
+CLI task profile：`text-to-video`、`image-to-video`、`camera-controlled-video`、`world-model`。绑定的 pipeline 类是 `WorldCrafterPipeline`。
+
+系列状态：**已验证**。
+
+已在本地 H100 上使用发布权重验证 640×384 的双片段图生视频和文生视频推理，包含严格权重加载、裁剪前输出有限性检查、完整解码与画面检查。
+
+共享 Transformer 的上游数值检查已通过；Base 从中断点恢复的裁剪前输出与连续运行完全一致。 长时程画面质量尚未确立。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run worldcrafter-fast --pipeline.task-profile text-to-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `TencentARC/WorldCrafter-Fast`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh worldcrafter-fast`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
 
 <ModelRelatedRecipes modelId="worldcrafter-fast" locale="zh" />

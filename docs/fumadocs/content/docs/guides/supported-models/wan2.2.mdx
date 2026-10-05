@@ -35,7 +35,7 @@ A14B inference swaps a high-noise expert and a low-noise expert across the sched
 
 ## Running in WorldFoundry
 
-Install the unified environment with `bash scripts/setup/unified_install.sh` (Python 3.11, CUDA 12.8) and stage weights locally — the runtime does not download them. The recorded launch is `worldfoundry-eval run wan2.2-t2v-a14b --pipeline.task-profile ti2v-5b`. That profile is the verified 5B contract, not a 14B run. Pipelines are `Wan2p2Pipeline` (5B), `Wan2p2T2VA14BPipeline`, and `Wan2p2I2VA14BPipeline`.
+Install the unified environment with `bash scripts/setup/unified_install.sh` (Python 3.11, CUDA 12.8) and stage weights locally — the runtime does not download them. The recorded launch is `worldfoundry-eval run wan2.2-ti2v-5b`. That profile is the verified 5B contract, not a 14B run. Pipelines are `Wan2p2Pipeline` (5B), `Wan2p2T2VA14BPipeline`, and `Wan2p2I2VA14BPipeline`.
 
 Checkpoints: `Wan-AI/Wan2.2-TI2V-5B`, `Wan-AI/Wan2.2-T2V-A14B`, `Wan-AI/Wan2.2-I2V-A14B` (all `apache-2.0`, public, not gated). Family-level hardware still lists **80 GB** because that is the A14B floor; the 5B verified path is the 24 GB line.
 

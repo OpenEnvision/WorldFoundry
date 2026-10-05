@@ -31,9 +31,9 @@ Reproduce a 2023-era open T2V baseline: required `prompt` in, `modelscope-t2v.mp
 
 ## Runtime contract
 
-Required `prompt`; artifacts `modelscope-t2v.mp4`.
+Optional `prompt`, `negative_prompt`, `frames`, `fps`, and `height`; artifacts `modelscope-t2v.mp4`.
 
-Recorded task profiles: `text-to-video`. WorldFoundry binds `ModelScopeT2VPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `ModelScopeT2VPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -43,11 +43,11 @@ Checkpoint license is non-commercial per HF cardData; do not treat as unrestrict
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run modelscope-t2v --pipeline.task-profile text-to-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run modelscope-t2v --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `ali-vilab/modelscope-damo-text-to-video-synthesis` and `ali-vilab/modelscope-damo-text-to-video-synthesis`. Stage assets with `bash scripts/inference/prepare_model_infer.sh modelscope-t2v`.
+Recorded weight repositories include `ali-vilab/modelscope-damo-text-to-video-synthesis` and `ali-vilab/modelscope-damo-text-to-video-synthesis`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh modelscope-t2v`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include cc-by-nc-4.0; status: **Runner parity pending**.
 

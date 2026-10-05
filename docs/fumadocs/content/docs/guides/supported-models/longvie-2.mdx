@@ -27,9 +27,9 @@ Recorded evaluation entry points include [ChronoMagic-Bench](/docs/evaluation/be
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `video`; optional `controls` (dense_depth_video_per_segment, sparse_pointmap_or_track_video_per_segment); artifacts `generated_video` and `longvie-2.mp4`.
+Optional `prompt`, `negative_prompt`, `input_path`, `interactions`, and `frames`; artifacts `generated_video` and `longvie-2.mp4`.
 
-Recorded task profiles: `image-to-video`, `long-video-generation`, `depth-controlled-video`, and `trajectory-controlled-video`. WorldFoundry binds `LongVie2Pipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `LongVie2Pipeline`.
 
 Family status: **Verified**.
 
@@ -41,11 +41,11 @@ LongVie 2 runs on canonical Wan components and the shared staged diffusion runne
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run longvie-2 --pipeline.task-profile image-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run longvie-2 --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-longvie-cu128` (Python 3.10, CUDA 12.8).
 
-Recorded weight repositories include `Vchitect/LongVie2`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `Vchitect/LongVie2` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh longvie-2`.
+Recorded weight repositories include `Vchitect/LongVie2`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `Vchitect/LongVie2` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh longvie-2`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Verified**.
 

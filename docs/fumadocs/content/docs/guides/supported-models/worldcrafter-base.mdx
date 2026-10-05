@@ -1,36 +1,46 @@
 ---
 title: "WorldCrafter Base"
-description: "WorldCrafter Base is a world model from Tencentarc. The catalog records it for text-to-video, image-to-video, camera-controlled-video, and world-model."
+description: "WorldCrafter Base from Tencentarc: text-to-video and image-to-video; Verified."
+modelId: "worldcrafter-base"
 pageSource: generated
 ---
 
-text · image → video
-
 WorldCrafter Base is a world model from Tencentarc. The catalog records it for text-to-video, image-to-video, camera-controlled-video, and world-model.
 
-WorldFoundry records a binding to the worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline pipeline via worldfoundry.pipeline.
+<ModelPaperFigures modelId="worldcrafter-base" locale="en" />
 
-It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).
+The recorded paper is [arXiv 2609.24984](https://arxiv.org/abs/2609.24984).
 
-Weights are pulled from the Hugging Face repository TencentARC/WorldCrafter-Base, pinned to revision d6b4731d4, plus 1 more recorded repository.
-
-A WorldFoundry runner-parity artifact is recorded for this route.
-
-**Catalog status:** Runner verified
-
-## Upstream sources
-
-- [Project](https://drexubery.github.io/WorldCrafter/)
-- [Paper](https://arxiv.org/abs/2609.24984)
-- [GitHub](https://github.com/TencentARC/WorldCrafter)
-- [Upstream README](https://github.com/TencentARC/WorldCrafter#readme)
+Project page: [drexubery.github.io/WorldCrafter](https://drexubery.github.io/WorldCrafter/). Code: [TencentARC/WorldCrafter](https://github.com/TencentARC/WorldCrafter).
 
 <ModelCommandBuilder modelId="worldcrafter-base" locale="en" />
 
-## Readiness and limitations
+## What it is for
 
-- Native demo evidence: Not recorded.
-- Local H100 validation passed released-weight I2V/T2V at 640x384 for two chunks, strict loading, pre-clamp finite outputs, full decode and visual review.
-- Shared-transformer upstream numerical checks passed; Base resume matched continuous pre-clamp outputs exactly. Long-horizon quality is not established.
+Use `worldcrafter-base` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+Catalog tasks include text-to-video, image-to-video, camera-controlled-video, and world-model. Documented modalities: text and image in, video out.
+
+## Runtime contract
+
+Optional `prompt`, `image`, `actions`, `seed`, and `frames`; artifacts `worldcrafter.mp4`.
+
+CLI task profiles: `text-to-video`, `image-to-video`, `camera-controlled-video`, and `world-model`. WorldFoundry binds `WorldCrafterPipeline`.
+
+Family status: **Verified**.
+
+Reuses shared Helios transformer, scheduler, latent preparation and VGGT layers.
+
+Model-specific UCPE camera residuals, RepEncoder memory and Fast routing remain explicit.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run worldcrafter-base --pipeline.task-profile text-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `TencentARC/WorldCrafter-Base` and `TencentARC/WorldCrafter-Fast`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh worldcrafter-base`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
 
 <ModelRelatedRecipes modelId="worldcrafter-base" locale="en" />

@@ -27,9 +27,9 @@ Recorded evaluation entry points include [EWMBench](/docs/evaluation/benchmark-h
 
 ## Runtime contract
 
-Required `image` and `prompt`; optional `actions`; artifacts `irasim.mp4`.
+Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `irasim.mp4`.
 
-Recorded task profiles: `robotics-world-model`, `video-generation`, and `action-conditioned-generation`. WorldFoundry binds `IRASimPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `IRASimPipeline`.
 
 Family status: **Planned**.
 
@@ -41,11 +41,11 @@ Upstream training dataloaders, evaluation scripts, and interactive application d
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run irasim --pipeline.task-profile robotics-world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run irasim --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, Prepare Only).
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, Prepare Only).
 
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh irasim`.
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh irasim`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Planned**.
 

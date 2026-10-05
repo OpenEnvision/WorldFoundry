@@ -17,13 +17,13 @@ FramePack 是斯坦福的**恒定记忆**长图生视频打包器（ControlNet �
 
 从起始图按下一帧块打包长视频。
 
-启动 `worldfoundry-eval run framepack --pipeline.task-profile image-to-video`。
+启动 `worldfoundry-eval run framepack`。
 
 评测入口：[ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)（长时程生成评测，契合 FramePack 的长视频定位）。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；产物 `framepack.mp4`。
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `framepack.mp4`。
 
 | 旋钮 | 默认 |
 | --- | --- |
@@ -39,6 +39,6 @@ FramePack 是斯坦福的**恒定记忆**长图生视频打包器（ControlNet �
 
 ## 在 WorldFoundry 中运行
 
-状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `lllyasviel/FramePackI2V_HY`、`lllyasviel/FramePack_F1_I2V_HY_20250503`、`lllyasviel/FramePackI2V_HY` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run framepack --pipeline.task-profile image-to-video`。catalog 未记录 VRAM。
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `lllyasviel/FramePackI2V_HY`、`lllyasviel/FramePack_F1_I2V_HY_20250503`、`lllyasviel/FramePackI2V_HY` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run framepack`。catalog 未记录 VRAM。
 
 <ModelRelatedRecipes modelId="framepack" locale="zh" />

@@ -1,43 +1,50 @@
 ---
 title: "Infinite-World"
-description: "Infinite-World 是美团 MeiGen-AI 的长时程世界视频模型：从一张图出发，长时间地在世界中导航与扩展。本 catalog 中它已验证——真实 GPU 推理经 Studio workspace 任务路径、按官方图像条件导航 demo 设置，产出非空的长时程世界视频产物与预览元数据。"
+description: "Infinite-World（Meituan (MeiGen-AI)）：世界模型、video；已验证。"
+modelId: "infinite-world"
 pageSource: generated
 ---
 
-**发表机构:** 美团（MeiGen-AI） · 企业
-video
-
 Infinite-World 是美团 MeiGen-AI 的长时程世界视频模型：从一张图出发，长时间地在世界中导航与扩展。本 catalog 中它已验证——真实 GPU 推理经 Studio workspace 任务路径、按官方图像条件导航 demo 设置，产出非空的长时程世界视频产物与预览元数据。
 
-**目录状态:** Runner 已验证
+<ModelPaperFigures modelId="infinite-world" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2602.02393](https://arxiv.org/abs/2602.02393)。
 
-- [项目主页](https://rq-wu.github.io/projects/infinite-world)
-- [论文](https://arxiv.org/abs/2602.02393)
-- [GitHub](https://github.com/MeiGen-AI/Infinite-World)
-- [Hugging Face](https://huggingface.co/MeiGen-AI/Infinite-World)
-- [源码](https://github.com/thuml/InfiniteWorld)
-- [上游 README](https://github.com/MeiGen-AI/Infinite-World#readme)
-- [上游 README](https://github.com/thuml/InfiniteWorld#readme)
+项目页：[rq-wu.github.io/projects/infinite-world](https://rq-wu.github.io/projects/infinite-world)。代码：[MeiGen-AI/Infinite-World](https://github.com/MeiGen-AI/Infinite-World)。代码：[thuml/InfiniteWorld](https://github.com/thuml/InfiniteWorld)。
 
 <ModelCommandBuilder modelId="infinite-world" locale="zh" />
 
-## 架构
+## 用来做什么
 
-树内运行时可解析本地或 Hugging Face checkpoint 布局，推理时不依赖外部仓库。除已记录结构外的架构内部细节仓库未存。
+用 `infinite-world` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
+
+树内运行时可解析本地或 Hugging Face checkpoint 布局，推理时不依赖外部仓库。除已记录结构外的架构内部细节仓库未存。该模型由美团（MeiGen-AI）发布。
+
+catalog 记录的任务包括 世界模型、video。输出模态为视频。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（长时程世界滚动生成质量）、[MemoBench](/zh/docs/evaluation/benchmark-hub/memobench)（长时程一致性评测）。
 
 ## 运行时契约
 
+可选 `prompt`、`negative_prompt`、`input_path`、`interactions`、`frames`；产物 `generated_world`、`infinite-world.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `InfiniteWorldPipeline`。
+
+系列状态：**已验证**。
+
+`interactive-video` 记录默认值：frames=81, fps=30, seed=42。
+
 档案匹配官方的本地/Hugging Face checkpoint 布局——请从已验证的官方图像条件 demo 设置出发。
 
-## 评测 Benchmark
+## 在 WorldFoundry 中运行
 
-- [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) — 长时程世界滚动生成质量。
-- [MemoBench](/zh/docs/evaluation/benchmark-hub/memobench) — 长时程一致性评测。
+catalog 启动命令是 `worldfoundry-eval run infinite-world --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-## 就绪状态与限制
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-- 长时程质量会自然漂移；请针对你的时长目标验证输出。
+记录的权重仓库包括 `thuml/InfiniteWorld`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh infinite-world`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
 
 <ModelRelatedRecipes modelId="infinite-world" locale="zh" />

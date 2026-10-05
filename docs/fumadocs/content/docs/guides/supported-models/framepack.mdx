@@ -17,7 +17,7 @@ Paper: [arXiv 2504.12626](https://arxiv.org/abs/2504.12626). Project: [lllyasvie
 
 Pack long video as next-frame chunks from a start image.
 
-Launch `worldfoundry-eval run framepack` with `--pipeline.task-profile image-to-video`.
+Launch `worldfoundry-eval run framepack`.
 
 Score on [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) — long-horizon generation suite matching FramePack's long-video focus.
 
@@ -39,6 +39,6 @@ Official in-tree runner defaults (the upstream UI quality recipe — not a GPU-v
 
 ## Run in WorldFoundry
 
-Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `lllyasviel/FramePackI2V_HY`, `lllyasviel/FramePack_F1_I2V_HY_20250503`, and `lllyasviel/FramePackI2V_HY` among others locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run framepack` with `--pipeline.task-profile image-to-video`. Catalog VRAM is unset.
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `lllyasviel/FramePackI2V_HY`, `lllyasviel/FramePack_F1_I2V_HY_20250503`, and `lllyasviel/FramePackI2V_HY` among others locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run framepack`. Catalog VRAM is unset.
 
 <ModelRelatedRecipes modelId="framepack" locale="en" />

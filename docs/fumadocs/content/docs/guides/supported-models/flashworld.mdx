@@ -25,15 +25,15 @@ The stack distills a Wan-based video generator into a fast Gaussian-style scene 
 
 FlashWorld distills a Wan-based video generator into a fast 3D-scene generator with Gaussian-style scene representations (per arXiv 2510.13678). Execution requires FlashWorld, Wan2.2, diffusers/transformers, and CUDA assets; no empty runner shim is registered. It is published by Xiamen University / Tencent.
 
-Catalog tasks include fast 3D scene generation from image or text and official-camera-scene.
+Catalog tasks include fast 3D scene generation from image or text.
 
 Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for navigable generated scenes).
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (camera_path, camera_action_sequence); artifacts `generated_3d_asset`, `generated_video`, and `flashworld.ply`.
+Optional `input_path`, `prompt`, `interactions`, `num_frames`, and `fps`; artifacts `generated_3d_asset`, `generated_video`, and `flashworld.ply`.
 
-Recorded task profiles: `fast 3D scene generation from image or text` and `official-camera-scene`. WorldFoundry binds `FlashWorldPipeline`.
+CLI task profiles: `official-camera-scene`. WorldFoundry binds `FlashWorldPipeline`.
 
 Family status: **Verified**.
 
@@ -47,7 +47,7 @@ Launch `worldfoundry-eval run flashworld --pipeline.task-profile official-camera
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `imlixinyang/FlashWorld` and `Wan-AI/Wan2.2-TI2V-5B-Diffusers`. Stage assets with `bash scripts/inference/prepare_model_infer.sh flashworld`.
+Recorded weight repositories include `imlixinyang/FlashWorld` and `Wan-AI/Wan2.2-TI2V-5B-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh flashworld`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Verified**.
 

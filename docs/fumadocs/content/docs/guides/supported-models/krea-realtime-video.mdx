@@ -1,41 +1,48 @@
 ---
 title: "Krea Realtime Video 14B"
-description: "Krea Realtime Video 14B is Krea AI's open realtime/streaming video generation model. Unlike the batch T2V models in this catalog, it targets low-latency streaming generation: text-to-video and video-to-video in a streaming regime. The in-t…"
+description: "Krea Realtime Video 14B from Krea AI: realtime-video-generation and text-to-video; Runner parity pending."
+modelId: "krea-realtime-video"
 pageSource: generated
 ---
 
-**Publisher:** Krea AI · Company
-text · video → video
-
 Krea Realtime Video 14B is Krea AI's open realtime/streaming video generation model. Unlike the batch T2V models in this catalog, it targets low-latency streaming generation: text-to-video and video-to-video in a streaming regime. The in-tree runtime lives under synthesis/visual_generation/krea_realtime, and the route exposes num_blocks, resolution, fps, and seed controls. Alias krea-rt-14b resolves here.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="krea-realtime-video" locale="en" />
 
-## Upstream sources
-
-- [Project](https://www.krea.ai/)
-- [GitHub](https://github.com/krea-ai/realtime-video)
-- [Hugging Face](https://huggingface.co/krea/krea-realtime-video)
-- [Upstream README](https://github.com/krea-ai/realtime-video#readme)
+Project page: [krea.ai](https://www.krea.ai/). Code: [krea-ai/realtime-video](https://github.com/krea-ai/realtime-video).
 
 <ModelCommandBuilder modelId="krea-realtime-video" locale="en" />
 
-## Architecture
+## What it is for
+
+Use `krea-realtime-video` for catalog text-to-video inference. The recipe exists so you can launch a recorded T2V profile without assembling an upstream demo.
 
 Upstream describes it as a 14B autoregressive/streaming video model distilled for realtime block-wise generation (weights at krea/krea-realtime-video, apache-2.0). This repository records the block-based generation controls (num_blocks) and the prompt/video input contract; deeper internals are not recorded here.
 
+Catalog tasks include realtime-video-generation, text-to-video, video-to-video, and streaming-video. Catalog aliases include `krea-rt-14b`. Documented modalities: text and video in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Baseline quality check for streaming T2V output).
+
 ## Runtime contract
 
-Runner parity is pending: the route is wired and controls are exposed, but official longer-realtime parity has not been recorded. Realtime throughput expectations depend heavily on your GPU — the 14B scale wants datacenter-class hardware for true realtime rates.
+Optional `prompt`, `negative_prompt`, `frames`, `fps`, and `height`; artifacts `krea-realtime-video.mp4`.
 
-## Evaluation benchmarks
+CLI task profiles: `interactive-video`. WorldFoundry binds `KreaRealtimeVideoPipeline`.
 
-- [VBench](/docs/evaluation/benchmark-hub/vbench) — Baseline quality check for streaming T2V output.
+Family status: **Runner parity pending**.
 
-## Readiness and limitations
+Recorded `interactive-video` defaults: fps=16, height=480, width=832, seed=42.
 
-- Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.
-- Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
-- True realtime rates require datacenter-class GPUs at 14B scale.
+Realtime throughput expectations depend heavily on your GPU — the 14B scale wants datacenter-class hardware for true realtime rates.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run krea-realtime-video --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `krea/krea-realtime-video`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh krea-realtime-video`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="krea-realtime-video" locale="en" />

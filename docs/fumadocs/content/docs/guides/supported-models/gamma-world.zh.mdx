@@ -33,7 +33,7 @@ catalog 记录的任务包括 multi-agent-world-model、动作条件视频、图
 
 必填 `prompt` 和起始图像。因果与四步因果推理还需要每个视角一份动作轨迹，可通过 `actions`/`action_paths` 或 `eval_dir` 中的动作 JSON 提供；这些 checkpoint 不能在缺少动作时运行。其他选项包括 `mode`、`n_players`、`num_frames`、`num_conditional_frames`、`guidance`、`num_steps` 和 `seed`；输出为生成视频。
 
-记录的任务 profile：`multi-agent-world-model`、`action-conditioned-video`、`image-to-video`。绑定的 pipeline 类是 `GammaWorldPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `GammaWorldPipeline`。
 
 起步 variant 是 `gamma-world-causal-few-step`。catalog 登记了 3 个 variant（上方卡片）：`gamma-world-causal-few-step`（`action-conditioned-video`）：Runner 一致性待确认、`gamma-world-causal`（`action-conditioned-video`）：Runner 一致性待确认、`gamma-world-bidirectional`（`action-conditioned-video`）：Runner 一致性待确认。系列状态：**Runner 一致性待确认**。
 
@@ -41,11 +41,11 @@ catalog 记录的任务包括 multi-agent-world-model、动作条件视频、图
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run gamma-world-causal-few-step --pipeline.task-profile action-conditioned-video` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run gamma-world-causal-few-step --pipeline.task-profile interactive-video` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是独立 profile `worldfoundry-gamma-world-cu128`（Python 3.1，CUDA 12.8，torch==2.7.0）。
 
-记录的权重仓库包括 `chijw/Gamma-World`、`nvidia/Cosmos-Reason1-7B`、`nvidia/Cosmos-Reason1-7B`。就位权重用 `bash scripts/inference/prepare_model_infer.sh gamma-world-causal-few-step`。
+记录的权重仓库包括 `chijw/Gamma-World`、`nvidia/Cosmos-Reason1-7B`、`nvidia/Cosmos-Reason1-7B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh gamma-world-causal-few-step`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
 

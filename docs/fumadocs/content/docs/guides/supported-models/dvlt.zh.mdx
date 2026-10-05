@@ -27,9 +27,9 @@ catalog 记录的任务包括 3D 重建、multi-view-reconstruction、camera-pos
 
 ## 运行时契约
 
-必填 `image`、`video`；可选 `actions` (view_sequence, reference_frame, reconstruction_options)、`prompt`；产物 `dvlt_reconstruction.glb`。
+可选 `input_path`、`execute`、`max_points`、`focal_length`；产物 `dvlt_reconstruction.glb`。
 
-记录的任务 profile：`3d-reconstruction`、`multi-view-reconstruction`、`camera-pose-estimation`、`depth-estimation`。绑定的 pipeline 类是 `DVLTPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `DVLTPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -41,11 +41,11 @@ checkpoint 许可仅限英伟达非商用研究/评估用途。
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run dvlt --pipeline.task-profile 3d-reconstruction` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run dvlt --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `nvidia/dvlt`。就位权重用 `bash scripts/inference/prepare_model_infer.sh dvlt`。
+记录的权重仓库包括 `nvidia/dvlt`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh dvlt`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 nvidia-noncommercial-research-evaluation；状态：**Runner 一致性待确认**。
 

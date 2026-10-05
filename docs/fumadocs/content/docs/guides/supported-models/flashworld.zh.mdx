@@ -25,15 +25,15 @@ FlashWorld 数秒内生成 3D 场景：从一张图（可附提示词）产出�
 
 FlashWorld 将基于 Wan 的视频生成器蒸馏为快速 3D 场景生成器，使用高斯式场景表示（见 arXiv 2510.13678）。运行需要 FlashWorld、Wan2.2、diffusers/transformers 与 CUDA 资产；不注册空的 runner 壳。该模型由厦门大学 / 腾讯发布。
 
-catalog 记录的任务包括 fast 3D scene generation from image or text、official-camera-scene。
+catalog 记录的任务包括 fast 3D scene generation from image or text。
 
 记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（可游走生成场景的标准评分）。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (camera_path, camera_action_sequence)；产物 `generated_3d_asset`、`generated_video`、`flashworld.ply`。
+可选 `input_path`、`prompt`、`interactions`、`num_frames`、`fps`；产物 `generated_3d_asset`、`generated_video`、`flashworld.ply`。
 
-记录的任务 profile：`fast 3D scene generation from image or text`、`official-camera-scene`。绑定的 pipeline 类是 `FlashWorldPipeline`。
+CLI task profile：`official-camera-scene`。绑定的 pipeline 类是 `FlashWorldPipeline`。
 
 系列状态：**已验证**。
 
@@ -49,7 +49,7 @@ catalog 记录的任务包括 fast 3D scene generation from image or text、offi
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `imlixinyang/FlashWorld`、`Wan-AI/Wan2.2-TI2V-5B-Diffusers`。就位权重用 `bash scripts/inference/prepare_model_infer.sh flashworld`。
+记录的权重仓库包括 `imlixinyang/FlashWorld`、`Wan-AI/Wan2.2-TI2V-5B-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh flashworld`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

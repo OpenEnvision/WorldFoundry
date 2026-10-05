@@ -36,6 +36,6 @@ AnimateDiff 是经典的运动模块式文生视频：在现成的 Stable Diffus
 
 ## 在 WorldFoundry 中运行
 
-在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中运行 `worldfoundry-eval run animatediff --pipeline.task-profile text-to-video`。官方模块会调用 `.cuda()`——CPU 会被拒绝。请就位 `guoyww/animatediff`、`guoyww/animatediff_t2i_backups`、`stable-diffusion-v1-5/stable-diffusion-v1-5` 和 `openai/clip-vit-large-patch14`。记录卡片上运动模块许可是 **apache-2.0**。Studio/API 走同一套统一环境，并包含已记录的 diffusers/transformers 键名兼容修复。
+在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中运行 `worldfoundry-eval run animatediff`。官方模块会调用 `.cuda()`——CPU 会被拒绝。请就位 `guoyww/animatediff`、`guoyww/animatediff_t2i_backups`、`stable-diffusion-v1-5/stable-diffusion-v1-5` 和 `openai/clip-vit-large-patch14`。记录卡片上运动模块许可是 **apache-2.0**。Studio/API 走同一套统一环境，并包含已记录的 diffusers/transformers 键名兼容修复。
 
 <ModelRelatedRecipes modelId="animatediff" locale="zh" />

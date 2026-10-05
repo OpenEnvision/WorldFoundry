@@ -31,9 +31,9 @@ Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (seed); artifacts `allegro-ti2v.mp4`.
+Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `allegro-ti2v.mp4`.
 
-Recorded task profiles: `text-to-video` and `image-to-video`. WorldFoundry binds `AllegroTi2VPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `AllegroTi2VPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -43,11 +43,11 @@ GitHub verification succeeded after retry; the first attempt hit a transient TLS
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run allegro --pipeline.task-profile text-to-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run allegro --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `rhymes-ai/Allegro` and `rhymes-ai/Allegro-TI2V`. Stage assets with `bash scripts/inference/prepare_model_infer.sh allegro`.
+Recorded weight repositories include `rhymes-ai/Allegro` and `rhymes-ai/Allegro-TI2V`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh allegro`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Runner parity pending**.
 

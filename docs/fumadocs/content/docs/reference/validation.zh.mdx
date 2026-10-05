@@ -246,7 +246,8 @@ export WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT=/absolute/path/to/checkpoints
 export WORLDFOUNDRY_REGRESSION_INPUT_IMAGE=/absolute/path/to/accepted-image.png
 # 多视角案例使用固定的 frame-0.png、frame-16.png、frame-32.png。
 export WORLDFOUNDRY_REGRESSION_INPUT_ROOT=/absolute/path/to/accepted-sequence
-export CUDA_VISIBLE_DEVICES=0
+# 先根据 nvidia-smi 将 REGRESSION_GPU_ID 设为可用 GPU 的编号或 UUID。
+export CUDA_VISIBLE_DEVICES="${REGRESSION_GPU_ID}"
 
 # 用同一个模型专用 Python 环境执行三条命令。
 python tests/manual/geometry_regression.py run \

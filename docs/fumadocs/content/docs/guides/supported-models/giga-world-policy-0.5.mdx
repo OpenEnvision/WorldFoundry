@@ -27,9 +27,9 @@ Catalog tasks include vla, vla action prediction, and vla world action model. Ca
 
 ## Runtime contract
 
-Required `image` and `prompt`; optional `model_id` (giga-world-policy-0.5), `state`, `preferred_cameras` (cam_high, cam_left_wrist, cam_right_wrist), `image_size` (384, 320), and `configured_action_horizon` (48); artifacts `action_trace` and `giga_world_policy_0_5_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `giga_world_policy_0_5_action_trace.json`.
 
-Recorded task profiles: `vla`, `vla.action_prediction`, and `vla.world_action_model`. WorldFoundry binds `GigaWorldPolicyPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `GigaWorldPolicyPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -39,11 +39,11 @@ Exact released action-centered Mixture-of-Transformers and official action-only 
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run giga-world-policy-0.5 --pipeline.task-profile vla` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run giga-world-policy-0.5 --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.7.1).
 
-Recorded weight repositories include `open-gigaai/Giga-World-Policy-0.5` and `Wan-AI/Wan2.2-TI2V-5B-Diffusers`. Stage assets with `bash scripts/inference/prepare_model_infer.sh giga-world-policy-0.5`.
+Recorded weight repositories include `open-gigaai/Giga-World-Policy-0.5` and `Wan-AI/Wan2.2-TI2V-5B-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh giga-world-policy-0.5`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

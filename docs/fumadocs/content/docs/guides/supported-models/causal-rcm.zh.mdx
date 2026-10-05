@@ -33,9 +33,9 @@ Causal RCM——不是 Causal Forcing。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions`；产物 `generated_world`、`generated_video`、`causal-rcm.mp4`。
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `generated_world`、`generated_video`、`causal-rcm.mp4`。
 
-记录的任务 profile：`autoregressive-video-generation`、`streaming-video-generation`、`interactive-world-model`、`text-to-video`、`image-to-video`。绑定的 pipeline 类是 `CausalRCMPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `CausalRCMPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -45,9 +45,9 @@ WorldFoundry vendors the official Apache-2.0 causal inference stack under synthe
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run causal-rcm --pipeline.task-profile autoregressive-video-generation` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run causal-rcm --pipeline.task-profile default` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-记录的权重仓库包括 `worstcoder/rcm-Wan`、`worstcoder/Wan`。就位权重用 `bash scripts/inference/prepare_model_infer.sh causal-rcm`。
+记录的权重仓库包括 `worstcoder/rcm-Wan`、`worstcoder/Wan`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh causal-rcm`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

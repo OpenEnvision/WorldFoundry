@@ -31,9 +31,9 @@ Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions`; artifacts `generated_world`, `generated_video`, and `causal-rcm.mp4`.
+Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `generated_world`, `generated_video`, and `causal-rcm.mp4`.
 
-Recorded task profiles: `autoregressive-video-generation`, `streaming-video-generation`, `interactive-world-model`, `text-to-video`, and `image-to-video`. WorldFoundry binds `CausalRCMPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `CausalRCMPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -43,9 +43,9 @@ WorldFoundry vendors the official Apache-2.0 causal inference stack under synthe
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run causal-rcm --pipeline.task-profile autoregressive-video-generation` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run causal-rcm --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-Recorded weight repositories include `worstcoder/rcm-Wan` and `worstcoder/Wan`. Stage assets with `bash scripts/inference/prepare_model_infer.sh causal-rcm`.
+Recorded weight repositories include `worstcoder/rcm-Wan` and `worstcoder/Wan`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh causal-rcm`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

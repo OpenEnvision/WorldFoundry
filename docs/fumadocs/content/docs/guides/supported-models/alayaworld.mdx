@@ -31,9 +31,9 @@ Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmar
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (camera_trajectory, camera_path); artifacts `generated_world_video` and `alayaworld.mp4`.
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `generated_world_video` and `alayaworld.mp4`.
 
-Recorded task profiles: `image-to-video`, `camera-controlled-video`, `interactive-world-model`, and `long-video-generation`. WorldFoundry binds `AlayaWorldPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `AlayaWorldPipeline`.
 
 Family status: **Verified**.
 
@@ -43,11 +43,11 @@ The runtime reuses WorldFoundry's existing LTX-2.3 Transformer, VAE, Gemma conne
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run alayaworld --pipeline.task-profile image-to-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run alayaworld --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.6).
 
-Recorded weight repositories include `AlayaLab/AlayaWorld`, `google/gemma-3-12b-it-qat-q4_0-unquantized`, and `depth-anything/DA3NESTED-GIANT-LARGE-1.1`. Stage assets with `bash scripts/inference/prepare_model_infer.sh alayaworld`.
+Recorded weight repositories include `AlayaLab/AlayaWorld`, `google/gemma-3-12b-it-qat-q4_0-unquantized`, and `depth-anything/DA3NESTED-GIANT-LARGE-1.1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh alayaworld`. Add `--download` to fetch missing public checkpoints.
 
 Gated `google/gemma-3-12b-it-qat-q4_0-unquantized` — accept upstream terms before download; status: **Verified**.
 

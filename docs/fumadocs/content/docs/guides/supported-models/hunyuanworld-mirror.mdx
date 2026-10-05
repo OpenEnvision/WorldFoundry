@@ -25,9 +25,9 @@ Catalog tasks include three dimension. Catalog aliases include `hunyuan-mirror` 
 
 ## Runtime contract
 
-Required `image`; optional `prompt` and `video`; artifacts `hunyuan_mirror_outputs.zip`.
+Optional `input_path`, `confidence_percentile`, `edge_normal_threshold`, `edge_depth_threshold`, and `apply_confidence_mask`; artifacts `hunyuan_mirror_outputs.zip`.
 
-Recorded task profiles: `three_dimension`. WorldFoundry binds `HunyuanMirrorPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `HunyuanMirrorPipeline`.
 
 Family status: **Verified**.
 
@@ -39,11 +39,11 @@ Dependencies mirror the official HunyuanWorld-Mirror requirements. gsplat may ne
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run hunyuanworld-mirror --pipeline.task-profile three_dimension` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run hunyuanworld-mirror --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, CUDA 12.8).
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `tencent/HunyuanWorld-Mirror`. Stage assets with `bash scripts/inference/prepare_model_infer.sh hunyuanworld-mirror`.
+Recorded weight repositories include `tencent/HunyuanWorld-Mirror`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hunyuanworld-mirror`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Verified**.
 

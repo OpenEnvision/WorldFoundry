@@ -1,38 +1,50 @@
 ---
 title: "Vid2World"
-description: "Vid2World from Tsinghua's THUML group turns pretrained video diffusion models into interactive world models: it adapts a passive video generator into an action-conditioned, autoregressive predictor. WorldFoundry registers the official eval…"
+description: "Vid2World from Tsinghua University (THUML): interactive-world-model and video-diffusion-adaptation; Runner parity pending."
+modelId: "vid2world"
 pageSource: generated
 ---
 
-**Publisher:** Tsinghua University (THUML) · University
-
 Vid2World from Tsinghua's THUML group turns pretrained video diffusion models into interactive world models: it adapts a passive video generator into an action-conditioned, autoregressive predictor. WorldFoundry registers the official evaluation route in-tree; checkpoints and config assets are runtime-gated.
 
-**Catalog status:** Runtime ported
+<ModelPaperFigures modelId="vid2world" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2505.14357](https://arxiv.org/abs/2505.14357).
 
-- [Project](https://knightnemo.github.io/vid2world/)
-- [Paper](https://arxiv.org/abs/2505.14357)
-- [GitHub](https://github.com/thuml/Vid2World)
-- [Upstream README](https://github.com/thuml/Vid2World#readme)
+Project page: [knightnemo.github.io/vid2world](https://knightnemo.github.io/vid2world/). Code: [thuml/Vid2World](https://github.com/thuml/Vid2World).
 
 <ModelCommandBuilder modelId="vid2world" locale="en" />
 
-## Architecture
+## What it is for
 
-The core idea recorded here is video-diffusion adaptation: converting a full-sequence diffusion model to causal, action-conditioned rollout. Architecture internals beyond the official repository pointer (thuml/Vid2World, pinned head ae24077a) are not recorded in this repository.
+`vid2world` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+The core idea recorded here is video-diffusion adaptation: converting a full-sequence diffusion model to causal, action-conditioned rollout. Architecture internals beyond the official repository pointer (thuml/Vid2World, pinned head ae24077a) are not recorded in this repository. It is published by Tsinghua University (THUML).
+
+Catalog tasks include interactive-world-model, video-diffusion-adaptation, and action-conditioned-video.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Action-conditioned interactive rollout quality).
 
 ## Runtime contract
 
+Optional `prompt`, `input_path`, `interactions`, `frames`, and `fps`; artifacts `generated_video` and `vid2world_runtime_plan.json`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `Vid2WorldPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `interactive-video` defaults: frames=16, fps=16, seed=42.
+
 Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
 
-## Evaluation benchmarks
+## Running in WorldFoundry
 
-- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Action-conditioned interactive rollout quality.
+The catalog launch is `worldfoundry-eval run vid2world --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-## Readiness and limitations
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-- Checkpoints/config assets are runtime-gated; no GPU validation is recorded in this repository.
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vid2world`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="vid2world" locale="en" />

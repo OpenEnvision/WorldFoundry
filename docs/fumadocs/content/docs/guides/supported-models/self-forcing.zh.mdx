@@ -1,47 +1,50 @@
 ---
 title: "Self-Forcing"
-description: "Self-Forcing 弥合了自回归视频扩散的训练-推理差距：在训练时模拟推理过程——让每帧以自己先前生成的帧为条件——从而在单卡上实现实时流式文生视频（arXiv 2506.08009）。本 catalog 中官方仅推理运行时已内置树内；一致性待 Self-Forcing DMD checkpoint 与 Wan2.1 权重就位。"
+description: "Self-Forcing（Adobe Research / The University of Texas at Austin）：文生视频、图生视频；Runner 一致性待确认; Self Forcing。"
+modelId: "self-forcing"
 pageSource: generated
 ---
 
-**发表机构:** Adobe 研究院 / 得克萨斯大学奥斯汀分校 · 企业
-text · image → video
-[Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion](https://arxiv.org/abs/2506.08009) (NeurIPS 2025 spotlight, 2025)
-
 Self-Forcing 弥合了自回归视频扩散的训练-推理差距：在训练时模拟推理过程——让每帧以自己先前生成的帧为条件——从而在单卡上实现实时流式文生视频（arXiv 2506.08009）。本 catalog 中官方仅推理运行时已内置树内；一致性待 Self-Forcing DMD checkpoint 与 Wan2.1 权重就位。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="self-forcing" locale="zh" />
 
-## 上游来源
+记录论文为[Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion](https://arxiv.org/abs/2506.08009)（NeurIPS 2025 spotlight, 2025）。
 
-- [项目主页](https://self-forcing.github.io)
-- [论文](https://arxiv.org/abs/2506.08009)
-- [GitHub](https://github.com/guandeh17/Self-Forcing)
-- [Hugging Face](https://huggingface.co/gdhe17/Self-Forcing)
-- [上游 README](https://github.com/guandeh17/Self-Forcing#readme)
-
-<figure className="wf-recipe-media is-diagram">
-  <DocsImage src="/models/self-forcing/paper.png" alt="Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion" />
-  <figcaption>Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion</figcaption>
-</figure>
+项目页：[self-forcing.github.io](https://self-forcing.github.io)。代码：[guandeh17/Self-Forcing](https://github.com/guandeh17/Self-Forcing)。
 
 <ModelCommandBuilder modelId="self-forcing" locale="zh" />
 
-## 架构
+## 用来做什么
 
-按论文，基于 Wan2.1 的因果学生在自生成滚动上做整体分布匹配训练，并用 KV 缓存实现流式。runner 在树内负责提示词/i2v 数据物化、Wan 权重软链、命令构造与输出加载（checkpoint： gdhe17/Self-Forcing）。
+一条配方同时覆盖文生视频与图生视频时选 `self-forcing`：prompt 进、可选静帧、视频出。不必再拼两条上游 demo。
+
+按论文，基于 Wan2.1 的因果学生在自生成滚动上做整体分布匹配训练，并用 KV 缓存实现流式。runner 在树内负责提示词/i2v 数据物化、Wan 权重软链、命令构造与输出加载（checkpoint： gdhe17/Self-Forcing）。该模型由Adobe 研究院 / 得克萨斯大学奥斯汀分校发布。
+
+catalog 记录的任务包括 文生视频、图生视频、autoregressive-video-generation。别名包括 `Self-Forcing`、`selfforcing`、`self_forcing`。模态上，它接受文本、图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（流式文生视频的质量评测）。
 
 ## 运行时契约
 
-默认 checkpoint 路径遵循 $\{WORLDFOUNDRY_CKPT_DIR\}/Self-Forcing 的官方 HF 布局——另行就位时请覆盖 checkpoint_path。完整一致性需要 wan_models 兼容布局下的 Wan2.1 权重；benchmark 提示词列表需自行准备，并通过本地输入配置提供。
+可选 `prompt`、`interactions`、`fps`、`seed`、`num_output_frames`；产物 `self-forcing.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `SelfForcingPipeline`。
 
-- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — 流式文生视频的质量评测。
+系列状态：**Runner 一致性待确认**。
 
-## 就绪状态与限制
+`default` 记录默认值：seed=0。
 
-- runner parity 待 Self-Forcing 与 Wan2.1 权重就位。
-- 蒸馏的少步学生：质量弱于双向教师。
+默认 checkpoint 路径遵循 $\{WORLDFOUNDRY_CKPT_DIR\}/Self-Forcing 的官方 HF 布局——另行就位时请覆盖 checkpoint_path。 完整一致性需要 wan_models 兼容布局下的 Wan2.1 权重；benchmark 提示词列表需自行准备，并通过本地输入配置提供。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run self-forcing --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `gdhe17/Self-Forcing`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh self-forcing`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="self-forcing" locale="zh" />

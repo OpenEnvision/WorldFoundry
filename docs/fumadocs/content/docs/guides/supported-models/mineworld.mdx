@@ -1,44 +1,50 @@
 ---
 title: "MineWorld"
-description: "MineWorld is Microsoft's real-time open-source interactive world model for Minecraft: an autoregressive transformer that plays forward Minecraft scenes from image/video context and actions (arXiv 2504.08388, MIT license)."
+description: "MineWorld from Microsoft: interactive-world-model and minecraft-world-model; Runner parity pending."
+modelId: "mineworld"
 pageSource: generated
 ---
 
-**Publisher:** Microsoft · Company
-[MineWorld: a Real-Time and Open-Source Interactive World Model on Minecraft](https://arxiv.org/abs/2504.08388) (2025)
-
 MineWorld is Microsoft's real-time open-source interactive world model for Minecraft: an autoregressive transformer that plays forward Minecraft scenes from image/video context and actions (arXiv 2504.08388, MIT license). In this catalog the source is vendored in-tree; runnable execution still needs the official dependency environment, checkpoints, and validation/demo data.
 
-**Catalog status:** Runtime ported
+<ModelPaperFigures modelId="mineworld" locale="en" />
 
-## Upstream sources
+The recorded paper is [MineWorld: a Real-Time and Open-Source Interactive World Model on Minecraft](https://arxiv.org/abs/2504.08388) (2025).
 
-- [Paper](https://arxiv.org/abs/2504.08388)
-- [GitHub](https://github.com/microsoft/mineworld)
-- [Upstream README](https://github.com/microsoft/mineworld#readme)
-
-<figure className="wf-recipe-media is-diagram">
-  <DocsImage src="/models/mineworld/paper.png" alt="MineWorld: a Real-Time and Open-Source Interactive World Model on Minecraft" />
-  <figcaption>MineWorld: a Real-Time and Open-Source Interactive World Model on Minecraft</figcaption>
-</figure>
+Code: [microsoft/mineworld](https://github.com/microsoft/mineworld).
 
 <ModelCommandBuilder modelId="mineworld" locale="en" />
 
-## Architecture
+## What it is for
+
+Use `mineworld` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
 
 Per the paper, a visual tokenizer plus an autoregressive transformer over interleaved state-action tokens, with parallel decoding for real-time speed. Internals beyond this are not recorded here.
 
+Catalog tasks include interactive-world-model, minecraft-world-model, and action-conditioned-video.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Action-conditioned game-world rollout quality).
+
 ## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `frames`, and `fps`; artifacts `mineworld.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `MineWorldPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `interactive-video` defaults: frames=16, fps=16, seed=42.
 
 The pipeline resolves the official inference entrypoint and returns blocked runtime diagnostics until checkpoints and validation data are staged.
 
-## Evaluation benchmarks
+## Running in WorldFoundry
 
-- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Action-conditioned game-world rollout quality.
+The catalog launch is `worldfoundry-eval run mineworld --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-## Readiness and limitations
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-- Execution is checkpoint/environment/data gated.
-- Minecraft-domain world model: not a general video generator.
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh mineworld`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="mineworld" locale="en" />

@@ -1,39 +1,46 @@
 ---
 title: "Hailuo 2.3"
-description: "Hailuo 2.3 is MiniMax's hosted video generation service, recorded in this catalog for image-to-video and joint audio-video generation. You hand it a start image (plus an optional prompt) and it returns a finished clip rendered on MiniMax's…"
+description: "Hailuo 2.3 from MiniMax: audio-video and image-to-video; Runner parity pending."
+modelId: "hailuo-2p3"
 pageSource: generated
 ---
 
-**Publisher:** MiniMax · Company
-image → video
-
 Hailuo 2.3 is MiniMax's hosted video generation service, recorded in this catalog for image-to-video and joint audio-video generation. You hand it a start image (plus an optional prompt) and it returns a finished clip rendered on MiniMax's infrastructure — WorldFoundry never runs the model itself. The catalog also lists the aliases minimax-i2v and minimax_i2v for this entry, so older configs keep resolving. Use it when you want MiniMax's production quality inside WorldFoundry's Studio workflow without managing GPUs.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="hailuo-2p3" locale="en" />
 
-## Upstream sources
-
-- [Project](https://www.minimax.io/)
+Project page: [minimax.io](https://www.minimax.io/).
 
 <ModelCommandBuilder modelId="hailuo-2p3" locale="en" />
 
-## Architecture
+## What it is for
 
-This is a hosted, provider-operated model: the vendor has not published its architecture, parameter count, or training recipe, and this repository does not record them. What WorldFoundry records is the integration surface only — a Studio pipeline that submits requests to the provider endpoint and collects the returned video artifacts.
+Pick `hailuo-2p3` when this card is a hosted API rather than a local checkpoint: call the recorded provider route instead of staging weights.
+
+Catalog tasks include audio-video, image-to-video, and hosted-api. Catalog aliases include `minimax-i2v` and `minimax_i2v`. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs), [Physics-IQ Original](/docs/evaluation/benchmark-hub/physics-iq) (Probes whether provider-side video models respect basic physical plausibility).
 
 ## Runtime contract
 
+Optional `prompt`, `input_path`, `task_type`, `model`, and `resolution`.
+
+CLI task profiles: `default`. WorldFoundry binds `Hailuo2p3Pipeline`.
+
+Family status: **Runner parity pending**.
+
 The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Point the pipeline at your MiniMax platform key before launching jobs.
 
-## Evaluation benchmarks
+Hosted API Studio pipeline is available; users must provide their own provider API key.
 
-- [VBench](/docs/evaluation/benchmark-hub/vbench) — Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
-- [Physics-IQ Original](/docs/evaluation/benchmark-hub/physics-iq) — Probes whether provider-side video models respect basic physical plausibility.
+## Running in WorldFoundry
 
-## Readiness and limitations
+Launch `worldfoundry-eval run hailuo-2p3 --pipeline.task-profile default` to call the hosted route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- Requires a paid provider account and API key; WorldFoundry does not ship credentials.
-- The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
-- No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+The environment profile is not recorded.
+
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hailuo-2p3`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="hailuo-2p3" locale="en" />

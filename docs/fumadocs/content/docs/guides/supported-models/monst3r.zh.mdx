@@ -25,9 +25,9 @@ catalog 记录的任务包括 geometry estimation in the presence of motion。
 
 ## 运行时契约
 
-必填 `image`、`video`；可选 `prompt`、`actions`；产物 `generated_4d_scene`、`monst3r.glb`。
+可选 `input_path`、`frames`、`fps`、`weights`、`model_name`；产物 `generated_4d_scene`、`monst3r.glb`。
 
-记录的任务 profile：`geometry estimation in the presence of motion`。绑定的 pipeline 类是 `MonST3RPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `MonST3RPipeline`。
 
 系列状态：**已验证**。
 
@@ -37,11 +37,11 @@ WorldFoundry vendors the MonST3R infer-time components in-tree.
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run monst3r --pipeline.task-profile 'geometry estimation in the presence of motion'` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run monst3r --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-本卡片未记录公开 checkpoint id；按使用说明就位权重。就位权重用 `bash scripts/inference/prepare_model_infer.sh monst3r`。
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh monst3r`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

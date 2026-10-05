@@ -1,47 +1,50 @@
 ---
 title: "Spatia"
-description: "Spatia is a camera-controlled video-to-video world model: given source video and a target camera trajectory it re-renders the scene along the new viewpoint path. WorldFoundry vendors the official source in-tree (revision f75b10c9) and expo…"
+description: "Spatia: camera-controlled-video and video-to-video; Verified."
+modelId: "spatia"
 pageSource: generated
 ---
 
-**Publisher:** Open-source research release (institution not recorded) · Research lab
-video → video
-
 Spatia is a camera-controlled video-to-video world model: given source video and a target camera trajectory it re-renders the scene along the new viewpoint path. WorldFoundry vendors the official source in-tree (revision f75b10c9) and exposes it through the shared pipeline runner with the Jinjing713/Spatia checkpoint reference, released under Apache-2.0.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="spatia" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2512.15716](https://arxiv.org/abs/2512.15716).
 
-- [Project](https://zhaojingjing713.github.io/Spatia/)
-- [Paper](https://arxiv.org/abs/2512.15716)
-- [GitHub](https://github.com/ZhaoJingjing713/Spatia)
-- [Source](https://github.com/facebookresearch/map-anything)
-- [Source](https://github.com/castacks/UniCeption)
-- [Source](https://github.com/facebookresearch/dinov2)
-- [Upstream README](https://github.com/ZhaoJingjing713/Spatia#readme)
-- [Upstream README](https://github.com/facebookresearch/map-anything#readme)
-- [Upstream README](https://github.com/castacks/UniCeption#readme)
-- [Upstream README](https://github.com/facebookresearch/dinov2#readme)
+Project page: [zhaojingjing713.github.io/Spatia](https://zhaojingjing713.github.io/Spatia/). Code: [ZhaoJingjing713/Spatia](https://github.com/ZhaoJingjing713/Spatia). Code: [facebookresearch/map-anything](https://github.com/facebookresearch/map-anything). Code: [castacks/UniCeption](https://github.com/castacks/UniCeption). Code: [facebookresearch/dinov2](https://github.com/facebookresearch/dinov2).
 
 <ModelCommandBuilder modelId="spatia" locale="en" />
 
-## Architecture
+## What it is for
+
+Pick `spatia` when you need camera-controlled video: a camera trajectory in, a steered clip out. Use it instead of unconstrained T2V when viewpoint must follow a path.
 
 The in-tree route wires Spatia inference with a dense world-to-camera (W2C) trajectory input: per-frame camera extrinsics drive the re-rendering. Architecture internals beyond the vendored source are not recorded in this repository.
 
+Catalog tasks include camera-controlled-video, video-to-video, and world-model. Documented modalities: video in, video out.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-trajectory adherence for controlled re-rendering).
+
 ## Runtime contract
+
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `spatia.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `SpatiaPipeline`.
+
+Family status: **Verified**.
+
+Recorded `default` defaults: frames=121, fps=24, height=704, width=1248, seed=20917.
 
 Provide a source image or video and a dense per-frame W2C camera trajectory. Optional mask_path passes one foreground mask matching the original source-frame size to reconstruction; set force_rebuild_intermediate when changing cached inputs. A local image-input run completed 17 frames at 832x480 and 40 steps; camera adherence has not been established.
 
-## Evaluation benchmarks
+## Running in WorldFoundry
 
-- [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — Camera-trajectory adherence for controlled re-rendering.
+Launch `worldfoundry-eval run spatia --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-## Readiness and limitations
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-- A local checkpoint-backed GPU inference run is recorded; official PyTorch3D renderer parity and camera-control accuracy remain unverified.
-- Requires dense per-frame camera trajectories, not sparse keyframe poses.
-- The default MapAnything checkpoint has a non-commercial license.
+Recorded weight repositories include `Jinjing713/Spatia`, `Wan-AI/Wan2.2-TI2V-5B`, and `facebook/map-anything`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh spatia`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
 
 <ModelRelatedRecipes modelId="spatia" locale="en" />

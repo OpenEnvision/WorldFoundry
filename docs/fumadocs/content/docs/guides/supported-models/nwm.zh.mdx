@@ -1,41 +1,50 @@
 ---
 title: "Navigation World Models"
-description: "Navigation World Models（NWM）是 Meta 的导航世界模型（CVPR 2025 highlight）：条件扩散 Transformer，从历史帧与导航动作预测第一视角未来视频，并能通过「想象」来规划轨迹。记录的 variant 覆盖 RECON 与 SCAND 数据集 checkpoint。本 catalog 中源码已内置树内；执行保持 checkpoint/数据集限制。"
+description: "Navigation World Models（Meta AI (FAIR)）：动作条件视频；Runner 一致性待确认; 2 个 variant。"
+modelId: "nwm"
 pageSource: generated
 ---
 
-**发表机构:** Meta AI（FAIR） · 企业
-video
-
 Navigation World Models（NWM）是 Meta 的导航世界模型（CVPR 2025 highlight）：条件扩散 Transformer，从历史帧与导航动作预测第一视角未来视频，并能通过「想象」来规划轨迹。记录的 variant 覆盖 RECON 与 SCAND 数据集 checkpoint。本 catalog 中源码已内置树内；执行保持 checkpoint/数据集限制。
 
-**目录状态:** 运行时已移植
+<ModelPaperFigures modelId="nwm" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2412.03572](https://arxiv.org/abs/2412.03572)。
 
-- [项目主页](https://www.amirbar.net/nwm/)
-- [论文](https://arxiv.org/abs/2412.03572)
-- [GitHub](https://github.com/facebookresearch/nwm)
-- [Hugging Face](https://huggingface.co/facebook/nwm)
-- [上游 README](https://github.com/facebookresearch/nwm#readme)
+项目页：[amirbar.net/nwm](https://www.amirbar.net/nwm/)。代码：[facebookresearch/nwm](https://github.com/facebookresearch/nwm)。
 
 <ModelCommandBuilder modelId="nwm" locale="zh" />
 
-## 架构
+## 用来做什么
 
-按上游发布，条件扩散 Transformer（CDiT）参数量达 1B，以动作与时间嵌入为条件做第一视角预测（checkpoint 位于 facebook/nwm，CC-BY-NC-4.0）。
+用 `nwm-recon` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
+
+按上游发布，条件扩散 Transformer（CDiT）参数量达 1B，以动作与时间嵌入为条件做第一视角预测（checkpoint 位于 facebook/nwm，CC-BY-NC-4.0）。该模型由Meta AI（FAIR）发布。
+
+catalog 记录的任务包括 navigation-world-model、动作条件视频、egocentric-video-generation。别名包括 `navigation-world-models`、`nwm-recon`、`nwm-scand`。输出模态为视频。同系列还有 `nwm-scand`。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（导航世界滚动生成质量）。
 
 ## 运行时契约
 
-pipeline 解析官方 NWM 推理入口，在 checkpoint 与评估数据集就位前返回 blocked 诊断。它是「非驾驶类导航视频评估」的记录候选。
+产物 `nwm.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `NWMPipeline`。
 
-- [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) — 导航世界滚动生成质量。
+起步 variant 是 `nwm-recon`。catalog 登记了 2 个 variant（上方卡片）：`nwm-recon`（`navigation-world-model`）：计划中、`nwm-scand`（`navigation-world-model`）：计划中。系列状态：**Runner 一致性待确认**。
 
-## 就绪状态与限制
+pipeline 解析官方 NWM 推理入口，在 checkpoint 与评估数据集就位前返回 blocked 诊断。 它是「非驾驶类导航视频评估」的记录候选。
 
-- CC-BY-NC-4.0：非商用许可。
-- 执行受 checkpoint/环境/数据集限制。
+CC-BY-NC-4.0：非商用许可。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run nwm-recon --pipeline.task-profile default` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `facebook/nwm`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh nwm-recon`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="nwm" locale="zh" />

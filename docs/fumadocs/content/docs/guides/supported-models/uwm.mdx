@@ -1,39 +1,50 @@
 ---
 title: "Unified World Models"
-description: "Unified World Models (UWM) from the University of Washington's WEIRD Lab couples video prediction and action diffusion in one robot world model, with recorded variants for LIBERO-90 (uwm-libero90) and DROID (uwm-droid). WorldFoundry regist…"
+description: "Unified World Models from University of Washington (WEIRD Lab): robot-world-model and action-conditioned-video; Runner parity pending."
+modelId: "uwm"
 pageSource: generated
 ---
 
-**Publisher:** University of Washington (WEIRD Lab) · University
-
 Unified World Models (UWM) from the University of Washington's WEIRD Lab couples video prediction and action diffusion in one robot world model, with recorded variants for LIBERO-90 (uwm-libero90) and DROID (uwm-droid). WorldFoundry registers the official evaluation route in-tree; checkpoints and datasets are runtime-gated.
 
-**Catalog status:** Runtime ported
+<ModelPaperFigures modelId="uwm" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2504.02792](https://arxiv.org/abs/2504.02792).
 
-- [Project](https://weirdlabuw.github.io/uwm/)
-- [Paper](https://arxiv.org/abs/2504.02792)
-- [GitHub](https://github.com/WEIRDLabUW/unified-world-model)
-- [Upstream README](https://github.com/WEIRDLabUW/unified-world-model#readme)
+Project page: [weirdlabuw.github.io/uwm](https://weirdlabuw.github.io/uwm/). Code: [WEIRDLabUW/unified-world-model](https://github.com/WEIRDLabUW/unified-world-model).
 
 <ModelCommandBuilder modelId="uwm" locale="en" />
 
-## Architecture
+## What it is for
 
-UWM is a video-action diffusion design: one diffusion process jointly models future observations and robot actions, so the same network serves prediction and policy roles. Details beyond the official repository pointer are not recorded in this repository.
+Pick `uwm` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+UWM is a video-action diffusion design: one diffusion process jointly models future observations and robot actions, so the same network serves prediction and policy roles. Details beyond the official repository pointer are not recorded in this repository. It is published by University of Washington (WEIRD Lab).
+
+Catalog tasks include robot-world-model, action-conditioned-video, and video-action-diffusion. Catalog aliases include `uwm-libero90` and `uwm-droid`.
+
+Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (The uwm-libero90 variant targets LIBERO tasks), [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Robot world-model rollout quality).
 
 ## Runtime contract
 
+Artifacts `generated_video` and `uwm_runtime_plan.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `UWMPipeline`.
+
+Family status: **Runner parity pending**.
+
 Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Pick the LIBERO-90 or DROID variant to match your evaluation suite.
 
-## Evaluation benchmarks
+UWM official evaluation route is registered; checkpoints/datasets are runtime-gated.
 
-- [LIBERO](/docs/evaluation/benchmark-hub/libero) — The uwm-libero90 variant targets LIBERO tasks.
-- [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) — Robot world-model rollout quality.
+## Running in WorldFoundry
 
-## Readiness and limitations
+The catalog launch is `worldfoundry-eval run uwm --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- Checkpoints/datasets are runtime-gated; no GPU validation is recorded in this repository.
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh uwm`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="uwm" locale="en" />

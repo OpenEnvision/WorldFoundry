@@ -1,33 +1,44 @@
 ---
 title: "Astronex-World"
-description: "Astronex-World 支持相机和动作条件下的因果及双向视频推理。"
+description: "Astronex-World（Astronex-Robotics）：文生视频、图生视频；Runner 一致性待确认; 独立环境 `astronex-world`。"
+modelId: "astronex-world"
 pageSource: generated
 ---
 
-**发表机构:** Astronex-Robotics · 研究机构
-text · image → video
-
 Astronex-World 支持相机和动作条件下的因果及双向视频推理。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="astronex-world" locale="zh" />
 
-## 上游来源
-
-- [源码](https://github.com/Astronex-Robotics/Astronex-World)
-- [上游 README](https://github.com/Astronex-Robotics/Astronex-World#readme)
+代码：[Astronex-Robotics/Astronex-World](https://github.com/Astronex-Robotics/Astronex-World)。
 
 <ModelCommandBuilder modelId="astronex-world" locale="zh" />
 
-## 架构
+## 用来做什么
 
-基于 Wan2.2 TI2V-5B，加入 PRoPE 相机条件、64 维动作和 embodiment 条件。调用外部官方采样器，本次集成不复制 Wan 骨干。
+用 `astronex-world` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+
+基于 Wan2.2 TI2V-5B，加入 PRoPE 相机条件、64 维动作和 embodiment 条件。调用外部官方采样器，本次集成不复制 Wan 骨干。该模型由Astronex-Robotics发布。
+
+catalog 记录的任务包括 文生视频、图生视频、相机可控视频、交互式世界模型。别名包括 `astronex`。模态上，它接受文本、图像，输出视频。
 
 ## 运行时契约
 
-选择 mode=causal 或 bidirectional，并提供 source_root 和 checkpoint_dir。execute=True 执行推理。latent_frames 为生成潜帧数；因果模式要求 (latent_frames + reference_count) 能被 8 整除。
+可选 `prompt`、`input_path`、`load.checkpoint_dir`、`latent_frames`、`trajectory`；产物 `generated_world`、`astronex-world.mp4`。
 
-## 就绪状态与限制
+CLI task profile：`interactive-world-model`。绑定的 pipeline 类是 `AstronexWorldPipeline`。
 
-- 当前工作区仅完成 CPU 可执行的检查，GPU 推理和 checkpoint 产物仍待验证。
+系列状态：**Runner 一致性待确认**。
+
+`interactive-world-model` 记录默认值：fps=24, seed=0。
+
+选择 mode=causal 或 bidirectional，并提供 source_root 和 checkpoint_dir。 execute=True 执行推理。 latent_frames 为生成潜帧数；因果模式要求 (latent_frames + reference_count) 能被 8 整除。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run astronex-world --pipeline.task-profile interactive-world-model`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `Astronex-Lab/Astronex-World`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh astronex-world`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="astronex-world" locale="zh" />

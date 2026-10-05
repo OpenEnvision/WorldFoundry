@@ -29,11 +29,11 @@ LingBot VLA rollout. v2 is a sibling card.
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `state`; optional `model_id` (lingbot-vla), `state_dim` (14), `camera_keys` (observation.images.cam_high, observation.images.cam_left_wrist, observation.images.cam_right_wrist), `policy_family`, and `action_representation`; artifacts `action_trace` and `lingbot_vla_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `lingbot_vla_action_trace.json`.
 
-Recorded task profiles: `vla`, `vla.action_prediction`, `vla.policy_rollout`, `robot_policy`, and `vla.pretraining`. WorldFoundry binds `LingBotVLAPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `LingBotVLAPipeline`.
 
-Start on `lingbot-vla-4b`. The family registers 3 catalog variants (cards above): `lingbot-vla-4b` (`vla.pretraining`) — Static load only; `lingbot-vla-4b-posttrain-robotwin` (`vla.policy_rollout`) — Static load only; `lingbot-vla-4b-depth-posttrain-robotwin` (`vla.policy_rollout`) — Static load only. Family status: **Static load only**.
+Start on `lingbot-vla-4b`. The family registers 3 catalog variants (cards above): `lingbot-vla-4b` (`vla.pretraining`) — Runner parity pending; `lingbot-vla-4b-posttrain-robotwin` (`vla.policy_rollout`) — Runner parity pending; `lingbot-vla-4b-depth-posttrain-robotwin` (`vla.policy_rollout`) — Runner parity pending. Family status: **Static load only**.
 
 Use the RoboTwin post-train for simulator benchmarks (the depth variant adds depth input) and the base for fine-tuning. For the newer 6B generation see lingbot-vla-v2.
 
@@ -43,11 +43,11 @@ Runnable / integrated: `lingbot-vla-4b`, `lingbot-vla-4b-posttrain-robotwin`, an
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run lingbot-vla-4b --pipeline.task-profile vla.pretraining`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run lingbot-vla-4b --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-lingbot-vla-v1-cu128` (Python 3.11, CUDA 12.8, torch==2.8.0).
 
-Recorded weight repositories include `robbyant/lingbot-vla-4b`, `robbyant/lingbot-vla-4b-posttrain-robotwin`, and `robbyant/lingbot-vla-4b-depth-posttrain-robotwin` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh lingbot-vla-4b`.
+Recorded weight repositories include `robbyant/lingbot-vla-4b`, `robbyant/lingbot-vla-4b-posttrain-robotwin`, and `robbyant/lingbot-vla-4b-depth-posttrain-robotwin` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-vla-4b`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Static load only**.
 

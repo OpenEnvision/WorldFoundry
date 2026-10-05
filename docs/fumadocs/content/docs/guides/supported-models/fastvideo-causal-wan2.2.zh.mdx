@@ -17,7 +17,7 @@ FastVideo CausalWan2.2 是 **8 步因果** Wan2.2 滚动：视频按**三潜帧*
 
 因果 Wan2.2 快视频。不是完整 Wan2.2 家族卡。
 
-提供输入图像，并运行 `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b --pipeline.task-profile image-to-video`。
+提供输入图像，并运行 `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b`。
 
 ## 运行时契约
 
@@ -34,6 +34,6 @@ FastVideo CausalWan2.2 是 **8 步因果** Wan2.2 滚动：视频按**三潜帧*
 
 ## 在 WorldFoundry 中运行
 
-状态：**已在 H100 上验证 848×464、81 帧真实权重推理**。提供图像运行 `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b --pipeline.task-profile image-to-video`。同参数的 FastVideo 官方入口实际输出 73 帧，因为其去噪器舍弃最后两个潜帧。两者公共帧的构图和前进运动一致；随机数生成器和潜变量精度不同，逐像素数值一致性仍待验证。许可证：Apache-2.0。catalog 未记录 VRAM。
+状态：**已在 H100 上验证 848×464、81 帧真实权重推理**。提供图像运行 `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b`。同参数的 FastVideo 官方入口实际输出 73 帧，因为其去噪器舍弃最后两个潜帧。两者公共帧的构图和前进运动一致；随机数生成器和潜变量精度不同，逐像素数值一致性仍待验证。许可证：Apache-2.0。catalog 未记录 VRAM。
 
 <ModelRelatedRecipes modelId="fastvideo-causal-wan2.2" locale="zh" />

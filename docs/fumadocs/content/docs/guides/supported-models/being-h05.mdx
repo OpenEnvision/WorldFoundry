@@ -25,7 +25,7 @@ The base `being-h05-2b` card is the unspecialized preview, not a suite specialis
 
 ## Runtime contract
 
-Required WorldFoundry inputs: `image`, `instruction`, `prompt`, and `state`. Optional: `video`. The `actions` field is recorded as `robot_action`, `action_unified`, `proprio`, `action_space`. Pipeline class: `BeingH05Pipeline`. Launch `worldfoundry-eval run being-h05-2b` with `--pipeline.task-profile vla.policy_rollout` — pick the LIBERO variant unless you are comparing checkpoints.
+Required WorldFoundry inputs: `image`, `instruction`, `prompt`, and `state`. Optional: `video`. The `actions` field is recorded as `robot_action`, `action_unified`, `proprio`, `action_space`. Pipeline class: `BeingH05Pipeline`. Launch `worldfoundry-eval run being-h05-2b` — pick the LIBERO variant unless you are comparing checkpoints.
 
 Two inference-time pieces travel with the released checkpoint. **Manifold-Preserving Gating** drops unreliable context under sensory shift so flow updates stay on a stable action manifold. **Universal Async Chunking** keeps action chunks consistent across different control rates and delays.
 

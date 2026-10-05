@@ -29,11 +29,11 @@ Imagine egocentric future video from past frames plus navigation actions. Pick `
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `video`; optional `actions` (navigation_action, world_action); artifacts `nwm.mp4`.
+Artifacts `nwm.mp4`.
 
-Recorded task profiles: `navigation-world-model`, `action-conditioned-video`, and `egocentric-video-generation`. WorldFoundry binds `NWMPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `NWMPipeline`.
 
-Start on `nwm-recon`. The family registers 2 catalog variants (cards above): `nwm-recon` (`navigation-world-model`) — Runner parity pending; `nwm-scand` (`navigation-world-model`) — Runner parity pending. Family status: **Runner parity pending**.
+Start on `nwm-recon`. The family registers 2 catalog variants (cards above): `nwm-recon` (`navigation-world-model`) — Planned; `nwm-scand` (`navigation-world-model`) — Planned. Family status: **Runner parity pending**.
 
 The pipeline resolves the official NWM inference entrypoint and returns blocked diagnostics until checkpoints and evaluation datasets are staged. It is the recorded candidate for non-driving navigation video evaluation.
 
@@ -41,11 +41,11 @@ WorldFoundry registers an in-tree runtime manifest pipeline for the vendored NWM
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run nwm-recon --pipeline.task-profile navigation-world-model` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run nwm-recon --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `facebook/nwm`. Stage assets with `bash scripts/inference/prepare_model_infer.sh nwm-recon`.
+Recorded weight repositories include `facebook/nwm`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh nwm-recon`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

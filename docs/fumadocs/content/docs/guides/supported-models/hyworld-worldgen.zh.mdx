@@ -25,9 +25,9 @@ catalog 记录的任务包括相机可控视频、world-generation-stage、point
 
 ## 运行时契约
 
-必填 `image`、`camera_json`、`scene_path`；产物 `hyworld-worldgen.mp4`。
+可选 `input_path`、`height`、`width`、`seed`、`camera_json`；产物 `hyworld-worldgen.mp4`。
 
-记录的任务 profile：`camera-controlled-video`、`world-generation-stage`、`point-cloud-rendering`。绑定的 pipeline 类是 `HYWorld2WorldgenPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `HYWorld2WorldgenPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -37,7 +37,7 @@ catalog 记录的任务包括相机可控视频、world-generation-stage、point
 
 ## 在 WorldFoundry 中运行
 
-源码与场景准备好后，运行 `worldfoundry-eval run hyworld-worldgen --pipeline.task-profile camera-controlled-video` 输出视频。
+源码与场景准备好后，运行 `worldfoundry-eval run hyworld-worldgen` 输出视频。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 

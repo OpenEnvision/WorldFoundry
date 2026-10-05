@@ -27,9 +27,9 @@ catalog 记录的任务包括 3D 重建、高斯泼溅、新视角合成。别�
 
 ## 运行时契约
 
-必填 `image`、`video`；可选 `prompt`、`actions` (camera_view, image_sequence)；产物 `scene_conf20.0_blackFalse_whiteFalse_camTrue_skyFalse_max200k.glb`。
+可选 `input_path`、`interactions`、`camera_view`、`task_type`、`image_resolution`；产物 `scene_conf20.0_blackFalse_whiteFalse_camTrue_skyFalse_max200k.glb`。
 
-记录的任务 profile：`3d-reconstruction`、`gaussian-splatting`、`novel-view-synthesis`。绑定的 pipeline 类是 `VGGTOmegaPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `VGGTOmegaPipeline`。
 
 系列状态：**已验证**。
 
@@ -39,11 +39,11 @@ VGGT-Omega uses an official-architecture representation runner plus the existing
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run vggt-omega --pipeline.task-profile 3d-reconstruction` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run vggt-omega --pipeline.task-profile interactive-video` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `facebook/VGGT-Omega`。就位权重用 `bash scripts/inference/prepare_model_infer.sh vggt-omega`。
+记录的权重仓库包括 `facebook/VGGT-Omega`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh vggt-omega`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 cc-by-nc-4.0；状态：**已验证**。
 

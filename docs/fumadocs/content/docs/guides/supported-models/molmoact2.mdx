@@ -27,11 +27,11 @@ Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `image`, `instruction`, `prompt`, and `state`; optional `actions` (action_chunk, robot_action), `camera_keys` (external_cam, external_cam_2, wrist_cam), `default_embodiment` (droid), `norm_tag`, and `state_dim` (8); artifacts `action_trace` and `molmoact2_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `action_trace` and `molmoact2_action_trace.json`.
 
-Recorded task profiles: `vla`, `vla.action_prediction`, `vla.policy_rollout`, and `robot_policy`. WorldFoundry binds `MolmoAct2Pipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `MolmoAct2Pipeline`.
 
-Start on `molmoact2-droid`. The family registers 5 catalog variants (cards above): `molmoact2-droid` (`vla.policy_rollout`) — Verified; `molmoact2-bimanual-yam` (`vla.policy_rollout`) — Verified; `molmoact2-so100-101` (`vla.policy_rollout`) — Verified; `molmoact2-libero` (`vla.policy_rollout`) — Verified; `molmoact2-think-libero` (`vla.policy_rollout`) — Verified. Family status: **Verified**.
+Start on `molmoact2-droid`. The family registers 5 catalog variants (cards above): `molmoact2-droid` (`vla.policy_rollout`) — Static load only; `molmoact2-bimanual-yam` (`vla.policy_rollout`) — Static load only; `molmoact2-so100-101` (`vla.policy_rollout`) — Static load only; `molmoact2-libero` (`vla.policy_rollout`) — Static load only; `molmoact2-think-libero` (`vla.policy_rollout`) — Static load only. Family status: **Verified**.
 
 Pick the checkpoint per embodiment: DROID for Franka arms, BimanualYAM for dual-arm YAM, SO100_101 for SO-ARM, LIBERO/Think-LIBERO for simulation. Integration is Static load onlyally verified.
 
@@ -41,11 +41,11 @@ Runnable / integrated: `molmoact2-droid`, `molmoact2-bimanual-yam`, `molmoact2-s
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run molmoact2-droid --pipeline.task-profile vla.policy_rollout` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run molmoact2-droid --pipeline.task-profile interactive-video` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `allenai/MolmoAct2-DROID`, `allenai/MolmoAct2-BimanualYAM`, and `allenai/MolmoAct2-SO100_101` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh molmoact2-droid`.
+Recorded weight repositories include `allenai/MolmoAct2-DROID`, `allenai/MolmoAct2-BimanualYAM`, and `allenai/MolmoAct2-SO100_101` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh molmoact2-droid`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Verified**.
 

@@ -1,33 +1,42 @@
 ---
 title: "BiWM Wan2.2"
-description: "BiWM Wan2.2 是来自 Lynnreal Ai 的世界模型。Catalog 将它记录为文生视频、图生视频、相机可控视频生成、世界模型任务。"
+description: "BiWM Wan2.2（Lynnreal Ai）：文生视频、图生视频；Runner 一致性待确认。"
+modelId: "biwm-wan22"
 pageSource: generated
 ---
 
-text · image → video
-
 BiWM Wan2.2 是来自 Lynnreal Ai 的世界模型。Catalog 将它记录为文生视频、图生视频、相机可控视频生成、世界模型任务。
 
-WorldFoundry 记录了到 worldfoundry.pipelines.biwm.pipeline_biwm:BiWMPipeline pipeline 的绑定（runner：worldfoundry.pipeline）；仅有绑定记录并不代表已成功运行。
+<ModelPaperFigures modelId="biwm-wan22" locale="zh" />
 
-它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。
-
-权重来自 Hugging Face 仓库 Wan-AI/Wan2.2-TI2V-5B。
-
-当前 runner parity 为“Pending”，原生 demo parity 为“Not Recorded”；端到端 GPU 证据应视为尚未记录。
-
-**目录状态:** 运行时已移植
-
-## 上游来源
-
-- [GitHub](https://github.com/LynnReal-AI/BiWM)
-- [上游 README](https://github.com/LynnReal-AI/BiWM#readme)
+代码：[LynnReal-AI/BiWM](https://github.com/LynnReal-AI/BiWM)。
 
 <ModelCommandBuilder modelId="biwm-wan22" locale="zh" />
 
-## 就绪状态与限制
+## 用来做什么
 
-- 已记录 pipeline 绑定，但尚无成功运行的证据；Runner parity 仍待验证，原生 Demo 证据未记录。
-- 由于训练后的 BiWM 生成器权重尚未公开发布，完整权重推理目前受阻；仅有 Wan 基座权重不能代替它。
+用 `biwm-wan22` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+
+catalog 记录的任务包括 文生视频、图生视频、相机可控视频、世界模型。模态上，它接受文本、图像，输出视频。
+
+## 运行时契约
+
+可选 `prompt`、`image`、`actions`、`seed`、`frames`；产物 `biwm.mp4`。
+
+CLI task profile：`text-to-video`、`image-to-video`、`camera-controlled-video`、`world-model`。绑定的 pipeline 类是 `BiWMPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+由于训练后的 BiWM 生成器权重尚未公开发布，完整权重推理目前受阻；仅有 Wan 基座权重不能代替它。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run biwm-wan22 --pipeline.task-profile text-to-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `Wan-AI/Wan2.2-TI2V-5B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh biwm-wan22`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="biwm-wan22" locale="zh" />

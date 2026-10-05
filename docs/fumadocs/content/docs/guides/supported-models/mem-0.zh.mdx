@@ -29,9 +29,9 @@ Mem-0 记忆策略 rollout，不是视频生成器。
 
 ## 运行时契约
 
-必填 `image`、`prompt`、`state`；可选 `model_id` (mem-0)、`episode_id`、`reset`、`policy_family`、`action_representation`；产物 `action_trace`、`mem-0_action_trace.json`。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`mem-0_action_trace.json`。
 
-记录的任务 profile：`vla`、`vla.policy_rollout`、`robot_policy`、`memory_policy`。绑定的 pipeline 类是 `Mem0Pipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `Mem0Pipeline`。
 
 系列状态：**仅静态加载**。
 
@@ -41,11 +41,11 @@ The in-tree runtime contains the episodic memory bank, Qwen feature path, classi
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run mem-0 --pipeline.task-profile vla` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run mem-0 --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是独立 profile `worldfoundry-vla-mem-0`（Python 3.11，Cu124 Or Newer，torch>=2.6）。
 
-记录的权重仓库包括 `qiuly/Mem-0-m1mix-RMBench`、`Qwen/Qwen3-VL-2B-Instruct`。就位权重用 `bash scripts/inference/prepare_model_infer.sh mem-0`。
+记录的权重仓库包括 `qiuly/Mem-0-m1mix-RMBench`、`Qwen/Qwen3-VL-2B-Instruct`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh mem-0`；下载缺失的公开权重时加 `--download`。
 
 状态：**仅静态加载**。
 

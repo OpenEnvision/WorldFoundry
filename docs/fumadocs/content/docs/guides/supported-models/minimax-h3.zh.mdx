@@ -15,7 +15,7 @@ MiniMax H3 是来自 MiniMaxAI 的视频生成模型。Catalog 将它记录为�
 
 ## 用来做什么
 
-`minimax-h3` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
+`minimax-h3` 是记录的 prompt 到视频路由——不是图像编辑，也不是策略。只要任务是文生视频，从这里起步。
 
 catalog 记录的任务包括 文生视频、图生视频、参考图生成视频。别名包括 `minimax_h3`、`minimax-h3-t2va`、`minimax-h3-fl2va`、`minimax-h3-ref2va`。模态上，它接受文本、图像，输出视频。
 
@@ -23,19 +23,19 @@ catalog 记录的任务包括 文生视频、图生视频、参考图生成视�
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`video`、`audio`；可选 `actions` (seed, task, flow_shift, audio_flow_shift)；产物 `minimax-h3.mp4`。
+可选 `prompt`、`steps`、`seed`、`task`、`short_edge`；产物 `minimax-h3.mp4`。
 
-记录的任务 profile：`text-to-video`、`image-to-video`、`reference-to-video`。绑定的 pipeline 类是 `NativeMiniMaxH3Pipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `NativeMiniMaxH3Pipeline`。
 
 系列状态：**计划中**。
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run minimax-h3 --pipeline.task-profile text-to-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+catalog 启动命令是 `worldfoundry-eval run minimax-h3 --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `MiniMaxAI/MiniMax-H3`、`MiniMaxAI/MiniMax-H3`。就位权重用 `bash scripts/inference/prepare_model_infer.sh minimax-h3`。
+记录的权重仓库包括 `MiniMaxAI/MiniMax-H3`、`MiniMaxAI/MiniMax-H3`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh minimax-h3`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0；catalog 显存 80 GB；状态：**计划中**。
 

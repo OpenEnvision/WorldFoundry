@@ -1,47 +1,50 @@
 ---
 title: "Stable Virtual Camera"
-description: "Stable Virtual Camera (SEVA) turns one or a few 2D images into a novel-view video along a user-defined camera path."
+description: "Stable Virtual Camera from Stability AI: generative novel view synthesis with camera control; Runner parity pending."
+modelId: "stable-virtual-camera"
 pageSource: generated
 ---
 
-**Publisher:** Stability AI · Company
-[Stable Virtual Camera: Generative View Synthesis with Diffusion Models](https://arxiv.org/abs/2503.14489) (2025)
-
 Stable Virtual Camera (SEVA) turns one or a few 2D images into a novel-view video along a user-defined camera path. In this catalog WorldFoundry wraps the upstream demo.py entrypoint with an in-tree adapter; runner parity is pending because the Stability AI checkpoint is gated and a reviewed official demo run is still needed.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="stable-virtual-camera" locale="en" />
 
-## Upstream sources
+The recorded paper is [Stable Virtual Camera: Generative View Synthesis with Diffusion Models](https://arxiv.org/abs/2503.14489) (2025).
 
-- [Project](https://stable-virtual-camera.github.io/)
-- [Paper](https://arxiv.org/abs/2503.14489)
-- [GitHub](https://github.com/Stability-AI/stable-virtual-camera)
-- [Hugging Face](https://huggingface.co/stabilityai/stable-virtual-camera)
-- [Hugging Face](https://huggingface.co/spaces/stabilityai/stable-virtual-camera)
-- [Upstream README](https://github.com/Stability-AI/stable-virtual-camera#readme)
-
-<figure className="wf-recipe-media is-diagram">
-  <DocsImage src="/models/stable-virtual-camera/paper.png" alt="Stable Virtual Camera: Generative View Synthesis with Diffusion Models" />
-  <figcaption>Stable Virtual Camera: Generative View Synthesis with Diffusion Models</figcaption>
-</figure>
+Project page: [stable-virtual-camera.github.io](https://stable-virtual-camera.github.io/). Code: [Stability-AI/stable-virtual-camera](https://github.com/Stability-AI/stable-virtual-camera).
 
 <ModelCommandBuilder modelId="stable-virtual-camera" locale="en" />
 
-## Architecture
+## What it is for
+
+Use `stable-virtual-camera` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.
 
 Per the paper (arXiv 2503.14489), a multi-view diffusion model generates target views at sampled camera poses in a two-pass procedural manner, trading generality across trajectories for consistency. Details beyond the recorded tasks are not stored in this repository.
 
+Catalog tasks include generative novel view synthesis with camera control. Catalog aliases include `SEVA`.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Evaluates camera-path control quality of generated views).
+
 ## Runtime contract
+
+Optional `input_path`, `steps`, `seed`, `version`, and `task`; artifacts `generated_video` and `stable_virtual_camera.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `StableVirtualCameraPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `default` defaults: seed=23.
 
 Accept the gated checkpoint terms on Hugging Face and set HF_TOKEN before running; missing gated access is reported at inference time. The adapter drives the upstream demo.py Fire entrypoint.
 
-## Evaluation benchmarks
+## Running in WorldFoundry
 
-- [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — Evaluates camera-path control quality of generated views.
+The catalog launch is `worldfoundry-eval run stable-virtual-camera --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-## Readiness and limitations
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-- Gated checkpoint: Stability AI community-license terms apply.
-- Full official-gallery artifact parity is pending gated access and a reviewed demo run.
+Recorded weight repositories include `stabilityai/stable-virtual-camera`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh stable-virtual-camera`. Add `--download` to fetch missing public checkpoints.
+
+Gated `stabilityai/stable-virtual-camera` — accept upstream terms before download; status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="stable-virtual-camera" locale="en" />

@@ -17,7 +17,7 @@ The recorded WorldFoundry variant is **`cosmos-transfer-2.5-2b`** only. Catalog 
 
 ## What it is for
 
-Turn structured control into photoreal world video. Launch `worldfoundry-eval run cosmos-transfer-2.5-2b` with `--pipeline.task-profile controlled-video`. Required inputs: `prompt`, `image`, `video`. The `actions` field is **`control_video`**. Artifact: `cosmos-transfer2.5-2b-controlled-video.mp4`.
+Turn structured control into photoreal world video. Launch `worldfoundry-eval run cosmos-transfer-2.5-2b`. Required inputs: `prompt`, `image`, `video`. The `actions` field is **`control_video`**. Artifact: `cosmos-transfer2.5-2b-controlled-video.mp4`.
 
 Give the native route a **raw RGB** control clip and it extracts **Canny** edges itself. Set `control_is_preprocessed` only when the clip is already an edge map. This is not text-to-world (Predict 2.5) and not T5-conditioned video2world (Predict 2).
 

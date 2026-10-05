@@ -1,39 +1,50 @@
 ---
 title: "LaST-R1"
-description: "LaST-R1 is an MIT-licensed VLA policy trained with reinforcement learning. The libero_10 RL checkpoint is staged locally, but WorldFoundry does not yet provide the model-specific rollout adapter needed for inference."
+description: "LaST-R1: vla and reinforcement learning; Planned."
+modelId: "last-r1"
 pageSource: generated
 ---
 
-**Publisher:** Open-source research release (institution not recorded) · Research lab
-
 LaST-R1 is an MIT-licensed VLA policy trained with reinforcement learning. The libero_10 RL checkpoint is staged locally, but WorldFoundry does not yet provide the model-specific rollout adapter needed for inference.
 
-**Catalog status:** Planned
+<ModelPaperFigures modelId="last-r1" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2604.28192](https://arxiv.org/abs/2604.28192).
 
-- [Project](https://siriyep.github.io/last-r1/)
-- [Paper](https://arxiv.org/abs/2604.28192)
-- [GitHub](https://github.com/CHEN-H01/LaST-R1)
-- [Hugging Face](https://huggingface.co/chenhao01/LaST-R1)
-- [Upstream README](https://github.com/CHEN-H01/LaST-R1#readme)
+Project page: [siriyep.github.io/last-r1](https://siriyep.github.io/last-r1/). Code: [CHEN-H01/LaST-R1](https://github.com/CHEN-H01/LaST-R1).
 
 <ModelCommandBuilder modelId="last-r1" locale="en" />
 
-## Architecture
+## What it is for
+
+Use `last-r1` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
 
 Task tags record a VLA plus reinforcement-learning design. Architecture internals beyond the official repository pointer (CHEN-H01/LaST-R1, pinned head ba4e9396) are not recorded in this repository.
 
+Catalog tasks include vla, reinforcement learning, and policy rollout.
+
+Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (Referenced in this model's manifest evidence notes).
+
 ## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `action_trace` and `last-r1_action_trace.json`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `LastR1Pipeline`.
+
+Family status: **Planned**.
 
 The local libero_10 checkpoint has both weight shards; libero_goal is incomplete. Inference remains unavailable until the official latent/action-token rollout is adapted and validated.
 
-## Evaluation benchmarks
+The local libero_10 RL checkpoint is staged, but the public policy runner is not ready.
 
-- [LIBERO](/docs/evaluation/benchmark-hub/libero) — Referenced in this model's manifest evidence notes.
+## Running in WorldFoundry
 
-## Readiness and limitations
+Launch `worldfoundry-eval run last-r1 --pipeline.task-profile interactive-video` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- No LaST-R1 policy inference or GPU validation is recorded in this repository.
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `chenhao01/LaST-R1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh last-r1`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Planned**.
 
 <ModelRelatedRecipes modelId="last-r1" locale="en" />

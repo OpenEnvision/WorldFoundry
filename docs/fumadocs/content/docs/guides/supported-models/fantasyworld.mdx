@@ -19,19 +19,19 @@ Runtime needs local FantasyWorld Wan2.1 (`acvlab/FantasyWorld-Wan2.1-I2V-14B-480
 
 ## What it is for
 
-Use `fantasyworld-wan21` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.
+Use `fantasyworld-wan21` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
 
 FantasyWorld augments a Wan video backbone with a unified 3D-prediction branch so that generated frames respect scene geometry (per arXiv 2509.21657). Runtime execution requires local FantasyWorld Wan2.1, Wan2.1 I2V, MoGe, and CUDA assets. It is published by Alibaba (Amap, Fantasy-AMAP).
 
-Catalog tasks include geometry-consistent world modeling and official-camera-world. Catalog aliases include `Geometry-Consistent World Modeling via Unified Video and 3D Prediction`. Also recorded: `fantasyworld-wan22`.
+Catalog tasks include geometry-consistent world modeling. Catalog aliases include `Geometry-Consistent World Modeling via Unified Video and 3D Prediction`. Also recorded: `fantasyworld-wan22`.
 
 Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Scores geometry-consistent generated worlds), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-control quality evaluation).
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (camera_path, camera_pose_sequence); artifacts `generated_world` and `fantasyworld.mp4`.
+Optional `input_path`, `prompt`, `camera_json_path`, `fps`, and `seed`; artifacts `generated_world` and `fantasyworld-wan21.mp4`.
 
-Recorded task profiles: `geometry-consistent world modeling` and `official-camera-world`. WorldFoundry binds `FantasyWorldPipeline`.
+CLI task profiles: `official-camera-world`. WorldFoundry binds `FantasyWorldPipeline`.
 
 Start on `fantasyworld-wan21`. The family registers 2 catalog variants (cards above): `fantasyworld-wan21` (`image-to-world-video`) — Runner parity pending; `fantasyworld-wan22` (`camera-controlled-world-video`) — Runner parity pending. Family status: **Verified**.
 
@@ -41,11 +41,11 @@ The default row resolves to the verified in-tree Wan2.1 runner — that is the r
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run fantasyworld-wan21 --pipeline.task-profile official-camera-world` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run fantasyworld-wan21 --pipeline.task-profile official-camera-world` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `acvlab/FantasyWorld-Wan2.1-I2V-14B-480P`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `Ruicheng/moge-2-vitl-normal`. Stage assets with `bash scripts/inference/prepare_model_infer.sh fantasyworld-wan21`.
+Recorded weight repositories include `acvlab/FantasyWorld-Wan2.1-I2V-14B-480P`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `Ruicheng/moge-2-vitl-normal`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh fantasyworld-wan21`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Verified**.
 

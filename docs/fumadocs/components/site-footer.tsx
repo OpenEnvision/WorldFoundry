@@ -4,7 +4,6 @@ import { WorldFoundryWordmarkLink } from '@/components/worldfoundry-wordmark';
 import {
   OPENENVISION_AWESOME_WORLD_MODELING,
   OPENENVISION_BLOGXIV_SITE,
-  OPENENVISION_GAIA_REPO,
   OPENENVISION_ORG,
   WORLDFOUNDRY_GITHUB_DISCUSSIONS,
   WORLDFOUNDRY_GITHUB_ISSUES,
@@ -61,7 +60,6 @@ const footerColumns: FooterColumn[] = [
       { label: 'Events', href: '/events' },
       { label: 'Awesome World Modeling', href: OPENENVISION_AWESOME_WORLD_MODELING, external: true },
       { label: 'BlogrXiv', href: OPENENVISION_BLOGXIV_SITE, external: true },
-      { label: 'Gaia', href: OPENENVISION_GAIA_REPO, external: true },
     ],
   },
 ];

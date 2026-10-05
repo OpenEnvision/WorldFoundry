@@ -27,9 +27,9 @@ Not [Marble 1.1](/docs/guides/supported-models/worldlabs-marble-1.1). Score on [
 
 ## Runtime contract
 
-Inputs, knobs, and artifacts are not recorded on this card.
+Optional `prompt`, `input_path`, `prompt_type`, `image_azimuths`, and `disable_recaption`.
 
-Recorded task profiles: `world-generation`, `assets`, and `hosted-api`. WorldFoundry binds `WorldLabsPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `WorldLabsPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -39,11 +39,11 @@ Hosted API Studio pipeline is available; users must provide their own provider A
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run worldlabs --pipeline.task-profile world-generation` to call the hosted route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run worldlabs --pipeline.task-profile default` to call the hosted route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 The environment profile is not recorded.
 
-Stage assets with `bash scripts/inference/prepare_model_infer.sh worldlabs`.
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh worldlabs`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

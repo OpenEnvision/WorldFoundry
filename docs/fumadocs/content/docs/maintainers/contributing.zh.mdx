@@ -65,7 +65,7 @@ WorldFoundry 目前只维护 **一个** Web 站点：`docs/fumadocs/` 下的 Fum
 
 在仓库根目录也可使用 `make docs-dev-fast`、`make docs-dev-ssd`、`make docs-dev-local` 或 `make docs-build-fast`。
 
-文档站点包含 **806 个 MDX 页面**（其中 532 个按模型生成）以及体积较大的生成 JSON 目录。在共享文件系统上，每次 `npm run dev` 都可能重跑 MDX codegen 并冷启动 webpack 缓存，体感较慢。
+文档站点包含数百个中英双语模型与 benchmark 页面，以及体积较大的生成 JSON 目录。在共享文件系统上，每次 `npm run dev` 都可能重跑 MDX codegen 并冷启动 webpack 缓存，体感较慢。
 
 **共享存储上最快的 dev（推荐）：**
 
@@ -75,7 +75,7 @@ npm run dev:ssd
 # 或从仓库根目录：make docs-dev-ssd
 ```
 
-`dev:ssd` 将热点路径符号链接到本地 SSD（默认 `~/.cache/worldfoundry-docs/<checkout-id>`）：`tmp/`（Next.js + webpack）、`.source/`（MDX codegen）、`node_modules/.cache`。源码仍留在共享 checkout，每次启动不做全量 rsync。首次运行可能一次性把现有 `tmp/` 或 `.source/` 迁移到 SSD。
+`dev:ssd` 将热点路径符号链接到本地 SSD（默认 `~/.cache/worldfoundry-docs/<checkout-id>`）：`tmp/`（Next.js + webpack）、`.source/`（MDX codegen）、`node_modules/.cache`。源码仍留在共享 checkout，每次启动不做全量 rsync。首次运行会迁移已有 `.source/` 产物；Next.js 与 webpack 缓存会在 SSD 上重建。
 
 日常 UI/CSS 打磨（已在本地快盘时）：
 
@@ -84,7 +84,7 @@ cd docs/fumadocs
 npm run dev:fast
 ```
 
-`dev:fast` 在 `.source/` 已是最新时会跳过 MDX 再生成，通过 `WF_DOCS_KEEP_DIST=1` 将 Next.js/webpack 缓存保留在 `tmp/` 下，并在 `generated/python-api.json` 存在时复用它。在共享存储上请优先用 `dev:ssd`——单独跑 `dev:fast` 仍会把缓存写在共享 `tmp/` 上（除非已执行 `ssd:setup`）。
+`dev:fast` 直接复用已有 `.source/`，不检查内容是否更新，并在 `generated/python-api.json` 存在时复用它。新增页面或修改导航、frontmatter 后需要重新生成 MDX。开发缓存默认放在 `tmp/`；共享存储上优先用 `dev:ssd` 将缓存放到本地 SSD。
 
 若 `node_modules` 读写也慢，可将整个站点镜像到本地 SSD：
 
@@ -93,7 +93,7 @@ cd docs/fumadocs
 npm run dev:local
 ```
 
-`dev:local` 会复用 `/tmp/wf-docs-dev/WorldFoundry` 下已有镜像（强制全量刷新：`bash scripts/dev-local-ssd.sh sync`）。
+`dev:local` 会刷新 `/tmp/wf-docs-dev/<checkout-id>/WorldFoundry` 下当前 checkout 专用镜像的源码，并复用已安装依赖。可通过 `WF_DOCS_LOCAL_ROOT` 指定其他镜像根目录。
 
 本地快速验证静态导出（不跑 CI 漂移检查）：
 
@@ -114,7 +114,7 @@ npm run build:fast
             <code>WF_DOCS_SKIP_MDX=1</code>
           </div>
         </div>
-        <p>启动 dev 时不运行 <code>fumadocs-mdx</code>（重启最快；改 MDX 后需手动 <code>npm run mdx:generate</code>）。</p>
+        <p>启动 dev 时复用已有 MDX 产物；产物缺失时会生成一次。新增页面或修改导航、frontmatter 后运行 <code>npm run mdx:generate</code>；<code>WF_DOCS_REFRESH_MDX=1</code> 可强制重新生成。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -138,7 +138,7 @@ npm run build:fast
             <code>WF_DOCS_KEEP_DIST=1</code>
           </div>
         </div>
-        <p>将 <code>.next</code> 缓存放在 <code>docs/fumadocs/tmp/</code> 而非 <code>/tmp</code>。</p>
+        <p>快速脚本仍传入此变量；缓存位置由 <code>next.config.mjs</code> 和下列缓存变量决定。开发使用 <code>tmp/next</code>，生产构建使用 <code>.next</code>。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -146,7 +146,7 @@ npm run build:fast
             <code>WF_DOCS_CACHE_ROOT</code>
           </div>
         </div>
-        <p>覆盖 Next.js 与 webpack 缓存根目录。</p>
+        <p>覆盖 webpack 缓存根目录；通过 <code>dev:ssd</code> 配合 <code>WF_DOCS_SSD_ROOT</code> 可迁移全部热点缓存。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">

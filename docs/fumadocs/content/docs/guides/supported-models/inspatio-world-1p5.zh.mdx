@@ -42,11 +42,12 @@ print(result["artifact_path"])
 复现时，先将官方仓库切到 catalog 记录的固定版本，并就位本地组件权重。请使用新的输出目录；官方视频样例没有附带深度，`prepare-depth` 会调用共享 DA3 补齐。
 
 ```bash
+# 先根据 nvidia-smi 将 INSPATIO_GPU_ID 设为可用 GPU 的编号或 UUID。
 INSPATIO_UPSTREAM=/path/to/inspatio-world-v1.5
 INSPATIO_CHECKPOINTS=/models
 INSPATIO_VALIDATION=/tmp/inspatio-v15-validation
 for mode in prepare prepare-depth native upstream compare; do
-  CUDA_VISIBLE_DEVICES=0 WAN_DISABLE_FA3=1 python tests/manual/inspatio_v15_regression.py "$mode" \
+  CUDA_VISIBLE_DEVICES="${INSPATIO_GPU_ID}" WAN_DISABLE_FA3=1 python tests/manual/inspatio_v15_regression.py "$mode" \
     --upstream "$INSPATIO_UPSTREAM" --checkpoints "$INSPATIO_CHECKPOINTS" \
     --output "$INSPATIO_VALIDATION"
 done

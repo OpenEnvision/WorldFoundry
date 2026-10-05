@@ -24,7 +24,7 @@ WRBench 相机控制走这条运行时，所以控制向评测看 [CameraBench](
 
 ## 在 WorldFoundry 中运行
 
-集成已记录；**runner 与 demo 一致性仍为 pending**。命令能启动，不等于本工作区已有 checkpoint 驱动的 GPU 产物。在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）里用面向 I2V 的 InP 权重（`alibaba-pai/EasyAnimateV5.1-7b-zh-InP`，就位路径 `$WORLDFOUNDRY_CKPT_DIR/hfd/alibaba-pai--EasyAnimateV5.1-7b-zh-InP`）跑 `worldfoundry-eval run easyanimate --pipeline.task-profile text-to-video`。相关卡片还包括 `EasyAnimateV5.1-12b-zh`。缺失的 checkpoint 会在运行时报告，不会自动下载。
+集成已记录；**runner 与 demo 一致性仍为 pending**。命令能启动，不等于本工作区已有 checkpoint 驱动的 GPU 产物。在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）里用面向 I2V 的 InP 权重（`alibaba-pai/EasyAnimateV5.1-7b-zh-InP`，就位路径 `$WORLDFOUNDRY_CKPT_DIR/hfd/alibaba-pai--EasyAnimateV5.1-7b-zh-InP`）跑 `worldfoundry-eval run easyanimate`。相关卡片还包括 `EasyAnimateV5.1-12b-zh`。缺失的 checkpoint 会在运行时报告，不会自动下载。
 
 ## 最小评测
 

@@ -23,13 +23,13 @@ Use `cut3r` for catalog geometry inference. Choose it when the artifact is a rec
 
 A recurrent transformer maintains a persistent scene state; each new frame updates the state and outputs pointmaps and camera parameters online (per the upstream publication). The recorded routes cover raw point-cloud export and a two-stage 3DGS pipeline; weights are apache-2.0. It is published by UC Berkeley.
 
-Catalog tasks include 3d-reconstruction, 3dgs, point-cloud, and official-export. Documented outputs include point cloud.
+Catalog tasks include 3d-reconstruction, 3dgs, and point-cloud. Documented outputs include point cloud.
 
 ## Runtime contract
 
-Required `input_path` (Required; default=/workspace/worldfoundry/data/test_cases/cut3r/examples/001); optional `size` (Optional; default=512), `vis_threshold` (Optional; default=1.5), and `revisit` (Optional; default=1).
+Optional `input_path`, `size`, `vis_threshold`, and `revisit`.
 
-Recorded task profiles: `3d-reconstruction`, `3dgs`, `point-cloud`, `official-export`, and `two-stage-3dgs`. WorldFoundry binds `CUT3RPipeline`.
+CLI task profiles: `official-export` and `two-stage-3dgs`. WorldFoundry binds `CUT3RPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -43,7 +43,7 @@ The catalog launch is `worldfoundry-eval run cut3r --pipeline.task-profile offic
 
 The environment profile is not recorded.
 
-Recorded weight repositories include `liguang0115/cut3r`. Stage assets with `bash scripts/inference/prepare_model_infer.sh cut3r`.
+Recorded weight repositories include `liguang0115/cut3r`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh cut3r`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

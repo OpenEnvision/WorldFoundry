@@ -29,9 +29,9 @@ Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmar
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `dense_point_tracks`; artifacts `ati-wan21-14b.mp4`.
+Optional `prompt`, `input_path`, `interactions`, and `operator_kwargs`; artifacts `ati-wan21-14b.mp4`.
 
-Recorded task profiles: `camera-controlled-video` and `image-to-video`. WorldFoundry binds `ATIPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `ATIPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -43,11 +43,11 @@ Checkpoint loading builds a **read-only union** of ATI weights and locally stage
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run ati-wan21-14b --pipeline.task-profile camera-controlled-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run ati-wan21-14b --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `bytedance-research/ATI`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `bytedance-research/ATI` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh ati-wan21-14b`.
+Recorded weight repositories include `bytedance-research/ATI`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `bytedance-research/ATI` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh ati-wan21-14b`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

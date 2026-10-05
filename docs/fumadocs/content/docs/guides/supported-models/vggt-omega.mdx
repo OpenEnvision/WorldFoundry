@@ -27,9 +27,9 @@ Not [VGGT](/docs/guides/supported-models/vggt) and [VGGT-World](/docs/guides/sup
 
 ## Runtime contract
 
-Required `image` and `video`; optional `prompt` and `actions` (camera_view, image_sequence); artifacts `scene_conf20.0_blackFalse_whiteFalse_camTrue_skyFalse_max200k.glb`.
+Optional `input_path`, `interactions`, `camera_view`, `task_type`, and `image_resolution`; artifacts `scene_conf20.0_blackFalse_whiteFalse_camTrue_skyFalse_max200k.glb`.
 
-Recorded task profiles: `3d-reconstruction`, `gaussian-splatting`, and `novel-view-synthesis`. WorldFoundry binds `VGGTOmegaPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `VGGTOmegaPipeline`.
 
 Family status: **Verified**.
 
@@ -39,11 +39,11 @@ VGGT-Omega uses an official-architecture representation runner plus the existing
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run vggt-omega --pipeline.task-profile 3d-reconstruction` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run vggt-omega --pipeline.task-profile interactive-video` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `facebook/VGGT-Omega`. Stage assets with `bash scripts/inference/prepare_model_infer.sh vggt-omega`.
+Recorded weight repositories include `facebook/VGGT-Omega`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vggt-omega`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include cc-by-nc-4.0; status: **Verified**.
 

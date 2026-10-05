@@ -43,7 +43,7 @@ from textual.widgets import (
 
 from worldfoundry.core.io.paths import checkpoint_root_path, conda_envs_root_path
 
-from .tui_brand import brand_logo_aspect_ratio, render_brand_logo
+from .tui_brand import brand_logo_aspect_ratio
 from .tui_discovery import (
     ASTRA_CAM_TYPE_OPTIONS,
     INFER_VARIANT_TO_MODEL,
@@ -65,6 +65,7 @@ from .tui_discovery import (
     resolve_infer_model_variant,
 )
 from .tui_icons import icons
+from .tui_logo import BrandLogo, logo_cell_aspect_ratio
 
 # ── Module constants ──────────────────────────────────────────────
 
@@ -367,15 +368,7 @@ class WorldFoundryTui(App[None]):
             with Vertical(id="left-column"):
                 with Vertical(id="status-pane", classes="pane"):
                     with Collapsible(title="OpenEnvision", id="brand-collapse", collapsed=False):
-                        yield Static(
-                            render_brand_logo(
-                                width_chars=self._brand_logo_width(),
-                                dark=self.current_theme.dark,
-                                background=self.current_theme.panel,
-                            ),
-                            id="brand-logo",
-                            markup=True,
-                        )
+                        yield BrandLogo(width_chars=self._brand_logo_width(), id="brand-logo")
                     with Horizontal(id="action-row"):
                         yield Label("Mode:", id="action-label")
                         yield Select(icons.action_options(), value=self.action, id="action", allow_blank=False)
@@ -704,10 +697,11 @@ class WorldFoundryTui(App[None]):
     def _sync_responsive_layout(self) -> None:
         """Reserve enough width for buttons and stack form fields on small screens."""
         width = self.size.width
-        self.screen.set_class(width < 80, "-compact")
-        self.screen.set_class(width < 128 or self.size.height < 44, "-hide-brand")
-        self.screen.set_class(self.size.height < 32, "-short")
-        self.screen.set_class(width < 96 or 128 <= width < 160, "-stack-actions")
+        screen = self.query_one("#main-content").screen
+        screen.set_class(width < 80, "-compact")
+        screen.set_class(width < 128 or self.size.height < 44, "-hide-brand")
+        screen.set_class(self.size.height < 32, "-short")
+        screen.set_class(width < 96 or 128 <= width < 160, "-stack-actions")
         self.sub_title = "Inference · Evaluation · Studio" if width >= 110 else ""
         self.query_one(Footer).compact = width < 100
         self.call_after_refresh(self._refresh_catalog_layout)
@@ -2010,12 +2004,13 @@ class WorldFoundryTui(App[None]):
             return
 
     def _brand_logo_width(self) -> int:
-        """Fit the swan to its widget and reserve space for the model catalog."""
-        max_rows = max(6, min(18, int(self.size.height * 0.3)))
-        max_width = int((max_rows - 2) * 2 * brand_logo_aspect_ratio())
+        """Fit the complete official logo while reserving space for the catalog."""
+        # Keep eight catalog rows after the status, search, and window chrome.
+        max_rows = max(6, self.size.height - 31)
+        max_width = int(max_rows * brand_logo_aspect_ratio() / logo_cell_aspect_ratio())
         available = max(1, int(self.size.width * 0.4) - 8)
         try:
-            measured_width = self.query_one("#brand-logo", Static).content_size.width
+            measured_width = self.query_one("#brand-logo", BrandLogo).content_size.width
             if measured_width:
                 available = measured_width
         except NoMatches:
@@ -2025,7 +2020,7 @@ class WorldFoundryTui(App[None]):
     def _sync_brand_logo(self) -> None:
         """Re-render the brand logo at the correct width, using a short timer to debounce layout changes."""
         try:
-            logo = self.query_one("#brand-logo", Static)
+            logo = self.query_one("#brand-logo", BrandLogo)
         except NoMatches:
             return
         
@@ -2034,17 +2029,8 @@ class WorldFoundryTui(App[None]):
             self._logo_update_timer.stop()
             
         def do_update():
-            # NOTE: For round borders, wait for size layout to settle before rendering
-            try:
-                logo.update(
-                    render_brand_logo(
-                        width_chars=self._brand_logo_width(),
-                        dark=self.current_theme.dark,
-                        background=self.current_theme.panel,
-                    )
-                )
-            except Exception:
-                pass
+            if logo.is_mounted:
+                logo.set_logo_width(self._brand_logo_width())
             
         self._logo_update_timer = self.set_timer(0.05, do_update)
 

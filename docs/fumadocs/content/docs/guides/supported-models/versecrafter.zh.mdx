@@ -1,40 +1,50 @@
 ---
 title: "VerseCrafter"
-description: "腾讯 ARC 的 VerseCrafter 是基于 4D 控制的相机可控图生视频世界模型：几何感知渲染阶段产出 4D 控制信号，引导扩散阶段沿指定相机路径生成。WorldFoundry 将官方源码（revision 008693b5）与精确的 VideoX-Fun 子模块（revision 246a0e3a）内置树内，checkpoint 引用为 TencentARC/VerseCrafter。"
+description: "VerseCrafter（Tencent ARC Lab）：相机可控视频、图生视频；已验证。"
+modelId: "versecrafter"
 pageSource: generated
 ---
 
-**发表机构:** 腾讯 ARC 实验室 · 企业
-image → video
-
 腾讯 ARC 的 VerseCrafter 是基于 4D 控制的相机可控图生视频世界模型：几何感知渲染阶段产出 4D 控制信号，引导扩散阶段沿指定相机路径生成。WorldFoundry 将官方源码（revision 008693b5）与精确的 VideoX-Fun 子模块（revision 246a0e3a）内置树内，checkpoint 引用为 TencentARC/VerseCrafter。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="versecrafter" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2601.05138](https://arxiv.org/abs/2601.05138)。
 
-- [项目主页](https://sixiaozheng.github.io/VerseCrafter_page/)
-- [论文](https://arxiv.org/abs/2601.05138)
-- [GitHub](https://github.com/TencentARC/VerseCrafter)
-- [上游 README](https://github.com/TencentARC/VerseCrafter#readme)
+项目页：[sixiaozheng.github.io/VerseCrafter_page](https://sixiaozheng.github.io/VerseCrafter_page/)。代码：[TencentARC/VerseCrafter](https://github.com/TencentARC/VerseCrafter)。
 
 <ModelCommandBuilder modelId="versecrafter" locale="zh" />
 
-## 架构
+## 用来做什么
 
-树内接通两个阶段：仅相机的 4D 控制渲染，随后是扩散阶段。扩散骨干来自锁定版本的 VideoX-Fun 子模块。更多架构内部细节仓库未记录。
+用 `versecrafter` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+
+树内接通两个阶段：仅相机的 4D 控制渲染，随后是扩散阶段。扩散骨干来自锁定版本的 VideoX-Fun 子模块。更多架构内部细节仓库未记录。该模型由腾讯 ARC 实验室发布。
+
+catalog 记录的任务包括 相机可控视频、图生视频、世界模型。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（4D 控制生成的相机路径跟随）。
 
 ## 运行时契约
 
-部署前务必注意许可：上游为仅研究、非商用，且排除面向欧盟的使用。本地真实权重短视频已验证，但后段有可见伪影；尚未测量与官方输出的一致性。
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `versecrafter.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `VerseCrafterPipeline`。
 
-- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 4D 控制生成的相机路径跟随。
+系列状态：**已验证**。
 
-## 就绪状态与限制
+`default` 记录默认值：frames=81, fps=16, height=480, width=832, seed=2025。
 
-- 仅研究、非商用许可，且排除面向欧盟的使用。
-- 短片 GPU 运行后段存在遮挡解除伪影；相机路径精度和官方输出一致性尚未测量。
+部署前务必注意许可：上游为仅研究、非商用，且排除面向欧盟的使用。 本地真实权重短视频已验证，但后段有可见伪影；尚未测量与官方输出的一致性。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run versecrafter --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `TencentARC/VerseCrafter`、`Wan-AI/Wan2.1-T2V-14B`、`Ruicheng/moge-2-vitl-normal`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh versecrafter`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
 
 <ModelRelatedRecipes modelId="versecrafter" locale="zh" />

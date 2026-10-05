@@ -31,9 +31,9 @@ catalog 记录的任务包括 单目深度估计、米制深度估计、几何�
 
 ## 运行时契约
 
-必填 `image`；可选 `prompt`、`video`、`actions`；产物 `depth-anything-v3-prior.npz`。
+可选 `input_path`、`focal_length`、`execute`、`max_points`；产物 `depth-anything-v3-prior.npz`。
 
-记录的任务 profile：`monocular-depth-estimation`、`metric-depth-estimation`、`geometry-prior`。绑定的 pipeline 类是 `DepthAnythingV3PriorPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `DepthAnythingV3PriorPipeline`。
 
 系列状态：**已验证**。
 
@@ -45,11 +45,11 @@ catalog 记录的任务包括 单目深度估计、米制深度估计、几何�
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run depth-anything-v3-prior --pipeline.task-profile monocular-depth-estimation`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+catalog 启动命令是 `worldfoundry-eval run depth-anything-v3-prior --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `depth-anything/DA3METRIC-LARGE`。就位权重用 `bash scripts/inference/prepare_model_infer.sh depth-anything-v3-prior`。
+记录的权重仓库包括 `depth-anything/DA3METRIC-LARGE`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh depth-anything-v3-prior`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

@@ -17,7 +17,7 @@ Catalog aliases include `scope-world-model` and `zizhaotong/SCOPE`.
 
 ## What it is for
 
-Drive SCOPE as an action-conditioned world route. Launch `worldfoundry-eval run scope` with `--pipeline.task-profile interactive-world-model` — required `image` and `prompt`; out `generated_video` and `scope.mp4`.
+Drive SCOPE as an action-conditioned world route. Launch `worldfoundry-eval run scope` — required `image` and `prompt`; out `generated_video` and `scope.mp4`.
 
 Score on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench).
 
@@ -27,6 +27,6 @@ Required: `image` and `prompt`. Optional: `video`. Actions: action_parquet. Arti
 
 ## Running in WorldFoundry
 
-Run in the unified environment `worldfoundry-unified-cu128` (Python 3.10, CUDA 12.8). Stage `zizhaotong/SCOPE` locally — the runtime does not download weights. Launch `worldfoundry-eval run scope` with `--pipeline.task-profile interactive-world-model`.
+Run in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `zizhaotong/SCOPE` locally — the runtime does not download weights. Launch `worldfoundry-eval run scope`.
 
 <ModelRelatedRecipes modelId="scope" locale="en" />

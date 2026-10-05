@@ -27,9 +27,9 @@ Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benc
 
 ## Runtime contract
 
-Required `prompt`, `image`, `pose`, and `action_matrix`; artifacts `lingbot-world-act.mp4`.
+Optional `prompt`, `image`, `pose`, `action_matrix`, and `seed`; artifacts `lingbot-world-act.mp4`.
 
-Recorded task profiles: `interactive-world-model` and `action-conditioned-video`. WorldFoundry binds `LingBotPipeline`.
+CLI task profiles: `interactive-world-model`, `action-conditioned-video`, and `world_model`. WorldFoundry binds `LingBotPipeline`.
 
 Family status: **Public runner verified for the 17-frame, 8-step configuration**.
 
@@ -43,7 +43,7 @@ The catalog launch is `worldfoundry-eval run lingbot-world-act --pipeline.task-p
 
 Use the dedicated `lingbot-world` environment (Python 3.10, CUDA 12.1). The unified environment previously produced near-black act2cam output.
 
-Recorded weight repositories include `robbyant/lingbot-world-base-act-preview`. Stage assets with `bash scripts/inference/prepare_model_infer.sh lingbot-world-act`.
+Recorded weight repositories include `robbyant/lingbot-world-base-act-preview`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-world-act`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Public runner verified for the 17-frame, 8-step configuration**. The official 161-frame recipe remains untested.
 

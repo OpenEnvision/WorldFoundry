@@ -23,17 +23,17 @@ DreamDojo 是英伟达的动作条件机器人世界模型：给定统一 384 �
 
 DreamDojo 基于动作条件的 Cosmos Predict 运行时，配 Groot Dreams 数据加载器与 LAM 模块，内置于 synthesis/visual_generation/dreamdojo/dreamdojo_runtime。记录的动作契约映射为 GR-1 [0,58)、G1 [58,101)、YAM [101,147)、AgiBot [147,169)、MANO [220,352)、潜在动作 [352,384)。该模型由英伟达（NVIDIA）发布。
 
-catalog 记录的任务包括 世界模型、robot-world-generation、interactive-robot-world-generation。同系列还有 `dreamdojo-distilled-gr1-realtime`。
+catalog 记录的任务包括 世界模型。同系列还有 `dreamdojo-distilled-gr1-realtime`。
 
 记录的评测入口包括[EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)（机器人视频预测的具身世界模型评测）。
 
 ## 运行时契约
 
-必填 `image`、`instruction`、`prompt`、`video`；可选 `actions` (robot_action, unified_384d_action, action_file, dataset_action_sequence)、`dataset_path` (datasets/PhysicalAI-Robotics-GR00T-Teleop-GR1/GR1_robot)；产物 `dreamdojo_world.mp4`。
+可选 `prompt`、`input_path`、`interactions`、`num_samples`；产物 `dreamdojo_world.mp4`。
 
-记录的任务 profile：`world_model`、`robot-world-generation`、`interactive-robot-world-generation`。绑定的 pipeline 类是 `DreamDojoPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `DreamDojoPipeline`。
 
-起步 variant 是 `dreamdojo-2b-gr1-action-conditioned`。catalog 登记了 2 个 variant（上方卡片）：`dreamdojo-2b-gr1-action-conditioned`（`robot-world-generation`）：Runner 一致性待确认、`dreamdojo-distilled-gr1-realtime`（`interactive-robot-world-generation`）：Runner 一致性待确认。系列状态：**计划中**。
+起步 variant 是 `dreamdojo-2b-gr1-action-conditioned`。catalog 登记了 2 个 variant（上方卡片）：`dreamdojo-2b-gr1-action-conditioned`（`robot-world-generation`）：计划中、`dreamdojo-distilled-gr1-realtime`（`interactive-robot-world-generation`）：计划中。系列状态：**计划中**。
 
 nvidia/DreamDojo checkpoint 已本地就位（含 2B_GR1_post-train 目录），但完整一致性仍需转换后的 model_ema_bf16.pt、官方 GR-1 评估数据集与 CUDA 12.8 级主机。 它有意不被归类为 VLA 策略或普通视频生成模型。
 
@@ -41,9 +41,9 @@ GPU 一致性待转换后的 checkpoint 产物与 GR-1 评估数据集。
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run dreamdojo-2b-gr1-action-conditioned --pipeline.task-profile robot-world-generation`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+catalog 启动命令是 `worldfoundry-eval run dreamdojo-2b-gr1-action-conditioned --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-记录的权重仓库包括 `nvidia/DreamDojo`。就位权重用 `bash scripts/inference/prepare_model_infer.sh dreamdojo-2b-gr1-action-conditioned`。
+记录的权重仓库包括 `nvidia/DreamDojo`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh dreamdojo-2b-gr1-action-conditioned`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 other:nvidia-open-model-license；状态：**计划中**。
 

@@ -15,7 +15,7 @@ RISE 是 OpenDriveLab 的 **Pi0.5 架构动作策略**。论文是 [RISE: Self-I
 
 ## 用来做什么
 
-滚动兼容的 Pi0.5 动作 checkpoint：`prompt` + `image`（外加 14 维 `state` 与三路相机）进，经 `RisePipeline` 写出 `action_trace` / `rise_action_trace.json`。任务 profile 为 `vla`、`vla.action_prediction`、`embodied_policy`。默认启动 `worldfoundry-eval run rise --pipeline.task-profile vla`。
+滚动兼容的 Pi0.5 动作 checkpoint：`prompt` + `image`（外加 14 维 `state` 与三路相机）进，经 `RisePipeline` 写出 `action_trace` / `rise_action_trace.json`。任务 profile 为 `vla`、`vla.action_prediction`、`embodied_policy`。默认启动 `worldfoundry-eval run rise`。
 
 公开 Hugging Face 仓库 `OpenDriveLab-org/RISE_Assets` **只提供动力学模型与样例数据**。你必须自行就位训练好的动作策略权重（`model.safetensors` 或 JAX Orbax `params/`）、分位数 `norm_stats.json`、本地 PaliGemma SentencePiece tokenizer，以及 FAST tokenizer。缺任何一项，运行时构建会尽早失败。不使用源码 checkout，也不走运行时网络。
 
@@ -26,6 +26,6 @@ RISE 是 OpenDriveLab 的 **Pi0.5 架构动作策略**。论文是 [RISE: Self-I
 
 ## 在 WorldFoundry 中运行
 
-在统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，`torch>=2.5`）里运行 `worldfoundry-eval run rise --pipeline.task-profile vla`。集成状态为 **integrated**；runner / demo 为 **未记录**，本卡片也没有公开的已训练动作 checkpoint id。期望 `get_action` 产物前，先把权重就位到本地。
+在统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，`torch>=2.5`）里运行 `worldfoundry-eval run rise`。集成状态为 **integrated**；runner / demo 为 **未记录**，本卡片也没有公开的已训练动作 checkpoint id。期望 `get_action` 产物前，先把权重就位到本地。
 
 <ModelRelatedRecipes modelId="rise" locale="zh" />

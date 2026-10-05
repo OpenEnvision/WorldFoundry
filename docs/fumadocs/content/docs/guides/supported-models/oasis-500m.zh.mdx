@@ -1,39 +1,48 @@
 ---
 title: "Oasis 500M"
-description: "Oasis 500M（open-oasis）是「可游玩 Minecraft」世界模型的开源版本：动作条件扩散 Transformer，从上下文帧与键鼠动作渲染下一游戏帧。树内运行时已通过真实权重 GPU 推理；使用时仍需就位 Etched/oasis-500m 权重、提示图像或视频以及动作张量。"
+description: "Oasis 500M（Etched / Decart）：交互式世界模型、Minecraft 世界模型；已验证。"
+modelId: "oasis-500m"
 pageSource: generated
 ---
 
-**发表机构:** Etched / Decart · 企业
-
 Oasis 500M（open-oasis）是「可游玩 Minecraft」世界模型的开源版本：动作条件扩散 Transformer，从上下文帧与键鼠动作渲染下一游戏帧。树内运行时已通过真实权重 GPU 推理；使用时仍需就位 Etched/oasis-500m 权重、提示图像或视频以及动作张量。
 
-**目录状态:** 运行时已移植
+<ModelPaperFigures modelId="oasis-500m" locale="zh" />
 
-## 上游来源
-
-- [项目主页](https://oasis-model.github.io/)
-- [GitHub](https://github.com/etched-ai/open-oasis)
-- [Hugging Face](https://huggingface.co/Etched/oasis-500m)
-- [上游 README](https://github.com/etched-ai/open-oasis#readme)
+项目页：[oasis-model.github.io](https://oasis-model.github.io/)。代码：[etched-ai/open-oasis](https://github.com/etched-ai/open-oasis)。
 
 <ModelCommandBuilder modelId="oasis-500m" locale="zh" />
 
-## 架构
+## 用来做什么
 
-按上游发布，ViT VAE 压缩帧，500M 扩散 Transformer 以历史帧与动作为条件生成下一帧（MIT 许可）。除此之外的内部细节此处未记录。
+需要动作条件世界步进时选 `oasis-500m`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+
+按上游发布，ViT VAE 压缩帧，500M 扩散 Transformer 以历史帧与动作为条件生成下一帧（MIT 许可）。除此之外的内部细节此处未记录。该模型由Etched / Decart发布。
+
+catalog 记录的任务包括 交互式世界模型、Minecraft 世界模型、动作条件视频。别名包括 `open-oasis`、`oasis`。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（动作条件游戏世界滚动生成质量）。
 
 ## 运行时契约
 
-按官方 Open-Oasis 格式提供 25 列动作张量。上游转换器把 MineRL camera[0] 映射为 cameraX、camera[1] 映射为 cameraY，再分别按 (raw-40)/40 归一化。MineRL 定义 camera[0] 为垂直俯仰、camera[1] 为水平偏航，因此 cameraX 虽名为 X，实际是俯仰。依据：https://github.com/etched-ai/open-oasis/blob/f59deef2c019c212bd0c5a3a5b986a51f3701847/utils.py 和 https://github.com/minerllabs/minerl/blob/cdeae668c2f334e3c9117adf651b5a94436b45f8/minerl/herobraine/hero/handlers/agent/actions/camera.py。使用本地权重时，WORLDFOUNDRY_CKPT_DIR 应指向包含 Etched--oasis-500m 的目录；缺少资产会返回 blocked 诊断。
+可选 `prompt`、`input_path`、`interactions`、`frames`、`fps`；产物 `oasis-500m.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `Oasis500MPipeline`。
 
-- [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) — 动作条件游戏世界滚动生成质量。
+系列状态：**已验证**。
 
-## 就绪状态与限制
+`interactive-video` 记录默认值：frames=32, fps=20。
 
-- 执行受 checkpoint/环境/动作资产限制。
-- 500M 研究模型：相较商业 demo 存在短时漂移与低分辨率。
+按官方 Open-Oasis 格式提供 25 列动作张量。 上游转换器把 MineRL camera[0] 映射为 cameraX、camera[1] 映射为 cameraY，再分别按 (raw-40)/40 归一化。 MineRL 定义 camera[0] 为垂直俯仰、camera[1] 为水平偏航，因此 cameraX 虽名为 X，实际是俯仰。 依据：https://github.com/etched-ai/open-oasis/blob/f59deef2c019c212bd0c5a3a5b986a51f3701847/utils.py 和 https://github.com/minerllabs/minerl/blob/cdeae668c2f334e3c9117adf651b5a94436b45f8/minerl/herobraine/hero/handlers/agent/actions/camera.py。 使用本地权重时，WORLDFOUNDRY_CKPT_DIR 应指向包含 Etched--oasis-500m 的目录；缺少资产会返回 blocked 诊断。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run oasis-500m --pipeline.task-profile interactive-video` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `Etched/oasis-500m`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh oasis-500m`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 mit；状态：**已验证**。
 
 <ModelRelatedRecipes modelId="oasis-500m" locale="zh" />

@@ -1,40 +1,50 @@
 ---
 title: "Pandora"
-description: "Pandora is an early general world model with natural-language actions and video states: it simulates world states as video and lets you steer the simulation with free-text actions at any step."
+description: "Pandora from Maitrix.org (UC San Diego / MBZUAI): diffusion-world-model and world-generation; Planned."
+modelId: "pandora"
 pageSource: generated
 ---
 
-**Publisher:** Maitrix.org (UC San Diego / MBZUAI) · Research lab
-text → video
-
 Pandora is an early general world model with natural-language actions and video states: it simulates world states as video and lets you steer the simulation with free-text actions at any step. In this catalog the model, ChatUniVi, and DynamiCrafter runtime modules are vendored in-tree; full generation stays blocked because the official weights are hidden by data-license constraints.
 
-**Catalog status:** Planned
+<ModelPaperFigures modelId="pandora" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2406.09401](https://arxiv.org/abs/2406.09401).
 
-- [Project](https://world-model.maitrix.org/)
-- [Paper](https://arxiv.org/abs/2406.09401)
-- [GitHub](https://github.com/maitrix-org/Pandora)
-- [Upstream README](https://github.com/maitrix-org/Pandora#readme)
+Project page: [world-model.maitrix.org](https://world-model.maitrix.org/). Code: [maitrix-org/Pandora](https://github.com/maitrix-org/Pandora).
 
 <ModelCommandBuilder modelId="pandora" locale="en" />
 
-## Architecture
+## What it is for
 
-Per the upstream release, an autoregressive LLM backbone (ChatUniVi-family) connects to a video diffusion decoder (DynamiCrafter-family) so language actions steer video-state rollouts. The vendored runtime lives under synthesis/visual_generation/pandora/pandora_runtime.
+Pick `pandora` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+Per the upstream release, an autoregressive LLM backbone (ChatUniVi-family) connects to a video diffusion decoder (DynamiCrafter-family) so language actions steer video-state rollouts. The vendored runtime lives under synthesis/visual_generation/pandora/pandora_runtime. It is published by Maitrix.org (UC San Diego / MBZUAI).
+
+Catalog tasks include diffusion-world-model, world-generation, and text-to-video. Catalog aliases include `pandora-world`. Documented modalities: text in, video out.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Language-action world-rollout quality).
 
 ## Runtime contract
 
+Required `prompt`; optional `seed`, `frames`, `fps`, `height`, and `width`; artifacts `pandora.mp4`.
+
+CLI task profiles: `diffusion-world-model`, `world-generation`, `text-to-video`, and `video_generation`. WorldFoundry binds `PandoraPipeline`.
+
+Family status: **Planned**.
+
 PandoraSynthesis provides a runtime-plan wrapper; real generation requires caller-provided official-compatible checkpoints, since official weights are hidden or unavailable.
 
-## Evaluation benchmarks
+Runtime source is vendored in-tree; full generation remains blocked by hidden official weights.
 
-- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Language-action world-rollout quality.
+## Running in WorldFoundry
 
-## Readiness and limitations
+The catalog launch is `worldfoundry-eval run pandora --pipeline.task-profile diffusion-world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- Official weights are hidden by data-license constraints — caller-provided checkpoints required.
-- Research prototype: quality trails newer world models.
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, Prepare-only).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh pandora`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Planned**.
 
 <ModelRelatedRecipes modelId="pandora" locale="en" />

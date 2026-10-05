@@ -17,7 +17,7 @@ Sana 是英伟达的高效生成系列，也是 video 类别中 variant 最多�
 
 ## 用来做什么
 
-在 WorldFoundry 里用 `sana-600m-512px` 做 catalog 文生视频推理。这条配方让你按已记录的 T2V profile 启动，而不用自己拼上游 demo。
+任务是 catalog 静帧而不是视频时，用 `sana-600m-512px`。
 
 Sana 的高效来自深压缩自编码器（32x）、线性注意力 DiT 块与小型 LLM 文本编码器，见论文（arXiv 2410.10629）。记录的流式路径使用内置官方 BF16 CLI、混合 DiT 块、融合 GDN 核与因果 LTX-2 VAE 封装，源码同步自固定的 NVlabs/Sana commit；论文中的 MPQ 部署路径不在公开 BF16 配方内。该模型由英伟达（NVIDIA）发布。
 
@@ -29,11 +29,11 @@ catalog 记录的任务包括 文生图、文生视频、视频到视频、image
 
 ## 运行时契约
 
-必填 `image`、`prompt`、`video`；产物 `sana.png`。
+可选 `prompt`、`negative_prompt`、`input_path`、`interactions`、`frames`；产物 `sana.png`。
 
-记录的任务 profile：`text-to-image`、`text-to-video`、`video-to-video`、`image-conditioned-generation`。绑定的 pipeline 类是 `SanaPipeline`。
+CLI task profile：`interactive-video`、`video-to-video`。绑定的 pipeline 类是 `SanaPipeline`。
 
-起步 variant 是 `sana-600m-512px`。catalog 登记了 20 个 variant（上方卡片）：`sana-600m-512px`（`text-to-image`）：已验证、`sana-600m-1024px`（`text-to-image`）：已验证、`sana-1600m-512px`（`text-to-image`）：已验证、`sana-1600m-512px-multiling`（`text-to-image`）：已验证、`sana-1600m-1024px`（`text-to-image`）：已验证 等。系列状态：**Runner 一致性待确认**。
+起步 variant 是 `sana-600m-512px`。catalog 登记了 20 个 variant（上方卡片）：`sana-600m-512px`（`text-to-image`）：Runner 一致性待确认、`sana-600m-1024px`（`text-to-image`）：Runner 一致性待确认、`sana-1600m-512px`（`text-to-image`）：Runner 一致性待确认、`sana-1600m-512px-multiling`（`text-to-image`）：Runner 一致性待确认、`sana-1600m-1024px`（`text-to-image`）：Runner 一致性待确认 等。系列状态：**Runner 一致性待确认**。
 
 SANA-Streaming 接受源视频路径或 hf:// URI。 完整 50 步/更长帧数的官方质量一致性仍在等待。
 
@@ -43,11 +43,11 @@ SANA-Streaming 接受源视频路径或 hf:// URI。 完整 50 步/更长帧数�
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run sana-600m-512px --pipeline.task-profile text-to-image`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+catalog 启动命令是 `worldfoundry-eval run sana-600m-512px --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `Efficient-Large-Model/Sana_600M_512px`、`Efficient-Large-Model/Sana_600M_1024px`、`Efficient-Large-Model/Sana_1600M_512px` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh sana-600m-512px`。
+记录的权重仓库包括 `Efficient-Large-Model/Sana_600M_512px`、`Efficient-Large-Model/Sana_600M_1024px`、`Efficient-Large-Model/Sana_1600M_512px` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh sana-600m-512px`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

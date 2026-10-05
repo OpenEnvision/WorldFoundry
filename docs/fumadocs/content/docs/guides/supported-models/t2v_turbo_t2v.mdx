@@ -29,9 +29,9 @@ Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Inputs, knobs, and artifacts are not recorded on this card.
+Optional `prompt`, `frames`, `fps`, `height`, and `width`.
 
-Recorded task profiles: `text-to-video`. WorldFoundry binds `T2VTurboT2VPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `T2VTurboT2VPipeline`.
 
 Family status: **Static load only**.
 
@@ -41,11 +41,11 @@ Uses the shared WorldFoundry native diffusion assembler, runner, checkpoint load
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run t2v_turbo_t2v --pipeline.task-profile text-to-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run t2v_turbo_t2v --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 The environment profile is not recorded.
 
-Recorded weight repositories include `jiachenli-ucsb/T2V-Turbo-VC2` and `VideoCrafter/VideoCrafter2`. Stage assets with `bash scripts/inference/prepare_model_infer.sh t2v_turbo_t2v`.
+Recorded weight repositories include `jiachenli-ucsb/T2V-Turbo-VC2` and `VideoCrafter/VideoCrafter2`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh t2v_turbo_t2v`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Static load only**.
 

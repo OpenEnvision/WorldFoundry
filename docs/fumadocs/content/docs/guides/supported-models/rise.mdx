@@ -15,7 +15,7 @@ The paper's training story is imagination RL on a compositional world model. Thi
 
 ## What it is for
 
-Roll out a compatible Pi0.5 action checkpoint: `prompt` + `image` (+ 14-D `state` and three cameras) in; `action_trace` / `rise_action_trace.json` out through `RisePipeline`. Task profiles are `vla`, `vla.action_prediction`, and `embodied_policy`. Default launch is `worldfoundry-eval run rise` with `--pipeline.task-profile vla`.
+Roll out a compatible Pi0.5 action checkpoint: `prompt` + `image` (+ 14-D `state` and three cameras) in; `action_trace` / `rise_action_trace.json` out through `RisePipeline`. Task profiles are `vla`, `vla.action_prediction`, and `embodied_policy`. Default launch is `worldfoundry-eval run rise`.
 
 The public Hugging Face repo `OpenDriveLab-org/RISE_Assets` ships the **dynamics model and sample data only**. You must stage trained action-policy weights (`model.safetensors` or JAX Orbax `params/`), quantile `norm_stats.json`, a local PaliGemma SentencePiece tokenizer, and the FAST tokenizer. Construction fails early if any of those are missing. No source checkout or runtime network access is used.
 
@@ -27,6 +27,6 @@ Accepted local formats are PyTorch safetensors and JAX Orbax params. Auto precis
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run rise --pipeline.task-profile vla` in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, `torch>=2.5`). Integration is recorded as **integrated**; runner / demo status is **not recorded**, and no public trained action checkpoint id is on this card. Stage weights locally before you expect a `get_action` artifact.
+Launch `worldfoundry-eval run rise` in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, `torch>=2.5`). Integration is recorded as **integrated**; runner / demo status is **not recorded**, and no public trained action checkpoint id is on this card. Stage weights locally before you expect a `get_action` artifact.
 
 <ModelRelatedRecipes modelId="rise" locale="en" />

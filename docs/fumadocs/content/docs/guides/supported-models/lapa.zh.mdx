@@ -27,9 +27,9 @@ catalog 记录的任务包括 va、vam、latent_action、video_action_modeling�
 
 ## 运行时契约
 
-必填 `image`、`instruction`、`prompt`、`video`；可选 `actions` (latent_action_tokens, video_context)；产物 `lapa_action_tokens.json`。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`seed`；产物 `lapa_action_tokens.json`。
 
-记录的任务 profile：`va`、`vam`、`latent_action`、`video_action_modeling`、`vam.video_action_modeling`。绑定的 pipeline 类是 `LAPAPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LAPAPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -39,11 +39,11 @@ LAPA latent action runtime is vendored in-tree; py_compile, from_pretrained, pla
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run lapa-7b-openx --pipeline.task-profile vam.video_action_modeling` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run lapa-7b-openx --pipeline.task-profile interactive-video` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是独立 profile `worldfoundry-lapa-jax-cu118`（Python 3.10，CUDA 11.8）。
 
-记录的权重仓库包括 `latent-action-pretraining/LAPA-7B-openx`、`latent-action-pretraining/LAPA-7B-openx`。就位权重用 `bash scripts/inference/prepare_model_infer.sh lapa-7b-openx`。
+记录的权重仓库包括 `latent-action-pretraining/LAPA-7B-openx`、`latent-action-pretraining/LAPA-7B-openx`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lapa-7b-openx`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 mit；状态：**Runner 一致性待确认**。
 

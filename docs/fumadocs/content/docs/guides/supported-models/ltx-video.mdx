@@ -39,7 +39,7 @@ Upstream 0.9.8 cards advertise **1216×704 @ 30 fps** and recommend guidance 3�
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run ltx-video-i2v --pipeline.task-profile image-to-video` in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `$WORLDFOUNDRY_HFD_ROOT/Lightricks--LTX-Video` with both `ltxv-13b-0.9.8-distilled.safetensors` and `ltxv-spatial-upscaler-0.9.8.safetensors` plus the T5 encoder/tokenizer shards. Missing weights are reported at runtime.
+Launch `worldfoundry-eval run ltx-video-i2v` in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `$WORLDFOUNDRY_HFD_ROOT/Lightricks--LTX-Video` with both `ltxv-13b-0.9.8-distilled.safetensors` and `ltxv-spatial-upscaler-0.9.8.safetensors` plus the T5 encoder/tokenizer shards. Missing weights are reported at runtime.
 
 Recorded Hugging Face repos: `Lightricks/LTX-Video` (the 0.9.8 distilled files WorldFoundry actually opens), plus `Lightricks/LTX-Video-0.9.5`, `Lightricks/LTX-Video-0.9.7-dev`, and `Lightricks/LTX-Video-0.9.8-13B-distilled`. Every card is tagged license **`other`**. The GitHub tree is Apache-2.0 — review the HF card before commercial use.
 

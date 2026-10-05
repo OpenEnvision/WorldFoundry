@@ -29,9 +29,9 @@ catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测�
 
 ## 运行时契约
 
-必填 `image`、`prompt`；可选 `model_id` (db-cogact)、`state`、`image_slots` (front, left_wrist, right_wrist)、`policy_family`、`action_representation`；产物 `action_trace`、`db-cogact_action_trace.json`。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`db-cogact_action_trace.json`。
 
-记录的任务 profile：`vla`、`vla.action_prediction`、`vla.policy_rollout`。绑定的 pipeline 类是 `DBCogACTPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `DBCogACTPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -45,11 +45,11 @@ Workspace 的 LIBERO 路径用了 `Dexmal/libero-db-cogact`，写出形状 **`[1
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run db-cogact-libero --pipeline.task-profile vla.policy_rollout` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run db-cogact-libero --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.10，CUDA 12.8，torch>=2.6.0）。
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.6.0）。
 
-记录的权重仓库包括 `Dexmal/libero-db-cogact`、`Dexmal/Dexbotic-CogACT-SArm`、`Dexmal/Dexbotic-CogACT-HArm` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh db-cogact-libero`。
+记录的权重仓库包括 `Dexmal/libero-db-cogact`、`Dexmal/Dexbotic-CogACT-SArm`、`Dexmal/Dexbotic-CogACT-HArm` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh db-cogact-libero`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
 

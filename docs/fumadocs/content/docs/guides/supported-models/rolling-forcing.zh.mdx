@@ -1,49 +1,50 @@
 ---
 title: "RollingForcing"
-description: "RollingForcing 自回归地流式生成数分钟长的视频：滚动窗口去噪加 attention sink，避免了朴素流式生成的漂移崩坏（论文 arXiv 2509.25161）。本 catalog 中 runner 达到 full_demo_verified——用发布的确切 checkpoint 完成完整 Workspace 推理，126 个潜帧解码为 501 帧 832x480、16 fps 的 H.264，A100 上耗时 31.31 秒的视频内容。"
+description: "RollingForcing（Tencent (ARC Lab) / Nanyang Technological University）：文生视频、长视频生成；已验证; Rolling Forcing。"
+modelId: "rolling-forcing"
 pageSource: generated
 ---
 
-**发表机构:** 腾讯（ARC Lab）/ 南洋理工大学 · 企业
-text → video
-[Rolling Forcing: Autoregressive Long Video Diffusion in Real Time](https://arxiv.org/abs/2509.25161) (2025)
-
 RollingForcing 自回归地流式生成数分钟长的视频：滚动窗口去噪加 attention sink，避免了朴素流式生成的漂移崩坏（论文 arXiv 2509.25161）。本 catalog 中 runner 达到 full_demo_verified——用发布的确切 checkpoint 完成完整 Workspace 推理，126 个潜帧解码为 501 帧 832x480、16 fps 的 H.264，A100 上耗时 31.31 秒的视频内容。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="rolling-forcing" locale="zh" />
 
-## 上游来源
+记录论文为[Rolling Forcing: Autoregressive Long Video Diffusion in Real Time](https://arxiv.org/abs/2509.25161)（2025）。
 
-- [项目主页](https://kunhao-liu.github.io/Rolling_Forcing_Webpage/)
-- [论文](https://arxiv.org/abs/2509.25161)
-- [GitHub](https://github.com/TencentARC/RollingForcing)
-- [Hugging Face](https://huggingface.co/TencentARC/RollingForcing)
-- [上游 README](https://github.com/TencentARC/RollingForcing#readme)
-
-<figure className="wf-recipe-media is-diagram">
-  <DocsImage src="/models/rolling-forcing/paper.png" alt="Rolling Forcing: Autoregressive Long Video Diffusion in Real Time" />
-  <figcaption>Rolling Forcing: Autoregressive Long Video Diffusion in Real Time</figcaption>
-</figure>
+项目页：[kunhao-liu.github.io/Rolling_Forcing_Webpage](https://kunhao-liu.github.io/Rolling_Forcing_Webpage/)。代码：[TencentARC/RollingForcing](https://github.com/TencentARC/RollingForcing)。
 
 <ModelCommandBuilder modelId="rolling-forcing" locale="zh" />
 
-## 架构
+## 用来做什么
 
-树内仅推理 runner 复用现有 forcing pipeline、因果 Wan variant、attention sink/KV 缓存、核心调度器、注意力分发、分布式辅助与视频 I/O；执行绝不导入外部 RollingForcing 仓库。静态集成遵循官方五步、三潜帧块配置。
+需要本系列的文生视频时选 `rolling-forcing`：prompt 进、生成视频出。它是 catalog 上的 T2V 起步线，不是编辑器，也不是世界模型步进器。
+
+树内仅推理 runner 复用现有 forcing pipeline、因果 Wan variant、attention sink/KV 缓存、核心调度器、注意力分发、分布式辅助与视频 I/O；执行绝不导入外部 RollingForcing 仓库。静态集成遵循官方五步、三潜帧块配置。该模型由腾讯（ARC Lab）/ 南洋理工大学发布。
+
+catalog 记录的任务包括 文生视频、长视频生成、autoregressive-video-generation。别名包括 `RollingForcing`、`rolling_forcing`、`rollingforcing`。模态上，它接受文本，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（长文生视频输出的质量评测）、[ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)（长时程时间连贯性评测）。
 
 ## 运行时契约
 
-发布路径仅文生视频——未验证的图生视频行为不对外宣传。BF16 与显存容量是硬件要求；官方 126 潜帧解码为 16 fps 长视频，更小的三的倍数可作冒烟运行。上游条款仅允许学术使用。
+可选 `prompt`、`frames`、`seed`、`num_samples`、`use_ema`；产物 `generated_video`、`rolling-forcing.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`text-to-long-video`。绑定的 pipeline 类是 `RollingForcingPipeline`。
 
-- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — 长文生视频输出的质量评测。
-- [ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench) — 长时程时间连贯性评测。
+系列状态：**已验证**。
 
-## 就绪状态与限制
+`text-to-long-video` 记录默认值：frames=126, seed=0。
 
-- 仅限学术使用的许可：禁止一切商用与生产用途。
-- 发布路径仅支持文生视频。
-- 已验证功能性 demo；不声称与上游参考产物的像素级数值一致。
+发布路径仅文生视频——未验证的图生视频行为不对外宣传。 BF16 与显存容量是硬件要求；官方 126 潜帧解码为 16 fps 长视频，更小的三的倍数可作冒烟运行。 上游条款仅允许学术使用。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run rolling-forcing --pipeline.task-profile text-to-long-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.4）。
+
+记录的权重仓库包括 `TencentARC/RollingForcing`、`Wan-AI/Wan2.1-T2V-1.3B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh rolling-forcing`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 rollingforcing-academic-only；状态：**已验证**。
 
 <ModelRelatedRecipes modelId="rolling-forcing" locale="zh" />

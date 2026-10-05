@@ -65,7 +65,7 @@ Every site must keep **fast iteration** npm scripts in-repo. Production CI is un
 
 From the repo root you can also use `make docs-dev-fast`, `make docs-dev-ssd`, `make docs-dev-local`, or `make docs-build-fast`.
 
-The docs app has **806 MDX pages** (532 per-model recipes) and large generated JSON catalogs. On a shared filesystem, `npm run dev` can feel slow because each start may rerun MDX codegen and cold webpack caches.
+The docs app contains hundreds of bilingual model and benchmark pages and large generated JSON catalogs. On a shared filesystem, `npm run dev` can feel slow because each start may rerun MDX codegen and cold webpack caches.
 
 **Fastest dev on shared storage (recommended):**
 
@@ -75,7 +75,7 @@ npm run dev:ssd
 # or from repo root: make docs-dev-ssd
 ```
 
-`dev:ssd` symlinks hot paths to local SSD (`~/.cache/worldfoundry-docs/<checkout-id>` by default): `tmp/` (Next.js + webpack), `.source/` (MDX codegen), and `node_modules/.cache`. Sources stay on the shared checkout — no full rsync on each start. First run may migrate existing `tmp/` or `.source/` to SSD once.
+`dev:ssd` symlinks hot paths to local SSD (`~/.cache/worldfoundry-docs/<checkout-id>` by default): `tmp/` (Next.js + webpack), `.source/` (MDX codegen), and `node_modules/.cache`. Sources stay on the shared checkout — no full rsync on each start. First run migrates existing `.source/` output; Next.js and webpack caches are rebuilt on SSD.
 
 For day-to-day UI/CSS polish when already on fast local disk:
 
@@ -84,7 +84,7 @@ cd docs/fumadocs
 npm run dev:fast
 ```
 
-`dev:fast` skips MDX regeneration when `.source/` is already current, keeps the Next.js/webpack cache under `tmp/` (`WF_DOCS_KEEP_DIST=1`), and reuses `generated/python-api.json` unless missing. On shared storage, prefer `dev:ssd` instead — `dev:fast` alone still writes caches to the shared `tmp/` unless symlinks are set up.
+`dev:fast` reuses existing `.source/` output without checking for content changes and reuses `generated/python-api.json` unless missing. Regenerate MDX after adding pages or changing navigation or frontmatter. Development caches use `tmp/` by default; on shared storage, prefer `dev:ssd` to place them on local SSD.
 
 If `node_modules` I/O is also slow, mirror the whole site to local SSD:
 
@@ -93,7 +93,7 @@ cd docs/fumadocs
 npm run dev:local
 ```
 
-`dev:local` reuses an existing mirror under `/tmp/wf-docs-dev/WorldFoundry` when present (run `bash scripts/dev-local-ssd.sh sync` to force a full refresh).
+`dev:local` refreshes source files in a checkout-specific mirror under `/tmp/wf-docs-dev/<checkout-id>/WorldFoundry` and reuses its installed dependencies. Set `WF_DOCS_LOCAL_ROOT` to choose another mirror root.
 
 To smoke-test static export locally without CI drift checks:
 
@@ -114,7 +114,7 @@ Useful environment variables (`WF_DOCS_*`):
             <code>WF_DOCS_SKIP_MDX=1</code>
           </div>
         </div>
-        <p>Never rerun <code>fumadocs-mdx</code> on dev start (fastest restarts; run <code>npm run mdx:generate</code> manually after MDX edits).</p>
+        <p>Reuse existing MDX output on dev start; missing output is generated once. Run <code>npm run mdx:generate</code> after adding pages or changing navigation or frontmatter. <code>WF_DOCS_REFRESH_MDX=1</code> forces regeneration.</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -138,7 +138,7 @@ Useful environment variables (`WF_DOCS_*`):
             <code>WF_DOCS_KEEP_DIST=1</code>
           </div>
         </div>
-        <p>Store <code>.next</code> cache under <code>docs/fumadocs/tmp/</code> instead of <code>/tmp</code>.</p>
+        <p>Retained in fast-script invocations; cache placement is controlled by <code>next.config.mjs</code> and the cache variables below. Development uses <code>tmp/next</code>; production uses <code>.next</code>.</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">

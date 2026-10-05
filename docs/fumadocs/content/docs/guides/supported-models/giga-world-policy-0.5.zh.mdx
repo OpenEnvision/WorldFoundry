@@ -29,9 +29,9 @@ catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测�
 
 ## 运行时契约
 
-必填 `image`、`prompt`；可选 `model_id` (giga-world-policy-0.5)、`state`、`preferred_cameras` (cam_high, cam_left_wrist, cam_right_wrist)、`image_size` (384, 320)、`configured_action_horizon` (48)；产物 `action_trace`、`giga_world_policy_0_5_action_trace.json`。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`giga_world_policy_0_5_action_trace.json`。
 
-记录的任务 profile：`vla`、`vla.action_prediction`、`vla.world_action_model`。绑定的 pipeline 类是 `GigaWorldPolicyPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `GigaWorldPolicyPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -43,11 +43,11 @@ catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测�
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run giga-world-policy-0.5 --pipeline.task-profile vla` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run giga-world-policy-0.5 --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.7.1）。
 
-记录的权重仓库包括 `open-gigaai/Giga-World-Policy-0.5`、`Wan-AI/Wan2.2-TI2V-5B-Diffusers`。就位权重用 `bash scripts/inference/prepare_model_infer.sh giga-world-policy-0.5`。
+记录的权重仓库包括 `open-gigaai/Giga-World-Policy-0.5`、`Wan-AI/Wan2.2-TI2V-5B-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh giga-world-policy-0.5`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

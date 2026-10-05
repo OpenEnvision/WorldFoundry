@@ -27,9 +27,9 @@ Catalog tasks include human-action-generation, motion-generation, and world-mode
 
 ## Runtime contract
 
-Required `prompt` and `video`; optional `actions` (whole_body_motion, control_sequence) and `image`; artifacts `action_trace` and `motionbricks_runtime_plan.json`.
+Artifacts `action_trace` and `motionbricks_runtime_plan.json`.
 
-Recorded task profiles: `human-action-generation`, `motion-generation`, and `world-model`. WorldFoundry binds `MotionBricksPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `MotionBricksPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -39,11 +39,11 @@ MotionBricks official source route is registered; motion/robot assets are runtim
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run motionbricks --pipeline.task-profile human-action-generation` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run motionbricks --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Stage assets with `bash scripts/inference/prepare_model_infer.sh motionbricks`.
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh motionbricks`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

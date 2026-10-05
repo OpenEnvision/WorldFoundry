@@ -33,9 +33,9 @@ Not [SANA](/docs/guides/supported-models/sana). Score on [SANA-WM 80-Scene Bench
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (camera_action, world_action, interaction); artifacts `sana-wm.mp4`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `guidance_scale`; artifacts `sana-wm-streaming.mp4`.
 
-Recorded task profiles: `world-model`, `camera-controlled-video`, and `controllable-world-generation`. WorldFoundry binds `SanaWMPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `SanaWMPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -45,9 +45,9 @@ WorldFoundry registers an in-tree resident pipeline with configurable multi-GPU 
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run sana-wm-streaming --pipeline.task-profile camera-controlled-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run sana-wm-streaming --pipeline.task-profile interactive-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-Recorded weight repositories include `Efficient-Large-Model/SANA-WM_streaming` and `Efficient-Large-Model/SANA-WM_bidirectional`. Stage assets with `bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`.
+Recorded weight repositories include `Efficient-Large-Model/SANA-WM_streaming` and `Efficient-Large-Model/SANA-WM_bidirectional`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Runner parity pending**.
 

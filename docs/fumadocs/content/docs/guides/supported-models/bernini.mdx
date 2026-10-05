@@ -35,9 +35,9 @@ ByteDance Bernini latent semantic planning video. Distill siblings are R-1.3B / 
 
 ## Runtime contract
 
-Required `prompt`, `image`, `images`, and `video`; optional `task_type` (t2i, i2i, t2v, v2v, r2v, rv2v); artifacts `generated_image`, `generated_video`, and `bernini.mp4`.
+Optional `prompt`, `task_type`, `neg_prompt`, `num_frames`, and `height`; artifacts `generated_image`, `generated_video`, and `bernini.mp4`.
 
-Recorded task profiles: `text-to-image`, `image-to-image`, `text-to-video`, `video-to-video`, `reference-to-video`, and `reference-video-to-video` among others. WorldFoundry binds `BerniniWorldFoundryPipeline`.
+CLI task profiles: `t2v`, `t2i`, `i2i`, `v2v`, `r2v`, and `rv2v`. WorldFoundry binds `BerniniWorldFoundryPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -47,11 +47,11 @@ Integration is complete but runner parity is pending_gpu_validation: the officia
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run bernini --pipeline.task-profile t2i`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run bernini --pipeline.task-profile t2v`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-bernini-cu124` (Python 3.11, CUDA 12.4, torch==2.5.1+cu124).
 
-Recorded weight repositories include `ByteDance/Bernini-Diffusers` and `ByteDance/Bernini-Diffusers`. Stage assets with `bash scripts/inference/prepare_model_infer.sh bernini`.
+Recorded weight repositories include `ByteDance/Bernini-Diffusers` and `ByteDance/Bernini-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh bernini`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Runner parity pending**.
 

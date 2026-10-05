@@ -1,45 +1,48 @@
 ---
 title: "ReCamMaster"
-description: "ReCamMaster re-renders an existing video along a new camera trajectory — camera-controlled generative rendering from a single video."
+description: "ReCamMaster from Kuaishou (Kling Team): camera-controlled video rerendering; Verified."
+modelId: "recammaster"
 pageSource: generated
 ---
 
-**Publisher:** Kuaishou (Kling Team) · Company
-[ReCamMaster: Camera-Controlled Generative Rendering from A Single Video](https://arxiv.org/abs/2503.11647) (2025)
-
 ReCamMaster re-renders an existing video along a new camera trajectory — camera-controlled generative rendering from a single video. In this catalog the in-tree pipeline, operator, and synthesis runtime live under the Kling namespace, and the runner is verified for the official camera-trajectory video-to-video demo with local ReCamMaster/Wan assets.
 
-**Catalog status:** Runner verified
+<ModelPaperFigures modelId="recammaster" locale="en" />
 
-## Upstream sources
-
-- [Project](https://jianhongbai.github.io/ReCamMaster/)
-- [Paper](https://arxiv.org/abs/2503.11647)
-- [GitHub](https://github.com/KlingAIResearch/ReCamMaster)
-- [Upstream README](https://github.com/KlingAIResearch/ReCamMaster#readme)
-
-<figure className="wf-recipe-media is-diagram">
-  <DocsImage src="/models/recammaster/paper.png" alt="ReCamMaster: Camera-Controlled Generative Rendering from A Single Video" />
-  <figcaption>ReCamMaster: Camera-Controlled Generative Rendering from A Single Video</figcaption>
-</figure>
+Project page: [jianhongbai.github.io/ReCamMaster](https://jianhongbai.github.io/ReCamMaster/). Code: [KlingAIResearch/ReCamMaster](https://github.com/KlingAIResearch/ReCamMaster).
 
 <ModelCommandBuilder modelId="recammaster" locale="en" />
 
-## Architecture
+## What it is for
 
-Per the paper (arXiv 2503.11647), ReCamMaster conditions a pre-trained text-to-video model (Wan-family in the open release) on the source video through frame-dimension conditioning, letting camera trajectories be swapped at generation time. Runtime execution requires local Wan2.1, the ReCamMaster checkpoint, torchvision, and CUDA assets.
+Use `recammaster` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+Per the paper (arXiv 2503.11647), ReCamMaster conditions a pre-trained text-to-video model (Wan-family in the open release) on the source video through frame-dimension conditioning, letting camera trajectories be swapped at generation time. Runtime execution requires local Wan2.1, the ReCamMaster checkpoint, torchvision, and CUDA assets. It is published by Kuaishou (Kling Team).
+
+Catalog tasks include camera-controlled video rerendering. Catalog aliases include `Camera-Controlled Generative Rendering from A Single Video`.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Directly evaluates camera-trajectory control quality).
 
 ## Runtime contract
 
-The open-source reference runtime is checkpoint/GPU gated — no empty runner shim is registered. Stage Wan2.1 plus the ReCamMaster checkpoint before submitting jobs; per-run visual QA is tracked outside the catalog.
+Optional `prompt`, `input_path`, `frames`, `fps`, and `steps`; artifacts `generated_video`, `generated_4d_scene`, and `recammaster.mp4`.
 
-## Evaluation benchmarks
+CLI task profiles: `default`. WorldFoundry binds `ReCamMasterPipeline`.
 
-- [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — Directly evaluates camera-trajectory control quality.
+Family status: **Verified**.
 
-## Readiness and limitations
+Recorded `default` defaults: frames=81, fps=8.
 
-- Requires local Wan2.1 and ReCamMaster checkpoints plus CUDA.
-- Re-rendering quality is bounded by the source video content — unseen regions are hallucinated.
+The open-source reference runtime is checkpoint/GPU gated — no empty runner shim is registered.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run recammaster --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `KlingTeam/ReCamMaster-Wan2.1` and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh recammaster`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
 
 <ModelRelatedRecipes modelId="recammaster" locale="en" />

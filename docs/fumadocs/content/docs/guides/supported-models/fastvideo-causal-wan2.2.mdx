@@ -17,7 +17,7 @@ Paper: [arXiv 2606.03159](https://arxiv.org/abs/2606.03159). Project: [nvidia.gi
 
 Causal Wan2.2 fast video. Not the full Wan2.2 family card.
 
-Launch `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b` with `--pipeline.task-profile image-to-video` and an input image.
+Launch `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b` and an input image.
 
 ## Runtime contract
 
@@ -34,6 +34,6 @@ Required: `prompt` and `image`; artifacts: `fastvideo-causal-wan2.2-i2v-14b.mp4`
 
 ## Run in WorldFoundry
 
-Status: **checkpoint-backed 81-frame inference verified** at 848×464 on an H100. Run `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b --pipeline.task-profile image-to-video` with an image. The matching official FastVideo request produced 73 frames because its denoiser drops the final two latent frames. The shared frames have matching composition and forward motion; pixel-level parity remains open because the implementations use different random generators and latent precision. License: Apache-2.0. Catalog VRAM is unset.
+Status: **checkpoint-backed 81-frame inference verified** at 848×464 on an H100. Run `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b` with an image. The matching official FastVideo request produced 73 frames because its denoiser drops the final two latent frames. The shared frames have matching composition and forward motion; pixel-level parity remains open because the implementations use different random generators and latent precision. License: Apache-2.0. Catalog VRAM is unset.
 
 <ModelRelatedRecipes modelId="fastvideo-causal-wan2.2" locale="en" />

@@ -1,41 +1,50 @@
 ---
 title: "InternVLA-A1-3B"
-description: "InternVLA-A1-3B is the A1 generation of InternRobotics' InternVLA series: a 3B policy pairing a Qwen3-VL-2B backbone with an action expert and an NVIDIA Cosmos tokenizer wrapper. Base and RoboTwin checkpoints are confirmed (InternVLA-A1-3B…"
+description: "InternVLA-A1-3B from Shanghai AI Laboratory (InternRobotics): vla and robot policy; Static load only; dedicated `worldfoundry-vla-internvla-a1`."
+modelId: "internvla-a1"
 pageSource: generated
 ---
 
-**Publisher:** Shanghai AI Laboratory (InternRobotics) · Research lab
-
 InternVLA-A1-3B is the A1 generation of InternRobotics' InternVLA series: a 3B policy pairing a Qwen3-VL-2B backbone with an action expert and an NVIDIA Cosmos tokenizer wrapper. Base and RoboTwin checkpoints are confirmed (InternVLA-A1-3B, InternVLA-A1-3B-RoboTwin) under CC-BY-NC-SA-4.0, and the full graph runs in-tree with static verification complete.
 
-**Catalog status:** Runtime ported
+<ModelPaperFigures modelId="internvla-a1" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2607.04988](https://arxiv.org/abs/2607.04988).
 
-- [Project](https://internrobotics.github.io/internvla-a15.github.io)
-- [Paper](https://arxiv.org/abs/2607.04988)
-- [GitHub](https://github.com/InternRobotics/InternVLA-A-series)
-- [Hugging Face](https://huggingface.co/InternRobotics/InternVLA-A1-3B)
-- [Hugging Face](https://huggingface.co/InternRobotics/InternVLA-A1-3B-RoboTwin)
-- [Upstream README](https://github.com/InternRobotics/InternVLA-A-series#readme)
+Project page: [internrobotics.github.io/internvla-a15.github.io](https://internrobotics.github.io/internvla-a15.github.io). Code: [InternRobotics/InternVLA-A-series](https://github.com/InternRobotics/InternVLA-A-series).
 
 <ModelCommandBuilder modelId="internvla-a1" locale="en" />
 
-## Architecture
+## What it is for
 
-The A1-3B graph couples Qwen3-VL-2B vision-language encoding with an expert action head, a Cosmos-Tokenizer-CI8x8 wrapper, flow sampling, and a normalization route — all in-tree, local-only, with no remote checkpoint code.
+Pick `internvla-a1` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+
+The A1-3B graph couples Qwen3-VL-2B vision-language encoding with an expert action head, a Cosmos-Tokenizer-CI8x8 wrapper, flow sampling, and a normalization route — all in-tree, local-only, with no remote checkpoint code. It is published by Shanghai AI Laboratory (InternRobotics).
+
+Catalog tasks include vla, robot policy, policy rollout, and embodied benchmark.
+
+Recorded evaluation entry points include [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) (Dedicated InternVLA-A1-3B-RoboTwin checkpoint).
 
 ## Runtime contract
 
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `internvla_a1_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `InternVLAA1Synthesis`.
+
+Family status: **Static load only**.
+
 Stage the A1-3B (or RoboTwin) checkpoint plus Qwen3-VL-2B-Instruct and the Cosmos tokenizer locally. Note the non-commercial license.
 
-## Evaluation benchmarks
+The A1-3B Qwen3-VL/expert graph, Cosmos wrapper, preprocessing, flow sampler, and normalization route are in tree.
 
-- [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) — Dedicated InternVLA-A1-3B-RoboTwin checkpoint.
+## Running in WorldFoundry
 
-## Readiness and limitations
+Launch `worldfoundry-eval run internvla-a1 --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- CC-BY-NC-SA-4.0: non-commercial use only.
-- GPU rollout validation is not recorded in this repository (static verification only).
+It runs in the dedicated environment `worldfoundry-vla-internvla-a1` (Python 3.10, CUDA 12.8, torch>=2.7,\<2.8).
+
+Recorded weight repositories include `InternRobotics/InternVLA-A1-3B`, `InternRobotics/InternVLA-A1-3B-RoboTwin`, and `Qwen/Qwen3-VL-2B-Instruct` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh internvla-a1`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Static load only**.
 
 <ModelRelatedRecipes modelId="internvla-a1" locale="en" />

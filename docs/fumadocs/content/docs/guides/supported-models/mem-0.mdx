@@ -27,9 +27,9 @@ Recorded evaluation entry points include [RoboTwin 2.0](/docs/evaluation/benchma
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `state`; optional `model_id` (mem-0), `episode_id`, `reset`, `policy_family`, and `action_representation`; artifacts `action_trace` and `mem-0_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `mem-0_action_trace.json`.
 
-Recorded task profiles: `vla`, `vla.policy_rollout`, `robot_policy`, and `memory_policy`. WorldFoundry binds `Mem0Pipeline`.
+CLI task profiles: `default`. WorldFoundry binds `Mem0Pipeline`.
 
 Family status: **Static load only**.
 
@@ -41,11 +41,11 @@ The official execution checkpoint is stored as nine byte-split parts. The in-tre
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run mem-0 --pipeline.task-profile vla` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run mem-0 --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-vla-mem-0` (Python 3.11, Cu124 Or Newer, torch>=2.6).
 
-Recorded weight repositories include `qiuly/Mem-0-m1mix-RMBench` and `Qwen/Qwen3-VL-2B-Instruct`. Stage assets with `bash scripts/inference/prepare_model_infer.sh mem-0`.
+Recorded weight repositories include `qiuly/Mem-0-m1mix-RMBench` and `Qwen/Qwen3-VL-2B-Instruct`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh mem-0`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Static load only**.
 

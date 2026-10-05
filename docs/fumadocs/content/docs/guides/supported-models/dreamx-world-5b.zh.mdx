@@ -19,7 +19,7 @@ DreamX-World 5B AR 是高德的**因果自回归**世界：潜变量、注意力
 
 滚一块常驻因果 AR 世界，不是长时程分数卡。
 
-启动 `worldfoundry-eval run dreamx-world-5b --pipeline.task-profile world_model`。
+启动 `worldfoundry-eval run dreamx-world-5b`。
 
 评测入口：[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（世界滚动生成的总体质量）。
 
@@ -38,6 +38,6 @@ DreamX-World 5B AR 是高德的**因果自回归**世界：潜变量、注意力
 
 ## 在 WorldFoundry 中运行
 
-状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `GD-ML/DreamX-World-5B`、`Wan-AI/Wan2.2-TI2V-5B` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dreamx-world-5b --pipeline.task-profile world_model`。catalog 未记录 VRAM。
+状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `GD-ML/DreamX-World-5B`、`Wan-AI/Wan2.2-TI2V-5B` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dreamx-world-5b`。catalog 未记录 VRAM。
 
 <ModelRelatedRecipes modelId="dreamx-world-5b" locale="zh" />

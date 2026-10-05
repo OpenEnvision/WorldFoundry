@@ -27,9 +27,9 @@ LTX-2.5 audio-video generation from a prompt. Sibling cards cover 2.x and LTX-Vi
 
 ## Runtime contract
 
-Required `prompt`; optional `image`, `video`, and `actions` (seed, height, width, num_frames, fps, offload_mode, quantization); artifacts `generated_video` and `ltx-2.5.mp4`.
+Optional `prompt`, `frames`, `fps`, `height`, and `width`; artifacts `generated_video` and `ltx-2.5.mp4`.
 
-Recorded task profiles: `text-to-video`, `image-to-video`, and `audio-video-generation`. WorldFoundry binds `LTX25Pipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `LTX25Pipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -39,9 +39,9 @@ Command construction and official split-component mapping are validated without 
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run ltx-2.5 --pipeline.task-profile text-to-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run ltx-2.5 --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-Recorded weight repositories include `Lightricks/LTX-2.5`. Stage assets with `bash scripts/inference/prepare_model_infer.sh ltx-2.5`.
+Recorded weight repositories include `Lightricks/LTX-2.5`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh ltx-2.5`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

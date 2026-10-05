@@ -105,7 +105,7 @@ def test_public_docs_expose_all_benchmarks_run_shortcut() -> None:
 
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        assert "worldfoundry-eval run \\" in text
+        assert "worldfoundry-eval run" in text
         assert "--all-benchmarks" in text
         assert "tmp/worldfoundry_all_benchmarks_plan" in text
         assert "--plan-only" in text

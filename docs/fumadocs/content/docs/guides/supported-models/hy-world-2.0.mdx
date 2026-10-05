@@ -27,9 +27,9 @@ Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `video`; optional `actions` (worldrecon, panorama); artifacts `hy-world-2.0.mp4`.
+Optional `input_path`, `task`, `confidence_percentile`, `edge_normal_threshold`, and `edge_depth_threshold`; artifacts `hy-world-2.0.mp4`.
 
-Recorded task profiles: `default`. WorldFoundry binds `HYWorld2Pipeline`.
+CLI task profiles: `default`. WorldFoundry binds `HYWorld2Pipeline`.
 
 Family status: **Planned**.
 
@@ -45,7 +45,7 @@ The catalog launch is `worldfoundry-eval run hy-world-2.0 --pipeline.task-profil
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `tencent/HY-World-2.0`. Stage assets with `bash scripts/inference/prepare_model_infer.sh hy-world-2.0`.
+Recorded weight repositories include `tencent/HY-World-2.0`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hy-world-2.0`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Planned**.
 

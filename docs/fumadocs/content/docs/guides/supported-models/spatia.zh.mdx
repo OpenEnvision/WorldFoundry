@@ -1,47 +1,50 @@
 ---
 title: "Spatia"
-description: "Spatia 是相机控制的 video-to-video 世界模型：给定源视频与目标相机轨迹，沿新视角路径重新渲染场景。WorldFoundry 已将官方源码内置树内（revision f75b10c9），通过共享 pipeline runner 暴露， checkpoint 引用为 Jinjing713/Spatia，以 Apache-2.0 许可发布。"
+description: "Spatia：相机可控视频、视频到视频；已验证。"
+modelId: "spatia"
 pageSource: generated
 ---
 
-**发表机构:** 开源研究发布（仓库未记录正式机构） · 研究机构
-video → video
-
 Spatia 是相机控制的 video-to-video 世界模型：给定源视频与目标相机轨迹，沿新视角路径重新渲染场景。WorldFoundry 已将官方源码内置树内（revision f75b10c9），通过共享 pipeline runner 暴露， checkpoint 引用为 Jinjing713/Spatia，以 Apache-2.0 许可发布。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="spatia" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2512.15716](https://arxiv.org/abs/2512.15716)。
 
-- [项目主页](https://zhaojingjing713.github.io/Spatia/)
-- [论文](https://arxiv.org/abs/2512.15716)
-- [GitHub](https://github.com/ZhaoJingjing713/Spatia)
-- [源码](https://github.com/facebookresearch/map-anything)
-- [源码](https://github.com/castacks/UniCeption)
-- [源码](https://github.com/facebookresearch/dinov2)
-- [上游 README](https://github.com/ZhaoJingjing713/Spatia#readme)
-- [上游 README](https://github.com/facebookresearch/map-anything#readme)
-- [上游 README](https://github.com/castacks/UniCeption#readme)
-- [上游 README](https://github.com/facebookresearch/dinov2#readme)
+项目页：[zhaojingjing713.github.io/Spatia](https://zhaojingjing713.github.io/Spatia/)。代码：[ZhaoJingjing713/Spatia](https://github.com/ZhaoJingjing713/Spatia)。代码：[facebookresearch/map-anything](https://github.com/facebookresearch/map-anything)。代码：[castacks/UniCeption](https://github.com/castacks/UniCeption)。代码：[facebookresearch/dinov2](https://github.com/facebookresearch/dinov2)。
 
 <ModelCommandBuilder modelId="spatia" locale="zh" />
 
-## 架构
+## 用来做什么
+
+需要相机可控视频时选 `spatia`：相机轨迹进、受控视频出。视角必须跟随路径时，用它而不是无约束 T2V。
 
 树内路由接入 Spatia 推理与稠密 world-to-camera（W2C）轨迹输入：逐帧相机外参驱动重渲染。除内置源码外的架构内部细节仓库未记录。
 
+catalog 记录的任务包括 相机可控视频、视频到视频、世界模型。模态上，它接受视频，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（相机轨迹跟随与受控重渲染质量）。
+
 ## 运行时契约
 
-提供源图像或视频及逐帧稠密 W2C 相机轨迹。可选 mask_path 将一张与原始源帧尺寸一致的前景掩码传入重建阶段；改变缓存输入时设置 force_rebuild_intermediate。本地图像输入已完成 832x480、40 步、17 帧推理；相机轨迹遵循性尚未确立。
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `spatia.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `SpatiaPipeline`。
 
-- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 相机轨迹跟随与受控重渲染质量。
+系列状态：**已验证**。
 
-## 就绪状态与限制
+`default` 记录默认值：frames=121, fps=24, height=704, width=1248, seed=20917。
 
-- 已记录本地真实权重 GPU 推理；官方 PyTorch3D 渲染器一致性及相机控制精度尚未验证。
-- 需要逐帧稠密相机轨迹，而非稀疏关键帧位姿。
-- 默认 MapAnything 权重使用非商业许可。
+提供源图像或视频及逐帧稠密 W2C 相机轨迹。 可选 mask_path 将一张与原始源帧尺寸一致的前景掩码传入重建阶段；改变缓存输入时设置 force_rebuild_intermediate。 本地图像输入已完成 832x480、40 步、17 帧推理；相机轨迹遵循性尚未确立。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run spatia --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `Jinjing713/Spatia`、`Wan-AI/Wan2.2-TI2V-5B`、`facebook/map-anything`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh spatia`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
 
 <ModelRelatedRecipes modelId="spatia" locale="zh" />

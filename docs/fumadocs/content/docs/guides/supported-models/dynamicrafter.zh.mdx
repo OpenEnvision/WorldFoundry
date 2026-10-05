@@ -19,7 +19,7 @@ DynamiCrafter 给开放域静帧做动画：图（加可选提示词）进去，
 
 用 DynamiCrafter 图生视频把静帧动起来。
 
-启动 `worldfoundry-eval run dynamicrafter-512-i2v --pipeline.task-profile image-to-video`。
+启动 `worldfoundry-eval run dynamicrafter-512-i2v`。
 
 评测入口：[AIGCBench](/zh/docs/evaluation/benchmark-hub/aigcbench)（与 DynamiCrafter 任务对齐的图生视频评测）。
 
@@ -34,6 +34,6 @@ DynamiCrafter 给开放域静帧做动画：图（加可选提示词）进去，
 
 ## 在 WorldFoundry 中运行
 
-状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `Doubiiu/DynamiCrafter`、`Doubiiu/DynamiCrafter_512`、`Doubiiu/DynamiCrafter_1024` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dynamicrafter-512-i2v --pipeline.task-profile image-to-video`。catalog 未记录 VRAM。
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `Doubiiu/DynamiCrafter`、`Doubiiu/DynamiCrafter_512`、`Doubiiu/DynamiCrafter_1024` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dynamicrafter-512-i2v`。catalog 未记录 VRAM。
 
 <ModelRelatedRecipes modelId="dynamicrafter" locale="zh" />

@@ -34,7 +34,7 @@ WorldFoundry 在 `worldfoundry/synthesis/action_generation/gr00t` 下保留推�
 独立环境 `worldfoundry-gr00t`（Python 3.10，CUDA 11.8 或更新）。先为门控 NVIDIA 仓库认证、就位锁定 revision，再启动：
 
 ```
-worldfoundry-eval run gr00t-n1.7-libero --pipeline.task-profile vla.policy_rollout
+worldfoundry-eval run gr00t-n1.7-libero
 ```
 
 catalog 默认启动仍打印 `gr00t-n1-2b`，任务 profile 相同。要跑已记录的 CUDA predict，换 variant。权重必须本地就位——运行时不会拉取。

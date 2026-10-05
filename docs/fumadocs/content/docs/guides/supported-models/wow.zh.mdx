@@ -1,45 +1,50 @@
 ---
 title: "WoW"
-description: "WoW 是 X-Humanoid 的具身世界模型家族，面向动作条件图生视频：仓库记录四条 checkpoint 线（MIT 许可的 Wan 1.3B-2M、官方 demo 默认的 Wan 14B-600k、官方推荐的 Wan 14B-2M，以及 DiT 2B 开发线）。WorldFoundry 将 Wan 变体经规范 Wan loader 路由，共享 conditioner、VAE 与调度器；已发布的 1.3B transformer 计算图与原生模型 825 个张量全部精确匹配。"
+description: "WoW（X-Humanoid (Beijing Humanoid Robot Innovation Center)）：世界模型、图生视频；Runner 一致性待确认。"
+modelId: "wow"
 pageSource: generated
 ---
 
-**发表机构:** X-Humanoid（北京人形机器人创新中心） · 企业
-image → video
-
 WoW 是 X-Humanoid 的具身世界模型家族，面向动作条件图生视频：仓库记录四条 checkpoint 线（MIT 许可的 Wan 1.3B-2M、官方 demo 默认的 Wan 14B-600k、官方推荐的 Wan 14B-2M，以及 DiT 2B 开发线）。WorldFoundry 将 Wan 变体经规范 Wan loader 路由，共享 conditioner、VAE 与调度器；已发布的 1.3B transformer 计算图与原生模型 825 个张量全部精确匹配。
 
-**目录状态:** 运行时已移植
+<ModelPaperFigures modelId="wow" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2509.22642](https://arxiv.org/abs/2509.22642)。
 
-- [项目主页](https://wow-world-model.github.io/)
-- [论文](https://arxiv.org/abs/2509.22642)
-- [GitHub](https://github.com/wow-world-model/wow-world-model)
-- [Hugging Face](https://huggingface.co/X-Humanoid/WoW-1-Wan-1.3B-2M)
-- [Hugging Face](https://huggingface.co/X-Humanoid/WoW-1-Wan-14B-600k)
-- [Hugging Face](https://huggingface.co/X-Humanoid/WoW-1-Wan-14B-2M)
-- [Hugging Face](https://huggingface.co/X-Humanoid/WoW-1-DiT-2B-600k)
-- [上游 README](https://github.com/wow-world-model/wow-world-model#readme)
+项目页：[wow-world-model.github.io](https://wow-world-model.github.io/)。代码：[wow-world-model/wow-world-model](https://github.com/wow-world-model/wow-world-model)。
 
 <ModelCommandBuilder modelId="wow" locale="zh" />
 
-## 架构
+## 用来做什么
 
-Wan 线在 Wan 扩散骨干上采用仅 VAE 的首帧条件。DiT 2B 线是规范 Cosmos Predict2 配方上的 transformer 覆盖，经 runtime_backend=dit2b 选择——不再保留私有 Cosmos 运行时。demo 默认值有记录：Wan 为 steps=50、seed=42、tiled、41 帧、15 fps；DiT 2B 为 720p、16 fps、guidance=7。
+`wow` 是记录的交互世界线。要用动作推进世界时从这里起步。
+
+Wan 线在 Wan 扩散骨干上采用仅 VAE 的首帧条件。DiT 2B 线是规范 Cosmos Predict2 配方上的 transformer 覆盖，经 runtime_backend=dit2b 选择——不再保留私有 Cosmos 运行时。demo 默认值有记录：Wan 为 steps=50、seed=42、tiled、41 帧、15 fps；DiT 2B 为 720p、16 fps、guidance=7。该模型由X-Humanoid（北京人形机器人创新中心）发布。
+
+catalog 记录的任务包括 世界模型、图生视频、动作条件视频。别名包括 `wow-world-model`、`world-of-worlds`。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)（具身动作条件世界模型质量）、[WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena)（WorldArena 开源世界模型榜单收录）。
 
 ## 运行时契约
 
-建议从结构已验证的 Wan 1.3B-2M（MIT）checkpoint 起步；官方推荐为 Wan 14B-2M。注意锁定的 DiT 2B Hub 快照未暴露 wow_dit_2b.pt，该线的本地计算图验证仍为 pending。
+可选 `input_path`、`prompt`、`steps`、`num_frames`、`seed`；产物 `wow.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`official-image-to-world`。绑定的 pipeline 类是 `WoWPipeline`。
 
-- [EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench) — 具身动作条件世界模型质量。
-- [WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena) — WorldArena 开源世界模型榜单收录。
+系列状态：**Runner 一致性待确认**。
 
-## 就绪状态与限制
+`official-image-to-world` 记录默认值：seed=42。
 
-- 原生 GPU parity 仍为 pending（implemented_pending_native_gpu_parity）。
-- DiT 2B 快照缺少 wow_dit_2b.pt，其本地验证与原生 CUDA 产物待完成。
+建议从结构已验证的 Wan 1.3B-2M（MIT）checkpoint 起步；官方推荐为 Wan 14B-2M。 注意锁定的 DiT 2B Hub 快照未暴露 wow_dit_2b.pt，该线的本地计算图验证仍为 pending。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run wow --pipeline.task-profile official-image-to-world`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `X-Humanoid/WoW-1-Wan-1.3B-2M`、`X-Humanoid/WoW-1-Wan-14B-600k`、`X-Humanoid/WoW-1-Wan-14B-2M` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh wow`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 mit；状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="wow" locale="zh" />

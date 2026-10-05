@@ -132,7 +132,7 @@ os.environ.update(
 
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from worldfoundry.runtime.inference_catalog import get_model_inference_spec  # noqa: E402
+from worldfoundry.cli.model_run import load_model_run_schema  # noqa: E402
 from model_page_mdx import sync_model_pages  # noqa: E402
 
 CATALOG_ROOT = ROOT / "worldfoundry/data/models/catalog"
@@ -630,6 +630,7 @@ def variant_data(
             environment,
             binding_id,
             binding,
+            unified_environment,
         )
         pipeline = binding.get("pipeline") if binding and isinstance(binding.get("pipeline"), dict) else {}
         loading = pipeline.get("loading") if isinstance(pipeline.get("loading"), dict) else {}
@@ -700,6 +701,7 @@ def runtime_data(
     environment: dict[str, Any] | None,
     binding_id: str | None,
     binding: dict[str, Any] | None,
+    unified_environment: dict[str, Any],
 ) -> dict[str, Any]:
     execution = profile.get("execution") if profile and isinstance(profile.get("execution"), dict) else {}
     pipeline = binding.get("pipeline") if binding and isinstance(binding.get("pipeline"), dict) else {}
@@ -711,6 +713,13 @@ def runtime_data(
     env_kind = "unrecorded"
     if env_name:
         env_kind = "unified" if "unified" in env_name.lower() else "dedicated"
+    python_version = text(environment.get("python")) if environment else None
+    if env_kind == "unified":
+        python_version = text(unified_environment.get("python"))
+        conda_packages = [
+            f"python={python_version}" if package.startswith("python=") else package
+            for package in conda_packages
+        ]
 
     return {
         "profileId": profile_id,
@@ -725,7 +734,7 @@ def runtime_data(
         "environmentId": env_id,
         "environmentName": env_name,
         "environmentKind": env_kind,
-        "python": text(environment.get("python")) if environment else None,
+        "python": python_version,
         "cudaProfile": text(environment.get("cuda_profile")) if environment else None,
         "cudaLabel": cuda_label(text(environment.get("cuda_profile"))) if environment else None,
         "driverStatus": text(environment.get("driver_status")) if environment else None,
@@ -794,140 +803,49 @@ def artifact_data(item: dict[str, Any], profile: dict[str, Any] | None) -> list[
     return output
 
 
-def task_field_detail(field: Any) -> str:
-    required = "Required" if getattr(field, "required", False) else "Optional"
-    pieces = [required]
-    default = getattr(field, "default", None)
-    if default is not None:
-        if isinstance(default, (dict, list, tuple)):
-            rendered = json.dumps(default, ensure_ascii=False, sort_keys=True)
-        else:
-            rendered = str(default)
-        pieces.append(f"default={rendered}")
-    choices = list(getattr(field, "choices", ()) or ())
-    if choices:
-        pieces.append(f"choices={', '.join(str(choice) for choice in choices)}")
-    return "; ".join(pieces)
-
-
-def core_inference_task_data(spec: Any, variant_ids: list[str]) -> list[dict[str, Any]]:
-    output: list[dict[str, Any]] = []
-    for task in getattr(spec, "tasks", ()):
-        inputs = []
-        for field in task.inputs:
-            inputs.append(
-                {
-                    "field": field.field_id,
-                    "detail": task_field_detail(field),
-                    "kind": field.kind,
-                    "target": field.target,
-                    "required": bool(field.required),
-                    "default": field.default,
-                    "choices": list(field.choices),
-                    "description": field.description,
-                }
-            )
-        artifacts = [
-            {
-                "kind": artifact.kind,
-                "filename": artifact.artifact_id,
-                "description": artifact.description,
-            }
-            for artifact in task.outputs
-        ]
-        output.append(
-            {
-                "id": task.task_id,
-                "label": task.label,
-                "description": task.description,
-                "source": "inference_spec",
-                "variantIds": list(variant_ids),
-                "inputs": inputs,
-                "artifacts": artifacts,
-            }
-        )
-    return output
-
-
-def catalog_inference_task_data(
-    item: dict[str, Any],
-    profile: dict[str, Any] | None,
-    variant_records: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Expose task profiles for models without a curated Python inference spec.
-
-    Catalog ``tasks`` are capabilities, while a variant's ``task`` is the
-    closest executable profile when variants exist. Keep the raw catalog
-    values for fallback model-run schemas, but bind them to the variants that
-    declare them so the docs cannot pair an arbitrary task with a variant.
-    """
-    declared_tasks = (
-        unique_strings(record.get("task") for record in variant_records if record.get("task"))
-        if variant_records
-        else task_data(item, profile)
-    )
-    if not declared_tasks:
-        declared_tasks = ["default"]
-
-    output: list[dict[str, Any]] = []
-    for task_id in declared_tasks:
-        matching = [record for record in variant_records if record.get("task") == task_id]
-        source_record = matching[0] if matching else (variant_records[0] if variant_records else None)
-        fields = source_record.get("inputContract", []) if source_record else input_contract(profile)
-        inputs = [
-            {
-                "field": field.get("field", ""),
-                "detail": field.get("detail", "Recorded"),
-                "kind": "string",
-                "target": "input",
-                "required": field.get("detail") == "Required",
-                "description": "Recorded input field from the runtime profile.",
-            }
-            for field in fields
-            if field.get("field")
-        ]
-        artifacts = source_record.get("artifacts", []) if source_record else artifact_data(item, profile)
-        output.append(
-            {
-                "id": task_id,
-                "label": humanize(task_id),
-                "description": "Catalog task profile used by the model runtime.",
-                "source": "catalog",
-                "variantIds": [record.get("id") for record in matching if record.get("id")],
-                "inputs": inputs,
-                "artifacts": [
-                    {
-                        "kind": artifact.get("kind", ""),
-                        "filename": artifact.get("filename", ""),
-                    }
-                    for artifact in artifacts
-                    if artifact.get("kind") or artifact.get("filename")
-                ],
-            }
-        )
-    return output
-
-
 def inference_task_data(
     item: dict[str, Any],
     profile: dict[str, Any] | None,
     variant_records: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    """Use the installed CLI contract for executable task ids and options."""
     model_id = text(item.get("id") or item.get("model_id")) or ""
-    spec = get_model_inference_spec(model_id)
-    if spec is None:
-        alias_specs = {
-            candidate.model_family_id: candidate
-            for alias in as_list(item.get("aliases"))
-            if alias
-            for candidate in [get_model_inference_spec(str(alias))]
-            if candidate is not None
-        }
-        if len(alias_specs) == 1:
-            spec = next(iter(alias_specs.values()))
-    if spec is not None:
-        return core_inference_task_data(spec, [record["id"] for record in variant_records])
-    return catalog_inference_task_data(item, profile, variant_records)
+    run_ids = [record["id"] for record in variant_records] or [model_id]
+    output: list[dict[str, Any]] = []
+    for run_id in run_ids:
+        default_schema = load_model_run_schema(run_id)
+        for task_id in dict.fromkeys((default_schema.task_id, *default_schema.task_choices)):
+            schema = default_schema if task_id == default_schema.task_id else load_model_run_schema(run_id, task_id=task_id)
+            inputs = [
+                {
+                    "field": field.option.removeprefix("--pipeline."),
+                    "option": field.option,
+                    "detail": "Required" if field.required else "Optional",
+                    "kind": field.kind,
+                    "target": field.scope,
+                    "required": field.required,
+                    "default": field.default,
+                    "choices": [str(choice) for choice in field.choices],
+                    "description": field.description,
+                }
+                for field in schema.fields
+                if field.scope in {"input", "call"} or field.required
+            ]
+            output.append(
+                {
+                    "id": task_id,
+                    "label": humanize(task_id),
+                    "description": f"Run {schema.display_name} through the public CLI contract.",
+                    "source": "cli",
+                    "variantIds": [run_id] if variant_records else [],
+                    "inputs": inputs,
+                    "artifacts": next(
+                        (record["artifacts"] for record in variant_records if record["id"] == run_id),
+                        artifact_data(item, profile),
+                    ),
+                }
+            )
+    return output
 
 
 def recipe_notes(item: dict[str, Any], profile: dict[str, Any] | None) -> list[str]:
@@ -1658,6 +1576,8 @@ def summary_for(item: dict[str, Any], tasks: list[str], notes: list[str]) -> str
 def command_placeholder(field: dict[str, Any]) -> str | None:
     if not field.get("required") or field.get("default") not in (None, ""):
         return None
+    if field.get("choices"):
+        return shlex.quote(str(field["choices"][0]))
     field_id = str(field.get("field") or "")
     if field_id == "language_embedding":
         return "/path/to/embedding.json"
@@ -1667,6 +1587,10 @@ def command_placeholder(field: dict[str, Any]) -> str | None:
         return "/path/to/input"
     if field.get("kind") in {"json", "interaction_tokens"}:
         return "'{}'"
+    if field.get("kind") in {"integer", "number"}:
+        return "1"
+    if field.get("kind") == "boolean":
+        return "true"
     return "VALUE"
 
 
@@ -1680,8 +1604,8 @@ def direct_run_command(runtime_model_id: str, task: dict[str, Any]) -> str:
         placeholder = command_placeholder(field)
         if placeholder is None:
             continue
-        option = str(field.get("field") or "").replace("_", "-")
-        lines.append(f"  --pipeline.{option} {placeholder} \\")
+        option = field.get("option") or "--pipeline." + str(field.get("field") or "").replace("_", "-")
+        lines.append(f"  {option} {placeholder} \\")
     lines.append("  --json")
     return "\n".join(lines)
 
@@ -1758,7 +1682,7 @@ def main() -> int:
                 runtime_model_id = variant_records[0]["id"] if variant_records else model_id
                 aliases = unique_strings(as_list(item.get("aliases")))
                 provider = provider_name(item, links, checkpoints)
-                runtime = runtime_data(item, profile_id, profile, env_id, environment, binding_id, binding)
+                runtime = runtime_data(item, profile_id, profile, env_id, environment, binding_id, binding, unified_environment)
                 docs = docs_data(
                     item,
                     category_id,

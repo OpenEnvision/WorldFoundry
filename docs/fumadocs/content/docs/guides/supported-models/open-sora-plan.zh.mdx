@@ -37,6 +37,6 @@ Studio/API 验证复现了官方 v1.3 GPU 脚本（`sample_t2v_v1_3.sh` / 东京
 
 ## 在 WorldFoundry 中运行
 
-在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中运行 `worldfoundry-eval run open-sora-plan --pipeline.task-profile text-to-video`。就位 `LanguageBind/Open-Sora-Plan-v1.3.0` 与 `google/mt5-xxl`。`scripts/inference/prepare_model_infer.sh` 会把约 50 GB 的文本编码器只放一份，避免同时复制进 `WORLDFOUNDRY_CKPT_DIR` 和 `WORLDFOUNDRY_HFD_ROOT`。记录的 v1.3 卡片许可是 **MIT**。状态：**Runner 一致性待确认**。
+在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中运行 `worldfoundry-eval run open-sora-plan`。就位 `LanguageBind/Open-Sora-Plan-v1.3.0` 与 `google/mt5-xxl`。`scripts/inference/prepare_model_infer.sh` 会把约 50 GB 的文本编码器只放一份，避免同时复制进 `WORLDFOUNDRY_CKPT_DIR` 和 `WORLDFOUNDRY_HFD_ROOT`。记录的 v1.3 卡片许可是 **MIT**。状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="open-sora-plan" locale="zh" />

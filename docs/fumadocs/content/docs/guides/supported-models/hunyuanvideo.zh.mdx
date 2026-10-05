@@ -68,7 +68,7 @@ WorldFoundry 原生文生视频配方（`HunyuanVideoT2VPipeline`）默认为 **
 
 ## 在 WorldFoundry 中
 
-文生视频与图生视频都是声明式的原生扩散配方，由共享 runner 组装，不用上游 CLI。启动 `worldfoundry-eval run hunyuanvideo-t2v --pipeline.task-profile text-to-video`，或对应的 `hunyuanvideo-i2v`。权重是 `tencent/HunyuanVideo` 与 `tencent/HunyuanVideo-I2V`（卡片 license 为 `other`）。集成已记录；runner 与 demo 一致性仍为 pending，所以命令能跑不等于本工作区已有 checkpoint 驱动的 GPU 产物。使用统一环境 `worldfoundry-unified-cu128`，并在本地就位权重。官方 720p / 129 帧任务面向 80 GB 级 GPU；只有接受论文里的 540p / FP8 折中时，才往下规划。
+文生视频与图生视频都是声明式的原生扩散配方，由共享 runner 组装，不用上游 CLI。启动 `worldfoundry-eval run hunyuanvideo-t2v`，或对应的 `hunyuanvideo-i2v`。权重是 `tencent/HunyuanVideo` 与 `tencent/HunyuanVideo-I2V`（卡片 license 为 `other`）。集成已记录；runner 与 demo 一致性仍为 pending，所以命令能跑不等于本工作区已有 checkpoint 驱动的 GPU 产物。使用统一环境 `worldfoundry-unified-cu128`，并在本地就位权重。官方 720p / 129 帧任务面向 80 GB 级 GPU；只有接受论文里的 540p / FP8 折中时，才往下规划。
 
 ## 最小评测
 

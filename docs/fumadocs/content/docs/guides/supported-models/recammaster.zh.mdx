@@ -1,45 +1,50 @@
 ---
 title: "ReCamMaster"
-description: "ReCamMaster 让已有视频沿新的相机轨迹重新渲染——从单个视频出发的相机可控生成式渲染。本 catalog 中其树内 pipeline、operator 与合成运行时位于 Kling 命名空间下，runner 已针对官方相机轨迹 video-to-video demo（使用本地 ReCamMaster/Wan 资产）验证。"
+description: "ReCamMaster（Kuaishou (Kling Team)）：3D 与 4D；已验证。"
+modelId: "recammaster"
 pageSource: generated
 ---
 
-**发表机构:** 快手（可灵团队） · 企业
-[ReCamMaster: Camera-Controlled Generative Rendering from A Single Video](https://arxiv.org/abs/2503.11647) (2025)
-
 ReCamMaster 让已有视频沿新的相机轨迹重新渲染——从单个视频出发的相机可控生成式渲染。本 catalog 中其树内 pipeline、operator 与合成运行时位于 Kling 命名空间下，runner 已针对官方相机轨迹 video-to-video demo（使用本地 ReCamMaster/Wan 资产）验证。
 
-**目录状态:** Runner 已验证
+<ModelPaperFigures modelId="recammaster" locale="zh" />
 
-## 上游来源
+记录论文为[ReCamMaster: Camera-Controlled Generative Rendering from A Single Video](https://arxiv.org/abs/2503.11647)（2025）。
 
-- [项目主页](https://jianhongbai.github.io/ReCamMaster/)
-- [论文](https://arxiv.org/abs/2503.11647)
-- [GitHub](https://github.com/KlingAIResearch/ReCamMaster)
-- [上游 README](https://github.com/KlingAIResearch/ReCamMaster#readme)
-
-<figure className="wf-recipe-media is-diagram">
-  <DocsImage src="/models/recammaster/paper.png" alt="ReCamMaster: Camera-Controlled Generative Rendering from A Single Video" />
-  <figcaption>ReCamMaster: Camera-Controlled Generative Rendering from A Single Video</figcaption>
-</figure>
+项目页：[jianhongbai.github.io/ReCamMaster](https://jianhongbai.github.io/ReCamMaster/)。代码：[KlingAIResearch/ReCamMaster](https://github.com/KlingAIResearch/ReCamMaster)。
 
 <ModelCommandBuilder modelId="recammaster" locale="zh" />
 
-## 架构
+## 用来做什么
 
-按论文（arXiv 2503.11647），ReCamMaster 通过帧维度条件化把源视频注入预训练文生视频模型（开源版基于 Wan 系），从而在生成时更换相机轨迹。运行需要本地 Wan2.1、ReCamMaster checkpoint、torchvision 与 CUDA 资产。
+用 `recammaster` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+
+按论文（arXiv 2503.11647），ReCamMaster 通过帧维度条件化把源视频注入预训练文生视频模型（开源版基于 Wan 系），从而在生成时更换相机轨迹。运行需要本地 Wan2.1、ReCamMaster checkpoint、torchvision 与 CUDA 资产。该模型由快手（可灵团队）发布。
+
+catalog 记录的任务包括 camera-controlled video rerendering。别名包括 `Camera-Controlled Generative Rendering from A Single Video`。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（直接评估相机轨迹控制质量）。
 
 ## 运行时契约
 
-开源参考运行时受 checkpoint/GPU 限制——不注册空 runner 壳。提交任务前请就位 Wan2.1 与 ReCamMaster checkpoint；每次运行的视觉 QA 在 catalog 外跟踪。
+可选 `prompt`、`input_path`、`frames`、`fps`、`steps`；产物 `generated_video`、`generated_4d_scene`、`recammaster.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `ReCamMasterPipeline`。
 
-- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 直接评估相机轨迹控制质量。
+系列状态：**已验证**。
 
-## 就绪状态与限制
+`default` 记录默认值：frames=81, fps=8。
 
-- 需要本地 Wan2.1 与 ReCamMaster checkpoint 及 CUDA。
-- 重渲染质量受源视频内容限制——未见区域由模型补全想象。
+开源参考运行时受 checkpoint/GPU 限制——不注册空 runner 壳。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run recammaster --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `KlingTeam/ReCamMaster-Wan2.1`、`Wan-AI/Wan2.1-T2V-1.3B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh recammaster`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
 
 <ModelRelatedRecipes modelId="recammaster" locale="zh" />

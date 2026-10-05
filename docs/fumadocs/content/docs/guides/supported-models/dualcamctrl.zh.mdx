@@ -17,7 +17,7 @@ DualCamCtrl 用**相机轨迹加深度图**控制视频：RGB 和深度一起钉
 
 双相机控制，面向立体风格成对输入。
 
-启动 `worldfoundry-eval run dualcamctrl --pipeline.task-profile world`。
+启动 `worldfoundry-eval run dualcamctrl`。
 
 评测入口：[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（受控生成的相机轨迹贴合度）。
 
@@ -34,6 +34,6 @@ DualCamCtrl 用**相机轨迹加深度图**控制视频：RGB 和深度一起钉
 
 ## 在 WorldFoundry 中运行
 
-状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `FayeHongfeiZhang/DualCamCtrl`、`alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`、`Wan-AI/Wan2.1-T2V-1.3B` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dualcamctrl --pipeline.task-profile world`。catalog 未记录 VRAM。
+状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `FayeHongfeiZhang/DualCamCtrl`、`alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`、`Wan-AI/Wan2.1-T2V-1.3B` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dualcamctrl`。catalog 未记录 VRAM。
 
 <ModelRelatedRecipes modelId="dualcamctrl" locale="zh" />

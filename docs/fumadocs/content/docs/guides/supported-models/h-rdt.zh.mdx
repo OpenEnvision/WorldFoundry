@@ -27,9 +27,9 @@ catalog 记录的任务包括 视觉-语言-动作（VLA）、human_motion_polic
 
 ## 运行时契约
 
-必填 `image`、`prompt`、`state`、`precomputed_image_tokens`、`precomputed_language_tokens`；可选 `model_id` (h-rdt)、`camera_keys` (head_cam, right_cam, left_cam)、`policy_family`、`action_representation`；产物 `action_trace`、`h_rdt_action_trace.json`。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`h_rdt_action_trace.json`。
 
-记录的任务 profile：`vla`、`human_motion_policy`、`vla.policy_rollout`、`robot_policy_finetune`。绑定的 pipeline 类是 `HRDTSynthesis`。
+CLI task profile：`default`。绑定的 pipeline 类是 `HRDTSynthesis`。
 
 系列状态：**仅静态加载**。
 
@@ -39,11 +39,11 @@ catalog 记录的任务包括 视觉-语言-动作（VLA）、human_motion_polic
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run h-rdt --pipeline.task-profile vla`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+catalog 启动命令是 `worldfoundry-eval run h-rdt --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是独立 profile `worldfoundry-vla-h-rdt`（Python 3.10，Cu121 Or Newer，torch>=2.2）。
 
-记录的权重仓库包括 `embodiedfoundation/H-RDT`、`google/t5-v1_1-xxl`。就位权重用 `bash scripts/inference/prepare_model_infer.sh h-rdt`。
+记录的权重仓库包括 `embodiedfoundation/H-RDT`、`google/t5-v1_1-xxl`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh h-rdt`；下载缺失的公开权重时加 `--download`。
 
 状态：**仅静态加载**。
 

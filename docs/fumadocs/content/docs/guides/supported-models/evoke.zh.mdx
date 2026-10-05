@@ -19,7 +19,7 @@ Evoke 在 catalog 里是**相机可控世界**，同时列出文生视频、图�
 
 走已接通的三步后蒸馏路径。这不是 AlayaWorld。
 
-启动 `worldfoundry-eval run evoke --pipeline.task-profile text-to-video`。
+启动 `worldfoundry-eval run evoke`。
 
 ## 运行时契约
 
@@ -39,11 +39,11 @@ Evoke 在 catalog 里是**相机可控世界**，同时列出文生视频、图�
 
 ## 在 WorldFoundry 中运行
 
-状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `AlayaLab/Evoke`、`pkqbajng/ViGeo1.1` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run evoke --pipeline.task-profile text-to-video`。许可证：CC-BY-NC-4.0。catalog 未记录 VRAM。
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `AlayaLab/Evoke`、`pkqbajng/ViGeo1.1` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run evoke`。许可证：CC-BY-NC-4.0。catalog 未记录 VRAM。
 
 ## 捆绑 runtime 说明
 
-WorldFoundry 的公开入口是 `EvokePipeline` / `worldfoundry-eval run evoke`。捆绑树 `worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/` 里还有 vendor launcher（`scripts/inference/infer_post_distill.sh`、`infer_stage1.sh`、`infer_evoke_teacher.sh`）。那是研究辅助，不是第二套 catalog 契约。`scripts/training/` 的训练脚本只属于 vendor；本仓库只做推理。
+WorldFoundry 的公开入口是 `EvokePipeline` / `worldfoundry-eval run evoke`。捆绑的推理脚本位于 `worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/scripts/inference/`：`infer_single.py` 执行推理，`postprocess_viz.py` 准备可视化产物。上游文档中的 shell launcher 属于官方仓库。
 
 学生模型按 latent chunk 自回归（`latent_window_size = 9`）。每个 chunk 在 RoPE 帧索引上排成 `prefix | long(16) | mid(2) | warp(W) | prev_short(1) | noise(W)`：
 
@@ -87,6 +87,6 @@ models/
 
 超过 7200 帧必须显式选择：`STREAM_LONG=1` 按 chunk 解码再从 `segments/` 拼 `geo_pred.mp4`（需要 `VAE_DECODE_TYPE=persistent`）；`GEO_HIST_MAX_FRAMES` 滑动点云（这是配方变更，必须远大于 `WARP_LAG * 36`）。自定义案例照抄 `examples/{t2v,i2v,v2v,segment_prompts}/cases.jsonl`。位姿是 vipe `.npz`（`cam_c2w [T,4,4]` + `intrinsics`）；与 i2v 默认（24 / `[480, 832]`）不同时要声明 `pose_fps` 和 `pose_source_resolution`。
 
-vendor launcher 产物：`<OUT_ROOT>/<case>/geo_pred.mp4`，可选 HUD / 分段 / v2v 四宫格，以及 `_logs/<case>.log` 和 `run_info.json`。已完成的 case 重跑会跳过。`infer_evoke_teacher.sh` 只是示例，不是受支持入口：无相机、无序列并行，bf16 约 56 GB，除非 `--offload`。
+上游 launcher 的产物约定：`<OUT_ROOT>/<case>/geo_pred.mp4`，可选 HUD / 分段 / v2v 四宫格，以及 `_logs/<case>.log` 和 `run_info.json`。已完成的 case 重跑会跳过。`infer_evoke_teacher.sh` 只是示例，不是受支持入口：无相机、无序列并行，bf16 约 56 GB，除非 `--offload`。
 
 <ModelRelatedRecipes modelId="evoke" locale="zh" />

@@ -27,7 +27,7 @@ Finally, catalog metadata is the public record. The YAML under `worldfoundry/dat
 
 ## The runnable route contract
 
-WorldFoundry resolves every runnable method through the same public contract. A method is runnable only when a concrete pipeline class can be imported. You name that class with `pipeline_target` (`module:Class`) or with a `pipeline_binding` id that bindings.py already knows. If neither is present, `evaluate --mode model` will fail before any GPU work starts, and that is intentional.
+WorldFoundry resolves every runnable method through the same public contract. A method is runnable only when a concrete pipeline class can be imported. You name that class with `pipeline_target` (`module:Class`) or with a `pipeline_binding` id that bindings.py already knows. If neither is present, `worldfoundry-eval run <model-id>` will fail before any GPU work starts, and that is intentional.
 
 A runtime profile is not a substitute for that route. Profiles describe conda or Docker environment, checkpoint roles, launch commands, and execution metadata. They help a machine *prepare* to run. They do not, by themselves, count as “this model is integrated.” A catalog row that only lists a profile and no pipeline will stay planned or blocked.
 
@@ -41,7 +41,7 @@ Add the operator in the same change set. Even a first-pass operator that only ch
 
 Place the vendor or in-house inference implementation according to the existing tree. Video synthesis usually lands under `synthesis/visual_generation/`. Interactive world models often sit next to a sibling that already vendors an official infer-only runtime. Perception and 3D helpers go under `base_models/`. Do not commit a second copy of the architecture under `cache/` and then import it from there. If the runner needs Python modules, those modules live under `worldfoundry/` and get reviewed with the rest of the PR.
 
-Register the route. The simplest form is a `pipeline_target` on the catalog YAML. If several aliases or a runtime profile should share one class, add or update a binding under `worldfoundry/data/models/bindings/pipelines/` and let `bindings.py` resolve it. When — and only when — the model can participate in the generic benchmark runner, add an inference handler in `worldfoundry/evaluation/models/pipelines/handlers.py`. Most first PRs do not need a handler. A working `evaluate --mode model` path is the milestone.
+Register the route. The simplest form is a `pipeline_target` on the catalog YAML. If several aliases or a runtime profile should share one class, add or update a binding under `worldfoundry/data/models/bindings/pipelines/` and let `bindings.py` resolve it. The generic benchmark runner adapts pipeline calls in `worldfoundry/evaluation/models/pipelines/invocation.py`. Update that adapter only when the new pipeline needs an invocation form it does not already support. A working `worldfoundry-eval run <model-id>` path is the milestone.
 
 Write or update the catalog entry last, after the class names exist, so the YAML cannot claim a target that does not import. Record source URLs, license, Hugging Face `repo_id`s, local `checkpoint` roles, tasks, `runtime_profile`, and an honest `integration.status`. Use `planned` until a check report exists. Use `blocked` when a missing license, checkpoint, API key, or GPU class prevents a run. Use `integrated` only after the required checks pass and the report hashes still match the current manifest.
 

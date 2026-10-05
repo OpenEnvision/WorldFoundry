@@ -107,9 +107,12 @@ type FormattedDefault = {
   text: string;
 };
 
-function commandPlaceholder(field: { field: string; required?: boolean; default?: unknown; kind?: string }) {
+function commandPlaceholder(field: { field: string; required?: boolean; default?: unknown; kind?: string; choices?: string[] }) {
   if (!field.required || (field.default !== undefined && field.default !== null && field.default !== '')) {
     return null;
+  }
+  if (field.choices?.length) {
+    return shellWord(String(field.choices[0]));
   }
   if (field.field === 'language_embedding') {
     return '/path/to/embedding.json';
@@ -123,6 +126,8 @@ function commandPlaceholder(field: { field: string; required?: boolean; default?
   if (field.kind === 'json' || field.kind === 'interaction_tokens') {
     return "'{}'";
   }
+  if (field.kind === 'integer' || field.kind === 'number') return '1';
+  if (field.kind === 'boolean') return 'true';
   return 'VALUE';
 }
 
@@ -139,7 +144,8 @@ function runCommand(modelId: string, task: ModelRecipeTask) {
   for (const field of task.inputs) {
     const placeholder = commandPlaceholder(field);
     if (!placeholder) continue;
-    lines.push(`  --pipeline.${field.field.replaceAll('_', '-')} ${placeholder} \\`);
+    const option = field.option ?? `--pipeline.${field.field.replaceAll('_', '-')}`;
+    lines.push(`  ${option} ${placeholder} \\`);
   }
   lines.push('  --json');
   return lines.join('\n');
@@ -319,13 +325,21 @@ function normalizeInput(item: ContractInput) {
     required: item.required ?? parsed.required ?? false,
     formatted: formatDefault(defaultValue),
     choices: item.choices?.length ? item.choices : parsed.choices,
-    description: visibleCopy(item.description),
+    description: fieldDescription(item.description),
   };
 }
 
 function visibleCopy(value?: string) {
   const text = value?.trim() ?? '';
   return text && !GENERIC_COPY.has(text) ? text : '';
+}
+
+function fieldDescription(value?: string) {
+  const text = visibleCopy(value);
+  if (!text) return '';
+  if (/ passed to the pipeline for every generated sample\.?$/.test(text)) return '';
+  if (/ used as the input for direct .+ inference\.?$/.test(text)) return '';
+  return text;
 }
 
 function countPhrase(count: number, singular: string, plural: string) {
@@ -394,6 +408,7 @@ function ContractFieldRow({
   t: Copy;
   field: ReturnType<typeof normalizeInput>;
 }) {
+  const inlineDefault = field.formatted.display === 'scalar';
   return (
     <li className="wf-command-builder-contract-row">
       <div className="wf-command-builder-contract-row-top">
@@ -404,9 +419,14 @@ function ContractFieldRow({
           </span>
           {field.kind ? <span className="wf-command-builder-pill">{field.kind}</span> : null}
         </div>
+        {inlineDefault ? (
+          <code className="wf-command-builder-contract-row-value" title={`${t.defaultValue}: ${field.formatted.text}`}>
+            {field.formatted.text}
+          </code>
+        ) : null}
       </div>
       {field.description ? <p className="wf-command-builder-field-note">{field.description}</p> : null}
-      <FieldDefault t={t} formatted={field.formatted} />
+      {inlineDefault ? null : <FieldDefault t={t} formatted={field.formatted} />}
       {field.choices.length > 0 ? (
         <div className="wf-command-builder-choices" aria-label={t.optional}>
           {field.choices.map((choice) => (
@@ -435,8 +455,6 @@ function ContractPanel({
 }) {
   const fields = inputs.map(normalizeInput).filter((field) => field.field);
   const outputItems = artifacts.filter((item) => item.kind || item.filename);
-  const splitColumns = fields.length > 0 && outputItems.length > 0;
-  const denseInputGrid = fields.length >= 4;
   const lead = visibleCopy(description);
   const [open, setOpen] = useState(false);
 
@@ -469,14 +487,14 @@ function ContractPanel({
       {open ? (
       <div className="wf-command-builder-contracts-body">
         {lead ? <p className="wf-command-builder-contracts-lead">{lead}</p> : null}
-        <div className={`wf-command-builder-contracts-grid${splitColumns ? '' : ' is-single'}`}>
+        <div className="wf-command-builder-contracts-grid is-single">
           <section className="wf-command-builder-contract">
             <header>
               <h3>{t.inputs}</h3>
               <b>{fields.length}</b>
             </header>
             {fields.length ? (
-              <ul className={`wf-command-builder-contract-rows${denseInputGrid ? ' is-dense-grid' : ''}`}>
+              <ul className="wf-command-builder-contract-rows">
                 {fields.map((field) => (
                   <ContractFieldRow key={field.field} t={t} field={field} />
                 ))}
@@ -559,7 +577,7 @@ export function ModelCommandBuilder({ recipe, locale = 'en' }: { recipe: ModelRe
           ],
     [recipe],
   );
-  const taskChoices: ModelRecipeTask[] =
+  const allTasks: ModelRecipeTask[] =
     recipe.inferenceTasks.length > 0
       ? recipe.inferenceTasks
       : [
@@ -574,14 +592,17 @@ export function ModelCommandBuilder({ recipe, locale = 'en' }: { recipe: ModelRe
           },
         ];
   const defaultChoice = choices.find(isRunnableVariant) ?? choices[0];
-  const defaultTask = taskChoices.find(
+  const defaultTask = allTasks.find(
     (task) => task.variantIds.length === 0 || task.variantIds.includes(defaultChoice?.id ?? ''),
-  ) ?? taskChoices[0];
+  ) ?? allTasks[0];
   const [selectedId, setSelectedId] = useState(defaultChoice?.id ?? recipe.id);
   const [selectedTaskId, setSelectedTaskId] = useState(defaultTask?.id ?? 'default');
   const [tab, setTab] = useState<CommandTab>(defaultChoice && isRunnableVariant(defaultChoice) ? 'run' : 'check');
   const [copied, setCopied] = useState(false);
   const selected = choices.find((choice) => choice.id === selectedId) ?? choices[0];
+  const taskChoices = allTasks.filter(
+    (task) => task.variantIds.length === 0 || task.variantIds.includes(selected?.id ?? recipe.id),
+  );
   const selectedTask = taskChoices.find((task) => task.id === selectedTaskId) ?? taskChoices[0];
   const selectedPipeline = recipe.variants.length > 0
     ? selected?.pipelineTarget
@@ -590,7 +611,7 @@ export function ModelCommandBuilder({ recipe, locale = 'en' }: { recipe: ModelRe
   const selectedEnvironment = selected?.environmentName ?? recipe.runtime.environmentName;
   const selectedDevice = selected?.cudaLabel ?? recipe.runtime.cudaLabel;
   const selectedProfile = selected?.runtimeProfile || recipe.runtime.profileId;
-  const selectedInputContract = selectedTask.inputs.length
+  const selectedInputContract = selectedTask.source === 'cli' || selectedTask.inputs.length
     ? selectedTask.inputs
     : selected?.inputContract?.length
       ? selected.inputContract
@@ -647,10 +668,11 @@ export function ModelCommandBuilder({ recipe, locale = 'en' }: { recipe: ModelRe
                 const nextId = event.target.value;
                 const nextChoice = choices.find((choice) => choice.id === nextId);
                 setSelectedId(nextId);
-                if (selectedTask.variantIds.length > 0 && !selectedTask.variantIds.includes(nextId)) {
-                  const compatible = taskChoices.find((task) => task.variantIds.includes(nextId));
-                  if (compatible) setSelectedTaskId(compatible.id);
-                }
+                const compatible = allTasks.filter(
+                  (task) => task.variantIds.length === 0 || task.variantIds.includes(nextId),
+                );
+                const nextTask = compatible.find((task) => task.id === selectedTaskId) ?? compatible[0];
+                if (nextTask) setSelectedTaskId(nextTask.id);
                 if (tab === 'run' && (!nextChoice || !isRunnableVariant(nextChoice))) setTab('check');
                 setCopied(false);
               }}
@@ -672,12 +694,6 @@ export function ModelCommandBuilder({ recipe, locale = 'en' }: { recipe: ModelRe
                 onChange={(event) => {
                   const nextTask = taskChoices.find((task) => task.id === event.target.value) ?? taskChoices[0];
                   setSelectedTaskId(nextTask.id);
-                  if (nextTask.variantIds.length > 0 && !nextTask.variantIds.includes(selected?.id ?? '')) {
-                    const nextVariantId = nextTask.variantIds[0];
-                    const nextChoice = choices.find((choice) => choice.id === nextVariantId);
-                    setSelectedId(nextVariantId);
-                    if (tab === 'run' && (!nextChoice || !isRunnableVariant(nextChoice))) setTab('prepare');
-                  }
                   setCopied(false);
                 }}
               >

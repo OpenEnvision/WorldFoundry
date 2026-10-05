@@ -29,9 +29,9 @@ Recorded evaluation entry points include [RoboTwin 2.0](/docs/evaluation/benchma
 
 ## Runtime contract
 
-Required `image` and `prompt`; optional `model_id` (eventvla), `state`, `temporal_anchors` (first, t-30, t-15, current), `action_dim` (14), and `action_horizon` (50); artifacts `action_trace` and `eventvla_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `eventvla_action_trace.json`.
 
-Recorded task profiles: `vla`, `vla.action_prediction`, and `vla.long_horizon_memory`. WorldFoundry binds `EventVLAPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `EventVLAPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -41,11 +41,11 @@ Qwen3-VL encoding, action-token gathering, the checkpoint-compatible MLP action 
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run eventvla --pipeline.task-profile vla`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run eventvla --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, CUDA 12.8, torch>=2.6.0).
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.6.0).
 
-Recorded weight repositories include `ganlinyang/EventVLA` and `Qwen/Qwen3-VL-4B-Instruct`. Stage assets with `bash scripts/inference/prepare_model_infer.sh eventvla`.
+Recorded weight repositories include `ganlinyang/EventVLA` and `Qwen/Qwen3-VL-4B-Instruct`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh eventvla`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

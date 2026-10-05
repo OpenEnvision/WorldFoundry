@@ -1,47 +1,50 @@
 ---
 title: "Solaris"
-description: "Solaris is a multi-agent interactive video world model from NYU's VisionX group (paper arXiv 2602.22208): multiple agents act inside one generated world."
+description: "Solaris from New York University (VisionX): video generation and multi-agent-world-model; Verified."
+modelId: "solaris"
 pageSource: generated
 ---
 
-**Publisher:** New York University (VisionX) · University
-video
-[Solaris: Building a Multiplayer Video World Model in Minecraft](https://arxiv.org/abs/2602.22208) (2026)
-
 Solaris is a multi-agent interactive video world model from NYU's VisionX group (paper arXiv 2602.22208): multiple agents act inside one generated world. In this catalog the runner is verified — the inference-only runtime is vendored in-tree and consumes the official Orbax checkpoint (nyu-visionx/solaris) and eval datasets from Hugging Face or a local mirror.
 
-**Catalog status:** Runner verified
+<ModelPaperFigures modelId="solaris" locale="en" />
 
-## Upstream sources
+The recorded paper is [Solaris: Building a Multiplayer Video World Model in Minecraft](https://arxiv.org/abs/2602.22208) (2026).
 
-- [Project](https://solaris-wm.github.io/)
-- [Paper](https://arxiv.org/abs/2602.22208)
-- [GitHub](https://github.com/solaris-wm/solaris)
-- [Hugging Face](https://huggingface.co/nyu-visionx/solaris)
-- [Upstream README](https://github.com/solaris-wm/solaris#readme)
-
-<figure className="wf-recipe-media is-diagram">
-  <DocsImage src="/models/solaris/paper.png" alt="Solaris: Building a Multiplayer Video World Model in Minecraft" />
-  <figcaption>Solaris: Building a Multiplayer Video World Model in Minecraft</figcaption>
-</figure>
+Project page: [solaris-wm.github.io](https://solaris-wm.github.io/). Code: [solaris-wm/solaris](https://github.com/solaris-wm/solaris).
 
 <ModelCommandBuilder modelId="solaris" locale="en" />
 
-## Architecture
+## What it is for
 
-The runtime is JAX/Orbax-based per the recorded checkpoint format; internals beyond the recorded tasks are not stored here. The upstream license is flagged for manual review.
+Pick `solaris` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+The runtime is JAX/Orbax-based per the recorded checkpoint format; internals beyond the recorded tasks are not stored here. The upstream license is flagged for manual review. It is published by New York University (VisionX).
+
+Catalog tasks include video generation, multi-agent-world-model, and interactive-video-generation. Catalog aliases include `solaris-wm`. Documented outputs include video.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Multi-agent world-rollout quality).
 
 ## Runtime contract
 
+Optional `eval_types`, `experiment_name`, `eval_num_samples`, `num_workers`, and `num_frames_eval`; artifacts `solaris.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `SolarisPipeline`.
+
+Family status: **Verified**.
+
 Inference launches one sample per visible GPU — eval_num_samples must be a multiple of the visible GPU count. Official weights and eval datasets resolve from HF or a same-layout local mirror.
 
-## Evaluation benchmarks
+In-tree inference-only Solaris runtime is packaged under worldfoundry/synthesis/visual_generation/solaris/solaris_runtime.
 
-- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Multi-agent world-rollout quality.
+## Running in WorldFoundry
 
-## Readiness and limitations
+The catalog launch is `worldfoundry-eval run solaris --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- Upstream license is under manual review.
-- eval_num_samples must match the GPU-count multiple constraint.
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `nyu-visionx/solaris`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh solaris`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
 
 <ModelRelatedRecipes modelId="solaris" locale="en" />

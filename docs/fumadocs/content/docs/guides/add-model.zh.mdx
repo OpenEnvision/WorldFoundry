@@ -27,7 +27,7 @@ Evaluation binding 决定 CLI、TUI 和通用 benchmark runner 如何找到该�
 
 ## 可运行路由契约
 
-WorldFoundry 用同一套公开 contract 解析每个 runnable method。只有能 import 到具体 pipeline class，这个方法才算 runnable。你用 `pipeline_target`（`module:Class`）或 bindings.py 已认识的 `pipeline_binding` id 来命名它。两者都缺时，`evaluate --mode model` 会在动 GPU 之前失败，这是刻意的。
+WorldFoundry 用同一套公开 contract 解析每个 runnable method。只有能 import 到具体 pipeline class，这个方法才算 runnable。你用 `pipeline_target`（`module:Class`）或 bindings.py 已认识的 `pipeline_binding` id 来命名它。两者都缺时，`worldfoundry-eval run <model-id>` 会在动 GPU 之前失败，这是刻意的。
 
 Runtime profile 不能替代这条 route。Profile 描述 conda / Docker 环境、checkpoint 角色、启动命令和 execution metadata，帮助机器*准备好*去跑；它本身不等于「模型已接入」。Catalog 里只有 profile、没有 pipeline 的条目，会一直停在 planned 或 blocked。
 
@@ -41,7 +41,7 @@ Operator 和 pipeline 放在同一次改动里。哪怕第一版只检查「prom
 
 Vendor 或自研推理实现跟现有树对齐。视频合成多半在 `synthesis/visual_generation/`；交互式 world model 往往挨着已经 vendoring 了官方仅推理 runtime 的兄弟目录；感知与 3D helper 在 `base_models/`。不要在 `cache/` 再放一份架构代码再从那里 import。Runner 需要的 Python 模块必须在 `worldfoundry/` 下，并和这次集成一起被 review。
 
-然后注册 route。最简单的是在 catalog YAML 上写 `pipeline_target`。若多个 alias 或某个 runtime profile 要共用一个类，在 `worldfoundry/data/models/bindings/pipelines/` 增加或更新 binding，交给 `bindings.py` 解析。只有当模型能参加通用 benchmark runner 时，才在 `worldfoundry/evaluation/models/pipelines/handlers.py` 加 inference handler。多数第一份 PR 不需要 handler；能跑通 `evaluate --mode model` 就是里程碑。
+然后注册 route。最简单的是在 catalog YAML 上写 `pipeline_target`。若多个 alias 或某个 runtime profile 要共用一个类，在 `worldfoundry/data/models/bindings/pipelines/` 增加或更新 binding，交给 `bindings.py` 解析。通用 benchmark runner 的 pipeline 调用契约在 `worldfoundry/evaluation/models/pipelines/invocation.py`。多数第一份 PR 只需接入现有调用契约；能跑通 `worldfoundry-eval run <model-id>` 就是里程碑。
 
 Catalog 条目放在类名已经存在之后再写，避免 YAML 指向一个 import 不了的 target。记录 source URL、license、Hugging Face `repo_id`、本地 `checkpoint` 角色、tasks、`runtime_profile`，以及诚实的 `integration.status`。在 check report 出现之前用 `planned`；license、checkpoint、API key 或 GPU 类型缺了、跑不起来时用 `blocked`；只有必要检查通过、且 report 哈希仍对得上当前 manifest 时，才标 `integrated`。
 

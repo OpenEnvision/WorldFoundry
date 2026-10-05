@@ -19,7 +19,7 @@ Both checkpoints passed **GPU probes** on CUDA 12.9. Full rollout parity is **no
 
 ## What it is for
 
-Pick `dreamzero-droid` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+Pick `dreamzero-droid` for world-action modeling: world-conditioned observations in, predicted actions out. Use it when the catalog marks a WAM route rather than a pure VLA or video model.
 
 The default 14B server uses two CUDA ranks while the Wan2.2 5B entrypoint can run on one. Checkpoint-controlled Hydra targets are rewritten to and allowlisted within in-tree inference modules, so checkpoint Python is never executed. It is published by NVIDIA (GEAR Lab).
 
@@ -29,9 +29,9 @@ Recorded evaluation entry points include [EWMBench](/docs/evaluation/benchmark-h
 
 ## Runtime contract
 
-Required `image`, `instruction`, `prompt`, `video`, and `world_state`; optional `actions` (world_action, robot_action, joint_position, gripper_position, video_prediction) and `debug_video_dir`; artifacts `dreamzero_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `checkpoint_dir`; artifacts `dreamzero_action_trace.json`.
 
-Recorded task profiles: `wam`, `world_action_model`, `wam.world_action_modeling`, `robot_policy`, `video_prediction`, and `wam.post_training_base`. WorldFoundry binds `DreamZeroPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `DreamZeroPipeline`.
 
 Start on `dreamzero-droid`. The family registers 2 catalog variants (cards above): `dreamzero-droid` (`wam.world_action_modeling`) — Runner parity pending; `dreamzero-agibot` (`wam.post_training_base`) — Runner parity pending. Family status: **Runner parity pending**.
 
@@ -41,11 +41,11 @@ DreamZero DROID and AgiBot checkpoints are staged under $\{WORLDFOUNDRY_HFD_ROOT
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run dreamzero-droid --pipeline.task-profile wam.world_action_modeling`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run dreamzero-droid --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-dreamzero-cu129` (Python 3.11, CUDA 12.9, torch==2.8.0).
 
-Recorded weight repositories include `GEAR-Dreams/DreamZero-DROID`, `GEAR-Dreams/DreamZero-AgiBot`, and `GEAR-Dreams/DreamZero-DROID` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh dreamzero-droid`.
+Recorded weight repositories include `GEAR-Dreams/DreamZero-DROID`, `GEAR-Dreams/DreamZero-AgiBot`, and `GEAR-Dreams/DreamZero-DROID` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dreamzero-droid`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Runner parity pending**.
 
