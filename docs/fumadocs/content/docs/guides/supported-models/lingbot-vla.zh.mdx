@@ -1,40 +1,50 @@
 ---
 title: "LingBot-VLA"
-description: "LingBot-VLA 是蚂蚁灵波科技（Robbyant）的 4B 视觉-语言-动作策略线：预训练 base，加 RoboTwin 后训练与深度增强 RoboTwin 变体，全部 Apache-2.0，并在 Hugging Face 与 ModelScope 锁定 revision。WorldFoundry 将官方策略、特征变换、机器人映射与归一化资产直接内置树内，作为进程内运行时。"
+description: "LingBot-VLA（Robbyant (Ant Group)）：视觉-语言-动作（VLA）、VLA 动作预测；仅静态加载; 3 个 variant。"
+modelId: "lingbot-vla"
 pageSource: generated
 ---
 
-**发表机构:** 蚂蚁灵波科技（Robbyant，蚂蚁集团） · 企业
+LingBot-VLA is Robbyant's 4B vision-language-action policy line: a pretrained base plus RoboTwin post-trained and depth-enhanced RoboTwin variants, all Apache-2.0 with pinned revisions on Hugging Face and ModelScope. WorldFoundry integrate…
 
-LingBot-VLA 是蚂蚁灵波科技（Robbyant）的 4B 视觉-语言-动作策略线：预训练 base，加 RoboTwin 后训练与深度增强 RoboTwin 变体，全部 Apache-2.0，并在 Hugging Face 与 ModelScope 锁定 revision。WorldFoundry 将官方策略、特征变换、机器人映射与归一化资产直接内置树内，作为进程内运行时。
+<ModelPaperFigures modelId="lingbot-vla" locale="zh" />
 
-**目录状态:** 运行时已移植
+记录论文为[arXiv 2508.02317](https://arxiv.org/abs/2508.02317)。
 
-## 上游来源
-
-- [论文](https://arxiv.org/abs/2508.02317)
-- [GitHub](https://github.com/Robbyant/lingbot-vla)
-- [Hugging Face](https://huggingface.co/robbyant/lingbot-vla-4b)
-- [Hugging Face](https://huggingface.co/robbyant/lingbot-vla-4b-posttrain-robotwin)
-- [Hugging Face](https://huggingface.co/robbyant/lingbot-vla-4b-depth-posttrain-robotwin)
-- [上游 README](https://github.com/Robbyant/lingbot-vla#readme)
+代码：[Robbyant/lingbot-vla](https://github.com/Robbyant/lingbot-vla)。
 
 <ModelCommandBuilder modelId="lingbot-vla" locale="zh" />
 
-## 架构
+## 用来做什么
 
-4B 策略骨干，配特征变换与按机器人映射；运行时使用共享的 WorldFoundry 核心设备选择、编译调度、Hugging Face 快照协调与流式 safetensors 加载。更多内部细节仓库未记录。
+需要 catalog 上的 VLA 策略时选 `lingbot-vla-4b`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+
+4B 策略骨干，配特征变换与按机器人映射；运行时使用共享的 WorldFoundry 核心设备选择、编译调度、Hugging Face 快照协调与流式 safetensors 加载。更多内部细节仓库未记录。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行、机器人策略。别名包括 `lingbot-vla-4b`、`lingbot-vla-4b-posttrain-robotwin`、`lingbot-vla-4b-depth-posttrain-robotwin`。同系列还有 `lingbot-vla-4b-posttrain-robotwin`、`lingbot-vla-4b-depth-posttrain-robotwin`。
+
+记录的评测入口包括[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（有专门的 RoboTwin 后训练 checkpoint）。
 
 ## 运行时契约
 
-模拟器基准用 RoboTwin 后训练版（depth 变体增加深度输入），微调用 base。更新的 6B 世代请见 lingbot-vla-v2。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`lingbot_vla_action_trace.json`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `LingBotVLAPipeline`。
 
-- [RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin) — 有专门的 RoboTwin 后训练 checkpoint。
+起步 variant 是 `lingbot-vla-4b`。catalog 登记了 3 个 variant（上方卡片）：`lingbot-vla-4b`（`vla.pretraining`）：Runner 一致性待确认、`lingbot-vla-4b-posttrain-robotwin`（`vla.policy_rollout`）：Runner 一致性待确认、`lingbot-vla-4b-depth-posttrain-robotwin`（`vla.policy_rollout`）：Runner 一致性待确认。系列状态：**仅静态加载**。
 
-## 就绪状态与限制
+模拟器基准用 RoboTwin 后训练版（depth 变体增加深度输入），微调用 base。 更新的 6B 世代请见 lingbot-vla-v2。
 
-- 此条目仓库未记录 GPU rollout 验证。
+此条目仓库未记录 GPU rollout 验证。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run lingbot-vla-4b --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-lingbot-vla-v1-cu128`（Python 3.11，CUDA 12.8，torch==2.8.0）。
+
+记录的权重仓库包括 `robbyant/lingbot-vla-4b`、`robbyant/lingbot-vla-4b-posttrain-robotwin`、`robbyant/lingbot-vla-4b-depth-posttrain-robotwin` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-vla-4b`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**仅静态加载**。
 
 <ModelRelatedRecipes modelId="lingbot-vla" locale="zh" />

@@ -19,7 +19,7 @@ Catalog aliases include `openvla_oft` and `openvla-oft-libero`.
 
 Use the OFT LIBERO specialists when you want parallel-decoded 8×7 action chunks on the OpenVLA 7B backbone — not the base [OpenVLA](/docs/guides/supported-models/openvla) card.
 
-Launch `worldfoundry-eval run openvla-oft-libero-spatial` with `--pipeline.task-profile vla.policy_rollout`. Required: `image`, `prompt`, `state`. Artifacts: `action_trace` and `openvla-oft_action_trace.json`. Swap `openvla-oft-libero-object`, `-goal`, `-10`, or the combined spatial-object-goal-10 card for the other splits.
+Launch `worldfoundry-eval run openvla-oft-libero-spatial`. Required: `image`, `prompt`, `state`. Artifacts: `action_trace` and `openvla-oft_action_trace.json`. Swap `openvla-oft-libero-object`, `-goal`, `-10`, or the combined spatial-object-goal-10 card for the other splits.
 
 Related suite: [LIBERO](/docs/evaluation/benchmark-hub/libero).
 
@@ -29,6 +29,6 @@ Required: `image`, `prompt`, `state`. Cameras: `full_image` and `wrist_image`. P
 
 ## Running in WorldFoundry
 
-Dedicated environment `worldfoundry-vla-openvla-compat-cu121` (Python 3.10, CUDA 12.1). Stage the matching `moojink/openvla-7b-oft-finetuned-libero-*` snapshot — the runtime does not download weights. Launch `worldfoundry-eval run openvla-oft-libero-spatial` with `--pipeline.task-profile vla.policy_rollout`. License: MIT.
+Dedicated environment `worldfoundry-vla-openvla-compat-cu121` (Python 3.10, CUDA 12.1). Stage the matching `moojink/openvla-7b-oft-finetuned-libero-*` snapshot — the runtime does not download weights. Launch `worldfoundry-eval run openvla-oft-libero-spatial`. License: MIT.
 
 <ModelRelatedRecipes modelId="openvla-oft" locale="en" />

@@ -27,9 +27,9 @@ catalog 记录的任务包括 图生视频、相机可控视频、交互式世�
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`camera_npz`；可选 `video`、`actions`；产物 `generated_world_video`、`matrix-game-3.5-first-person.mp4`。
+可选 `prompt`、`input_path`、`fps`、`steps`、`guidance_scale`；产物 `generated_world_video`、`matrix-game-3.5-first-person.mp4`。
 
-记录的任务 profile：`image-to-video`、`camera-controlled-video`、`interactive-world-model`、`long-horizon-generation`。绑定的 pipeline 类是 `MatrixGame35FirstPersonPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `MatrixGame35FirstPersonPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -39,11 +39,11 @@ Revision-pinned inference behavior is integrated through the canonical NativeDif
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run matrix-game-3.5-first-person --pipeline.task-profile image-to-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run matrix-game-3.5-first-person --pipeline.task-profile interactive-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `RiemannDynamics/Matrix-Game-3.5-Base`、`Wan-AI/Wan2.2-TI2V-5B`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh matrix-game-3.5-first-person`。
+记录的权重仓库包括 `RiemannDynamics/Matrix-Game-3.5-Base`、`Wan-AI/Wan2.2-TI2V-5B`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh matrix-game-3.5-first-person`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0、cc-by-nc-4.0；状态：**Runner 一致性待确认**。
 

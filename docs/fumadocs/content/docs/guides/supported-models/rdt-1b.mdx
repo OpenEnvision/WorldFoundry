@@ -15,7 +15,7 @@ WorldFoundry keeps the unified action model, **two-frame / three-camera** prepro
 
 ## What it is for
 
-Run the pretrained policy: cameras + instruction + proprio in; `action_trace` / `rdt-1b_action_trace.json` out through `RDT1BPipeline`. Task profiles are `vla` (default), `vla.policy_rollout`, and `robot_policy`. Launch `worldfoundry-eval run rdt-1b --pipeline.task-profile vla`.
+Run the pretrained policy: cameras + instruction + proprio in; `action_trace` / `rdt-1b_action_trace.json` out through `RDT1BPipeline`. Task profiles are `vla` (default), `vla.policy_rollout`, and `robot_policy`. Launch `worldfoundry-eval run rdt-1b`.
 
 Stage `robotics-diffusion-transformer/rdt-1b`, `google/siglip-so400m-patch14-384`, and `google/t5-v1_1-xxl`. The released weight is a **pretraining** checkpoint — embodiment / task fine-tuning is usually required before you treat it as a deployable specialist. On memory-constrained hosts, encode the prompt once and pass cached T5 embeddings; the T5 encoder can be released afterward.
 

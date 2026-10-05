@@ -33,9 +33,9 @@ GigaBrain-0 具身策略，不是世界生成器。
 
 ## 运行时契约
 
-必填 `embodiment_id`、`image`、`instruction`、`prompt`、`state`；可选 `action_chunk` (50)、`actions` (robot_action, action_chunk, continuous_action, subtask, trajectory_2d)、`data_path`、`original_action_dim`、`video`；产物 `action_trace`、`giga_brain_0_action_trace.json`。
+可选 `prompt`、`input_path`、`interactions`、`fps`；产物 `action_trace`、`giga_brain_0_action_trace.json`。
 
-记录的任务 profile：`vla`、`vla.action_prediction`、`vla.policy_rollout`、`robot_policy`、`subtask_prediction`。绑定的 pipeline 类是 `GigaBrain0Pipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `GigaBrain0Pipeline`。
 
 起步 variant 是 `giga-brain-0-3.5b-base`。catalog 登记了 2 个 variant（上方卡片）：`giga-brain-0-3.5b-base`（`vla.action_prediction`）：Runner 一致性待确认、`giga-brain-0.1-3.5b-base`（`vla.policy_rollout`）：Runner 一致性待确认。系列状态：**已验证**。
 
@@ -45,11 +45,11 @@ WorldFoundry in-tree GigaBrain-0.1 runtime emitted a checkpoint-backed CUDA acti
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run giga-brain-0-3.5b-base --pipeline.task-profile vla.action_prediction` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run giga-brain-0-3.5b-base --pipeline.task-profile interactive-video` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `open-gigaai/GigaBrain-0-3.5B-Base`、`open-gigaai/GigaBrain-0.1-3.5B-Base`、`google/paligemma-3b-pt-224` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh giga-brain-0-3.5b-base`。
+记录的权重仓库包括 `open-gigaai/GigaBrain-0-3.5B-Base`、`open-gigaai/GigaBrain-0.1-3.5B-Base`、`google/paligemma-3b-pt-224` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh giga-brain-0-3.5b-base`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0；状态：**已验证**。
 

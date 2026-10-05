@@ -17,7 +17,7 @@ The paper is [X-VLA: Soft-Prompted Transformer as Scalable Cross-Embodiment Visi
 
 Roll out a cross-embodiment VLA. WorldFoundry validated all nine released checkpoints on A100: each emits a finite 30×20 action with an explicit `domain_id`.
 
-Launch `worldfoundry-eval run xvla` with `--pipeline.task-profile vla`. Required: `image`, `prompt`, `state`, `domain_id`, and `denoising_steps`. Artifacts: `action_trace` and `xvla_action_trace.json`.
+Launch `worldfoundry-eval run xvla`. Required: `image`, `prompt`, `state`, `domain_id`, and `denoising_steps`. Artifacts: `action_trace` and `xvla_action_trace.json`.
 
 Match `domain_id` to the checkpoint (WidowX, Google Robot, LIBERO, CALVIN, RoboTwin2, …). The foundation `2toINF/X-VLA-Pt` card still needs that ID. Related suite: [BridgeData V2](/docs/evaluation/benchmark-hub/bridgedata-v2).
 
@@ -27,6 +27,6 @@ Required: `image`, `prompt`, `state`, `domain_id`, `denoising_steps`. Optional c
 
 ## Running in WorldFoundry
 
-Dedicated environment `worldfoundry-vla-xvla` (Python 3.10, CUDA 12.1 or newer, torch>=2.2). Stage a matching snapshot such as `2toINF/X-VLA-WidowX`, `2toINF/X-VLA-Google-Robot`, or `2toINF/X-VLA-Libero` — the runtime does not download weights. Launch `worldfoundry-eval run xvla` with `--pipeline.task-profile vla`. License: Apache-2.0.
+Dedicated environment `worldfoundry-vla-xvla` (Python 3.10, CUDA 12.1 or newer, torch>=2.2). Stage a matching snapshot such as `2toINF/X-VLA-WidowX`, `2toINF/X-VLA-Google-Robot`, or `2toINF/X-VLA-Libero` — the runtime does not download weights. Launch `worldfoundry-eval run xvla`. License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="xvla" locale="en" />

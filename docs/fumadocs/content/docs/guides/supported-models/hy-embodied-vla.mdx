@@ -1,39 +1,50 @@
 ---
 title: "Hy-Embodied-0.5-VLA"
-description: "Hy-Embodied-0.5-VLA is Tencent Hunyuan's bimanual manipulation VLA, GPU-validated in this catalog: the RoboTwin checkpoint restored strictly and produced finite 20x20 decoded actions from the official six-frame, three-camera input on an A1…"
+description: "Hy-Embodied-0.5-VLA from Tencent Hunyuan: vla and vla policy rollout; Verified; 2 variants."
+modelId: "hy-embodied-vla"
 pageSource: generated
 ---
 
-**Publisher:** Tencent Hunyuan · Company
-
 Hy-Embodied-0.5-VLA is Tencent Hunyuan's bimanual manipulation VLA, GPU-validated in this catalog: the RoboTwin checkpoint restored strictly and produced finite 20x20 decoded actions from the official six-frame, three-camera input on an A100, and the UMI checkpoint produced a finite 50x20 relative-action chunk in BF16. Both Apache-2.0 checkpoints are pinned on Hugging Face and ModelScope.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="hy-embodied-vla" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2606.14409](https://arxiv.org/abs/2606.14409).
 
-- [Paper](https://arxiv.org/abs/2606.14409)
-- [GitHub](https://github.com/Tencent-Hunyuan/Hy-Embodied-0.5-VLA)
-- [Hugging Face](https://huggingface.co/tencent/Hy-Embodied-0.5-VLA-UMI)
-- [Hugging Face](https://huggingface.co/tencent/Hy-Embodied-0.5-VLA-RoboTwin)
-- [Upstream README](https://github.com/Tencent-Hunyuan/Hy-Embodied-0.5-VLA#readme)
+Code: [Tencent-Hunyuan/Hy-Embodied-0.5-VLA](https://github.com/Tencent-Hunyuan/Hy-Embodied-0.5-VLA).
 
 <ModelCommandBuilder modelId="hy-embodied-vla" locale="en" />
 
-## Architecture
+## What it is for
+
+Use `hy-embodied-vla-umi` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
 
 An inference-only mixture-of-transformers (MoT) backbone with in-tree preprocessing and action decoding. The official input contract is six frames from three cameras; RoboTwin decodes absolute joint actions while UMI decodes relative actions.
 
+Catalog tasks include vla, vla policy rollout, robot policy, and bimanual manipulation. Catalog aliases include `hy-vla`, `hy-embodied-0.5-vla`, and `Hy-Embodied-0.5-VLA`. Also recorded: `hy-embodied-vla-robotwin`.
+
+Recorded evaluation entry points include [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) (GPU-validated RoboTwin policy checkpoint).
+
 ## Runtime contract
+
+Optional `prompt`, `input_path`, `state`, `variant`, and `state_format`; artifacts `action_trace` and `hy_embodied_vla_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `HyEmbodiedVLAPipeline`.
+
+Start on `hy-embodied-vla-umi`. The family registers 2 catalog variants (cards above): `hy-embodied-vla-umi` (`vla.policy_rollout`) — Verified; `hy-embodied-vla-robotwin` (`vla.policy_rollout`) — Verified. Family status: **Verified**.
 
 Choose the RoboTwin checkpoint for simulator benchmark work and the UMI checkpoint for UMI-style relative-action deployments; both run through the same in-tree runtime.
 
-## Evaluation benchmarks
+Inference-only architecture, MoT backbone, runtime, preprocessing, and action decoding are retained in-tree.
 
-- [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) — GPU-validated RoboTwin policy checkpoint.
+## Running in WorldFoundry
 
-## Readiness and limitations
+The catalog launch is `worldfoundry-eval run hy-embodied-vla-umi --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- Validation covers action decoding on A100; full benchmark rollout parity is tracked separately.
+It runs in the dedicated environment `worldfoundry-hy-embodied-vla-cu128` (Python 3.12, CUDA 12.8, torch>=2.7,\<2.8).
+
+Recorded weight repositories include `tencent/Hy-Embodied-0.5-VLA-UMI` and `tencent/Hy-Embodied-0.5-VLA-RoboTwin`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hy-embodied-vla-umi`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include Apache-2.0; status: **Verified**.
 
 <ModelRelatedRecipes modelId="hy-embodied-vla" locale="en" />

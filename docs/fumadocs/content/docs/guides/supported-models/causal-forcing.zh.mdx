@@ -17,13 +17,13 @@ Studio 默认对齐官方 chunk-wise CLI：`config_path: causal_forcing_dmd_chun
 
 ## 用来做什么
 
-从 **chunk-wise** 学生做**文生视频**。启动 `worldfoundry-eval run causal-forcing --pipeline.task-profile text-to-video`。catalog schema 标了 `prompt`、`image`；官方路径默认是 T2V，只有传入 `images` 或设置 `i2v: true` 才走图生视频。产物：`causal-forcing.mp4`。`actions` 记录为 `seed`。
+从 **chunk-wise** 学生做**文生视频**。启动 `worldfoundry-eval run causal-forcing`。catalog schema 标了 `prompt`、`image`；官方路径默认是 T2V，只有传入 `images` 或设置 `i2v: true` 才走图生视频。产物：`causal-forcing.mp4`。`actions` 记录为 `seed`。
 
 **图生视频只支持 frame-wise。** 官方 `inference.py` 会断言 `num_frame_per_block: 1`，chunk-wise 默认线不能跑 I2V。传静帧之前，先把 `config_path:` / `checkpoint_path:` 切到 frame-wise 学生（或 ++ 的 frame-wise 文件）。I2V 会把静帧缩到 **480×832**，编码成首个 latent，再采样 `num_output_frames: 21` 减一。分布式 I2V 不受支持。
 
 只有你明确要 **1 或 2 步**采样时才用 ++。那些 YAML 对**第一帧仍走 4 步**（`denoising_step_list_first_chunk:` `[1000, 750, 500, 250]`，++ 记录的 ASD 首帧技巧）。不要把本运行时下的 `long_video/` 树当成 [Rolling-Forcing](/zh/docs/guides/supported-models/rolling-forcing)。
 
-片源质量看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)。那是列出的评测入口，不是已收录的 WorldFoundry 排名。forcing 家族的提示词列表在 `worldfoundry/data/test_cases/forcing/prompts/`（可用 `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT` 覆盖）。
+片源质量看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)。那是列出的评测入口，不是已收录的 WorldFoundry 排名。通过 `--pipeline.prompt` 提供提示词；外部批量提示词列表需单独准备，并将 `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT` 指向其目录。
 
 ## 运行时契约
 WorldFoundry `CausalForcingPipeline` 默认值（共享 forcing 运行时；`use_ema: false`，与 Self-Forcing / Rolling-Forcing 不同）：
@@ -56,10 +56,10 @@ WorldFoundry `CausalForcingPipeline` 默认值（共享 forcing 运行时；`use
 
 ## 在 WorldFoundry 中运行
 
-`worldfoundry-eval run causal-forcing --pipeline.task-profile text-to-video`，环境 `worldfoundry-unified-cu128`（Python 3.10，CUDA 12.8）。与 Self-Forcing 同一环境族。可选根目录：`$WORLDFOUNDRY_CAUSAL_FORCING_CKPT_ROOT`、`$WORLDFOUNDRY_CAUSAL_FORCING_REPO_ROOT`。catalog 许可证为 **unknown**——生产使用前请核对本仓库 GitHub / Hugging Face 卡片。catalog 未记录 VRAM。缺 Wan 或学生权重时运行时报错，不会下载。
+`worldfoundry-eval run causal-forcing`，环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。与 Self-Forcing 同一环境族。可选根目录：`$WORLDFOUNDRY_CAUSAL_FORCING_CKPT_ROOT`、`$WORLDFOUNDRY_CAUSAL_FORCING_REPO_ROOT`。catalog 许可证为 **unknown**——生产使用前请核对本仓库 GitHub / Hugging Face 卡片。catalog 未记录 VRAM。缺 Wan 或学生权重时运行时报错，不会下载。
 
 ## 最小评测
 
-chunk-wise 文生视频，再跑 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 的 `custom_input` / `aesthetic_quality`。profile 把提示词指向 `worldfoundry/data/test_cases/forcing/prompts/`（`$WORLDFOUNDRY_FORCING_PROMPTS_ROOT`）。demo 一致性仍为 pending；有界 VBench 主键仍是 `aesthetic_quality`。
+chunk-wise 文生视频，再跑 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 的 `custom_input` / `aesthetic_quality`。批量提示词列表需单独准备，并通过 `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT` 选择目录。demo 一致性仍为 pending；有界 VBench 主键仍是 `aesthetic_quality`。
 
 <ModelRelatedRecipes modelId="causal-forcing" locale="zh" />

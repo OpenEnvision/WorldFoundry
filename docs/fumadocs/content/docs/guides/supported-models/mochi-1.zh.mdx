@@ -1,39 +1,48 @@
 ---
 title: "Mochi-1"
-description: "Mochi-1 是 Genmo 开源的文生视频模型，以 preview checkpoint 形式发布，发布时在开源模型中以运动质量见长。catalog 记录一个可运行 variant：mochi-1-preview-t2v；WorldFoundry runner 路径已按官方 preview checkpoint 接好。"
+description: "Mochi-1（Genmo）：文生视频；Runner 一致性待确认。"
+modelId: "mochi-1"
 pageSource: generated
 ---
 
-**发表机构:** Genmo · 企业
-text → video
-
 Mochi-1 是 Genmo 开源的文生视频模型，以 preview checkpoint 形式发布，发布时在开源模型中以运动质量见长。catalog 记录一个可运行 variant：mochi-1-preview-t2v；WorldFoundry runner 路径已按官方 preview checkpoint 接好。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="mochi-1" locale="zh" />
 
-## 上游来源
-
-- [项目主页](https://www.genmo.ai/blog)
-- [GitHub](https://github.com/genmoai/models)
-- [上游 README](https://github.com/genmoai/models#readme)
+项目页：[genmo.ai/blog](https://www.genmo.ai/blog)。代码：[genmoai/models](https://github.com/genmoai/models)。
 
 <ModelCommandBuilder modelId="mochi-1" locale="zh" />
 
-## 架构
+## 用来做什么
+
+`mochi-1-preview-t2v` 是记录的 prompt 到视频路由——不是图像编辑，也不是策略。只要任务是文生视频，从这里起步。
 
 上游将 Mochi-1 描述为 100 亿参数的非对称扩散 Transformer（AsymmDiT），配专用视频 VAE。本仓库记录 runner 接线与标准 prompt/image/video/actions 输入 schema；更多内部细节仓库未记录。
 
+catalog 记录的任务包括 文生视频。模态上，它接受文本，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（标准文生视频质量评测）。
+
 ## 运行时契约
 
-Runner parity 仍待验证：路径已接好，但完整 31 帧、64 步的官方画质一致性尚未记录，且未提供公开 demo 复现脚本。GitHub 组织名为 genmoai，Hugging Face 为 genmo；运行前需就位 preview checkpoint。
+可选 `prompt`、`negative_prompt`、`frames`、`fps`、`height`；产物 `mochi-1-preview-t2v.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `Mochi1PreviewT2VPipeline`。
 
-- [VBench](/zh/docs/evaluation/benchmark-hub/vbench) — 标准文生视频质量评测。
+系列状态：**Runner 一致性待确认**。
 
-## 就绪状态与限制
+`interactive-video` 记录默认值：frames=84, fps=30, height=480, width=848, seed=12345。
 
-- Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
-- Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+Runner parity 仍待验证：路径已接好，但完整 31 帧、64 步的官方画质一致性尚未记录，且未提供公开 demo 复现脚本。 GitHub 组织名为 genmoai，Hugging Face 为 genmo；运行前需就位 preview checkpoint。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run mochi-1-preview-t2v --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `genmo/mochi-1-preview`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh mochi-1-preview-t2v`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="mochi-1" locale="zh" />

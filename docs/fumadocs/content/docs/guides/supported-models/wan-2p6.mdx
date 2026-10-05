@@ -25,13 +25,13 @@ Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub
 
 Wan 2.6 on this card is DashScope **image-to-video**, not the local Wan weights and not [Wan 2.5](/docs/guides/supported-models/wan-2p5) T2V.
 
-Launch `worldfoundry-eval run wan-2p6` with `--pipeline.task-profile image-to-video`. Send a start image; take the returned clip. Sibling: [Wan 2.7 API](/docs/guides/supported-models/wan-2p7).
+Launch `worldfoundry-eval run wan-2p6`. Send a start image; take the returned clip. Sibling: [Wan 2.7 API](/docs/guides/supported-models/wan-2p7).
 
 ## Runtime contract
 
-Inputs, knobs, and artifacts are not recorded on this card.
+Optional `prompt`, `negative_prompt`, `input_path`, `seed`, and `reference_urls`.
 
-Recorded task profiles: `image-to-video` and `hosted-api`. WorldFoundry binds `Wan2p6Pipeline`.
+CLI task profiles: `default`. WorldFoundry binds `Wan2p6Pipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -41,11 +41,11 @@ Hosted DashScope API Studio pipeline is available; users must provide their own 
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run wan-2p6 --pipeline.task-profile image-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run wan-2p6 --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 The environment profile is not recorded.
 
-Stage assets with `bash scripts/inference/prepare_model_infer.sh wan-2p6`.
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wan-2p6`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

@@ -19,7 +19,7 @@ The released RoboTwin 2.0 checkpoint completed real **A100** Workspace inference
 
 AHA-WAM RoboTwin chunk from three ALOHA views plus state.
 
-Launch `worldfoundry-eval run ahawam` with `--pipeline.task-profile vla`.
+Launch `worldfoundry-eval run ahawam`.
 
 Score on [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) — the released checkpoint is trained for RoboTwin 2.0.
 
@@ -36,6 +36,6 @@ Required: `image` and `prompt`; optional: `model_id`, `state`, `preferred_camera
 
 ## Run in WorldFoundry
 
-Status: **Verified**. Unified environment `worldfoundry-unified-cu128` (Python 3.10, CUDA 12.8). Stage `SereneC/AHA-WAM-RoboTwin2.0`, `DiffSynth-Studio/Wan-Series-Converted-Safetensors`, and `Wan-AI/Wan2.1-T2V-1.3B` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run ahawam` with `--pipeline.task-profile vla`. Catalog VRAM is unset.
+Status: **Verified**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `SereneC/AHA-WAM-RoboTwin2.0`, `DiffSynth-Studio/Wan-Series-Converted-Safetensors`, and `Wan-AI/Wan2.1-T2V-1.3B` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run ahawam`. Catalog VRAM is unset.
 
 <ModelRelatedRecipes modelId="ahawam" locale="en" />

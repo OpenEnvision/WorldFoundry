@@ -29,9 +29,9 @@ Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `image`, `prompt`, `state`, and `precomputed_language_tokens`; optional `model_id` (fastwam), `policy_family`, and `action_representation`; artifacts `action_trace` and `fastwam_action_trace.json`.
+Optional `prompt`, `input_path`, `steps`, `seed`, and `state`; artifacts `action_trace` and `fastwam_action_trace.json`.
 
-Recorded task profiles: `wam`, `robot_policy`, `policy_rollout`, and `embodied_benchmark`. WorldFoundry binds `FastWAMPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `FastWAMPipeline`.
 
 Family status: **Verified**.
 
@@ -41,11 +41,11 @@ WorldFoundry contains the released MoT action-inference graph, Wan VAE, UMT5 enc
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run fastwam --pipeline.task-profile wam`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run fastwam --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-vla-fastwam` (Python 3.10, Cu121 Or Newer, torch>=2.2).
 
-Recorded weight repositories include `yuanty/fastwam`, `DiffSynth-Studio/Wan-Series-Converted-Safetensors`, and `Wan-AI/Wan2.1-T2V-1.3B` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh fastwam`.
+Recorded weight repositories include `yuanty/fastwam`, `DiffSynth-Studio/Wan-Series-Converted-Safetensors`, and `Wan-AI/Wan2.1-T2V-1.3B` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh fastwam`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Verified**.
 

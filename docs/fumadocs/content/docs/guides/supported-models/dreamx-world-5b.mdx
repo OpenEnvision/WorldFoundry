@@ -19,7 +19,7 @@ A **2026-07-28** single-A100 run produced a finite, decodable **nine-frame 1280�
 
 Roll a resident causal AR world block, not a long-horizon scorecard.
 
-Launch `worldfoundry-eval run dreamx-world-5b` with `--pipeline.task-profile world_model`.
+Launch `worldfoundry-eval run dreamx-world-5b`.
 
 Score on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — general world-rollout quality.
 
@@ -38,6 +38,6 @@ Required: `image` and `prompt`; optional: `video`; `actions`: camera_navigation;
 
 ## Run in WorldFoundry
 
-Status: **Verified**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `GD-ML/DreamX-World-5B` and `Wan-AI/Wan2.2-TI2V-5B` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run dreamx-world-5b` with `--pipeline.task-profile world_model`. Catalog VRAM is unset.
+Status: **Verified**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `GD-ML/DreamX-World-5B` and `Wan-AI/Wan2.2-TI2V-5B` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run dreamx-world-5b`. Catalog VRAM is unset.
 
 <ModelRelatedRecipes modelId="dreamx-world-5b" locale="en" />

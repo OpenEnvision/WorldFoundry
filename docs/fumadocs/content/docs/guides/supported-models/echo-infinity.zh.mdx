@@ -19,7 +19,7 @@ Echo-Infinity 是京东的**自回归长视频**生成器：文本进去，任�
 
 在 Wan2.1 权重上跑 Echo-Infinity 长视频。
 
-启动 `worldfoundry-eval run echo-infinity --pipeline.task-profile text-to-video`。
+启动 `worldfoundry-eval run echo-infinity`。
 
 评测入口：[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（长文生视频的质量评测）。
 
@@ -40,6 +40,6 @@ Echo-Infinity 是京东的**自回归长视频**生成器：文本进去，任�
 
 ## 在 WorldFoundry 中运行
 
-状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。权重必须本地就位——运行时不下载。在该环境执行 `worldfoundry-eval run echo-infinity --pipeline.task-profile text-to-video`。catalog 未记录 VRAM。
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。权重必须本地就位——运行时不下载。在该环境执行 `worldfoundry-eval run echo-infinity`。catalog 未记录 VRAM。
 
 <ModelRelatedRecipes modelId="echo-infinity" locale="zh" />

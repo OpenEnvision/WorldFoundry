@@ -27,9 +27,9 @@ Infinite-VGGT 流式几何。不是 Infinite-World 视频卡。
 
 ## 运行时契约
 
-本卡片未记录输入、旋钮或产物。
+可选 `input_path`、`interactions`、`output_format`。
 
-记录的任务 profile：`3d-reconstruction`、`streaming-3d`。绑定的 pipeline 类是 `InfiniteVGGTPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `InfiniteVGGTPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -39,11 +39,11 @@ CC-BY-NC-4.0：非商用许可。
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run infinite-vggt --pipeline.task-profile 3d-reconstruction`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+catalog 启动命令是 `worldfoundry-eval run infinite-vggt --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境未记录。
 
-记录的权重仓库包括 `lch01/StreamVGGT`。就位权重用 `bash scripts/inference/prepare_model_infer.sh infinite-vggt`。
+记录的权重仓库包括 `lch01/StreamVGGT`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh infinite-vggt`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

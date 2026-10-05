@@ -1,45 +1,50 @@
 ---
 title: "WorldMem"
-description: "WorldMem 针对交互式世界模型的核心弱点——遗忘：为 Minecraft 式交互世界模型加装显式记忆，使重访地点在长时程下保持一致（论文：arXiv 2504.12369）。WorldFoundry 树内注册了路由；上游推理模型与数据资产为运行时门控。"
+description: "WorldMem：交互式世界模型、Minecraft 世界模型；Runner 一致性待确认。"
+modelId: "worldmem"
 pageSource: generated
 ---
 
-**发表机构:** 开源研究发布（仓库未记录正式机构） · 研究机构
-[WorldMem: Long-term Consistent World Simulation with Memory](https://arxiv.org/abs/2504.12369) (2025)
-
 WorldMem 针对交互式世界模型的核心弱点——遗忘：为 Minecraft 式交互世界模型加装显式记忆，使重访地点在长时程下保持一致（论文：arXiv 2504.12369）。WorldFoundry 树内注册了路由；上游推理模型与数据资产为运行时门控。
 
-**目录状态:** 运行时已移植
+<ModelPaperFigures modelId="worldmem" locale="zh" />
 
-## 上游来源
+记录论文为[WorldMem: Long-term Consistent World Simulation with Memory](https://arxiv.org/abs/2504.12369)（2025）。
 
-- [项目主页](https://worldmem.github.io/)
-- [论文](https://arxiv.org/abs/2504.12369)
-- [GitHub](https://github.com/xizaoqu/WorldMem)
-- [上游 README](https://github.com/xizaoqu/WorldMem#readme)
-
-<figure className="wf-recipe-media is-diagram">
-  <DocsImage src="/models/worldmem/paper.png" alt="WorldMem: Long-term Consistent World Simulation with Memory" />
-  <figcaption>WorldMem: Long-term Consistent World Simulation with Memory</figcaption>
-</figure>
+项目页：[worldmem.github.io](https://worldmem.github.io/)。代码：[xizaoqu/WorldMem](https://github.com/xizaoqu/WorldMem)。
 
 <ModelCommandBuilder modelId="worldmem" locale="zh" />
 
-## 架构
+## 用来做什么
+
+`worldmem` 是记录的交互世界线。要用动作推进世界时从这里起步。
 
 仓库记录的设计主题是基于记忆的长期一致性：存储并检索历史观测以条件化后续滚动生成。官方仓库与论文指针之外的架构内部细节仓库未记录。
 
+catalog 记录的任务包括 交互式世界模型、Minecraft 世界模型、长期一致性。
+
+记录的评测入口包括[MemoBench](/zh/docs/evaluation/benchmark-hub/memobench)（世界滚动生成的长期记忆一致性）、[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（动作条件交互滚动生成质量）。
+
 ## 运行时契约
 
-配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
+产物 `generated_video`、`worldmem_runtime_plan.json`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `WorldMemPipeline`。
 
-- [MemoBench](/zh/docs/evaluation/benchmark-hub/memobench) — 世界滚动生成的长期记忆一致性。
-- [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) — 动作条件交互滚动生成质量。
+系列状态：**Runner 一致性待确认**。
 
-## 就绪状态与限制
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。
 
-- 上游推理模型/数据资产为运行时门控；仓库未记录 GPU 验证。
+WorldFoundry tracks WorldMem source 计划中; no runnable pipeline is registered.
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run worldmem --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh worldmem`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="worldmem" locale="zh" />

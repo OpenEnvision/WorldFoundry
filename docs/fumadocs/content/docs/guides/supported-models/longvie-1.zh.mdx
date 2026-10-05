@@ -1,41 +1,50 @@
 ---
 title: "LongVie"
-description: "LongVie 是 Vchitect 团队的可控超长视频生成框架：用稠密深度与稀疏点/轨迹控制视频来驱动基于 Wan 的扩散基座，使分钟级视频保持一致。本条目保留第一代适配器，但上游尚未发布第一代权重；公开的 Vchitect/LongVie2 checkpoint 不能混用。"
+description: "LongVie（Shanghai AI Laboratory (Vchitect)）：图生视频、长视频生成；Runner 一致性待确认; 独立环境 `worldfoundry-longvie-cu128`。"
+modelId: "longvie-1"
 pageSource: generated
 ---
 
-**发表机构:** 上海人工智能实验室（Vchitect 团队） · 研究机构
-image → video · depth
-
 LongVie 是 Vchitect 团队的可控超长视频生成框架：用稠密深度与稀疏点/轨迹控制视频来驱动基于 Wan 的扩散基座，使分钟级视频保持一致。本条目保留第一代适配器，但上游尚未发布第一代权重；公开的 Vchitect/LongVie2 checkpoint 不能混用。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="longvie-1" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2512.13604](https://arxiv.org/abs/2512.13604)。
 
-- [项目主页](https://vchitect.github.io/LongVie2-project/)
-- [论文](https://arxiv.org/abs/2512.13604)
-- [GitHub](https://github.com/Vchitect/LongVie)
-- [上游 README](https://github.com/Vchitect/LongVie#readme)
+项目页：[vchitect.github.io/LongVie2-project](https://vchitect.github.io/LongVie2-project/)。代码：[Vchitect/LongVie](https://github.com/Vchitect/LongVie)。
 
 <ModelCommandBuilder modelId="longvie-1" locale="zh" />
 
-## 架构
+## 用来做什么
 
-LongVie-1 = 规范化 Wan 模型 + 编码器 + VAE + VACE/控制角色 + checkpoint 加载器 + 共享分段 runner。原生 runner 保留官方 640x352 分段尺寸与历史/噪声续写状态，并支持可选的 USP ring/ulysses 分布式控制。其 synthesis 包只是薄薄的产品装配层，不是独立引擎。
+`longvie-1` 是记录的深度路由。需要从记录输入出深度图时从这里起步。
+
+LongVie-1 = 规范化 Wan 模型 + 编码器 + VAE + VACE/控制角色 + checkpoint 加载器 + 共享分段 runner。原生 runner 保留官方 640x352 分段尺寸与历史/噪声续写状态，并支持可选的 USP ring/ulysses 分布式控制。其 synthesis 包只是薄薄的产品装配层，不是独立引擎。该模型由上海人工智能实验室（Vchitect 团队）发布。
+
+catalog 记录的任务包括 图生视频、长视频生成、depth-controlled-video、trajectory-controlled-video。别名包括 `longvie`、`longvie1`、`longvie-v1`。模态上，它接受图像，输出视频、深度。
+
+记录的评测入口包括[ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)（面向分钟级生成的长时程评测）。
 
 ## 运行时契约
 
-默认调用在未传 execute=True 时快速失败。由于官方尚未发布 LongVie-1 权重，执行时还必须显式提供第一代 control checkpoint。需要公开 checkpoint 支持的路径时请使用 longvie-2。
+可选 `prompt`、`negative_prompt`、`input_path`、`interactions`、`frames`；产物 `generated_video`、`longvie-1.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LongVie1Pipeline`。
 
-- [ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench) — 面向分钟级生成的长时程评测。
+系列状态：**Runner 一致性待确认**。
 
-## 就绪状态与限制
+`interactive-video` 记录默认值：frames=81, fps=16, height=352, width=640, seed=0。
 
-- Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
-- Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
-- 需要用户提供深度与点/轨迹控制视频——它不是普通的图生视频模型。
+默认调用在未传 execute=True 时快速失败。 由于官方尚未发布 LongVie-1 权重，执行时还必须显式提供第一代 control checkpoint。 需要公开 checkpoint 支持的路径时请使用 longvie-2。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run longvie-1 --pipeline.task-profile interactive-video` 写出深度。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-longvie-cu128`（Python 3.10，CUDA 12.8）。
+
+记录的权重仓库包括 `Wan-AI/Wan2.1-I2V-14B-480P`、`Wan-AI/Wan2.1-T2V-1.3B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh longvie-1`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="longvie-1" locale="zh" />

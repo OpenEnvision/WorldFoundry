@@ -23,6 +23,8 @@ const READER_LABELS: Record<StatusLocale, Record<ReaderStatusKey, string>> = {
 
 /** Longest-first so a static-verified token wins over a shorter runtime prefix. */
 const TOKEN_KEYS: Array<[string, ReaderStatusKey]> = [
+  ['native_checkpoint_structure_validated', 'static'],
+  ['native_checkpoint_structure_verified', 'static'],
   ['in_tree_checkpoint_runtime_static_verified', 'static'],
   ['in_tree_checkpoint_runtime_static_validated', 'static'],
   ['static_runtime_verified_checkpoint_assets_staged', 'static'],

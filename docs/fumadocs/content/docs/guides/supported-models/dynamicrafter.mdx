@@ -19,7 +19,7 @@ Both variants are wired; **official long-config parity is pending**. Start at 51
 
 Animate a still with DynamiCrafter I2V.
 
-Launch `worldfoundry-eval run dynamicrafter-512-i2v` with `--pipeline.task-profile image-to-video`.
+Launch `worldfoundry-eval run dynamicrafter-512-i2v`.
 
 Score on [AIGCBench](/docs/evaluation/benchmark-hub/aigcbench) — image-to-video benchmark aligned with DynamiCrafter's task.
 
@@ -34,6 +34,6 @@ Required: `prompt` and `image`; optional: `video`; `actions`: seed; artifacts: `
 
 ## Run in WorldFoundry
 
-Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Doubiiu/DynamiCrafter`, `Doubiiu/DynamiCrafter_512`, and `Doubiiu/DynamiCrafter_1024` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run dynamicrafter-512-i2v` with `--pipeline.task-profile image-to-video`. Catalog VRAM is unset.
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Doubiiu/DynamiCrafter`, `Doubiiu/DynamiCrafter_512`, and `Doubiiu/DynamiCrafter_1024` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run dynamicrafter-512-i2v`. Catalog VRAM is unset.
 
 <ModelRelatedRecipes modelId="dynamicrafter" locale="en" />

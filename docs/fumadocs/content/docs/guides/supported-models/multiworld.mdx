@@ -1,39 +1,48 @@
 ---
 title: "MultiWorld"
-description: "MultiWorld (\"It Takes Two\") is a multi-agent interactive video generator: two players' actions drive one shared generated game world. The in-tree ItTakesTwo wrapper has completed a checkpoint-backed 81-frame GPU inference run; game-domain…"
+description: "MultiWorld: video generation and multi-agent-world-model; Verified."
+modelId: "multiworld"
 pageSource: generated
 ---
 
-**Publisher:** Open-source research release (institution not recorded) · Research lab
-video
-
 MultiWorld ("It Takes Two") is a multi-agent interactive video generator: two players' actions drive one shared generated game world. The in-tree ItTakesTwo wrapper has completed a checkpoint-backed 81-frame GPU inference run; game-domain action fidelity remains unverified.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="multiworld" locale="en" />
 
-## Upstream sources
-
-- [GitHub](https://github.com/CIntellifusion/MultiWorld)
-- [Upstream README](https://github.com/CIntellifusion/MultiWorld#readme)
+Code: [CIntellifusion/MultiWorld](https://github.com/CIntellifusion/MultiWorld).
 
 <ModelCommandBuilder modelId="multiworld" locale="en" />
 
-## Architecture
+## What it is for
+
+Pick `multiworld` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
 
 Architecture internals beyond the recorded tasks are not stored in this repository. The upstream license is custom and flagged for manual review.
 
+Catalog tasks include video generation, multi-agent-world-model, interactive-video-generation, and game-video. Catalog aliases include `multiword` and `multiworld-ittakestwo`. Documented outputs include video.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Multi-agent world-rollout quality).
+
 ## Runtime contract
+
+Optional `input_path`, `interactions`, `frames`, `fps`, and `height`; artifacts `multiworld.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `MultiWorldItTakesTwoPipeline`.
+
+Family status: **Verified**.
+
+Recorded `default` defaults: frames=81, fps=60.
 
 Supply an initial image and two-player discrete and continuous action tensors (or an action CSV). A local toydata checkpoint run produced 81 frames at 480x480 and 35 steps. Review the custom upstream license before redistribution.
 
-## Evaluation benchmarks
+## Running in WorldFoundry
 
-- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Multi-agent world-rollout quality.
+The catalog launch is `worldfoundry-eval run multiworld --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-## Readiness and limitations
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-- Custom upstream license flagged for manual review.
-- The synthetic-action, out-of-domain image check does not establish game-domain action control or realistic world dynamics.
-- The publishing institution is not recorded in this repository.
+Recorded weight repositories include `Haoyuwu/MultiWorldCheckpoint`, `Wan-AI/Wan2.2-TI2V-5B`, and `facebook/VGGT-1B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh multiworld`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
 
 <ModelRelatedRecipes modelId="multiworld" locale="en" />

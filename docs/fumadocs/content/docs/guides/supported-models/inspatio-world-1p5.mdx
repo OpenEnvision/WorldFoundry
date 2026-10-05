@@ -42,11 +42,12 @@ Six short GPU cases passed exact BF16/SDPA comparison: three prepared source typ
 To reproduce, check out the upstream revision shown in the catalog and stage the component weights locally. Use a new output directory; the video example ships without depth, which `prepare-depth` computes with the shared DA3 model.
 
 ```bash
+# Set INSPATIO_GPU_ID to an available GPU index or UUID from nvidia-smi.
 INSPATIO_UPSTREAM=/path/to/inspatio-world-v1.5
 INSPATIO_CHECKPOINTS=/models
 INSPATIO_VALIDATION=/tmp/inspatio-v15-validation
 for mode in prepare prepare-depth native upstream compare; do
-  CUDA_VISIBLE_DEVICES=0 WAN_DISABLE_FA3=1 python tests/manual/inspatio_v15_regression.py "$mode" \
+  CUDA_VISIBLE_DEVICES="${INSPATIO_GPU_ID}" WAN_DISABLE_FA3=1 python tests/manual/inspatio_v15_regression.py "$mode" \
     --upstream "$INSPATIO_UPSTREAM" --checkpoints "$INSPATIO_CHECKPOINTS" \
     --output "$INSPATIO_VALIDATION"
 done

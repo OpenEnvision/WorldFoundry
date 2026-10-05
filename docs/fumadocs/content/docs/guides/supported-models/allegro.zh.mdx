@@ -29,9 +29,9 @@ catalog 记录的任务包括 文生视频、图生视频。别名包括 `allegr
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (seed)；产物 `allegro-ti2v.mp4`。
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `allegro-ti2v.mp4`。
 
-记录的任务 profile：`text-to-video`、`image-to-video`。绑定的 pipeline 类是 `AllegroTi2VPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `AllegroTi2VPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -41,11 +41,11 @@ GitHub verification succeeded after retry; the first attempt hit a transient TLS
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run allegro --pipeline.task-profile text-to-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run allegro --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `rhymes-ai/Allegro`、`rhymes-ai/Allegro-TI2V`。就位权重用 `bash scripts/inference/prepare_model_infer.sh allegro`。
+记录的权重仓库包括 `rhymes-ai/Allegro`、`rhymes-ai/Allegro-TI2V`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh allegro`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
 

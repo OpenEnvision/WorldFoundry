@@ -25,17 +25,17 @@ Paper: [arXiv 2602.06949](https://arxiv.org/abs/2602.06949). Project: [dreamdojo
 
 DreamDojo builds on an action-conditioned Cosmos Predict runtime with the Groot Dreams dataloader and LAM modules, vendored under synthesis/visual_generation/dreamdojo/dreamdojo_runtime. The recorded action contract maps GR-1 [0,58), G1 [58,101), YAM [101,147), AgiBot [147,169), MANO [220,352), latent actions [352,384).
 
-Catalog tasks include world model, robot-world-generation, and interactive-robot-world-generation. Also recorded: `dreamdojo-distilled-gr1-realtime`.
+Catalog tasks include world model. Also recorded: `dreamdojo-distilled-gr1-realtime`.
 
 Recorded evaluation entry points include [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Embodied world-model evaluation for robot video prediction).
 
 ## Runtime contract
 
-Required `image`, `instruction`, `prompt`, and `video`; optional `actions` (robot_action, unified_384d_action, action_file, dataset_action_sequence) and `dataset_path` (datasets/PhysicalAI-Robotics-GR00T-Teleop-GR1/GR1_robot); artifacts `dreamdojo_world.mp4`.
+Optional `prompt`, `input_path`, `interactions`, and `num_samples`; artifacts `dreamdojo_world.mp4`.
 
-Recorded task profiles: `world_model`, `robot-world-generation`, and `interactive-robot-world-generation`. WorldFoundry binds `DreamDojoPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `DreamDojoPipeline`.
 
-Start on `dreamdojo-2b-gr1-action-conditioned`. The family registers 2 catalog variants (cards above): `dreamdojo-2b-gr1-action-conditioned` (`robot-world-generation`) — Runner parity pending; `dreamdojo-distilled-gr1-realtime` (`interactive-robot-world-generation`) — Runner parity pending. Family status: **Planned**.
+Start on `dreamdojo-2b-gr1-action-conditioned`. The family registers 2 catalog variants (cards above): `dreamdojo-2b-gr1-action-conditioned` (`robot-world-generation`) — Planned; `dreamdojo-distilled-gr1-realtime` (`interactive-robot-world-generation`) — Planned. Family status: **Planned**.
 
 nvidia/DreamDojo checkpoints are staged locally including the 2B_GR1_post-train directory, but full parity still requires the converted model_ema_bf16.pt, the official GR-1 evaluation dataset, and a CUDA 12.8-class host. It is intentionally not classified as a VLA policy or plain video generation.
 
@@ -43,9 +43,9 @@ Runtime code is vendored in-tree; checkpoints and datasets remain external asset
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run dreamdojo-2b-gr1-action-conditioned --pipeline.task-profile robot-world-generation`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run dreamdojo-2b-gr1-action-conditioned --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-Recorded weight repositories include `nvidia/DreamDojo`. Stage assets with `bash scripts/inference/prepare_model_infer.sh dreamdojo-2b-gr1-action-conditioned`.
+Recorded weight repositories include `nvidia/DreamDojo`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dreamdojo-2b-gr1-action-conditioned`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include other:nvidia-open-model-license; status: **Planned**.
 

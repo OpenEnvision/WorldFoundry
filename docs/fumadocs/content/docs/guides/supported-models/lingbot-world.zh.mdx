@@ -21,15 +21,15 @@ LingBot-World 是蚂蚁灵波的相机可控世界视频模型。本 catalog 中
 
 官方 base-cam 配方使用八卡，DiT/T5 FSDP 加 Ulysses 序列并行；Workspace 亦支持四卡紧凑拓扑（4 与 8 都能整除模型的 40 个注意力头）。共享的时间步嵌入为整数调度时间步保留浮点精度，避免分布式序列并行的输出损坏。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
 
-catalog 记录的任务包括 世界模型、相机控制、image-navigation-video。
+catalog 记录的任务包括 世界模型、相机控制。
 
 记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（世界滚动生成的相机控制贴合度）、[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（世界滚动生成的总体质量）。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (camera_path, navigation_action)；产物 `lingbot-world.mp4`。
+可选 `image`、`prompt`、`interactions`、`action_path`、`frames`；产物 `lingbot-world.mp4`。
 
-记录的任务 profile：`world`、`camera_control`、`world_model`、`image-navigation-video`、`image-action-video`。绑定的 pipeline 类是 `LingBotPipeline`。
+CLI task profile：`image-navigation-video`、`image-action-video`。绑定的 pipeline 类是 `LingBotPipeline`。
 
 系列状态：**已验证**。
 
@@ -41,7 +41,7 @@ catalog 记录的任务包括 世界模型、相机控制、image-navigation-vid
 
 启动 `worldfoundry-eval run lingbot-world --pipeline.task-profile image-navigation-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-记录的权重仓库包括 `robbyant/lingbot-world-base-cam`。就位权重用 `bash scripts/inference/prepare_model_infer.sh lingbot-world`。
+记录的权重仓库包括 `robbyant/lingbot-world-base-cam`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-world`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

@@ -1,41 +1,50 @@
 ---
 title: "NeoVerse"
-description: "NeoVerse is a 4D world model built as a native assembly over canonical Wan components plus model-specific control and reconstruction roles: it enhances world generation with 4D-aware conditioning."
+description: "NeoVerse from CreateAI (formerly TuSimple): 4D world modeling from in-the-wild monocular videos; Verified."
+modelId: "neoverse"
 pageSource: generated
 ---
 
-**Publisher:** CreateAI (formerly TuSimple) · Company
-[NeoVerse: Enhancing 4D World Model with in-the-wild Monocular Videos](https://arxiv.org/abs/2601.00393) (CVPR 2026, 2026)
-
 NeoVerse is a 4D world model built as a native assembly over canonical Wan components plus model-specific control and reconstruction roles: it enhances world generation with 4D-aware conditioning. In this catalog the runner is verified for the README-style tilt_up video demo with local NeoVerse assets; the official video-input path uses static_scene=false.
 
-**Catalog status:** Runner verified
+<ModelPaperFigures modelId="neoverse" locale="en" />
 
-## Upstream sources
+The recorded paper is [NeoVerse: Enhancing 4D World Model with in-the-wild Monocular Videos](https://arxiv.org/abs/2601.00393) (CVPR 2026, 2026).
 
-- [Project](https://neoverse-4d.github.io/)
-- [Paper](https://arxiv.org/abs/2601.00393)
-- [GitHub](https://github.com/IamCreateAI/NeoVerse)
-- [Upstream README](https://github.com/IamCreateAI/NeoVerse#readme)
+Project page: [neoverse-4d.github.io](https://neoverse-4d.github.io/). Code: [IamCreateAI/NeoVerse](https://github.com/IamCreateAI/NeoVerse).
 
 <ModelCommandBuilder modelId="neoverse" locale="en" />
 
-## Architecture
+## What it is for
 
-Per the upstream release (arXiv 2601.00393), NeoVerse layers 4D reconstruction and control roles over a Wan video backbone. WorldFoundry expresses this as a native assembly over shared Wan infrastructure — real inference stays checkpoint/GPU gated with no metadata-only runner shim.
+`neoverse` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+Per the upstream release (arXiv 2601.00393), NeoVerse layers 4D reconstruction and control roles over a Wan video backbone. WorldFoundry expresses this as a native assembly over shared Wan infrastructure — real inference stays checkpoint/GPU gated with no metadata-only runner shim. It is published by CreateAI (formerly TuSimple).
+
+Catalog tasks include 4D world modeling from in-the-wild monocular videos. Catalog aliases include `NeoVerse: Enhancing 4D World Model`.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Scores navigable generated worlds), [4DWorldBench](/docs/evaluation/benchmark-hub/4dworldbench) (Matches the entry's 4D world-model focus).
 
 ## Runtime contract
 
-Runtime execution requires NeoVerse, Wan, reconstructor, LoRA, and CUDA assets. For video input follow the official path with static_scene=false; per-run visual QA and artifact checks are tracked outside the catalog.
+Optional `video`, `prompt`, `predefined_trajectory`, `interactions`, and `trajectory_file`; artifacts `generated_world`, `generated_4d_scene`, and `neoverse.mp4`.
 
-## Evaluation benchmarks
+CLI task profiles: `official-tilt-up-video`. WorldFoundry binds `NeoVersePipeline`.
 
-- [WorldScore](/docs/evaluation/benchmark-hub/worldscore) — Scores navigable generated worlds.
-- [4DWorldBench](/docs/evaluation/benchmark-hub/4dworldbench) — Matches the entry's 4D world-model focus.
+Family status: **Verified**.
 
-## Readiness and limitations
+Recorded `official-tilt-up-video` defaults: seed=42.
 
-- Requires the full recorded asset stack (NeoVerse + Wan + reconstructor + LoRA).
-- Verified scope is the README-style demo; broader scenario coverage is tracked outside the catalog.
+Runtime execution requires NeoVerse, Wan, reconstructor, LoRA, and CUDA assets.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run neoverse --pipeline.task-profile official-tilt-up-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `Yuppie1204/NeoVerse`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh neoverse`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
 
 <ModelRelatedRecipes modelId="neoverse" locale="en" />

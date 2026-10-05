@@ -1,40 +1,50 @@
 ---
 title: "SolarWM"
-description: "SolarWM provides dataset-indexed camera-controlled inference across Wan 5B/14B, LTX-2.5 and MiniMax-H3 releases."
+description: "SolarWM from Junchao-cs: camera-controlled-video and interactive-world-model; Runner parity pending; 4 variants."
+modelId: "solarwm"
 pageSource: generated
 ---
 
-**Publisher:** Junchao-cs · Research lab
-
 SolarWM provides dataset-indexed camera-controlled inference across Wan 5B/14B, LTX-2.5 and MiniMax-H3 releases.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="solarwm" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2609.02886](https://arxiv.org/abs/2609.02886).
 
-- [Project](https://junchao-cs.github.io/SolarWM-Web/)
-- [Paper](https://arxiv.org/abs/2609.02886)
-- [Source](https://github.com/Junchao-cs/SolarWM)
-- [Upstream README](https://github.com/Junchao-cs/SolarWM#readme)
+Project page: [junchao-cs.github.io/SolarWM-Web](https://junchao-cs.github.io/SolarWM-Web/). Code: [Junchao-cs/SolarWM](https://github.com/Junchao-cs/SolarWM).
 
 <ModelCommandBuilder modelId="solarwm" locale="en" />
 
-## Architecture
+## What it is for
 
-A single WorldFoundry launcher selects the released solarwm infer route in its dedicated backend environment. Source backbones, training code and data pipelines are not vendored.
+Use `solarwm-wan2.2-5b` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+
+A single WorldFoundry launcher selects the released solarwm infer route in its dedicated backend environment. Source backbones, training code and data pipelines are not vendored. It is published by Junchao-cs.
+
+Catalog tasks include camera-controlled-video and interactive-world-model. Catalog aliases include `solar-wm`, `solarwm-wan2.2-5b`, `solarwm-wan22-5b`, and `solarwm-wan2.2-14b` among others. Also recorded: `solarwm-wan2.2-14b`, `solarwm-ltx-22b`, `solarwm-h3-33b`.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Long-horizon camera-controlled world consistency).
 
 ## Runtime contract
 
+Required `load.base_path` and `load.data_root`; optional `load.checkpoint_dir`, `overrides`, `execute`, and `timeout_seconds`; artifacts `generated_world` and `solarwm.mp4`.
+
+CLI task profiles: `indexed-inference`. WorldFoundry binds `SolarWMPipeline`.
+
+Start on `solarwm-wan2.2-5b`. The family registers 4 catalog variants (cards above): `solarwm-wan2.2-5b` (`camera-conditioned-video`) — Runner parity pending; `solarwm-wan2.2-14b` (`camera-conditioned-video`) — Runner parity pending; `solarwm-ltx-22b` (`camera-conditioned-video`) — Runner parity pending; `solarwm-h3-33b` (`camera-conditioned-video`) — Runner parity pending. Family status: **Runner parity pending**.
+
 Default variant=wan-5b-dmd. Provide source_root, checkpoint_dir, base_path and data_root. Prompts, images and camera tracks come from the indexed samples. Use a separate interpreter for Wan, LTX and H3; route process counts follow the official configs.
 
-## Evaluation benchmarks
+GPU/checkpoint-backed artifact parity has not been run in this workspace.
 
-- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Long-horizon camera-controlled world consistency.
+## Running in WorldFoundry
 
-## Readiness and limitations
+The catalog launch is `worldfoundry-eval run solarwm-wan2.2-5b --pipeline.task-profile indexed-inference`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- Only the infer action is exposed. Training, preencoding and data-engine commands are excluded.
-- Code is Apache-2.0; LTX and H3 base/adapter weights retain their respective community licenses and restrictions.
-- Checkpoint-backed GPU generation is pending.
+It runs in the dedicated environment `worldfoundry-solarwm-wan22-cu124` (Python 3.10, CUDA 12.4, torch==2.5.1+cu124).
+
+Recorded weight repositories include `junchaoh-cs/SolarWM` and `junchaoh-cs/SolarWM-H3-33B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh solarwm-wan2.2-5b`. Add `--download` to fetch missing public checkpoints.
+
+Gated `junchaoh-cs/SolarWM` — accept upstream terms before download; status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="solarwm" locale="en" />

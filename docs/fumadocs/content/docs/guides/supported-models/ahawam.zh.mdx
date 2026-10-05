@@ -19,7 +19,7 @@ AHA-WAM 是面向操作的**世界-动作模型**：视频专家和动作专家�
 
 用三个 ALOHA 视角加状态跑 AHA-WAM 的 RoboTwin 动作块。
 
-启动 `worldfoundry-eval run ahawam --pipeline.task-profile vla`。
+启动 `worldfoundry-eval run ahawam`。
 
 评测入口：[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（发布的 checkpoint 面向 RoboTwin 2.0 训练）。
 
@@ -38,6 +38,6 @@ AHA-WAM 是面向操作的**世界-动作模型**：视频专家和动作专家�
 
 ## 在 WorldFoundry 中运行
 
-状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.10, CUDA 12.8）。先把 `SereneC/AHA-WAM-RoboTwin2.0`、`DiffSynth-Studio/Wan-Series-Converted-Safetensors`、`Wan-AI/Wan2.1-T2V-1.3B` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run ahawam --pipeline.task-profile vla`。catalog 未记录 VRAM。
+状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `SereneC/AHA-WAM-RoboTwin2.0`、`DiffSynth-Studio/Wan-Series-Converted-Safetensors`、`Wan-AI/Wan2.1-T2V-1.3B` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run ahawam`。catalog 未记录 VRAM。
 
 <ModelRelatedRecipes modelId="ahawam" locale="zh" />

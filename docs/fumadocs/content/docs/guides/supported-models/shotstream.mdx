@@ -1,37 +1,48 @@
 ---
 title: "ShotStream"
-description: "ShotStream is Kling AI Research's real-time interactive streaming video generator: it targets continuous, interactively steered video streams rather than fixed clips."
+description: "ShotStream from Kuaishou (Kling Team): interactive-video-generation and real-time-video-generation; Runner parity pending."
+modelId: "shotstream"
 pageSource: generated
 ---
 
-**Publisher:** Kuaishou (Kling Team) · Company
-video
-
 ShotStream is Kling AI Research's real-time interactive streaming video generator: it targets continuous, interactively steered video streams rather than fixed clips. In this catalog the official inference route is registered with the source bound at a pinned commit; checkpoint and streaming assets stay runtime-gated.
 
-**Catalog status:** Runtime ported
+<ModelPaperFigures modelId="shotstream" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2603.25746](https://arxiv.org/abs/2603.25746).
 
-- [Project](https://luo0207.github.io/ShotStream/)
-- [Paper](https://arxiv.org/abs/2603.25746)
-- [GitHub](https://github.com/KlingAIResearch/ShotStream)
-- [Hugging Face](https://huggingface.co/KlingTeam/ShotStream)
-- [Upstream README](https://github.com/KlingAIResearch/ShotStream#readme)
+Project page: [luo0207.github.io/ShotStream](https://luo0207.github.io/ShotStream/). Code: [KlingAIResearch/ShotStream](https://github.com/KlingAIResearch/ShotStream).
 
 <ModelCommandBuilder modelId="shotstream" locale="en" />
 
-## Architecture
+## What it is for
 
-Architecture internals beyond the recorded tasks are not stored in this repository (weights at KlingTeam/ShotStream). The upstream repository lacks a root license and is flagged for manual review.
+Pick `shotstream` when you want this family's text-to-video line in WorldFoundry: a prompt in, a generated clip out. Use it as the catalog T2V start rather than an editor or a world-model stepper.
+
+Architecture internals beyond the recorded tasks are not stored in this repository (weights at KlingTeam/ShotStream). The upstream repository lacks a root license and is flagged for manual review. It is published by Kuaishou (Kling Team).
+
+Catalog tasks include interactive-video-generation, real-time-video-generation, and streaming-video. Catalog aliases include `interactive-video-generation`. Documented outputs include video.
 
 ## Runtime contract
 
+Optional `prompt`, `load.checkpoint_dir`, `load.wan_model_dir`, `data_path`, and `seed`; artifacts `generated_video` and `shotstream.mp4`.
+
+CLI task profiles: `causal-video`. WorldFoundry binds `ShotStreamPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `causal-video` defaults: seed=42, fps=16.
+
 Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
 
-## Readiness and limitations
+## Running in WorldFoundry
 
-- Missing root license upstream: legal review required.
-- Real generation is checkpoint/asset gated.
+Launch `worldfoundry-eval run shotstream --pipeline.task-profile causal-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `KlingTeam/ShotStream` and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh shotstream`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="shotstream" locale="en" />

@@ -15,7 +15,7 @@ SmolVLA 是 Hugging Face / LeRobot 的紧凑社区 VLA：**SmolVLM2-500M** 视�
 
 ## 用来做什么
 
-滚动 LIBERO 专家线：必填 `image`、`prompt`、`state` 进，经 `SmolVLAPipeline` 写出 `action_trace` / `smolvla_action_trace.json`。两路官方相机（`observation.images.image`、`observation.images.image2`）。动作契约是形状 **50×7** 的连续块。默认启动 `worldfoundry-eval run smolvla-libero --pipeline.task-profile vla.policy_rollout`。
+滚动 LIBERO 专家线：必填 `image`、`prompt`、`state` 进，经 `SmolVLAPipeline` 写出 `action_trace` / `smolvla_action_trace.json`。两路官方相机（`observation.images.image`、`observation.images.image2`）。动作契约是形状 **50×7** 的连续块。默认启动 `worldfoundry-eval run smolvla-libero`。
 
 LIBERO 专家线的评测看 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero)。那是匹配套件，不是已收录的 WorldFoundry 排名。不要把 `smolvla-base` 送进同一条 rollout。
 

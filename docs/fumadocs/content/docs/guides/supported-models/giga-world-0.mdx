@@ -49,7 +49,7 @@ Launch `worldfoundry-eval run giga-world-0 --pipeline.task-profile robot-image-t
 
 It runs in the unified environment `worldfoundry-unified-cu121` (Python 3.11, CUDA 12.1, torch==2.5.1).
 
-Recorded weight repositories include `open-gigaai/GigaWorld-0-Video-Pretrain-2b`, `open-gigaai/GigaWorld-0-Video-GR1-2b`, and `google-t5/t5-11b` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh giga-world-0`.
+Recorded weight repositories include `open-gigaai/GigaWorld-0-Video-Pretrain-2b`, `open-gigaai/GigaWorld-0-Video-GR1-2b`, and `google-t5/t5-11b` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh giga-world-0`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

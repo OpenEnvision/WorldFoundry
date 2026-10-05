@@ -31,9 +31,9 @@ Recorded evaluation entry points include [RoboTwin 2.0](/docs/evaluation/benchma
 
 ## Runtime contract
 
-Required `embodiment_id`, `image`, `instruction`, `prompt`, and `state`; optional `action_chunk` (50), `actions` (robot_action, action_chunk, continuous_action, subtask, trajectory_2d), `data_path`, `original_action_dim`, and `video`; artifacts `action_trace` and `giga_brain_0_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `action_trace` and `giga_brain_0_action_trace.json`.
 
-Recorded task profiles: `vla`, `vla.action_prediction`, `vla.policy_rollout`, `robot_policy`, and `subtask_prediction`. WorldFoundry binds `GigaBrain0Pipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `GigaBrain0Pipeline`.
 
 Start on `giga-brain-0-3.5b-base`. The family registers 2 catalog variants (cards above): `giga-brain-0-3.5b-base` (`vla.action_prediction`) — Runner parity pending; `giga-brain-0.1-3.5b-base` (`vla.policy_rollout`) — Runner parity pending. Family status: **Verified**.
 
@@ -43,11 +43,11 @@ WorldFoundry in-tree GigaBrain-0.1 runtime emitted a checkpoint-backed CUDA acti
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run giga-brain-0-3.5b-base --pipeline.task-profile vla.action_prediction` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run giga-brain-0-3.5b-base --pipeline.task-profile interactive-video` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `open-gigaai/GigaBrain-0-3.5B-Base`, `open-gigaai/GigaBrain-0.1-3.5B-Base`, and `google/paligemma-3b-pt-224` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh giga-brain-0-3.5b-base`.
+Recorded weight repositories include `open-gigaai/GigaBrain-0-3.5B-Base`, `open-gigaai/GigaBrain-0.1-3.5B-Base`, and `google/paligemma-3b-pt-224` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh giga-brain-0-3.5b-base`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Verified**.
 

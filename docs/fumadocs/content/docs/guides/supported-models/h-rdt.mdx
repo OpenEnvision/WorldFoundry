@@ -27,9 +27,9 @@ Catalog tasks include vla, human motion policy, vla policy rollout, and robot po
 
 ## Runtime contract
 
-Required `image`, `prompt`, `state`, `precomputed_image_tokens`, and `precomputed_language_tokens`; optional `model_id` (h-rdt), `camera_keys` (head_cam, right_cam, left_cam), `policy_family`, and `action_representation`; artifacts `action_trace` and `h_rdt_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `h_rdt_action_trace.json`.
 
-Recorded task profiles: `vla`, `human_motion_policy`, `vla.policy_rollout`, and `robot_policy_finetune`. WorldFoundry binds `HRDTSynthesis`.
+CLI task profiles: `default`. WorldFoundry binds `HRDTSynthesis`.
 
 Family status: **Static load only**.
 
@@ -39,11 +39,11 @@ Runtime code never imports a source checkout or executes checkpoint-provided Pyt
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run h-rdt --pipeline.task-profile vla`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run h-rdt --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-vla-h-rdt` (Python 3.10, Cu121 Or Newer, torch>=2.2).
 
-Recorded weight repositories include `embodiedfoundation/H-RDT` and `google/t5-v1_1-xxl`. Stage assets with `bash scripts/inference/prepare_model_infer.sh h-rdt`.
+Recorded weight repositories include `embodiedfoundation/H-RDT` and `google/t5-v1_1-xxl`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh h-rdt`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Static load only**.
 

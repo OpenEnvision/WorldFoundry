@@ -1,41 +1,50 @@
 ---
 title: "VLANeXt"
-description: "VLANeXt is a next-generation VLA released under the S-Lab License 1.0 (source-available, research-oriented), with official LIBERO and LIBERO-plus checkpoints in the DravenALG/VLANeXt collection. WorldFoundry calls the official get_vla/get_…"
+description: "VLANeXt from Nanyang Technological University (S-Lab): vla and vla action prediction; Static load only."
+modelId: "vlanext"
 pageSource: generated
 ---
 
-**Publisher:** Nanyang Technological University (S-Lab) · University
-
 VLANeXt is a next-generation VLA released under the S-Lab License 1.0 (source-available, research-oriented), with official LIBERO and LIBERO-plus checkpoints in the DravenALG/VLANeXt collection. WorldFoundry calls the official get_vla/get_processor/get_vla_action contract in-process from a vendored inference subset.
 
-**Catalog status:** Profile only
+<ModelPaperFigures modelId="vlanext" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2602.18532](https://arxiv.org/abs/2602.18532).
 
-- [Project](https://dravenalg.github.io/VLANeXt)
-- [Paper](https://arxiv.org/abs/2602.18532)
-- [GitHub](https://github.com/DravenALG/VLANeXt)
-- [Hugging Face](https://huggingface.co/DravenALG/VLANeXt)
-- [Upstream README](https://github.com/DravenALG/VLANeXt#readme)
+Project page: [dravenalg.github.io/VLANeXt](https://dravenalg.github.io/VLANeXt). Code: [DravenALG/VLANeXt](https://github.com/DravenALG/VLANeXt).
 
 <ModelCommandBuilder modelId="vlanext" locale="en" />
 
-## Architecture
+## What it is for
 
-Public checkpoints cover the LIBERO suites (VLANeXt_libero_spatial.pt, _object.pt and more). Architecture internals beyond the official repository pointer are not recorded in this repository.
+Use `vlanext-libero` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
+
+Public checkpoints cover the LIBERO suites (VLANeXt_libero_spatial.pt, _object.pt and more). Architecture internals beyond the official repository pointer are not recorded in this repository. It is published by Nanyang Technological University (S-Lab).
+
+Catalog tasks include vla, vla action prediction, and vla policy rollout. Catalog aliases include `vlanext-libero` and `vla-next`.
+
+Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (Official LIBERO checkpoint collection), [LIBERO-Plus](/docs/evaluation/benchmark-hub/libero-plus) (LIBERO-plus contracts are recorded).
 
 ## Runtime contract
 
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `vlanext_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `VLANeXtPipeline`.
+
+Family status: **Static load only**.
+
 Resolver, runtime import, and compileall checks pass without an external checkout; checkpoint-backed action-chunk validation remains required before demo parity is claimed. Note the S-Lab-1.0 license restricts commercial use.
 
-## Evaluation benchmarks
+WorldFoundry records VLANeXt LIBERO/LIBERO-plus action inference contracts with an independent synthesis entrypoint.
 
-- [LIBERO](/docs/evaluation/benchmark-hub/libero) — Official LIBERO checkpoint collection.
-- [LIBERO-Plus](/docs/evaluation/benchmark-hub/libero-plus) — LIBERO-plus contracts are recorded.
+## Running in WorldFoundry
 
-## Readiness and limitations
+Launch `worldfoundry-eval run vlanext-libero --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-- S-Lab-1.0 license: source-available with research-use restrictions.
-- Demo parity is not yet claimed; checkpoint-backed validation is pending.
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch==2.4.0).
+
+Recorded weight repositories include `DravenALG/VLANeXt`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vlanext-libero`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include s-lab-1.0; status: **Static load only**.
 
 <ModelRelatedRecipes modelId="vlanext" locale="en" />

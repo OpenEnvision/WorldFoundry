@@ -21,15 +21,15 @@ Use `local-checkpoint` for catalog world-model inference. Choose it when you nee
 
 Architecture internals beyond the recorded tasks are not stored in this repository (apache-2.0). Workspace discovery, argument routing, and command generation are covered without loading model weights; a local-checkpoint variant records the Rocket Science rollout task.
 
-Catalog tasks include action-conditioned-world-model, multiplayer-game-world-model, and rocket-science-rollout. Catalog aliases include `mira-wm` and `multiplayer-interactive-world-model`.
+Catalog tasks include action-conditioned-world-model and multiplayer-game-world-model. Catalog aliases include `mira-wm` and `multiplayer-interactive-world-model`.
 
 Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Multiplayer world-rollout quality).
 
 ## Runtime contract
 
-Optional `prompt`, `image`, `video`, and `actions` (rocket_league_keyboard, game_action); artifacts `generated_video` and `mira.mp4`.
+Optional `load.checkpoint_path`, `load.dataset_path`, `plan_only`, and `timeout_seconds`; artifacts `generated_video` and `mira.mp4`.
 
-Recorded task profiles: `action-conditioned-world-model`, `multiplayer-game-world-model`, and `rocket-science-rollout`. WorldFoundry binds `MIRAPipeline`.
+CLI task profiles: `rocket-science-rollout`. WorldFoundry binds `MIRAPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -43,7 +43,7 @@ The catalog launch is `worldfoundry-eval run local-checkpoint --pipeline.task-pr
 
 It runs in the dedicated environment `mira` (Python 3.12, CUDA 12.8, torch==2.8.0+cu128).
 
-Stage assets with `bash scripts/inference/prepare_model_infer.sh local-checkpoint`.
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh local-checkpoint`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

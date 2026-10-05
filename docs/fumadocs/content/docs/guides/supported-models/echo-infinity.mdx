@@ -19,7 +19,7 @@ Full GPU parity waits on local Echo-Infinity **and** Wan2.1 weights under `$WORL
 
 Echo-Infinity long video on top of Wan2.1 weights.
 
-Launch `worldfoundry-eval run echo-infinity` with `--pipeline.task-profile text-to-video`.
+Launch `worldfoundry-eval run echo-infinity`.
 
 Score on [VBench](/docs/evaluation/benchmark-hub/vbench) — video quality evaluation for long text-to-video generation.
 
@@ -40,6 +40,6 @@ Required: `prompt`; optional: `image` and `video`; `actions`: seed; artifacts: `
 
 ## Run in WorldFoundry
 
-Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage weights locally — the runtime does not download them. Run `worldfoundry-eval run echo-infinity` with `--pipeline.task-profile text-to-video`. Catalog VRAM is unset.
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage weights locally — the runtime does not download them. Run `worldfoundry-eval run echo-infinity`. Catalog VRAM is unset.
 
 <ModelRelatedRecipes modelId="echo-infinity" locale="en" />

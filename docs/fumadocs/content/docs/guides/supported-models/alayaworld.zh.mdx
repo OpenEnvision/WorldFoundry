@@ -33,9 +33,9 @@ AlayaWorld 空间记忆加视频。不是 Evoke。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (camera_trajectory, camera_path)；产物 `generated_world_video`、`alayaworld.mp4`。
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `generated_world_video`、`alayaworld.mp4`。
 
-记录的任务 profile：`image-to-video`、`camera-controlled-video`、`interactive-world-model`、`long-video-generation`。绑定的 pipeline 类是 `AlayaWorldPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `AlayaWorldPipeline`。
 
 系列状态：**已验证**。
 
@@ -45,11 +45,11 @@ The runtime reuses WorldFoundry's existing LTX-2.3 Transformer, VAE, Gemma conne
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run alayaworld --pipeline.task-profile image-to-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run alayaworld --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.6）。
 
-记录的权重仓库包括 `AlayaLab/AlayaWorld`、`google/gemma-3-12b-it-qat-q4_0-unquantized`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1`。就位权重用 `bash scripts/inference/prepare_model_infer.sh alayaworld`。
+记录的权重仓库包括 `AlayaLab/AlayaWorld`、`google/gemma-3-12b-it-qat-q4_0-unquantized`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh alayaworld`；下载缺失的公开权重时加 `--download`。
 
 gated `google/gemma-3-12b-it-qat-q4_0-unquantized`，下载前需在上游接受条款；状态：**已验证**。
 

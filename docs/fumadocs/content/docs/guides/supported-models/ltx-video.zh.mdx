@@ -39,7 +39,7 @@ WorldFoundry 钉死蒸馏版的**两段**配方：**7 + 3 = 10** 步固定 sigma
 
 ## 在 WorldFoundry 中运行
 
-在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中启动 `worldfoundry-eval run ltx-video-i2v --pipeline.task-profile image-to-video`。把 `$WORLDFOUNDRY_HFD_ROOT/Lightricks--LTX-Video` 就位，目录里需要 `ltxv-13b-0.9.8-distilled.safetensors`、`ltxv-spatial-upscaler-0.9.8.safetensors` 以及 T5 encoder/tokenizer 分片。权重缺失会在运行时报告。
+在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中启动 `worldfoundry-eval run ltx-video-i2v`。把 `$WORLDFOUNDRY_HFD_ROOT/Lightricks--LTX-Video` 就位，目录里需要 `ltxv-13b-0.9.8-distilled.safetensors`、`ltxv-spatial-upscaler-0.9.8.safetensors` 以及 T5 encoder/tokenizer 分片。权重缺失会在运行时报告。
 
 记录的 Hugging Face 仓库：`Lightricks/LTX-Video`（WorldFoundry 实际打开的 0.9.8 蒸馏文件），以及 `Lightricks/LTX-Video-0.9.5`、`Lightricks/LTX-Video-0.9.7-dev`、`Lightricks/LTX-Video-0.9.8-13B-distilled`。卡片许可均为 **`other`**。GitHub 树是 Apache-2.0——商用前请审阅 HF 卡片。
 

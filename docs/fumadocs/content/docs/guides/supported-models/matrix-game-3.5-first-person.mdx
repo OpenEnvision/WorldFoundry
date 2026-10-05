@@ -25,9 +25,9 @@ Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benc
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `camera_npz`; optional `video` and `actions`; artifacts `generated_world_video` and `matrix-game-3.5-first-person.mp4`.
+Optional `prompt`, `input_path`, `fps`, `steps`, and `guidance_scale`; artifacts `generated_world_video` and `matrix-game-3.5-first-person.mp4`.
 
-Recorded task profiles: `image-to-video`, `camera-controlled-video`, `interactive-world-model`, and `long-horizon-generation`. WorldFoundry binds `MatrixGame35FirstPersonPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `MatrixGame35FirstPersonPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -39,11 +39,11 @@ The public runtime retains only the generated rollout and provenance needed to r
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run matrix-game-3.5-first-person --pipeline.task-profile image-to-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run matrix-game-3.5-first-person --pipeline.task-profile interactive-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `RiemannDynamics/Matrix-Game-3.5-Base`, `Wan-AI/Wan2.2-TI2V-5B`, and `depth-anything/DA3NESTED-GIANT-LARGE-1.1` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh matrix-game-3.5-first-person`.
+Recorded weight repositories include `RiemannDynamics/Matrix-Game-3.5-Base`, `Wan-AI/Wan2.2-TI2V-5B`, and `depth-anything/DA3NESTED-GIANT-LARGE-1.1` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh matrix-game-3.5-first-person`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0 and cc-by-nc-4.0; status: **Runner parity pending**.
 

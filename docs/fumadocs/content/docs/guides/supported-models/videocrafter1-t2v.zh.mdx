@@ -29,9 +29,9 @@ catalog 记录的任务包括 文生视频、视频生成。别名包括 `videoc
 
 ## 运行时契约
 
-必填 `prompt`；可选 `image`、`video`；产物 `generated_video`、`videocrafter1-t2v.mp4`。
+可选 `prompt`、`frames`、`fps`、`height`、`width`；产物 `generated_video`、`videocrafter1-t2v.mp4`。
 
-记录的任务 profile：`text-to-video`、`video-generation`。绑定的 pipeline 类是 `VideoCrafter1T2VPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `VideoCrafter1T2VPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -41,11 +41,11 @@ Checkpoint provenance is tracked on the top-level videocrafter catalog entry to 
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run videocrafter1-t2v --pipeline.task-profile text-to-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run videocrafter1-t2v --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `VideoCrafter/Text2Video-1024`。就位权重用 `bash scripts/inference/prepare_model_infer.sh videocrafter1-t2v`。
+记录的权重仓库包括 `VideoCrafter/Text2Video-1024`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh videocrafter1-t2v`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

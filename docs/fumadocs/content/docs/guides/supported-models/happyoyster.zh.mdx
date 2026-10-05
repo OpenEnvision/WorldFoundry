@@ -1,32 +1,46 @@
 ---
 title: "HappyOyster"
-description: "HappyOyster 是商业世界模型 API 产品，本仓库以产品官网（happyoyster.cn）而非代码仓库记录。本 catalog 中仅注册了 API 路径元数据——WorldFoundry 出于生态完整性跟踪该产品，未注册可运行的 API 客户端或生成 pipeline。"
+description: "HappyOyster（HappyOyster (commercial product)）：世界模型、api-product；Runner 一致性待确认。"
+modelId: "happyoyster"
 pageSource: generated
 ---
 
-**发表机构:** HappyOyster（商业产品，机构主体未记录） · 企业
-
 HappyOyster 是商业世界模型 API 产品，本仓库以产品官网（happyoyster.cn）而非代码仓库记录。本 catalog 中仅注册了 API 路径元数据——WorldFoundry 出于生态完整性跟踪该产品，未注册可运行的 API 客户端或生成 pipeline。
 
-**目录状态:** 运行时已移植
+<ModelPaperFigures modelId="happyoyster" locale="zh" />
 
-## 上游来源
-
-- [项目主页](https://www.happyoyster.cn)
+项目页：[happyoyster.cn](https://www.happyoyster.cn)。
 
 <ModelCommandBuilder modelId="happyoyster" locale="zh" />
 
-## 架构
+## 用来做什么
+
+需要动作条件世界步进时选 `happyoyster`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
 
 这是托管的商业产品：厂商未公开其架构，本仓库亦未记录。仅记录 world-model/API 产品的任务标签。
 
+catalog 记录的任务包括 世界模型、api-product、世界生成。
+
 ## 运行时契约
 
-API 凭据与端点受运行时限制。真实使用需要厂商账号；当前条目仅输出运行时计划。
+产物 `generated_world`、`happyoyster_runtime_plan.json`。
 
-## 就绪状态与限制
+CLI task profile：`default`。绑定的 pipeline 类是 `HappyOysterPipeline`。
 
-- 未注册可运行的 API 客户端——仅元数据条目。
-- 厂商架构、定价与质量本仓库未记录。
+系列状态：**Runner 一致性待确认**。
+
+API 凭据与端点受运行时限制。 真实使用需要厂商账号；当前条目仅输出运行时计划。
+
+WorldFoundry tracks HappyOyster 计划中; no runnable API client or generation pipeline is registered.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run happyoyster --pipeline.task-profile default` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh happyoyster`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="happyoyster" locale="zh" />

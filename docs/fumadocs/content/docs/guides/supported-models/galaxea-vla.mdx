@@ -19,7 +19,7 @@ The released G0Plus base is intended for **downstream fine-tuning**, not claimed
 
 Galaxea / G0-VLA static-load route. GPU numerical rollout is still pending.
 
-Launch `worldfoundry-eval run galaxea-vla` with `--pipeline.task-profile vla`.
+Launch `worldfoundry-eval run galaxea-vla`.
 
 ## Runtime contract
 
@@ -35,6 +35,6 @@ Action chunks are **32** steps. The staged transformer lives in `G0Plus_3B_base`
 
 ## Run in WorldFoundry
 
-Status: **Static load only**. Dedicated environment `worldfoundry-vla-galaxea` (Python 3.11, Cu124 Or Newer). Stage `OpenGalaxea/G0-VLA` and `google/paligemma-3b-pt-224` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run galaxea-vla` with `--pipeline.task-profile vla`. Catalog VRAM is unset.
+Status: **Static load only**. Dedicated environment `worldfoundry-vla-galaxea` (Python 3.11, Cu124 Or Newer). Stage `OpenGalaxea/G0-VLA` and `google/paligemma-3b-pt-224` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run galaxea-vla`. Catalog VRAM is unset.
 
 <ModelRelatedRecipes modelId="galaxea-vla" locale="en" />

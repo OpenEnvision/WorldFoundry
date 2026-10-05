@@ -1,42 +1,50 @@
 ---
 title: "Hunyuan Game Craft"
-description: "GameCraft generates action-conditioned world video from a scene image using an inference-only runtime and shared WorldFoundry model components."
+description: "Hunyuan Game Craft from Tencent (Hunyuan): interactive-world-model and image-to-video; Runner parity pending; dedicated `HYGameCraft`."
+modelId: "hunyuan-game-craft"
 pageSource: generated
 ---
 
-**Publisher:** Tencent (Hunyuan) · Company
-image → video
-
 GameCraft generates action-conditioned world video from a scene image using an inference-only runtime and shared WorldFoundry model components.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="hunyuan-game-craft" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2506.17201](https://arxiv.org/abs/2506.17201).
 
-- [Project](https://hunyuan-gamecraft.github.io/)
-- [Paper](https://arxiv.org/abs/2506.17201)
-- [GitHub](https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0)
-- [Hugging Face](https://huggingface.co/tencent/Hunyuan-GameCraft-1.0)
-- [Upstream README](https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0#readme)
+Project page: [hunyuan-gamecraft.github.io](https://hunyuan-gamecraft.github.io/). Code: [Tencent-Hunyuan/Hunyuan-GameCraft-1.0](https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0).
 
 <ModelCommandBuilder modelId="hunyuan-game-craft" locale="en" />
 
-## Architecture
+## What it is for
 
-HunyuanVideo transformer with a GameCraft camera network and history-conditioned autoregressive sampling; generic layers, VAE, encoder foundations and scheduler are shared.
+`hunyuan-game-craft` is the recorded camera-control route. Start here to follow a catalog camera path.
+
+HunyuanVideo transformer with a GameCraft camera network and history-conditioned autoregressive sampling; generic layers, VAE, encoder foundations and scheduler are shared. It is published by Tencent (Hunyuan).
+
+Catalog tasks include interactive-world-model, image-to-video, and camera-control. Catalog aliases include `hunyuan-gamecraft` and `gamecraft`. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Action-following world-rollout quality).
 
 ## Runtime contract
 
+Optional `image`, `prompt`, `interactions`, `frames`, and `fps`; artifacts `hunyuan-game-craft.mp4`.
+
+CLI task profiles: `official-interactive-video`. WorldFoundry binds `HunyuanGameCraftPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `official-interactive-video` defaults: frames=129, fps=24, height=704, width=1216.
+
 Provide local GameCraft checkpoints. Each action generates 33 frames; explicit num_frames must equal 33 times the action count. CPU offload and output_path export are supported.
 
-## Evaluation benchmarks
+## Running in WorldFoundry
 
-- [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — Action-following world-rollout quality.
+Launch `worldfoundry-eval run hunyuan-game-craft --pipeline.task-profile official-interactive-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-## Readiness and limitations
+It runs in the dedicated environment `HYGameCraft` (Python 3.10, CUDA 12.4, torch==2.5.1).
 
-- Validated on one H100 with CPU offload, one action and the standard checkpoint; distributed inference is unvalidated and FP8 conversion is unsupported.
-- Dedicated environment (Python 3.10 / torch 2.5.1) isolated from the unified profile.
-- Tencent Hunyuan community license applies; see included license and provenance.
+Recorded weight repositories include `tencent/Hunyuan-GameCraft-1.0`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hunyuan-game-craft`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="hunyuan-game-craft" locale="en" />

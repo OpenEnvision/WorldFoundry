@@ -1,32 +1,46 @@
 ---
 title: "OmniVinci"
-description: "OmniVinci is NVIDIA's omni-modal understanding LLM: one model that reasons over images, video, and audio together."
+description: "OmniVinci from NVIDIA: multimodal-reasoning and audio-reasoning; Runner parity pending."
+modelId: "omnivinci"
 pageSource: generated
 ---
 
-**Publisher:** NVIDIA · Company
-
 OmniVinci is NVIDIA's omni-modal understanding LLM: one model that reasons over images, video, and audio together. In this catalog it is an understanding/reasoning entry, not a generator — tasks are multimodal reasoning, audio reasoning, and image/video question answering, and the artifact is a model_response.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="omnivinci" locale="en" />
 
-## Upstream sources
-
-- [GitHub](https://huggingface.co/nvidia/omnivinci)
+Code: [nvidia/omnivinci](https://huggingface.co/nvidia/omnivinci).
 
 <ModelCommandBuilder modelId="omnivinci" locale="en" />
 
-## Architecture
+## What it is for
+
+Pick `omnivinci` for the recorded multimodal reasoning route: documented inputs in, a reasoning artifact out. Use it when the card is a reasoner, not a generator.
 
 NVIDIA describes OmniVinci as an omni-modal LLM with joint vision-audio alignment (public release at nvidia/omnivinci). This repository records the prompt/image/video input contract; parameter counts and internals are not recorded here.
 
+Catalog tasks include multimodal-reasoning, audio-reasoning, image-question-answering, and video-question-answering. Catalog aliases include `nvidia/omnivinci`.
+
 ## Runtime contract
 
-Runner parity is pending. Use it to interrogate videos produced by generation entries — e.g. asking questions about physical plausibility or event order — rather than to generate content.
+Optional `prompt`, `image`, `video`, `seed`, and `frames`; artifacts `omnivinci.json`.
 
-## Readiness and limitations
+CLI task profiles: `multimodal-reasoning`, `audio-reasoning`, `image-question-answering`, `video-question-answering`, and `video_generation`. WorldFoundry binds `OmniVinciPipeline`.
 
-- Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.
-- Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+Family status: **Runner parity pending**.
+
+Use it to interrogate videos produced by generation entries — e.g. asking questions about physical plausibility or event order — rather than to generate content.
+
+WorldFoundry route is complete; missing checkpoint/assets are reported at runtime.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run omnivinci --pipeline.task-profile multimodal-reasoning` to run the reasoning route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `nvidia/omnivinci`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh omnivinci`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="omnivinci" locale="en" />

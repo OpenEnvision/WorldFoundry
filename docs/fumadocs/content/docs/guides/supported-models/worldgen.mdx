@@ -15,7 +15,7 @@ The catalog paper URL and title-page thumb are Meta Reality Labs' [WorldGen: Fro
 
 ## What it is for
 
-Build a walkable 3D asset, not a clip. Launch `worldfoundry-eval run worldgen` with `--pipeline.task-profile 3d-world-generation`. Recorded inputs: `prompt` and `image`. Optional `actions.camera_path`. Video is **not** a required input. The in-tree flow is text-to-scene (`t2s`) or image-to-scene (`i2s`): FLUX paints a panorama, then the adapter reconstructs splat or mesh. You can also pass a ready panorama and skip FLUX generation.
+Build a walkable 3D asset, not a clip. Launch `worldfoundry-eval run worldgen`. Recorded inputs: `prompt` and `image`. Optional `actions.camera_path`. Video is **not** a required input. The in-tree flow is text-to-scene (`t2s`) or image-to-scene (`i2s`): FLUX paints a panorama, then the adapter reconstructs splat or mesh. You can also pass a ready panorama and skip FLUX generation.
 
 Default inference resolution in the vendored script is **1600**. Low-VRAM mode turns on automatically below 24 GB. Background inpaint cannot combine with `return_mesh`.
 

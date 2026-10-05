@@ -1,44 +1,50 @@
 ---
 title: "MolmoAct2"
-description: "MolmoAct2 是 AI2 的第二代动作推理模型，Apache-2.0 checkpoint 阵容异常齐全：base、 Think（深度推理）、DROID（Franka）、双臂 YAM、SO100/101 与 LIBERO 变体均已确认。WorldFoundry 将官方 DROID/YAM predict_action 服务契约移植为树内 action_trace pipeline，无外部 checkout 依赖。"
+description: "MolmoAct2（Allen Institute for AI (AI2)）：视觉-语言-动作（VLA）、VLA 动作预测；已验证; 5 个 variant。"
+modelId: "molmoact2"
 pageSource: generated
 ---
 
-**发表机构:** 艾伦人工智能研究所（AI2） · 研究机构
-
 MolmoAct2 是 AI2 的第二代动作推理模型，Apache-2.0 checkpoint 阵容异常齐全：base、 Think（深度推理）、DROID（Franka）、双臂 YAM、SO100/101 与 LIBERO 变体均已确认。WorldFoundry 将官方 DROID/YAM predict_action 服务契约移植为树内 action_trace pipeline，无外部 checkout 依赖。
 
-**目录状态:** Runner 已验证
+<ModelPaperFigures modelId="molmoact2" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2605.02881](https://arxiv.org/abs/2605.02881)。
 
-- [论文](https://arxiv.org/abs/2605.02881)
-- [GitHub](https://github.com/allenai/molmoact2)
-- [Hugging Face](https://huggingface.co/allenai/MolmoAct2)
-- [Hugging Face](https://huggingface.co/allenai/MolmoAct2-Think)
-- [Hugging Face](https://huggingface.co/allenai/MolmoAct2-DROID)
-- [Hugging Face](https://huggingface.co/allenai/MolmoAct2-BimanualYAM)
-- [Hugging Face](https://huggingface.co/allenai/MolmoAct2-SO100_101)
-- [Hugging Face](https://huggingface.co/allenai/MolmoAct2-LIBERO)
-- [Hugging Face](https://huggingface.co/allenai/MolmoAct2-Think-LIBERO)
-- [上游 README](https://github.com/allenai/molmoact2#readme)
+代码：[allenai/molmoact2](https://github.com/allenai/molmoact2)。
 
 <ModelCommandBuilder modelId="molmoact2" locale="zh" />
 
-## 架构
+## 用来做什么
 
-MolmoAct2 基于 Molmo 开放 VLM 线并加动作推理头；Think 变体在行动前增加基于深度的推理。已配置的 DROID、YAM、SO100、LIBERO 与 Think-LIBERO profile 暴露 checkpoint 驱动的 action_trace 路由。
+`molmoact2-droid` 是记录的指令到动作线。需要 WorldFoundry VLA rollout 而不是视频生成时从这里起步。
+
+MolmoAct2 基于 Molmo 开放 VLM 线并加动作推理头；Think 变体在行动前增加基于深度的推理。已配置的 DROID、YAM、SO100、LIBERO 与 Think-LIBERO profile 暴露 checkpoint 驱动的 action_trace 路由。该模型由艾伦人工智能研究所（AI2）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行、机器人策略。别名包括 `molmo-act2`、`molmoact`、`molmoact2-droid`、`molmoact2-yam`。同系列还有 `molmoact2-bimanual-yam`、`molmoact2-so100-101`、`molmoact2-libero`。
+
+记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（有专门的 LIBERO 与 Think-LIBERO checkpoint）。
 
 ## 运行时契约
 
-按本体选择 checkpoint：Franka 机械臂用 DROID，双臂 YAM 用 BimanualYAM，SO-ARM 用 SO100_101，仿真用 LIBERO/Think-LIBERO。集成已通过静态验证。
+可选 `prompt`、`input_path`、`interactions`、`fps`；产物 `action_trace`、`molmoact2_action_trace.json`。
 
-## 评测 Benchmark
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `MolmoAct2Pipeline`。
 
-- [LIBERO](/zh/docs/evaluation/benchmark-hub/libero) — 有专门的 LIBERO 与 Think-LIBERO checkpoint。
+起步 variant 是 `molmoact2-droid`。catalog 登记了 5 个 variant（上方卡片）：`molmoact2-droid`（`vla.policy_rollout`）：仅静态加载、`molmoact2-bimanual-yam`（`vla.policy_rollout`）：仅静态加载、`molmoact2-so100-101`（`vla.policy_rollout`）：仅静态加载、`molmoact2-libero`（`vla.policy_rollout`）：仅静态加载、`molmoact2-think-libero`（`vla.policy_rollout`）：仅静态加载。系列状态：**已验证**。
 
-## 就绪状态与限制
+按本体选择 checkpoint：Franka 机械臂用 DROID，双臂 YAM 用 BimanualYAM，SO-ARM 用 SO100_101，仿真用 LIBERO/Think-LIBERO。 集成已通过静态验证。
 
-- 仓库未记录 GPU rollout 验证（仅静态验证）。
+仓库未记录 GPU rollout 验证（仅静态验证）。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run molmoact2-droid --pipeline.task-profile interactive-video` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `allenai/MolmoAct2-DROID`、`allenai/MolmoAct2-BimanualYAM`、`allenai/MolmoAct2-SO100_101` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh molmoact2-droid`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**已验证**。
 
 <ModelRelatedRecipes modelId="molmoact2" locale="zh" />

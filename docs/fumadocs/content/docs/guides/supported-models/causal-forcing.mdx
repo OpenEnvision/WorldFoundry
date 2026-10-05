@@ -17,13 +17,13 @@ Studio defaults mirror the official chunk-wise CLI: `config_path: causal_forcing
 
 ## What it is for
 
-Start on the **chunk-wise** student for **text-to-video**. Launch `worldfoundry-eval run causal-forcing` with `--pipeline.task-profile text-to-video`. Catalog schema marks `prompt` and `image`; the official path is T2V unless you pass `images` or set `i2v: true`. Artifact: `causal-forcing.mp4`. `actions` is recorded as `seed`.
+Start on the **chunk-wise** student for **text-to-video**. Launch `worldfoundry-eval run causal-forcing`. Catalog schema marks `prompt` and `image`; the official path is T2V unless you pass `images` or set `i2v: true`. Artifact: `causal-forcing.mp4`. `actions` is recorded as `seed`.
 
 **Image-to-video is frame-wise only.** Official `inference.py` asserts `num_frame_per_block: 1` and does not run I2V on the chunk-wise default. Switch `config_path:` / `checkpoint_path:` to the frame-wise student (or a ++ frame-wise file) before passing a still. I2V resizes that still to **480×832**, encodes it as the first latent, and samples `num_output_frames: 21` minus one. Distributed I2V is not supported.
 
 Use ++ only when you deliberately want **1- or 2-step** sampling. Those YAMLs still spend **4 steps on the first frame** (`denoising_step_list_first_chunk:` `[1000, 750, 500, 250]` — the ASD first-frame trick). Do not treat the `long_video/` tree under this runtime as [Rolling-Forcing](/docs/guides/supported-models/rolling-forcing).
 
-Score clip quality on [VBench](/docs/evaluation/benchmark-hub/vbench). That is a listed suite, not an ingested WorldFoundry rank. Prompt lists for the forcing family live under `worldfoundry/data/test_cases/forcing/prompts/` (override with `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT`).
+Score clip quality on [VBench](/docs/evaluation/benchmark-hub/vbench). That is a listed suite, not an ingested WorldFoundry rank. Supply a prompt through `--pipeline.prompt`. For external batch prompt lists, set `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT` to their local directory.
 
 ## Runtime contract
 
@@ -57,10 +57,10 @@ Configs live under `worldfoundry/data/models/runtime/configs/causal_forcing/`. I
 
 ## Running in WorldFoundry
 
-`worldfoundry-eval run causal-forcing --pipeline.task-profile text-to-video` in `worldfoundry-unified-cu128` (Python 3.10, CUDA 12.8). Same environment family as Self-Forcing. Optional roots: `$WORLDFOUNDRY_CAUSAL_FORCING_CKPT_ROOT`, `$WORLDFOUNDRY_CAUSAL_FORCING_REPO_ROOT`. Catalog license is **unknown** — confirm the GitHub / Hugging Face cards before any production use. Catalog VRAM is unset. Missing Wan or student weights are reported at runtime, not downloaded.
+`worldfoundry-eval run causal-forcing` in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Same environment family as Self-Forcing. Optional roots: `$WORLDFOUNDRY_CAUSAL_FORCING_CKPT_ROOT`, `$WORLDFOUNDRY_CAUSAL_FORCING_REPO_ROOT`. Catalog license is **unknown** — confirm the GitHub / Hugging Face cards before any production use. Catalog VRAM is unset. Missing Wan or student weights are reported at runtime, not downloaded.
 
 ## Minimal eval
 
-Chunk-wise T2V, then [VBench](/docs/evaluation/benchmark-hub/vbench) `custom_input` / `aesthetic_quality`. Profile notes point prompts at `worldfoundry/data/test_cases/forcing/prompts/` (`$WORLDFOUNDRY_FORCING_PROMPTS_ROOT`). Demo parity is pending; the bounded VBench key is still `aesthetic_quality`.
+Chunk-wise T2V, then [VBench](/docs/evaluation/benchmark-hub/vbench) `custom_input` / `aesthetic_quality`. Stage batch prompt lists separately and select their directory with `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT`. Demo parity is pending; the bounded VBench key is still `aesthetic_quality`.
 
 <ModelRelatedRecipes modelId="causal-forcing" locale="en" />

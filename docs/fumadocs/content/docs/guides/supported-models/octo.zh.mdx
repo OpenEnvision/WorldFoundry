@@ -33,7 +33,7 @@ WorldFoundry 在 `worldfoundry/synthesis/action_generation/octo` 下保留扁平
 独立环境 `worldfoundry-octo-jax`（Python 3.10，CUDA 11.8，JAX 0.4.20，cuDNN 8.9）。这不是 PyTorch 统一栈。启动已 GPU 验证的 variant：
 
 ```
-worldfoundry-eval run octo-small-1.5 --pipeline.task-profile vla.policy_rollout
+worldfoundry-eval run octo-small-1.5
 ```
 
 catalog 默认启动仍打印 `octo-base-1.5`。要跑已记录的 A100 采样，换 variant。本仓库未记录许可证——生产使用前请确认上游条款。

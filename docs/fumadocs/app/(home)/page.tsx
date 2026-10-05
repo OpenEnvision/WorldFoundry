@@ -21,7 +21,6 @@ import { WorldFoundryWorkflow } from '@/components/worldfoundry-system-map';
 import {
   OPENENVISION_AWESOME_WORLD_MODELING,
   OPENENVISION_BLOGXIV_SITE,
-  OPENENVISION_GAIA_REPO,
   WORLDFOUNDRY_GITHUB_ISSUES,
   WORLDFOUNDRY_GITHUB_REPO,
   WORLDFOUNDRY_SLACK_INVITE,
@@ -171,12 +170,6 @@ const ecosystemLinks = [
     label: 'BlogrXiv',
     text: 'Curated index for technical AI research blogs and writing.',
     href: OPENENVISION_BLOGXIV_SITE,
-    external: true,
-  },
-  {
-    label: 'Gaia',
-    text: 'Sibling open-vision project in the same organization.',
-    href: OPENENVISION_GAIA_REPO,
     external: true,
   },
   {

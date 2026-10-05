@@ -27,9 +27,9 @@ catalog 记录的任务包括 相机可控视频、图生视频。模态上，�
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`pose_txt`；产物 `wan22-fun-5b-cam.mp4`。
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `wan22-fun-5b-cam.mp4`。
 
-记录的任务 profile：`camera-controlled-video`、`image-to-video`。绑定的 pipeline 类是 `Wan22Fun5BCameraPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `Wan22Fun5BCameraPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -39,11 +39,11 @@ VideoX-Fun source is vendored at revision 403f1f7b78dcafccc4f6606dda4ec28e16e667
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run wan22-fun-5b-cam --pipeline.task-profile camera-controlled-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run wan22-fun-5b-cam --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `alibaba-pai/Wan2.2-Fun-5B-Control-Camera`。就位权重用 `bash scripts/inference/prepare_model_infer.sh wan22-fun-5b-cam`。
+记录的权重仓库包括 `alibaba-pai/Wan2.2-Fun-5B-Control-Camera`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh wan22-fun-5b-cam`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

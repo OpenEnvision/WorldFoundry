@@ -85,6 +85,7 @@ export type ModelRecipeArtifact = { kind: string; filename: string };
 
 export type ModelRecipeTaskField = {
   field: string;
+  option?: string;
   detail: string;
   kind?: string;
   target?: string;
@@ -104,7 +105,7 @@ export type ModelRecipeTask = {
   id: string;
   label: string;
   description: string;
-  source: 'inference_spec' | 'catalog';
+  source: 'inference_spec' | 'catalog' | 'cli';
   variantIds: string[];
   inputs: ModelRecipeTaskField[];
   artifacts: ModelRecipeTaskArtifact[];

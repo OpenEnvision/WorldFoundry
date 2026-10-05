@@ -1,42 +1,46 @@
 ---
 title: "Echo-WM"
-description: "Echo-WM 是在连续导航控制下联合演化视频、环境音、音乐与语音的全模态世界模型。Base 生成约十秒内容；Flash Preview 使用四步去噪与有界 sink-plus-FIFO 缓存进行自回归滚动。"
+description: "Echo-WM（JD.com (JoyAI / Echo Team)）：image-to-world-video、相机可控视频；Runner 一致性待确认; 独立环境 `joyai-echo-wm`。"
+modelId: "joyai-echo-wm"
 pageSource: generated
 ---
 
-**发表机构:** 京东（JoyAI / Echo 团队） · 企业
-image → world state · video
-
 Echo-WM 是在连续导航控制下联合演化视频、环境音、音乐与语音的全模态世界模型。Base 生成约十秒内容；Flash Preview 使用四步去噪与有界 sink-plus-FIFO 缓存进行自回归滚动。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="joyai-echo-wm" locale="zh" />
 
-## 上游来源
-
-- [源码](https://github.com/jd-opensource/JoyAI-Echo)
-- [上游 README](https://github.com/jd-opensource/JoyAI-Echo#readme)
+代码：[jd-opensource/JoyAI-Echo](https://github.com/jd-opensource/JoyAI-Echo)。
 
 <ModelCommandBuilder modelId="joyai-echo-wm" locale="zh" />
 
-## 架构
+## 用来做什么
 
-两个公开变体均使用带 UCPE 相机条件的 LTX-2.3 音视频骨干。Base 为双向模型并分别使用视频/音频 CFG；Flash 以 DMD 蒸馏 guidance，并维护有界的视频、音频、跨模态及相机注意力缓存。
+`joyai-echo-wm` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
+
+两个公开变体均使用带 UCPE 相机条件的 LTX-2.3 音视频骨干。Base 为双向模型并分别使用视频/音频 CFG；Flash 以 DMD 蒸馏 guidance，并维护有界的视频、音频、跨模态及相机注意力缓存。该模型由京东（JoyAI / Echo 团队）发布。
+
+catalog 记录的任务包括 image-to-world-video、相机可控视频、交互式世界模型、音视频联合生成。别名包括 `echo-wm`、`joyai-echo-world-model`。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（相机与导航动作遵循度）、[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（通用动作条件世界滚动生成质量）、[WBench](/zh/docs/evaluation/benchmark-hub/wbench)（上游 Flash 示例采用 WBench 相机控制案例）。
 
 ## 运行时契约
 
-需提供首帧图像、提示词与形如 w-60,a-60 的 Action DSL。加载时选择 variant=base 或 variant=flash。执行 execute=True 前必须准备官方源码检出、专用 CUDA 环境、Echo checkpoint 与受限访问的未量化 Gemma 编码器。
+必填 `input_path`；可选 `prompt`、`load.checkpoint_dir`、`load.gemma_path`、`action_str`、`num_frames`；产物 `generated_world`、`joyai-echo-wm.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`image-to-video`。绑定的 pipeline 类是 `JoyAIEchoWMPipeline`。
 
-- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 相机与导航动作遵循度。
-- [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) — 通用动作条件世界滚动生成质量。
-- [WBench](/zh/docs/evaluation/benchmark-hub/wbench) — 上游 Flash 示例采用 WBench 相机控制案例。
+系列状态：**Runner 一致性待确认**。
 
-## 就绪状态与限制
+`image-to-video` 记录默认值：width=1280, height=704, fps=24, seed=4。
 
-- 上游版本标注为学术研究与非商业用途，并受 LTX-2 Community License 约束。
-- Echo-WM Base 要求六字段提示词；Flash 可接受公开示例中的自由文本描述。
-- Flash Preview 为短时程版本；上游长时程 checkpoint 与在线流式 demo 尚未发布。
-- 当前纯 CPU workspace 尚未验证 GPU 产物与视觉一致性。
+需提供首帧图像、提示词与形如 w-60,a-60 的 Action DSL。 加载时选择 variant=base 或 variant=flash。 执行 execute=True 前必须准备官方源码检出、专用 CUDA 环境、Echo checkpoint 与受限访问的未量化 Gemma 编码器。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run joyai-echo-wm --pipeline.task-profile image-to-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `Echo-Team/Echo-WM`、`google/gemma-3-12b-it-qat-q4_0-unquantized`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh joyai-echo-wm`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="joyai-echo-wm" locale="zh" />

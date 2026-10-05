@@ -21,7 +21,7 @@ HY-WorldPlay 是腾讯的实时交互世界视频模型：从一张图出发，�
 
 记录的 checkpoint 组合揭示其装配：tencent/HY-WorldPlay 动作权重叠加 tencent/HunyuanVideo-1.5 视频模型支持资产，辅以 Qwen2.5-VL-7B-Instruct、byt5-small 与 FLUX.1-Redux-dev 支持组件。树内 pipeline 遵循官方 demo 契约。该模型由腾讯（混元）发布。
 
-catalog 记录的任务包括 世界模型、video、official-image-pose-video。别名包括 `hunyuan-worldplay`、`hunyuanworldplay`。输出模态为视频。
+catalog 记录的任务包括 世界模型、video。别名包括 `hunyuan-worldplay`、`hunyuanworldplay`。输出模态为视频。
 
 记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（交互式世界滚动生成质量）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（位姿/相机跟随精度）。
 
@@ -29,9 +29,9 @@ HY-WorldPlay 交互回放。不是 HY-World 2.0。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions`；产物 `hy-worldplay.mp4`。
+可选 `image`、`prompt`、`interactions`、`num_frames`、`fps`；产物 `hy-worldplay.mp4`。
 
-记录的任务 profile：`world`、`video`、`world_model`、`official-image-pose-video`。绑定的 pipeline 类是 `HunyuanWorldPlayPipeline`。
+CLI task profile：`official-image-pose-video`。绑定的 pipeline 类是 `HunyuanWorldPlayPipeline`。
 
 系列状态：**已验证**。
 
@@ -45,7 +45,7 @@ HY-WorldPlay 交互回放。不是 HY-World 2.0。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `tencent/HY-WorldPlay`、`tencent/HunyuanVideo-1.5`、`Qwen/Qwen2.5-VL-7B-Instruct` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh hy-worldplay`。
+记录的权重仓库包括 `tencent/HY-WorldPlay`、`tencent/HunyuanVideo-1.5`、`Qwen/Qwen2.5-VL-7B-Instruct` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh hy-worldplay`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

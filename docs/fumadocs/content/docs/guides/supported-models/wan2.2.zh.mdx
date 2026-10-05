@@ -35,7 +35,7 @@ A14B 推理在时间步上切换高噪专家与低噪专家（catalog 边界：T
 
 ## 在 WorldFoundry 中运行
 
-用 `bash scripts/setup/unified_install.sh` 安装统一环境（Python 3.11，CUDA 12.8），并在本地就位权重——运行时不会下载。记录的启动命令是 `worldfoundry-eval run wan2.2-t2v-a14b --pipeline.task-profile ti2v-5b`。该 profile 是已验证的 5B 契约，不是 14B 运行。Pipeline 分别为 `Wan2p2Pipeline`（5B）、`Wan2p2T2VA14BPipeline`、`Wan2p2I2VA14BPipeline`。
+用 `bash scripts/setup/unified_install.sh` 安装统一环境（Python 3.11，CUDA 12.8），并在本地就位权重——运行时不会下载。记录的启动命令是 `worldfoundry-eval run wan2.2-ti2v-5b`。该 variant 使用已记录的 5B 契约，不是 14B 运行。Pipeline 分别为 `Wan2p2Pipeline`（5B）、`Wan2p2T2VA14BPipeline`、`Wan2p2I2VA14BPipeline`。
 
 Checkpoint：`Wan-AI/Wan2.2-TI2V-5B`、`Wan-AI/Wan2.2-T2V-A14B`、`Wan-AI/Wan2.2-I2V-A14B`（均为 `apache-2.0`，公开、非 gated）。家族级硬件仍写 **80 GB**，因为那是 A14B 下限；已验证的 5B 路径是 24 GB 那条。
 

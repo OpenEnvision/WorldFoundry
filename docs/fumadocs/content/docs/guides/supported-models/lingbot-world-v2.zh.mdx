@@ -21,7 +21,7 @@ LingBot-World-V2（别名 lingbot-world-infinity）是蚂蚁灵波世界模型�
 
 通用的 Wan、T5、VAE、调度器、FSDP、集合通信、几何与媒体代码从 WorldFoundry 复用；训练、示例资产与未发布的 causal-pretrain/双向路径被排除。记录的 checkpoint 为 robbyant/lingbot-world-v2-14b-causal-fast。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
 
-catalog 记录的任务包括 image-to-world-video、相机可控视频、交互式世界模型、image-camera-video。别名包括 `lingbot-world-infinity`、`lingbot-v2`。模态上，它接受图像，输出世界状态、视频。
+catalog 记录的任务包括 image-to-world-video、相机可控视频、交互式世界模型。别名包括 `lingbot-world-infinity`、`lingbot-v2`。模态上，它接受图像，输出世界状态、视频。
 
 记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（世界滚动生成的相机控制贴合度）、[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（世界滚动生成的总体质量）。
 
@@ -29,9 +29,9 @@ LingBot World v2。不是 v1 世界卡，也不是 world-act。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (camera_path, navigation_action)；产物 `generated_world_video`、`lingbot-world-v2.mp4`。
+可选 `image`、`prompt`、`action_path`、`size`、`frame_num`；产物 `generated_world_video`、`lingbot-world-v2.mp4`。
 
-记录的任务 profile：`image-to-world-video`、`camera-controlled-video`、`interactive-world-model`、`image-camera-video`。绑定的 pipeline 类是 `LingBotWorldV2Pipeline`。
+CLI task profile：`image-camera-video`。绑定的 pipeline 类是 `LingBotWorldV2Pipeline`。
 
 系列状态：**计划中**。
 
@@ -45,7 +45,7 @@ LingBot World v2。不是 v1 世界卡，也不是 world-act。
 
 catalog 启动命令是 `worldfoundry-eval run lingbot-world-v2 --pipeline.task-profile image-camera-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-记录的权重仓库包括 `robbyant/lingbot-world-v2-14b-causal-fast`、`robbyant/lingbot-world-v2-14b-causal-fast`。就位权重用 `bash scripts/inference/prepare_model_infer.sh lingbot-world-v2`。
+记录的权重仓库包括 `robbyant/lingbot-world-v2-14b-causal-fast`、`robbyant/lingbot-world-v2-14b-causal-fast`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-world-v2`；下载缺失的公开权重时加 `--download`。
 
 状态：**计划中**。
 

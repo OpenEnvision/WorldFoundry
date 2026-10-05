@@ -19,7 +19,7 @@ A **2026-07-20** A100 artifact **predates** the NativeDiffusionPipeline cutover 
 
 Echo memory-context K1 slots, not the Infinity long-video card.
 
-Launch `worldfoundry-eval run echo-memory-context-k1` with `--pipeline.task-profile image-to-video`.
+Launch `worldfoundry-eval run echo-memory-context-k1`.
 
 Score on [MemoBench](/docs/evaluation/benchmark-hub/memobench) — purpose-built for evaluating long-horizon memory in interactive world models.
 
@@ -46,7 +46,7 @@ Pass `camera_trajectory="w*80"` to request the published forward action scale, o
 
 ## Run in WorldFoundry
 
-Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Echo-Team/Echo-Memory`, `Wan-AI/Wan2.1-T2V-1.3B`, and `Echo-Team/Echo-Memory` among others locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run echo-memory-context-k1` with `--pipeline.task-profile image-to-video`. License: CC-BY-4.0 and apache-2.0. Catalog VRAM is unset.
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Echo-Team/Echo-Memory`, `Wan-AI/Wan2.1-T2V-1.3B`, and `Echo-Team/Echo-Memory` among others locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run echo-memory-context-k1`. License: CC-BY-4.0 and apache-2.0. Catalog VRAM is unset.
 
 `worldfoundry/base_models/diffusion_model/models/networks/echo_memory` holds checkpoint-specific network blocks only. It is not a CLI. Memory lifecycle, model assembly, and the runtime contract stay in the shared diffusion infrastructure. How to add a new immutable recipe is on the [inference guide](/docs/guides/inference#echo-memory-context-k1). Checkpoint staging is on [local assets](/docs/guides/local-assets).
 

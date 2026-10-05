@@ -47,7 +47,7 @@ pipeline 解析内置推理入口，在 checkpoint 与任务资产就位前返�
 
 运行环境是统一 profile `worldfoundry-unified-cu121`（Python 3.11，CUDA 12.1，torch==2.5.1）。
 
-记录的权重仓库包括 `open-gigaai/GigaWorld-0-Video-Pretrain-2b`、`open-gigaai/GigaWorld-0-Video-GR1-2b`、`google-t5/t5-11b` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh giga-world-0`。
+记录的权重仓库包括 `open-gigaai/GigaWorld-0-Video-Pretrain-2b`、`open-gigaai/GigaWorld-0-Video-GR1-2b`、`google-t5/t5-11b` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh giga-world-0`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

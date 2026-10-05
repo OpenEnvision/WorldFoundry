@@ -27,9 +27,9 @@ catalog 记录的任务包括 human-action-generation、motion-generation、世�
 
 ## 运行时契约
 
-必填 `prompt`、`video`；可选 `actions` (whole_body_motion, control_sequence)、`image`；产物 `action_trace`、`motionbricks_runtime_plan.json`。
+产物 `action_trace`、`motionbricks_runtime_plan.json`。
 
-记录的任务 profile：`human-action-generation`、`motion-generation`、`world-model`。绑定的 pipeline 类是 `MotionBricksPipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `MotionBricksPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -41,11 +41,11 @@ WorldFoundry tracks upstream source and checkpoint 计划中; no runnable pipeli
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run motionbricks --pipeline.task-profile human-action-generation` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run motionbricks --pipeline.task-profile default` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-本卡片未记录公开 checkpoint id；按使用说明就位权重。就位权重用 `bash scripts/inference/prepare_model_infer.sh motionbricks`。
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh motionbricks`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

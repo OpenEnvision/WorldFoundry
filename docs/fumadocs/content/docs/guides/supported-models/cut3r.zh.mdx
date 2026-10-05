@@ -23,13 +23,13 @@ Runner 一致性**待验证**。路径已注册；checkpoint 驱动的推理等�
 
 循环 Transformer 维护持久场景状态；每帧新图像更新状态并在线输出点图与相机参数（见上游论文）。已记录路径覆盖点云导出与两段式 3DGS pipeline；权重为 apache-2.0。该模型由加州大学伯克利分校（UC Berkeley）发布。
 
-catalog 记录的任务包括 3D 重建、3dgs、点云、official-export。输出模态为点云。
+catalog 记录的任务包括 3D 重建、3dgs、点云。输出模态为点云。
 
 ## 运行时契约
 
-必填 `input_path` (Required; default=/workspace/worldfoundry/data/test_cases/cut3r/examples/001)；可选 `size` (Optional; default=512)、`vis_threshold` (Optional; default=1.5)、`revisit` (Optional; default=1)。
+可选 `input_path`、`size`、`vis_threshold`、`revisit`。
 
-记录的任务 profile：`3d-reconstruction`、`3dgs`、`point-cloud`、`official-export`、`two-stage-3dgs`。绑定的 pipeline 类是 `CUT3RPipeline`。
+CLI task profile：`official-export`、`two-stage-3dgs`。绑定的 pipeline 类是 `CUT3RPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -43,7 +43,7 @@ catalog 启动命令是 `worldfoundry-eval run cut3r --pipeline.task-profile off
 
 运行环境未记录。
 
-记录的权重仓库包括 `liguang0115/cut3r`。就位权重用 `bash scripts/inference/prepare_model_infer.sh cut3r`。
+记录的权重仓库包括 `liguang0115/cut3r`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh cut3r`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

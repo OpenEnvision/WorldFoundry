@@ -29,9 +29,9 @@ LongVie-1 long I2V with optional depth/trajectory control. v2 is a sibling.
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `video`; optional `actions` (dense_video, sparse_video); artifacts `generated_video` and `longvie-1.mp4`.
+Optional `prompt`, `negative_prompt`, `input_path`, `interactions`, and `frames`; artifacts `generated_video` and `longvie-1.mp4`.
 
-Recorded task profiles: `image-to-video`, `long-video-generation`, `depth-controlled-video`, and `trajectory-controlled-video`. WorldFoundry binds `LongVie1Pipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `LongVie1Pipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -41,11 +41,11 @@ WorldFoundry implements LongVie over the canonical Wan model, encoders, VAE, VAC
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run longvie-1 --pipeline.task-profile image-to-video` to write depth. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run longvie-1 --pipeline.task-profile interactive-video` to write depth. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-longvie-cu128` (Python 3.10, CUDA 12.8).
 
-Recorded weight repositories include `Wan-AI/Wan2.1-I2V-14B-480P` and `Wan-AI/Wan2.1-T2V-1.3B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh longvie-1`.
+Recorded weight repositories include `Wan-AI/Wan2.1-I2V-14B-480P` and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh longvie-1`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

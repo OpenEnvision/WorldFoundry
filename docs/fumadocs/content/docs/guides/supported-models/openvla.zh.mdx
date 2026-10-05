@@ -30,10 +30,10 @@ WorldFoundry 把 Hugging Face 架构（`configuration_prismatic.py`、`modeling_
 
 ## 在 WorldFoundry 中运行
 
-统一环境 `worldfoundry-unified-cu128`（Python 3.10，CUDA 11.3）。两套 Hugging Face 树都要本地就位，然后：
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 11.3）。两套 Hugging Face 树都要本地就位，然后：
 
 ```
-worldfoundry-eval run openvla-7b --pipeline.task-profile vla.action_prediction
+worldfoundry-eval run openvla-7b
 ```
 
 `unnorm_key` 必须匹配该 checkpoint 的数据契约。两套记录仓库的许可都是 **MIT**。

@@ -31,9 +31,9 @@ Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `state`; optional `model_id` (a1), `camera_views`, `policy_family`, and `action_representation`; artifacts `action_trace` and `a1_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `a1_action_trace.json`.
 
-Recorded task profiles: `vla`, `vla.policy_rollout`, and `robot_policy`. WorldFoundry binds `A1Pipeline`.
+CLI task profiles: `default`. WorldFoundry binds `A1Pipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -43,11 +43,11 @@ AffordVLA, Molmo, CLIP ViT, L1/DiT/flow action heads, preprocessing, and safe lo
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run a1 --pipeline.task-profile vla` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run a1 --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-vla-a1` (Python 3.11, CUDA 12.8, torch>=2.8).
 
-Recorded weight repositories include `spatialtemporal-ai/a1-libero` and `Qwen/Qwen2-7B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh a1`.
+Recorded weight repositories include `spatialtemporal-ai/a1-libero` and `Qwen/Qwen2-7B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh a1`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

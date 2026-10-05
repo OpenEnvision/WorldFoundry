@@ -27,9 +27,9 @@ Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `image`, `instruction`, `prompt`, `state`, and `video`; optional `actions` (robot_action, action_chunk, video_action, world_action, proprio) and `env_type`; artifacts `lingbot_va_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `lingbot_va_action_trace.json`.
 
-Recorded task profiles: `vla`, `va`, `vam`, `wam`, `vla.policy_rollout`, and `vam.video_action_modeling` among others. WorldFoundry binds `LingBotVAPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `LingBotVAPipeline`.
 
 Start on `lingbot-va-base`. The family registers 3 catalog variants (cards above): `lingbot-va-base` (`vam.video_action_modeling`) — Runner parity pending; `lingbot-va-posttrain-robotwin` (`vla.policy_rollout`) — Runner parity pending; `lingbot-va-posttrain-libero-long` (`vla.policy_rollout`) — Runner parity pending. Family status: **Runner parity pending**.
 
@@ -41,11 +41,11 @@ The retained inference path includes the model graph, distributed server, client
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run lingbot-va-base --pipeline.task-profile vam.video_action_modeling`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run lingbot-va-base --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-lingbot-va-cu12` (Python 3.10, Cu126 Or Newer, torch==2.9.0).
 
-Recorded weight repositories include `robbyant/lingbot-va-base`, `robbyant/lingbot-va-posttrain-robotwin`, and `robbyant/lingbot-va-posttrain-libero-long`. Stage assets with `bash scripts/inference/prepare_model_infer.sh lingbot-va-base`.
+Recorded weight repositories include `robbyant/lingbot-va-base`, `robbyant/lingbot-va-posttrain-robotwin`, and `robbyant/lingbot-va-posttrain-libero-long`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-va-base`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Runner parity pending**.
 

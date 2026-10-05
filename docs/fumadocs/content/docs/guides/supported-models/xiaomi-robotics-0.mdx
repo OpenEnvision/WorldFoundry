@@ -17,7 +17,7 @@ Catalog aliases include `xr0`, `xiaomi-robotics-zero`, and `Xiaomi-Robotics-0`.
 
 ## What it is for
 
-Roll out Xiaomi-Robotics-0 as a vision-language-action policy. First variant `xiaomi-robotics-0-libero`; also `xiaomi-robotics-0-calvin-abcd`, `xiaomi-robotics-0-calvin-abc`, and `xiaomi-robotics-0-simplerenv-google` among others. Launch `worldfoundry-eval run xiaomi-robotics-0-libero` with `--pipeline.task-profile vla.policy_rollout` — required `instruction`, `prompt`, `image`, and `state`; out `action_trace` and `xiaomi_robotics_0_action_trace.json`.
+Roll out Xiaomi-Robotics-0 as a vision-language-action policy. First variant `xiaomi-robotics-0-libero`; also `xiaomi-robotics-0-calvin-abcd`, `xiaomi-robotics-0-calvin-abc`, and `xiaomi-robotics-0-simplerenv-google` among others. Launch `worldfoundry-eval run xiaomi-robotics-0-libero` — required `instruction`, `prompt`, `image`, and `state`; out `action_trace` and `xiaomi_robotics_0_action_trace.json`.
 
 Not [Xiaomi Robotics 1](/docs/guides/supported-models/xiaomi-robotics-1). Score on [LIBERO](/docs/evaluation/benchmark-hub/libero) and [CALVIN](/docs/evaluation/benchmark-hub/calvin).
 
@@ -27,6 +27,6 @@ Required: `instruction`, `prompt`, `image`, and `state`. Optional: `video`, `sta
 
 ## Running in WorldFoundry
 
-Run in the dedicated environment `worldfoundry-xiaomi-robotics-0-cu128` (Python 3.12, CUDA 12.8). Stage `XiaomiRobotics/Xiaomi-Robotics-0-LIBERO`, `XiaomiRobotics/Xiaomi-Robotics-0-Calvin-ABCD_D`, and `XiaomiRobotics/Xiaomi-Robotics-0-Calvin-ABC_D` among others locally — the runtime does not download weights. Launch `worldfoundry-eval run xiaomi-robotics-0-libero` with `--pipeline.task-profile vla.policy_rollout`. License: Apache-2.0.
+Run in the dedicated environment `worldfoundry-xiaomi-robotics-0-cu128` (Python 3.12, CUDA 12.8). Stage `XiaomiRobotics/Xiaomi-Robotics-0-LIBERO`, `XiaomiRobotics/Xiaomi-Robotics-0-Calvin-ABCD_D`, and `XiaomiRobotics/Xiaomi-Robotics-0-Calvin-ABC_D` among others locally — the runtime does not download weights. Launch `worldfoundry-eval run xiaomi-robotics-0-libero`. License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="xiaomi-robotics-0" locale="en" />

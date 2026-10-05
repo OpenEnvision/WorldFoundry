@@ -107,7 +107,7 @@ chunk 时间戳把每个 prompt 区间映射到生成视频：
 
 vendor `evaluate_pipelines.py` 会写 `batch_manifests/<domain>_<pipeline>_{all,pending}.jsonl` 和 `batch_logs/<domain>_<pipeline>/`（`summary_latest.jsonl`、`score_summary.json`、`score_cases.csv`）。常用开关：`--list-pipelines`、`--limit N`、`--dry-run`、`--no-summarize`、`--skip-pair gaming:lingbot-world`。WorldFoundry 已验证的是 `--run-official --dry-run`；不声称已做 1000 视频计分三项赛。
 
-更底层的 vendor 工具（只用于调试）：`make_manifest.py`、`batch_scheduler.py`、`summarize_scores.py`、`scripts/score_video_physical_3d.py`。
+更底层的 vendor 工具（只用于调试）：`make_manifest.py`、`batch_scheduler.py`、`summarize_scores.py`、`scripts/score_video_physical_3d.py`。这些路径相对于 `worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/`。
 
 物理赛道在仓内 runtime 里的细节：对 GT 与生成视频做 SAM3 mask / box，力学再用 DA3 质心进 3D；热学是题库；材料是视觉启发式（混色、溶解、可燃、硬度 / 形变），可再加 VLM。请走官方 runner，不要直接跑那些目录脚本。
 

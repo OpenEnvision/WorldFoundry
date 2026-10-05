@@ -1,34 +1,44 @@
 ---
 title: "HyperFlow for MiniMax-H3"
-description: "MiniMax-H3 的八步推理适配器，支持联合音视频、首尾帧条件与有序多模态参考。"
+description: "HyperFlow for MiniMax-H3（Video Rebirth）：文生视频、图生视频；Runner 一致性待确认; 独立环境 `hyperflow`。"
+modelId: "hyperflow"
 pageSource: generated
 ---
 
-**发表机构:** Video Rebirth
-text · image → video
-
 MiniMax-H3 的八步推理适配器，支持联合音视频、首尾帧条件与有序多模态参考。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="hyperflow" locale="zh" />
 
-## 上游来源
-
-- [源码](https://github.com/Video-Rebirth/hyperflow)
-- [上游 README](https://github.com/Video-Rebirth/hyperflow#readme)
+代码：[Video-Rebirth/hyperflow](https://github.com/Video-Rebirth/hyperflow)。
 
 <ModelCommandBuilder modelId="hyperflow" locale="zh" />
 
+## 用来做什么
+
+用 `hyperflow` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。
+
+该模型由Video Rebirth发布。
+
+catalog 记录的任务包括 文生视频、图生视频、参考图生成视频、音视频联合生成。别名包括 `hyperflow-h3`、`minimax-h3-hyperflow`。模态上，它接受文本、图像，输出视频。
+
 ## 运行时契约
 
-提供完整的本地 Diffusers 格式 MiniMax-H3 权重快照、weights_path 和专用 Python 可执行文件。上游加载器使用固定网格；num_inference_steps 必须为 8，输出帧率必须为 24 fps。
+可选 `prompt`、`num_frames`、`height`、`width`、`seed`；产物 `generated_video`、`hyperflow.mp4`。
 
-## 就绪状态与限制
+CLI task profile：`t2va`、`fl2va`、`ref2va`。绑定的 pipeline 类是 `HyperFlowPipeline`。
 
-- Runner parity 仍待验证；已完成的单卡烟测不代表端到端 Runner 与官方结果一致。原生 Demo 证据未记录。
-- T2VA、单图 FL2VA 和图像参考 Ref2VA 已在单张 H100 上完成 640×384、124 帧、8 步烟测，包含完整视频与立体声音频解码。
-- GPU 推理需要大量显存和主机内存；上游公布的单卡测量使用 H200。
-- 官方帧数会向上对齐到 17n+5；在 24 fps 下支持对齐后的 124 至 345 帧。
-- Ref2VA 需要 transformer_ref 权重；不支持仅音频参考。
-- 高分辨率质量一致性、多卡推理、末帧条件以及视频/音频参考条件尚未验证。
+系列状态：**Runner 一致性待确认**。
+
+`t2va` 记录默认值：seed=42；`fl2va` 记录默认值：seed=42。
+
+提供完整的本地 Diffusers 格式 MiniMax-H3 权重快照、weights_path 和专用 Python 可执行文件。 上游加载器使用固定网格；num_inference_steps 必须为 8，输出帧率必须为 24 fps。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run hyperflow --pipeline.task-profile t2va` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `videorebirth/hyperflow`、`MiniMaxAI/MiniMax-H3`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh hyperflow`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="hyperflow" locale="zh" />

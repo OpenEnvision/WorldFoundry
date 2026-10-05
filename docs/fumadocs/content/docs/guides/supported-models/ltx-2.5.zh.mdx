@@ -25,9 +25,9 @@ catalog 记录的任务包括 文生视频、图生视频、音视频联合生�
 
 ## 运行时契约
 
-必填 `prompt`；可选 `image`、`video`、`actions` (seed, height, width, num_frames, fps, offload_mode, quantization)；产物 `generated_video`、`ltx-2.5.mp4`。
+可选 `prompt`、`frames`、`fps`、`height`、`width`；产物 `generated_video`、`ltx-2.5.mp4`。
 
-记录的任务 profile：`text-to-video`、`image-to-video`、`audio-video-generation`。绑定的 pipeline 类是 `LTX25Pipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LTX25Pipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -39,9 +39,9 @@ Command construction and official split-component mapping are validated without 
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run ltx-2.5 --pipeline.task-profile text-to-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run ltx-2.5 --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-记录的权重仓库包括 `Lightricks/LTX-2.5`。就位权重用 `bash scripts/inference/prepare_model_infer.sh ltx-2.5`。
+记录的权重仓库包括 `Lightricks/LTX-2.5`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh ltx-2.5`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

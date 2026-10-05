@@ -27,9 +27,9 @@ catalog 记录的任务包括 3D 重建、3dgs、点云。输出模态为点云�
 
 ## 运行时契约
 
-本卡片未记录输入、旋钮或产物。
+可选 `input_path`、`interactions`、`fps`、`height`、`width`。
 
-记录的任务 profile：`3d-reconstruction`、`3dgs`、`point-cloud`。绑定的 pipeline 类是 `VGGTPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `VGGTPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -39,11 +39,11 @@ In-tree VGGT two-stage 3DGS pipeline is registered; distinct from vggt-omega and
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run vggt --pipeline.task-profile 3d-reconstruction` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run vggt --pipeline.task-profile interactive-video` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境未记录。
 
-记录的权重仓库包括 `facebook/VGGT-1B`。就位权重用 `bash scripts/inference/prepare_model_infer.sh vggt`。
+记录的权重仓库包括 `facebook/VGGT-1B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh vggt`；下载缺失的公开权重时加 `--download`。
 
 状态：**Runner 一致性待确认**。
 

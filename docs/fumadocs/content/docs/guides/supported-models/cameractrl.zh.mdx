@@ -29,9 +29,9 @@ catalog 记录的任务包括 世界模型、video、相机控制。输出模态
 
 ## 运行时契约
 
-必填 `prompt`；可选 `image`、`video`、`actions` (camera_trajectory, pose_file)；产物 `cameractrl.mp4`。
+可选 `prompt`、`trajectory_file`、`frames`、`fps`、`height`；产物 `cameractrl.mp4`。
 
-记录的任务 profile：`world`、`video`、`camera_control`、`world_model`、`trajectory-video`。绑定的 pipeline 类是 `CameraCtrlPipeline`。
+CLI task profile：`trajectory-video`。绑定的 pipeline 类是 `CameraCtrlPipeline`。
 
 系列状态：**已验证**。
 
@@ -43,9 +43,9 @@ runner 遵循官方 demo 轨迹契约——提供相机轨迹文件与文本提�
 
 启动 `worldfoundry-eval run cameractrl --pipeline.task-profile trajectory-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.10，CUDA 11.3）。
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 11.3）。
 
-记录的权重仓库包括 `hehao13/CameraCtrl`。就位权重用 `bash scripts/inference/prepare_model_infer.sh cameractrl`。
+记录的权重仓库包括 `hehao13/CameraCtrl`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh cameractrl`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

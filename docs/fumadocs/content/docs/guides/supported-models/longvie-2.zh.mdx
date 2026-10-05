@@ -29,9 +29,9 @@ LongVie-2 长图生视频。不是 v1 卡。
 
 ## 运行时契约
 
-必填 `image`、`prompt`、`video`；可选 `controls` (dense_depth_video_per_segment, sparse_pointmap_or_track_video_per_segment)；产物 `generated_video`、`longvie-2.mp4`。
+可选 `prompt`、`negative_prompt`、`input_path`、`interactions`、`frames`；产物 `generated_video`、`longvie-2.mp4`。
 
-记录的任务 profile：`image-to-video`、`long-video-generation`、`depth-controlled-video`、`trajectory-controlled-video`。绑定的 pipeline 类是 `LongVie2Pipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LongVie2Pipeline`。
 
 系列状态：**已验证**。
 
@@ -41,11 +41,11 @@ LongVie-2 长图生视频。不是 v1 卡。
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run longvie-2 --pipeline.task-profile image-to-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+catalog 启动命令是 `worldfoundry-eval run longvie-2 --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是独立 profile `worldfoundry-longvie-cu128`（Python 3.10，CUDA 12.8）。
 
-记录的权重仓库包括 `Vchitect/LongVie2`、`Wan-AI/Wan2.1-I2V-14B-480P`、`Vchitect/LongVie2` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh longvie-2`。
+记录的权重仓库包括 `Vchitect/LongVie2`、`Wan-AI/Wan2.1-I2V-14B-480P`、`Vchitect/LongVie2` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh longvie-2`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

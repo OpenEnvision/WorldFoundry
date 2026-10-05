@@ -23,15 +23,15 @@ Use `ctrl-world` for catalog world-model inference. Choose it when you need acti
 
 The recorded checkpoints tell the design: a Stable Video Diffusion image-to-video backbone (stabilityai/stable-video-diffusion-img2vid) with CLIP conditioning (openai/clip-vit-base-patch32) and Ctrl-World's own action-conditioning weights (yjguo/Ctrl-World). Internals beyond this are not recorded in this repository. It is published by Tsinghua University / Stanford University.
 
-Catalog tasks include interactive-world-model, game-world-model, action-conditioned-video, and robot-action-video. Catalog aliases include `ctrl_world` and `ctrlworld`.
+Catalog tasks include interactive-world-model, game-world-model, and action-conditioned-video. Catalog aliases include `ctrl_world` and `ctrlworld`.
 
 Recorded evaluation entry points include [WorldArena](/docs/evaluation/benchmark-hub/worldarena) (The entry is listed on WorldArena for robot world-model evaluation).
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (world_action, robot_action); artifacts `ctrl-world.mp4`.
+Optional `input_path`, `prompt`, `load.checkpoint_path`, `load.base_model_dir`, and `load.clip_model_dir`; artifacts `ctrl-world.mp4`.
 
-Recorded task profiles: `interactive-world-model`, `game-world-model`, `action-conditioned-video`, and `robot-action-video`. WorldFoundry binds `CtrlWorldPipeline`.
+CLI task profiles: `robot-action-video`. WorldFoundry binds `CtrlWorldPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -45,7 +45,7 @@ Launch `worldfoundry-eval run ctrl-world --pipeline.task-profile robot-action-vi
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `yjguo/Ctrl-World`, `stabilityai/stable-video-diffusion-img2vid`, and `openai/clip-vit-base-patch32`. Stage assets with `bash scripts/inference/prepare_model_infer.sh ctrl-world`.
+Recorded weight repositories include `yjguo/Ctrl-World`, `stabilityai/stable-video-diffusion-img2vid`, and `openai/clip-vit-base-patch32`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh ctrl-world`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

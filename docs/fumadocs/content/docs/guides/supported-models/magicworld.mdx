@@ -1,44 +1,50 @@
 ---
 title: "MagicWorld"
-description: "MagicWorld is vivo's interactive world model: from an image it generates camera-controlled world video, with a MagicWorld-Fast camera path wired in this catalog. The official source is vendored at a pinned revision; runner parity waits on…"
+description: "MagicWorld from vivo (Camera Research): interactive-world-model and camera-controlled-video; Runner parity pending."
+modelId: "magicworld"
 pageSource: generated
 ---
 
-**Publisher:** vivo (Camera Research) · Company
-image → video
-
 MagicWorld is vivo's interactive world model: from an image it generates camera-controlled world video, with a MagicWorld-Fast camera path wired in this catalog. The official source is vendored at a pinned revision; runner parity waits on checkpoints.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="magicworld" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2511.18886](https://arxiv.org/abs/2511.18886).
 
-- [Project](https://vivocameraresearch.github.io/magicworld/)
-- [Paper](https://arxiv.org/abs/2511.18886)
-- [GitHub](https://github.com/vivoCameraResearch/Magic-World)
-- [Source](https://github.com/alibaba-damo-academy/Uni3C)
-- [Source](https://github.com/apple/ml-depth-pro)
-- [Upstream README](https://github.com/vivoCameraResearch/Magic-World#readme)
-- [Upstream README](https://github.com/alibaba-damo-academy/Uni3C#readme)
-- [Upstream README](https://github.com/apple/ml-depth-pro#readme)
+Project page: [vivocameraresearch.github.io/magicworld](https://vivocameraresearch.github.io/magicworld/). Code: [vivoCameraResearch/Magic-World](https://github.com/vivoCameraResearch/Magic-World). Code: [alibaba-damo-academy/Uni3C](https://github.com/alibaba-damo-academy/Uni3C). Code: [apple/ml-depth-pro](https://github.com/apple/ml-depth-pro).
 
 <ModelCommandBuilder modelId="magicworld" locale="en" />
 
-## Architecture
+## What it is for
 
-Architecture internals beyond the recorded tasks are not stored in this repository. Note the split licensing: code is apache-2.0, while the upstream README applies CC BY-NC-SA 4.0 terms to released model materials.
+Pick `magicworld` when you need camera-controlled video: a camera trajectory in, a steered clip out. Use it instead of unconstrained T2V when viewpoint must follow a path.
+
+Architecture internals beyond the recorded tasks are not stored in this repository. Note the split licensing: code is apache-2.0, while the upstream README applies CC BY-NC-SA 4.0 terms to released model materials. It is published by vivo (Camera Research).
+
+Catalog tasks include interactive-world-model, camera-controlled-video, and image-to-video. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-control adherence of interactive rollouts).
 
 ## Runtime contract
 
+Optional `prompt`, `input_path`, `frames`, `seed`, and `native_rows`; artifacts `magicworld.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `MagicWorldPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `default` defaults: frames=81, seed=42.
+
 Inputs are prompt, image, and native_rows camera control. Model materials retain upstream non-commercial share-alike terms — review before commercial use.
 
-## Evaluation benchmarks
+## Running in WorldFoundry
 
-- [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — Camera-control adherence of interactive rollouts.
+The catalog launch is `worldfoundry-eval run magicworld --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-## Readiness and limitations
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-- Model materials are CC BY-NC-SA 4.0 (non-commercial).
-- Runner parity is pending checkpoints.
+Recorded weight repositories include `LuckyLiGY/MagicWorld`, `alibaba-pai/Wan2.1-Fun-V1.1-1.3B-InP`, and `apple/DepthPro`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh magicworld`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="magicworld" locale="en" />

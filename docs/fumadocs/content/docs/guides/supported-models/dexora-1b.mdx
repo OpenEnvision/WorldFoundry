@@ -27,9 +27,9 @@ Catalog tasks include vla, dexterous manipulation, bimanual robot policy, and vl
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `state`; optional `model_id` (dexora-1b), `camera_keys` (cam_head, cam_left_wrist, cam_third_view, cam_right_wrist), `state_dim` (36), `action_dim` (36), and `action_horizon` (32); artifacts `action_trace` and `dexora_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `dexora_action_trace.json`.
 
-Recorded task profiles: `vla`, `dexterous_manipulation`, `bimanual_robot_policy`, and `vla.policy_rollout`. WorldFoundry binds `DexoraPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `DexoraPipeline`.
 
 Family status: **Static load only**.
 
@@ -41,11 +41,11 @@ Dedicated env: `worldfoundry-vla-dexora` (Python 3.10, CUDA 12.1 or newer). Trai
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run dexora-1b --pipeline.task-profile vla`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run dexora-1b --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-vla-dexora` (Python 3.10, Cu121 Or Newer, torch>=2.2).
 
-Recorded weight repositories include `google/siglip-so400m-patch14-384` and `google/t5-v1_1-xxl`. Stage assets with `bash scripts/inference/prepare_model_infer.sh dexora-1b`.
+Recorded weight repositories include `google/siglip-so400m-patch14-384` and `google/t5-v1_1-xxl`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dexora-1b`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Static load only**.
 

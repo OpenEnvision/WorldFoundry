@@ -33,7 +33,7 @@ Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benc
 
 Required `prompt` and start images. Causal and four-step causal inference also require one action track per view, supplied through `actions`/`action_paths` or action JSONs in `eval_dir`; these checkpoints cannot run without actions. Other options include `mode`, `n_players`, `num_frames`, `num_conditional_frames`, `guidance`, `num_steps`, and `seed`. The output is a generated video.
 
-Recorded task profiles: `multi-agent-world-model`, `action-conditioned-video`, and `image-to-video`. WorldFoundry binds `GammaWorldPipeline`.
+CLI task profiles: `interactive-video`. WorldFoundry binds `GammaWorldPipeline`.
 
 Start on `gamma-world-causal-few-step`. The family registers 3 catalog variants (cards above): `gamma-world-causal-few-step` (`action-conditioned-video`) — Runner parity pending; `gamma-world-causal` (`action-conditioned-video`) — Runner parity pending; `gamma-world-bidirectional` (`action-conditioned-video`) — Runner parity pending. Family status: **Runner parity pending**.
 
@@ -43,11 +43,11 @@ Gamma-World is a native diffusion recipe and does not require an external source
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run gamma-world-causal-few-step --pipeline.task-profile action-conditioned-video` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run gamma-world-causal-few-step --pipeline.task-profile interactive-video` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-gamma-world-cu128` (Python 3.1, CUDA 12.8, torch==2.7.0).
 
-Recorded weight repositories include `chijw/Gamma-World`, `nvidia/Cosmos-Reason1-7B`, and `nvidia/Cosmos-Reason1-7B`. Stage assets with `bash scripts/inference/prepare_model_infer.sh gamma-world-causal-few-step`.
+Recorded weight repositories include `chijw/Gamma-World`, `nvidia/Cosmos-Reason1-7B`, and `nvidia/Cosmos-Reason1-7B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh gamma-world-causal-few-step`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include apache-2.0; status: **Runner parity pending**.
 

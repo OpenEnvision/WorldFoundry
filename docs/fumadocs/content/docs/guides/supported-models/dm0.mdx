@@ -29,9 +29,9 @@ Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `state`; optional `model_id` (dm0), `max_image_slots` (3), and `action_representation`; artifacts `action_trace` and `dm0_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `dm0_action_trace.json`.
 
-Recorded task profiles: `vla`, `vla.action_prediction`, and `vla.policy_rollout`. WorldFoundry binds `DM0Pipeline`.
+CLI task profiles: `default`. WorldFoundry binds `DM0Pipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -41,11 +41,11 @@ The Qwen3 flow action expert, merged prefix/suffix attention, triple-view prepro
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run dm0 --pipeline.task-profile vla`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run dm0 --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.10, CUDA 12.8, torch>=2.6.0).
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.6.0).
 
-Recorded weight repositories include `Dexmal/DM0-libero` and `Dexmal/DM0-base`. Stage assets with `bash scripts/inference/prepare_model_infer.sh dm0`.
+Recorded weight repositories include `Dexmal/DM0-libero` and `Dexmal/DM0-base`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dm0`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

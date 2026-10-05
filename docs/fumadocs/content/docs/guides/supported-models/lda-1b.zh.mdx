@@ -1,39 +1,50 @@
 ---
 title: "LDA-1B"
-description: "LDA-1B 是 1B 规模的 VLA 策略，将 Qwen3-VL 视觉-语言组装、DINOv3-ViT 兼容模型与 MMDiT 动作采样器结合，面向 RoboCasa 发布（Wayer2/LDA-robocasa，CC-BY-NC-4.0）。WorldFoundry 将完整推理路径内置树内，静态运行时验证已完成。"
+description: "LDA-1B：视觉-语言-动作（VLA）、机器人策略；仅静态加载; 独立环境 `worldfoundry-vla-lda-1b`。"
+modelId: "lda-1b"
 pageSource: generated
 ---
 
-**发表机构:** 开源研究发布（仓库未记录正式机构） · 研究机构
-
 LDA-1B 是 1B 规模的 VLA 策略，将 Qwen3-VL 视觉-语言组装、DINOv3-ViT 兼容模型与 MMDiT 动作采样器结合，面向 RoboCasa 发布（Wayer2/LDA-robocasa，CC-BY-NC-4.0）。WorldFoundry 将完整推理路径内置树内，静态运行时验证已完成。
 
-**目录状态:** 运行时已移植
+<ModelPaperFigures modelId="lda-1b" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2505.03233](https://arxiv.org/abs/2505.03233)。
 
-- [论文](https://arxiv.org/abs/2505.03233)
-- [GitHub](https://github.com/jiangranlv/LDA-1B)
-- [Hugging Face](https://huggingface.co/Wayer2/LDA-robocasa)
-- [上游 README](https://github.com/jiangranlv/LDA-1B#readme)
+代码：[jiangranlv/LDA-1B](https://github.com/jiangranlv/LDA-1B)。
 
 <ModelCommandBuilder modelId="lda-1b" locale="zh" />
 
-## 架构
+## 用来做什么
+
+用 `lda-1b` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。
 
 Qwen3-VL 提供多模态编码，DINOv3-ViT 补充视觉特征，MMDiT（多模态扩散 transformer）采样动作，状态打包与动作反归一化内置树内。模型与参数名保持发布 checkpoint 契约。
 
+catalog 记录的任务包括 视觉-语言-动作（VLA）、机器人策略、策略执行、具身评测。别名包括 `lda1b`、`wayer2/lda-robocasa`。
+
+记录的评测入口包括[RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)（发布的 checkpoint 面向 RoboCasa）。
+
 ## 运行时契约
 
-运行时仅以 weights_only=true 加载本地就位的张量 state dict。精确 checkpoint 键与数值 rollout 验证需要尚未就位的 14.4 GB 工件——真实运行前请先就位。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`lda_1b_action_trace.json`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `LDA1BSynthesis`。
 
-- [RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa) — 发布的 checkpoint 面向 RoboCasa。
+系列状态：**仅静态加载**。
 
-## 就绪状态与限制
+运行时仅以 weights_only=true 加载本地就位的张量 state dict。 精确 checkpoint 键与数值 rollout 验证需要尚未就位的 14.4 GB 工件——真实运行前请先就位。
 
-- CC-BY-NC-4.0：仅限非商用。
-- 14.4 GB checkpoint 未就位；数值验证待定。
+CC-BY-NC-4.0：仅限非商用。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run lda-1b --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-vla-lda-1b`（Python 3.10，CUDA 12.4+，torch==2.6.0）。
+
+记录的权重仓库包括 `Wayer2/LDA-robocasa`、`Qwen/Qwen3-VL-4B-Instruct`、`facebook/dinov3-vits16-pretrain-lvd1689m`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lda-1b`；下载缺失的公开权重时加 `--download`。
+
+状态：**仅静态加载**。
 
 <ModelRelatedRecipes modelId="lda-1b" locale="zh" />

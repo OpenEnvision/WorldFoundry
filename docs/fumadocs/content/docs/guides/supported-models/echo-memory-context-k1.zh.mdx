@@ -19,7 +19,7 @@ Echo-Memory Context K=1 是京东 Echo-Memory 家族里的**一个身份**：Wan
 
 Echo memory-context K1 槽位，不是 Infinity 长视频卡。
 
-启动 `worldfoundry-eval run echo-memory-context-k1 --pipeline.task-profile image-to-video`。
+启动 `worldfoundry-eval run echo-memory-context-k1`。
 
 评测入口：[MemoBench](/zh/docs/evaluation/benchmark-hub/memobench)（专为评估交互式世界模型的长时程记忆而设）。
 
@@ -46,7 +46,7 @@ Echo memory-context K1 槽位，不是 Infinity 长视频卡。
 
 ## 在 WorldFoundry 中运行
 
-状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `Echo-Team/Echo-Memory`、`Wan-AI/Wan2.1-T2V-1.3B`、`Echo-Team/Echo-Memory` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run echo-memory-context-k1 --pipeline.task-profile image-to-video`。许可证：CC-BY-4.0、apache-2.0。catalog 未记录 VRAM。
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `Echo-Team/Echo-Memory`、`Wan-AI/Wan2.1-T2V-1.3B`、`Echo-Team/Echo-Memory` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run echo-memory-context-k1`。许可证：CC-BY-4.0、apache-2.0。catalog 未记录 VRAM。
 
 `worldfoundry/base_models/diffusion_model/models/networks/echo_memory` 只放 checkpoint 特有的网络块，不是命令行入口。记忆生命周期、模型装配和运行时契约在共享扩散基础设施里。如何加一条不可变 recipe 见[推理指南](/zh/docs/guides/inference#echo-memory-context-k1)。权重就位见[本地资产](/zh/docs/guides/local-assets)。
 

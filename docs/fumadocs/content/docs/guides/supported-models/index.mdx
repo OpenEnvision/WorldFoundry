@@ -9,7 +9,7 @@ description: Pick a model, inspect its runtime, and copy a command that matches 
 
 Every model carries one readiness badge. The badge is computed from independent manifest records and never rounds missing evidence up to a stronger claim.
 
-- **Runner verified** — A WorldFoundry runner-parity artifact is recorded for at least one route. Copy the run command and expect it to produce the recorded artifact.
+- **Runner verified** — A WorldFoundry runner-parity artifact is recorded for at least one route. Select the variant and configuration named in that evidence.
 - **Integrated** — A runnable pipeline is bound, but end-to-end GPU parity is still pending. Run it; treat outputs as unvalidated until parity is recorded.
 - **Runtime ported** — Runtime code exists in-tree; the route is still being wired up. Inspect the manifest; running may require manual steps.
 - **Profile only** — Only a runtime profile is recorded — no bound pipeline. Use the page for provenance and planning; no run command is shown.
@@ -25,7 +25,7 @@ Every model carries one readiness badge. The badge is computed from independent 
 
 ## What each model page contains
 
-Model pages are generated from repository manifests by `docs/fumadocs/scripts/generate-model-recipes.py` — not hand-maintained marketing pages. Each page keeps these claims separate:
+Model pages combine generated runtime records with model-specific articles. `docs/fumadocs/scripts/generate-model-recipes.py` refreshes recipe data and pages marked `pageSource: generated`; authored articles are maintained separately. Each page keeps these claims separate:
 
 <RecipeRecords items={[
   {
@@ -58,7 +58,7 @@ Model pages are generated from repository manifests by `docs/fumadocs/scripts/ge
   },
 ]} />
 
-Unknown values remain **Not recorded**. Every catalog manifest now carries a curated bilingual `docs:` block — overview, architecture, publisher attribution, and recommended benchmarks (only real benchmark ids from this repository) — written from the manifest, the runtime profile, and the recorded official sources. Usage notes and blockers live in the **Runtime contract** on each model page. Facts the repository does not record are stated as "not recorded" rather than invented; GPU validation is only claimed where the manifest records it.
+Unknown values remain **Not recorded**. Catalog manifests can carry a curated bilingual `docs:` block with overview, architecture, publisher attribution, and recommended benchmarks. Entries without that block use recorded catalog and runtime metadata. Usage notes and blockers live in the **Runtime contract** on each model page. Catalog tasks describe model capabilities; the command builder uses the CLI's accepted task-profile IDs and options. Recorded validation applies to the stated route and configuration.
 
 ## Common commands
 
@@ -78,8 +78,8 @@ worldfoundry-eval zoo model-download \
 # Resolve and install the environment manifest for one runtime profile.
 bash scripts/setup/model_env_install.sh --model <model-id>
 
-# Download checkpoints and source assets for a runtime profile.
-bash scripts/inference/prepare_model_infer.sh <model-id>
+# Download declared checkpoints for a runtime profile.
+bash scripts/inference/prepare_model_infer.sh <model-id> --download
 
 # Run a recorded task profile (each model page generates the exact flags).
 worldfoundry-eval run <model-id> --pipeline.task-profile <task> --json

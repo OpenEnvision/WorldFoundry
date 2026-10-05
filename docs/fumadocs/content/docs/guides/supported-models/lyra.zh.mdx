@@ -21,15 +21,15 @@ Lyra 是英伟达面向探索的生成式世界模型家族：Lyra-1 从图像�
 
 catalog 记录两代模型：Lyra-1 做图像/视频到世界视频，Lyra-2 做动作条件世界视频（论文见 OpenReview，项目页在 NVIDIA Research）。运行需要本地 Lyra checkpoint、文本编码器资产、DA3（Depth Anything 3）资产与 CUDA 依赖；除已记录结构外的内部细节仓库未存。该模型由英伟达（NVIDIA）发布。
 
-catalog 记录的任务包括 open generative 3D and 4D world models、official-zoomgs。别名包括 `Project Lyra`、`Lyra 1.0`、`Lyra 2.0`。同系列还有 `lyra-2`。
+catalog 记录的任务包括 open generative 3D and 4D world models。别名包括 `Project Lyra`、`Lyra 1.0`、`Lyra 2.0`。同系列还有 `lyra-2`。
 
 记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（可探索生成世界的标准评分）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（评估探索过程中的相机/视角控制质量）。
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`video`；可选 `actions` (navigation_actions, camera_trajectory)；产物 `generated_world`、`generated_3d_asset`、`lyra.mp4`。
+可选 `image`、`prompt`、`mode`、`trajectory`、`camera_rotation`；产物 `generated_world`、`generated_3d_asset`、`lyra-1.mp4`。
 
-记录的任务 profile：`open generative 3D and 4D world models`、`official-zoomgs`。绑定的 pipeline 类是 `LyraPipeline`。
+CLI task profile：`official-static-sdg`、`official-zoomgs`。绑定的 pipeline 类是 `LyraPipeline`。
 
 起步 variant 是 `lyra-1`。catalog 登记了 2 个 variant（上方卡片）：`lyra-1`（`image-or-video-to-world-video`）：Runner 一致性待确认、`lyra-2`（`action-conditioned-world-video`）：Runner 一致性待确认。系列状态：**已验证**。
 
@@ -41,9 +41,9 @@ catalog 记录的任务包括 open generative 3D and 4D world models、official-
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run lyra-1 --pipeline.task-profile official-zoomgs` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run lyra-1 --pipeline.task-profile official-static-sdg` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-记录的权重仓库包括 `depth-anything/DA3NESTED-GIANT-LARGE-1.1`。就位权重用 `bash scripts/inference/prepare_model_infer.sh lyra-1`。
+记录的权重仓库包括 `depth-anything/DA3NESTED-GIANT-LARGE-1.1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lyra-1`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

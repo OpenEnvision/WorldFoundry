@@ -21,7 +21,7 @@ What this repository actually checked: native **2B** architecture **567** checkp
 
 Stay on this card only when you need the **T5-conditioned v2** recipe. New world-video work should start on [Predict 2.5](/docs/guides/supported-models/cosmos-predict-2.5): Reason1 conditioner, flow-UniPC, and a **verified 2B text-to-world** route at the same 1280×704 / 93-frame / 35-step geometry.
 
-Launch `worldfoundry-eval run cosmos-predict2-2b-video2world` with `--pipeline.task-profile image/video-to-world`. Required inputs: `prompt`, `image`, `video`. Artifact: `cosmos-predict2-2b-video2world.mp4` (14B writes `cosmos-predict2-14b-video2world.mp4`). There is **no** control-video / VACE branch here — that is Transfer 2.5. There is **no** joint sound or policy head — that is Cosmos 3.
+Launch `worldfoundry-eval run cosmos-predict2-2b-video2world`. Required inputs: `prompt`, `image`, `video`. Artifact: `cosmos-predict2-2b-video2world.mp4` (14B writes `cosmos-predict2-14b-video2world.mp4`). There is **no** control-video / VACE branch here — that is Transfer 2.5. There is **no** joint sound or policy head — that is Cosmos 3.
 
 Score predicted world video on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) and [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq). Those are catalog entry points, not ingested WorldFoundry scores.
 

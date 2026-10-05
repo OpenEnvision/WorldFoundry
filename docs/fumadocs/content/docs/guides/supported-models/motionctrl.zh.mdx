@@ -1,41 +1,50 @@
 ---
 title: "MotionCtrl"
-description: "MotionCtrl 是统一、灵活的视频生成运动控制器：在单一模型中独立控制相机运动与物体运动（SIGGRAPH 2024）。本 catalog 中 runner 已验证——相机运动 demo 经 Workspace 推理路径运行，使用就位的 MotionCtrl checkpoint 与树内相机位姿 fixture。"
+description: "MotionCtrl（Tencent (ARC Lab)）：世界模型；已验证。"
+modelId: "motionctrl"
 pageSource: generated
 ---
 
-**发表机构:** 腾讯（ARC Lab） · 企业
-
 MotionCtrl 是统一、灵活的视频生成运动控制器：在单一模型中独立控制相机运动与物体运动（SIGGRAPH 2024）。本 catalog 中 runner 已验证——相机运动 demo 经 Workspace 推理路径运行，使用就位的 MotionCtrl checkpoint 与树内相机位姿 fixture。
 
-**目录状态:** Runner 已验证
+<ModelPaperFigures modelId="motionctrl" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2312.03641](https://arxiv.org/abs/2312.03641)。
 
-- [项目主页](https://wanquanf.github.io/MotionCtrl/)
-- [论文](https://arxiv.org/abs/2312.03641)
-- [GitHub](https://github.com/TencentARC/MotionCtrl)
-- [Hugging Face](https://huggingface.co/TencentARC/MotionCtrl)
-- [Hugging Face](https://huggingface.co/TencentARC/MotionCtrl_SVD)
-- [上游 README](https://github.com/TencentARC/MotionCtrl#readme)
+项目页：[wanquanf.github.io/MotionCtrl](https://wanquanf.github.io/MotionCtrl/)。代码：[TencentARC/MotionCtrl](https://github.com/TencentARC/MotionCtrl)。
 
 <ModelCommandBuilder modelId="motionctrl" locale="zh" />
 
-## 架构
+## 用来做什么
 
-按论文，相机运动控制模块以相机位姿序列为条件、物体运动控制模块以轨迹为条件，挂接在 LVDM 系视频基座上。WorldFoundry 将 LVDM 栈、控制模块、采样器、默认配置与运动 fixture 内置于 synthesis/visual_generation/motionctrl/motionctrl_runtime 并在进程内加载。
+`motionctrl` 是记录的交互世界线。要用动作推进世界时从这里起步。
+
+按论文，相机运动控制模块以相机位姿序列为条件、物体运动控制模块以轨迹为条件，挂接在 LVDM 系视频基座上。WorldFoundry 将 LVDM 栈、控制模块、采样器、默认配置与运动 fixture 内置于 synthesis/visual_generation/motionctrl/motionctrl_runtime 并在进程内加载。该模型由腾讯（ARC Lab）发布。
+
+catalog 记录的任务包括 interactive-video。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（相机运动控制贴合度）。
 
 ## 运行时契约
 
-默认的相机/物体运动 fixture 参数记录在运行时档案中——请从这里开始。上游 CLI 仅作溯源； benchmark 打分是独立工作。
+可选 `prompt`、`input_path`、`interactions`、`frames`、`fps`；产物 `motionctrl.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `MotionCtrlPipeline`。
 
-- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 相机运动控制贴合度。
+系列状态：**已验证**。
 
-## 就绪状态与限制
+`interactive-video` 记录默认值：height=256, width=256, seed=42。
 
-- LVDM 时代基座：画质弱于较新的 DiT 视频模型。
-- benchmark 打分尚未记录。
+默认的相机/物体运动 fixture 参数记录在运行时档案中——请从这里开始。 上游 CLI 仅作溯源； benchmark 打分是独立工作。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run motionctrl --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `TencentARC/MotionCtrl`、`TencentARC/MotionCtrl_SVD`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh motionctrl`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
 
 <ModelRelatedRecipes modelId="motionctrl" locale="zh" />

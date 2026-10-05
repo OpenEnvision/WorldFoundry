@@ -27,9 +27,9 @@ Not [Wan2.2](/docs/guides/supported-models/wan2.2) and [Wan2.2 Fun A14B Cam](/do
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `pose_txt`; artifacts `wan22-fun-5b-cam.mp4`.
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `wan22-fun-5b-cam.mp4`.
 
-Recorded task profiles: `camera-controlled-video` and `image-to-video`. WorldFoundry binds `Wan22Fun5BCameraPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `Wan22Fun5BCameraPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -39,11 +39,11 @@ VideoX-Fun source is vendored at revision 403f1f7b78dcafccc4f6606dda4ec28e16e667
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run wan22-fun-5b-cam --pipeline.task-profile camera-controlled-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run wan22-fun-5b-cam --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `alibaba-pai/Wan2.2-Fun-5B-Control-Camera`. Stage assets with `bash scripts/inference/prepare_model_infer.sh wan22-fun-5b-cam`.
+Recorded weight repositories include `alibaba-pai/Wan2.2-Fun-5B-Control-Camera`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wan22-fun-5b-cam`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 

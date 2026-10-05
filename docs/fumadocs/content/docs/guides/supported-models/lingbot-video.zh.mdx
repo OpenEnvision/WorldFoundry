@@ -29,9 +29,9 @@ LingBot 文/图生视频家族，不是世界卡。
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`prompt_json`；产物 `generated_image`、`generated_video`、`lingbot_video.mp4`。
+可选 `prompt`、`prompt_json`、`negative_prompt`、`backend`、`mode`；产物 `generated_image`、`generated_video`、`lingbot_video.mp4`。
 
-记录的任务 profile：`text-to-image`、`text-to-video`、`text-image-to-video`、`video-refinement`、`t2v`、`ti2v` 等。绑定的 pipeline 类是 `LingBotVideoGenerationPipeline`。
+CLI task profile：`t2v`、`ti2v`、`t2i`。绑定的 pipeline 类是 `LingBotVideoGenerationPipeline`。
 
 系列状态：**MoE 短片 T2V 已与官方运行器对照，其他模式待验证**。
 
@@ -47,7 +47,7 @@ catalog 启动命令是 `worldfoundry-eval run lingbot-video --pipeline.task-pro
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch==2.11.0+cu128）。
 
-记录的权重仓库包括 `robbyant/lingbot-video-dense-1.3b`、`robbyant/lingbot-video-moe-30b-a3b`、`robbyant/lingbot-video-dense-1.3b` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh lingbot-video`。
+记录的权重仓库包括 `robbyant/lingbot-video-dense-1.3b`、`robbyant/lingbot-video-moe-30b-a3b`、`robbyant/lingbot-video-dense-1.3b` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-video`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
 

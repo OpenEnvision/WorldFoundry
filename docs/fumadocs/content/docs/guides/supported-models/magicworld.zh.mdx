@@ -1,44 +1,50 @@
 ---
 title: "MagicWorld"
-description: "MagicWorld 是 vivo 的交互式世界模型：从一张图生成相机可控的世界视频，本 catalog 已接通 MagicWorld-Fast 相机路径。官方源码以固定 revision 内置；runner parity 待 checkpoint 就位。"
+description: "MagicWorld（vivo (Camera Research)）：交互式世界模型、相机可控视频；Runner 一致性待确认。"
+modelId: "magicworld"
 pageSource: generated
 ---
 
-**发表机构:** vivo（影像研究团队） · 企业
-image → video
-
 MagicWorld 是 vivo 的交互式世界模型：从一张图生成相机可控的世界视频，本 catalog 已接通 MagicWorld-Fast 相机路径。官方源码以固定 revision 内置；runner parity 待 checkpoint 就位。
 
-**目录状态:** 已集成
+<ModelPaperFigures modelId="magicworld" locale="zh" />
 
-## 上游来源
+记录论文为[arXiv 2511.18886](https://arxiv.org/abs/2511.18886)。
 
-- [项目主页](https://vivocameraresearch.github.io/magicworld/)
-- [论文](https://arxiv.org/abs/2511.18886)
-- [GitHub](https://github.com/vivoCameraResearch/Magic-World)
-- [源码](https://github.com/alibaba-damo-academy/Uni3C)
-- [源码](https://github.com/apple/ml-depth-pro)
-- [上游 README](https://github.com/vivoCameraResearch/Magic-World#readme)
-- [上游 README](https://github.com/alibaba-damo-academy/Uni3C#readme)
-- [上游 README](https://github.com/apple/ml-depth-pro#readme)
+项目页：[vivocameraresearch.github.io/magicworld](https://vivocameraresearch.github.io/magicworld/)。代码：[vivoCameraResearch/Magic-World](https://github.com/vivoCameraResearch/Magic-World)。代码：[alibaba-damo-academy/Uni3C](https://github.com/alibaba-damo-academy/Uni3C)。代码：[apple/ml-depth-pro](https://github.com/apple/ml-depth-pro)。
 
 <ModelCommandBuilder modelId="magicworld" locale="zh" />
 
-## 架构
+## 用来做什么
 
-除已记录任务外的架构内部细节仓库未存。注意分离的许可：代码为 apache-2.0，而上游 README 对发布的模型材料适用 CC BY-NC-SA 4.0 条款。
+需要相机可控视频时选 `magicworld`：相机轨迹进、受控视频出。视角必须跟随路径时，用它而不是无约束 T2V。
+
+除已记录任务外的架构内部细节仓库未存。注意分离的许可：代码为 apache-2.0，而上游 README 对发布的模型材料适用 CC BY-NC-SA 4.0 条款。该模型由vivo（影像研究团队）发布。
+
+catalog 记录的任务包括 交互式世界模型、相机可控视频、图生视频。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（交互滚动生成的相机控制贴合度）。
 
 ## 运行时契约
 
-输入为提示词、图像与 native_rows 相机控制。模型材料保留上游非商用相同方式共享条款——商用前请先审查。
+可选 `prompt`、`input_path`、`frames`、`seed`、`native_rows`；产物 `magicworld.mp4`。
 
-## 评测 Benchmark
+CLI task profile：`default`。绑定的 pipeline 类是 `MagicWorldPipeline`。
 
-- [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench) — 交互滚动生成的相机控制贴合度。
+系列状态：**Runner 一致性待确认**。
 
-## 就绪状态与限制
+`default` 记录默认值：frames=81, seed=42。
 
-- 模型材料为 CC BY-NC-SA 4.0（非商用）。
-- runner parity 待 checkpoint 就位。
+输入为提示词、图像与 native_rows 相机控制。 模型材料保留上游非商用相同方式共享条款——商用前请先审查。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run magicworld --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `LuckyLiGY/MagicWorld`、`alibaba-pai/Wan2.1-Fun-V1.1-1.3B-InP`、`apple/DepthPro`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh magicworld`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="magicworld" locale="zh" />

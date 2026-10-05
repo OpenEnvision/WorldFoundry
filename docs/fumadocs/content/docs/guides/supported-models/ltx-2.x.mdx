@@ -29,9 +29,9 @@ LTX 2.3-class I2V. Not the 2.5 or original LTX-Video card.
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (seed); artifacts `ltx-2.3-i2v.mp4`.
+Artifacts `ltx-2-t2v.mp4`.
 
-Recorded task profiles: `text-to-video`, `image-to-video`, `video-to-video`, and `audio-video-generation`. WorldFoundry binds `LTX23I2VPipeline`.
+CLI task profiles: `default`, `interactive-video`, and `control-video-to-video`. WorldFoundry binds `LTX23I2VPipeline`.
 
 Start on `ltx-2-i2v`. The family registers 6 catalog variants (cards above): `ltx-2-t2v` (`text-to-video`) — Runner parity pending; `ltx-2-i2v` (`image-to-video`) — Verified; `ltx-2-v2v` (`video-to-video`) — Runner parity pending; `ltx-2.3-t2v` (`text-to-video`) — Runner parity pending; `ltx-2.3-i2v` (`image-to-video`) — Verified among others. Family status: **Verified**.
 
@@ -41,13 +41,13 @@ Tracked separately from LTX-Video 0.9.x because upstream publishes LTX-2.x under
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run ltx-2-t2v --pipeline.task-profile text-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run ltx-2-t2v --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
 The in-tree LTX package is **architecture only**. Runtime assembly, scheduling, loading, offload, quantization, and the denoising loop stay in the shared `diffusion_model` infrastructure. The transformer is adapted from [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2) at `d6053703e00195bc668cbd1d5eda9dc0b2e7b74a`. Checkpoints and adapted source remain under the upstream LTX license. AlayaWorld's action/history model reuses this architecture from its own synthesis package.
 
-Recorded weight repositories include `Lightricks/LTX-2` and `Lightricks/LTX-2.3`. Stage assets with `bash scripts/inference/prepare_model_infer.sh ltx-2-t2v`.
+Recorded weight repositories include `Lightricks/LTX-2` and `Lightricks/LTX-2.3`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh ltx-2-t2v`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include other; status: **Verified**.
 

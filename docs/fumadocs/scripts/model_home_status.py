@@ -29,6 +29,8 @@ READER_LABELS = {
 # Longest-first so ``in_tree_checkpoint_runtime_static_verified`` wins over
 # a shorter ``in_tree_checkpoint_runtime`` prefix.
 _TOKEN_KEYS: tuple[tuple[str, str], ...] = (
+    ("native_checkpoint_structure_validated", "static"),
+    ("native_checkpoint_structure_verified", "static"),
     ("in_tree_checkpoint_runtime_static_verified", "static"),
     ("in_tree_checkpoint_runtime_static_validated", "static"),
     ("static_runtime_verified_checkpoint_assets_staged", "static"),

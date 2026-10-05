@@ -27,9 +27,9 @@ Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `image`, `prompt`, and `video`; artifacts `generated_video` and `longcat_video.mp4`.
+Optional `prompt`, `negative_prompt`, `task_type`, `num_frames`, and `fps`; artifacts `generated_video` and `longcat_video.mp4`.
 
-Recorded task profiles: `text-to-video`, `image-to-video`, `video-continuation`, `long-video-generation`, and `official-t2v`. WorldFoundry binds `LongCatVideoPipeline`.
+CLI task profiles: `official-t2v`. WorldFoundry binds `LongCatVideoPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -45,7 +45,7 @@ Launch `worldfoundry-eval run longcat-video --pipeline.task-profile official-t2v
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `meituan-longcat/LongCat-Video`. Stage assets with `bash scripts/inference/prepare_model_infer.sh longcat-video`.
+Recorded weight repositories include `meituan-longcat/LongCat-Video`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh longcat-video`. Add `--download` to fetch missing public checkpoints.
 
 Recorded licenses include mit; status: **Runner parity pending**.
 

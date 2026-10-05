@@ -61,22 +61,6 @@ Join the **WorldFoundry Community** on Slack, [Discord](https://discord.gg/ybUQM
 
 ![WorldFoundry teaser](docs/fumadocs/public/teaser.png)
 
-## Links
-
-- [Documentation](https://openenvision.github.io/WorldFoundry/docs)
-- [Design and architecture](https://openenvision.github.io/WorldFoundry/docs/overview/design)
-- [Quickstart](https://openenvision.github.io/WorldFoundry/docs/quickstart)
-- [Environment reference](https://openenvision.github.io/WorldFoundry/docs/reference/environments)
-- [Local asset preparation](https://openenvision.github.io/WorldFoundry/docs/guides/local-assets)
-- [TUI](https://openenvision.github.io/WorldFoundry/docs/guides/tui)
-- [Inference guide](https://openenvision.github.io/WorldFoundry/docs/guides/inference)
-- [Studio guide](https://openenvision.github.io/WorldFoundry/docs/guides/studio)
-- [CLI reference](https://openenvision.github.io/WorldFoundry/docs/reference/cli)
-- [Python API reference](https://openenvision.github.io/WorldFoundry/docs/api-reference)
-- [Supported models](https://openenvision.github.io/WorldFoundry/docs/guides/supported-models)
-- [Benchmark hub](https://openenvision.github.io/WorldFoundry/docs/evaluation/benchmark-hub)
-- [Contributing](CONTRIBUTING.md)
-
 ## What WorldFoundry Provides
 
 | Surface | Purpose | Entry point |
@@ -348,42 +332,21 @@ worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --include-spe
 For existing official-shaped benchmark outputs:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id vbench \
-  --mode official-validation \
-  --official-results-path <official_results.json> \
-  --generated-artifact-dir <generated_videos> \
-  --output-dir tmp/benchmark_zoo/official_validation/vbench \
-  --json
+worldfoundry-eval zoo benchmark-run --benchmark-id vbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir tmp/benchmark_zoo/official_validation/vbench --json
 ```
 
 For existing generated outputs:
 
 ```bash
-worldfoundry-eval evaluate \
-  --results-path tmp/results.jsonl \
-  --output-dir tmp/worldfoundry_evaluate \
-  --metric artifact_count \
-  --required-artifact video \
-  --json
+worldfoundry-eval evaluate --results-path tmp/results.jsonl --output-dir tmp/worldfoundry_evaluate --metric artifact_count --required-artifact video --json
 ```
 
 For the formal benchmark inventory, review the expanded plan first:
 
 ```bash
-worldfoundry-eval prepare \
-  --all-benchmarks \
-  --output-dir tmp/worldfoundry_all_benchmarks_plan \
-  --json
+worldfoundry-eval prepare --all-benchmarks --output-dir tmp/worldfoundry_all_benchmarks_plan --json
 
-worldfoundry-eval run \
-  --all-benchmarks \
-  --model <model-zoo-id> \
-  --prepare \
-  --data-root cache/worldfoundry/data/hfd_datasets \
-  --plan-only \
-  --output-dir tmp/worldfoundry_all_benchmarks_plan \
-  --json
+worldfoundry-eval run --all-benchmarks --model <model-zoo-id> --prepare --data-root cache/worldfoundry/data/hfd_datasets --plan-only --output-dir tmp/worldfoundry_all_benchmarks_plan --json
 ```
 
 Use the integrity commands before claiming benchmark support:
@@ -459,12 +422,12 @@ WorldFoundry
 │  ├─ workspace                          # Studio / Workspace launch helpers
 │  └─ docs                               # Documentation build wrapper
 ├─ worldfoundry
+│  ├─ base_models                        # Shared model components, perception, and 3D/4D runtimes
 │  ├─ core                               # Shared contracts and reusable runtime abstractions
 │  ├─ data                               # Model/benchmark catalogs, runtime profiles, fixtures
 │  ├─ evaluation                         # Runner, tasks, metrics, scorecards, reports
 │  ├─ operators                          # Input validation, preprocessing, interaction handling
 │  ├─ pipelines                          # User-facing pipeline wrappers
-│  ├─ representations                    # 3D/4D and spatial representation outputs
 │  ├─ runtime                            # Runtime paths, assets, jobs, and probes
 │  ├─ studio                             # Workspace and Studio frontends
 │  └─ synthesis                          # In-tree model synthesis/action-generation runtimes

@@ -19,7 +19,7 @@ Runner 一致性**已验证**：RealEstate10K 相机控制 demo 走 Workspace �
 
 沿指定 3D 路径重绘一段视频。优先走 RealEstate10K 风格的 2B ControlNet demo。
 
-启动 `worldfoundry-eval run ac3d --pipeline.task-profile camera-control-video`。
+启动 `worldfoundry-eval run ac3d`。
 
 评测入口：[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（直接衡量生成视频中的相机控制精度）。
 
@@ -31,6 +31,6 @@ Runner 一致性**已验证**：RealEstate10K 相机控制 demo 走 Workspace �
 
 ## 在 WorldFoundry 中运行
 
-状态：**已验证**。独立环境 `ac3d`（Python 3.10，CUDA 12.4，torch 2.4），与 `worldfoundry-unified-cu128` ABI 不兼容。本地就位 CogVideoX 基座和对应 ControlNet。在该环境执行 `worldfoundry-eval run ac3d --pipeline.task-profile camera-control-video`。许可证：Snap 非商用研究。catalog 未记录 VRAM。
+状态：**已验证**。独立环境 `ac3d`（Python 3.10，CUDA 12.4，torch 2.4），与 `worldfoundry-unified-cu128` ABI 不兼容。本地就位 CogVideoX 基座和对应 ControlNet。在该环境执行 `worldfoundry-eval run ac3d`。许可证：Snap 非商用研究。catalog 未记录 VRAM。
 
 <ModelRelatedRecipes modelId="ac3d" locale="zh" />

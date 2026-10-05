@@ -1,36 +1,48 @@
 ---
 title: "MMAudio"
-description: "MMAudio generates soundtracks for silent video: given a video (and optionally a text prompt), it synthesizes audio that is semantically and temporally aligned with the visuals."
+description: "MMAudio from Sony AI / University of Illinois Urbana-Champaign: text-to-audio and video-to-audio; Runner parity pending."
+modelId: "mmaudio"
 pageSource: generated
 ---
 
-**Publisher:** Sony AI / University of Illinois Urbana-Champaign · Company
-text · video → audio
-
 MMAudio generates soundtracks for silent video: given a video (and optionally a text prompt), it synthesizes audio that is semantically and temporally aligned with the visuals. In this catalog it is the companion tool for adding audio to clips produced by the video models — its artifact type is generated_audio, not video.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="mmaudio" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2412.15322](https://arxiv.org/abs/2412.15322).
 
-- [Project](https://hkchengrex.github.io/MMAudio)
-- [Paper](https://arxiv.org/abs/2412.15322)
-- [GitHub](https://github.com/hkchengrex/MMAudio)
-- [Upstream README](https://github.com/hkchengrex/MMAudio#readme)
+Project page: [hkchengrex.github.io/MMAudio](https://hkchengrex.github.io/MMAudio). Code: [hkchengrex/MMAudio](https://github.com/hkchengrex/MMAudio).
 
 <ModelCommandBuilder modelId="mmaudio" locale="en" />
 
-## Architecture
+## What it is for
 
-MMAudio is a multimodal joint-training flow-matching model that conditions audio generation on video frames and text (per its publication). This repository records the prompt/video input contract and the generated_audio artifact; model size options and internals are not recorded here.
+`mmaudio` is the recorded audio line. Start here to write audio from the documented inputs.
+
+MMAudio is a multimodal joint-training flow-matching model that conditions audio generation on video frames and text (per its publication). This repository records the prompt/video input contract and the generated_audio artifact; model size options and internals are not recorded here. It is published by Sony AI / University of Illinois Urbana-Champaign.
+
+Catalog tasks include text-to-audio, video-to-audio, and audio-generation. Catalog aliases include `hkchengrex/MMAudio`.
 
 ## Runtime contract
 
-Runner parity is pending — checkpoint-backed artifact parity has not been run in this workspace. Typical workflow: generate video with any T2V/I2V entry, then feed the clip to MMAudio for a soundtrack.
+Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `mmaudio.wav`.
 
-## Readiness and limitations
+CLI task profiles: `interactive-video`. WorldFoundry binds `MMAudioPipeline`.
 
-- Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.
-- Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+Family status: **Runner parity pending**.
+
+Typical workflow: generate video with any T2V/I2V entry, then feed the clip to MMAudio for a soundtrack.
+
+WorldFoundry route is complete; missing checkpoint/assets are reported at runtime.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run mmaudio --pipeline.task-profile interactive-video` to write audio. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `hkchengrex/MMAudio`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh mmaudio`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="mmaudio" locale="en" />

@@ -25,9 +25,9 @@ Catalog tasks include camera-controlled-video, world-generation-stage, and point
 
 ## Runtime contract
 
-Required `image`, `camera_json`, and `scene_path`; artifacts `hyworld-worldgen.mp4`.
+Optional `input_path`, `height`, `width`, `seed`, and `camera_json`; artifacts `hyworld-worldgen.mp4`.
 
-Recorded task profiles: `camera-controlled-video`, `world-generation-stage`, and `point-cloud-rendering`. WorldFoundry binds `HYWorld2WorldgenPipeline`.
+CLI task profiles: `default`. WorldFoundry binds `HYWorld2WorldgenPipeline`.
 
 Family status: **Runner parity pending**.
 
@@ -37,7 +37,7 @@ Before running, install the pinned official source in the runtime directory and 
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run hyworld-worldgen --pipeline.task-profile camera-controlled-video` after staging the source and scene to write video.
+Launch `worldfoundry-eval run hyworld-worldgen` after staging the source and scene to write video.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 

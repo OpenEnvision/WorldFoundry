@@ -21,15 +21,15 @@ Use `lyra-1` for catalog world-model inference. Choose it when you need action-c
 
 The catalog records two generations: Lyra-1 for image-or-video-to-world-video and Lyra-2 for action-conditioned world video (paper on OpenReview; project page at NVIDIA Research). Runtime execution requires local Lyra checkpoints, text-encoder assets, DA3 (Depth Anything 3) assets, and CUDA dependencies; internals beyond the recorded structure are not stored in this repository.
 
-Catalog tasks include open generative 3D and 4D world models and official-zoomgs. Catalog aliases include `Project Lyra`, `Lyra 1.0`, and `Lyra 2.0`. Also recorded: `lyra-2`.
+Catalog tasks include open generative 3D and 4D world models. Catalog aliases include `Project Lyra`, `Lyra 1.0`, and `Lyra 2.0`. Also recorded: `lyra-2`.
 
 Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for explorable generated worlds), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Evaluates camera/viewpoint control quality during exploration).
 
 ## Runtime contract
 
-Required `prompt`, `image`, and `video`; optional `actions` (navigation_actions, camera_trajectory); artifacts `generated_world`, `generated_3d_asset`, and `lyra.mp4`.
+Optional `image`, `prompt`, `mode`, `trajectory`, and `camera_rotation`; artifacts `generated_world`, `generated_3d_asset`, and `lyra-1.mp4`.
 
-Recorded task profiles: `open generative 3D and 4D world models` and `official-zoomgs`. WorldFoundry binds `LyraPipeline`.
+CLI task profiles: `official-static-sdg` and `official-zoomgs`. WorldFoundry binds `LyraPipeline`.
 
 Start on `lyra-1`. The family registers 2 catalog variants (cards above): `lyra-1` (`image-or-video-to-world-video`) — Runner parity pending; `lyra-2` (`action-conditioned-world-video`) — Runner parity pending. Family status: **Verified**.
 
@@ -39,9 +39,9 @@ Pick the variant by input: lyra-1 when you start from an image or video, lyra-2 
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run lyra-1 --pipeline.task-profile official-zoomgs` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run lyra-1 --pipeline.task-profile official-static-sdg` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-Recorded weight repositories include `depth-anything/DA3NESTED-GIANT-LARGE-1.1`. Stage assets with `bash scripts/inference/prepare_model_infer.sh lyra-1`.
+Recorded weight repositories include `depth-anything/DA3NESTED-GIANT-LARGE-1.1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lyra-1`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Verified**.
 

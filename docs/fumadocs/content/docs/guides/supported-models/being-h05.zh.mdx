@@ -24,7 +24,7 @@ WorldFoundry 在 `worldfoundry/synthesis/action_generation/being_h05` 下保留�
 基座 `being-h05-2b` 是未特化预览，不是套件专家。和已发布专家线对齐的仿真套件，下一页看 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 与 [RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)。
 
 ## 运行时契约
-WorldFoundry 必填输入：`image`、`instruction`、`prompt`、`state`。可选：`video`。`actions` 字段记录为 `robot_action`、`action_unified`、`proprio`、`action_space`。Pipeline 类：`BeingH05Pipeline`。启动 `worldfoundry-eval run being-h05-2b --pipeline.task-profile vla.policy_rollout`；除非你在对比 checkpoint，否则选 LIBERO variant。
+WorldFoundry 必填输入：`image`、`instruction`、`prompt`、`state`。可选：`video`。`actions` 字段记录为 `robot_action`、`action_unified`、`proprio`、`action_space`。Pipeline 类：`BeingH05Pipeline`。启动 `worldfoundry-eval run being-h05-2b`；除非你在对比 checkpoint，否则选 LIBERO variant。
 
 随权重一起生效的还有两块推理设计。**Manifold-Preserving Gating** 在感知偏移时丢掉不可靠上下文，让 flow 更新停在稳定的动作流形上。**Universal Async Chunking** 让动作块在不同控制频率和延迟下仍保持一致。
 

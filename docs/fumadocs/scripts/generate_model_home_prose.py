@@ -37,6 +37,7 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -522,9 +523,10 @@ def benchmark_hub_ids() -> set[str]:
 
 def recorded_task_ids(recipe: dict[str, Any]) -> list[str]:
     tasks = [str(item) for item in recipe.get("tasks") or [] if item]
-    for item in recipe.get("inferenceTasks") or []:
-        if isinstance(item, dict) and item.get("id"):
-            tasks.append(str(item["id"]))
+    if not tasks:
+        for item in recipe.get("inferenceTasks") or []:
+            if isinstance(item, dict) and item.get("id"):
+                tasks.append(str(item["id"]))
     return unique_keep(tasks)
 
 
@@ -562,15 +564,24 @@ def format_field_token(item: dict[str, Any], locale: str) -> str:
 
 
 def _contract_rows(recipe: dict[str, Any]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for item in recipe.get("inputContract") or []:
-        if isinstance(item, dict):
-            rows.append(item)
-    if not rows:
-        tasks = [item for item in (recipe.get("inferenceTasks") or []) if isinstance(item, dict)]
-        if tasks:
-            rows.extend(item for item in (tasks[0].get("inputs") or []) if isinstance(item, dict))
-    return rows
+    tasks = [item for item in (recipe.get("inferenceTasks") or []) if isinstance(item, dict)]
+    if tasks:
+        run_id, task_id = run_identity(recipe)
+        task = next(
+            (item for item in tasks if item.get("id") == task_id
+             and (not item.get("variantIds") or run_id in item["variantIds"])),
+            tasks[0],
+        )
+        return [
+            {
+                **item,
+                "field": str(item.get("field") or "").replace("-", "_"),
+                "required": bool(item.get("required")) and item.get("default") in (None, ""),
+                "detail": "Required" if item.get("required") and item.get("default") in (None, "") else "Optional",
+            }
+            for item in task.get("inputs") or [] if isinstance(item, dict)
+        ]
+    return [item for item in recipe.get("inputContract") or [] if isinstance(item, dict)]
 
 
 def exemplar_block(model_id: str, key: str, locale: str) -> list[str]:
@@ -614,14 +625,7 @@ def run_identity(recipe: dict[str, Any]) -> tuple[str, str]:
 def _contract_fields(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
     required: list[str] = []
     optional: list[str] = []
-    rows: list[dict[str, Any]] = []
-    for item in recipe.get("inputContract") or []:
-        if isinstance(item, dict):
-            rows.append(item)
-    if not rows:
-        tasks = [item for item in (recipe.get("inferenceTasks") or []) if isinstance(item, dict)]
-        if tasks:
-            rows.extend(item for item in (tasks[0].get("inputs") or []) if isinstance(item, dict))
+    rows = _contract_rows(recipe)
     for item in rows:
         field = str(item.get("field") or "").strip()
         if not field:
@@ -674,7 +678,7 @@ def preferred_variant(recipe: dict[str, Any]) -> str:
 
 
 def action_detail(recipe: dict[str, Any]) -> str:
-    for item in recipe.get("inputContract") or []:
+    for item in _contract_rows(recipe):
         if isinstance(item, dict) and str(item.get("field") or "") == "actions":
             return str(item.get("detail") or "").strip()
     return ""
@@ -682,7 +686,14 @@ def action_detail(recipe: dict[str, Any]) -> str:
 
 def artifact_names(recipe: dict[str, Any]) -> list[str]:
     names: list[str] = []
-    for item in recipe.get("artifacts") or []:
+    run_id, task_id = run_identity(recipe)
+    task = next(
+        (item for item in recipe.get("inferenceTasks") or []
+         if item.get("id") == task_id and (not item.get("variantIds") or run_id in item["variantIds"])),
+        None,
+    )
+    artifacts = task.get("artifacts", []) if task is not None else recipe.get("artifacts") or []
+    for item in artifacts:
         if not isinstance(item, dict):
             continue
         filename = str(item.get("filename") or "").strip()
@@ -965,12 +976,20 @@ def variants_paragraph(recipe: dict[str, Any], locale: str) -> str:
     if len(variants) <= 1:
         return ""
     preferred = preferred_variant(recipe)
+    profile_uses = Counter(str(item.get("runtimeProfile") or "") for item in variants)
     shown = variants[:5]
     bits: list[str] = []
     for item in shown:
         vid = str(item.get("id") or "")
         task = str(item.get("task") or "").strip()
-        raw = str(item.get("runtimeStatus") or item.get("status") or "")
+        runtime_status = str(item.get("runtimeStatus") or "")
+        shared_profile = profile_uses[str(item.get("runtimeProfile") or "")] > 1
+        all_checkpoints_verified = runtime_status.startswith(
+            ("all_released_checkpoints_gpu_validated", "all_declared_variants_checkpoint_gpu_validated")
+        )
+        raw = runtime_status or str(item.get("status") or "")
+        if shared_profile and not all_checkpoints_verified:
+            raw = str(item.get("status") or "")
         label = reader_label(classify_token(raw), locale) if raw and raw != "not_recorded" else ""
         if locale == "zh":
             piece = f"`{vid}`"
@@ -999,7 +1018,10 @@ def variants_paragraph(recipe: dict[str, Any], locale: str) -> str:
 
 
 def task_profile_sentence(recipe: dict[str, Any], locale: str) -> str:
-    ids = recorded_task_ids(recipe)
+    ids = unique_keep(
+        str(item["id"]) for item in recipe.get("inferenceTasks") or []
+        if isinstance(item, dict) and item.get("id")
+    )
     if not ids:
         return "No task profiles are recorded on this card." if locale == "en" else "本卡片未记录任务 profile。"
     shown = ids[:6]
@@ -1007,11 +1029,11 @@ def task_profile_sentence(recipe: dict[str, Any], locale: str) -> str:
     joined = join_zh(f"`{item}`" for item in shown) if locale == "zh" else join_en(f"`{item}`" for item in shown)
     pipe = pipeline_class(recipe)
     if locale == "zh":
-        text = f"记录的任务 profile：{joined}{extra}。"
+        text = f"CLI task profile：{joined}{extra}。"
         if pipe:
             text += f"绑定的 pipeline 类是 `{pipe}`。"
         return text
-    text = f"Recorded task profiles: {joined}{extra}."
+    text = f"CLI task profiles: {joined}{extra}."
     if pipe:
         text += f" WorldFoundry binds `{pipe}`."
     return text
@@ -1101,8 +1123,8 @@ def prepare_sentence(recipe: dict[str, Any], locale: str) -> str:
         return ""
     cmd = " ".join(line.strip().rstrip("\\").strip() for line in prepare.splitlines())
     if locale == "zh":
-        return f"就位权重用 `{cmd}`。"
-    return f"Stage assets with `{cmd}`."
+        return f"准备环境并检查本地资产：`{cmd}`；下载缺失的公开权重时加 `--download`。"
+    return f"Prepare the environment and check local assets with `{cmd}`. Add `--download` to fetch missing public checkpoints."
 
 
 def builder_sentence(locale: str) -> str:
@@ -1247,10 +1269,16 @@ def run_command_sentence(recipe: dict[str, Any], locale: str) -> str:
     if not cmd:
         return ""
     model_id = str(recipe.get("id") or "")
+    variant = run_identity(recipe)[0] or preferred_variant(recipe) or model_id
     table = _RUN_CMD_ZH if locale == "zh" else _RUN_CMD_EN
-    family = job_family(recipe)
+    selected = next(
+        (item for item in recipe.get("variants") or [] if item.get("id") == variant),
+        None,
+    )
+    opening_recipe = {**recipe, "tasks": [selected["task"]]} if selected and selected.get("task") else recipe
+    family = job_family(opening_recipe)
     voices = table.get(family) or table["generic"]
-    return _fill_template(voices[voice_index(model_id, len(voices))], preferred_variant(recipe) or model_id, cmd)
+    return _fill_template(voices[voice_index(model_id, len(voices))], variant, cmd)
 
 
 def for_what_paragraphs(recipe: dict[str, Any], locale: str) -> list[str]:
@@ -1800,7 +1828,12 @@ def family_opening(recipe: dict[str, Any], locale: str) -> str:
     if not cmd:
         cmd = f"worldfoundry-eval run {variant}"
     table = _OPENINGS_ZH if locale == "zh" else _OPENINGS_EN
-    family = job_family(recipe)
+    selected = next(
+        (item for item in recipe.get("variants") or [] if item.get("id") == variant),
+        None,
+    )
+    opening_recipe = {**recipe, "tasks": [selected["task"]]} if selected and selected.get("task") else recipe
+    family = job_family(opening_recipe)
     voices = table.get(family) or table["generic"]
     return _fill_template(voices[voice_index(model_id, len(voices))], variant, cmd)
 
@@ -2655,7 +2688,11 @@ def main() -> int:
                     extras=extras,
                 )
             else:
-                content = render_page(recipe, locale)
+                content = render_page(
+                    recipe,
+                    locale,
+                    page_source_override="generated" if page_source(path) == "generated" else None,
+                )
             violations.extend(generated_page_violations(content, locale, f"{model_id}.{locale}"))
 
             if args.check:

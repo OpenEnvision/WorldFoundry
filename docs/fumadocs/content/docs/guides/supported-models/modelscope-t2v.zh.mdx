@@ -31,9 +31,9 @@ catalog 记录的任务包括 文生视频。模态上，它接受文本，输�
 
 ## 运行时契约
 
-必填 `prompt`；产物 `modelscope-t2v.mp4`。
+可选 `prompt`、`negative_prompt`、`frames`、`fps`、`height`；产物 `modelscope-t2v.mp4`。
 
-记录的任务 profile：`text-to-video`。绑定的 pipeline 类是 `ModelScopeT2VPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `ModelScopeT2VPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -43,14 +43,14 @@ Checkpoint license is non-commercial per HF cardData; do not treat as unrestrict
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run modelscope-t2v --pipeline.task-profile text-to-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run modelscope-t2v --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `ali-vilab/modelscope-damo-text-to-video-synthesis`、`ali-vilab/modelscope-damo-text-to-video-synthesis`。就位权重用 `bash scripts/inference/prepare_model_infer.sh modelscope-t2v`。
+记录的权重仓库包括 `ali-vilab/modelscope-damo-text-to-video-synthesis`、`ali-vilab/modelscope-damo-text-to-video-synthesis`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh modelscope-t2v`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 cc-by-nc-4.0；状态：**Runner 一致性待确认**。
 
-路径已集成在 `worldfoundry-unified-cu128`。启动 `worldfoundry-eval run modelscope-t2v --pipeline.task-profile text-to-video`。缺失权重会在运行时报告。**没有 runner-parity 证据**。启动前就位 `ali-vilab/modelscope-damo-text-to-video-synthesis`——不要用名字相近的 `model-scope/text-to-video-synthesis`，那不是本条目选定的 checkpoint。
+路径已集成在 `worldfoundry-unified-cu128`。启动 `worldfoundry-eval run modelscope-t2v`。缺失权重会在运行时报告。**没有 runner-parity 证据**。启动前就位 `ali-vilab/modelscope-damo-text-to-video-synthesis`——不要用名字相近的 `model-scope/text-to-video-synthesis`，那不是本条目选定的 checkpoint。
 
 <ModelRelatedRecipes modelId="modelscope-t2v" locale="zh" />

@@ -1,37 +1,48 @@
 ---
 title: "UniK3D"
-description: "UniK3D generalizes metric 3D estimation to any camera — pinhole, fisheye, even full panoramas — with one model."
+description: "UniK3D from ETH Zurich: panoramic-depth-estimation and metric-3d-estimation; Verified."
+modelId: "unik3d-prior"
 pageSource: generated
 ---
 
-**Publisher:** ETH Zurich · University
-image → depth
-
 UniK3D generalizes metric 3D estimation to any camera — pinhole, fisheye, even full panoramas — with one model. In this catalog it is a checkpoint-verified universal-camera geometry prior: real checkpoint inference is verified through the shared contract with automatic camera estimation, while pinhole and panorama overrides stay explicit.
 
-**Catalog status:** Integrated
+<ModelPaperFigures modelId="unik3d-prior" locale="en" />
 
-## Upstream sources
+The recorded paper is [arXiv 2503.16591](https://arxiv.org/abs/2503.16591).
 
-- [Project](https://lpiccinelli-eth.github.io/pub/unik3d/)
-- [Paper](https://arxiv.org/abs/2503.16591)
-- [GitHub](https://github.com/lpiccinelli-eth/UniK3D)
-- [Hugging Face](https://huggingface.co/lpiccinelli/unik3d-vitl)
-- [Upstream README](https://github.com/lpiccinelli-eth/UniK3D#readme)
+Project page: [lpiccinelli-eth.github.io/pub/unik3d](https://lpiccinelli-eth.github.io/pub/unik3d/). Code: [lpiccinelli-eth/UniK3D](https://github.com/lpiccinelli-eth/UniK3D).
 
 <ModelCommandBuilder modelId="unik3d-prior" locale="en" />
 
-## Architecture
+## What it is for
 
-Per the upstream publication, UniK3D represents the camera with a learned spherical-basis model, decoupling ray directions from radial depth so that no distortion-specific tuning is needed. The default checkpoint resolves from lpiccinelli/unik3d-vitl; registered at base_models/three_dimensions/depth/unik3d.
+Pick `unik3d-prior` for feed-forward geometry: views in, reconstruction / trajectory / point cloud out. Use it when you need the catalog 3D route rather than a depth-only prior.
+
+Per the upstream publication, UniK3D represents the camera with a learned spherical-basis model, decoupling ray directions from radial depth so that no distortion-specific tuning is needed. The default checkpoint resolves from lpiccinelli/unik3d-vitl; registered at base_models/three_dimensions/depth/unik3d. It is published by ETH Zurich.
+
+Catalog tasks include panoramic-depth-estimation, metric-3d-estimation, monocular-depth-estimation, and geometry-prior. Catalog aliases include `unik3d` and `unik3d-vitl`. Documented modalities: image in, depth out.
 
 ## Runtime contract
 
+Optional `input_path`, `type`, `camera_model`, `execute`, and `max_points`; artifacts `unik3d-prior.npz`.
+
+CLI task profiles: `default`. WorldFoundry binds `UniK3DPriorPipeline`.
+
+Family status: **Verified**.
+
 It is integrated as an independent geometry prior under worldfoundry/base_models and exposed through the shared geometry-prior pipeline/operator contract. Higher-level pipelines (e.g. ViPE) import it from this canonical owner instead of keeping private copies. Prefer it over pinhole-only priors when inputs include fisheye or panoramic imagery. The upstream release is CC-BY-NC-4.0.
 
-## Readiness and limitations
+Integrated as a universal-camera geometric prior at worldfoundry/base_models/three_dimensions/depth/unik3d.
 
-- CC-BY-NC-4.0: non-commercial license terms apply downstream.
-- Auto camera estimation can misjudge unusual optics — use explicit pinhole/panorama overrides when known.
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run unik3d-prior --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `lpiccinelli/unik3d-vitl`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh unik3d-prior`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
 
 <ModelRelatedRecipes modelId="unik3d-prior" locale="en" />

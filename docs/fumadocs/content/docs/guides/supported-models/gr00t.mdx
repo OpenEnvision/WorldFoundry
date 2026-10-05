@@ -34,7 +34,7 @@ Pinned, gated Hugging Face revisions:
 Dedicated environment `worldfoundry-gr00t` (Python 3.10, CUDA 11.8 or newer). Authenticate for the gated NVIDIA repos, stage the pinned revisions, then launch:
 
 ```
-worldfoundry-eval run gr00t-n1.7-libero --pipeline.task-profile vla.policy_rollout
+worldfoundry-eval run gr00t-n1.7-libero
 ```
 
 The catalog default launch still prints `gr00t-n1-2b` with the same task profile. Swap the variant if you want the recorded CUDA predict. Weights stay local — the runtime never fetches them.

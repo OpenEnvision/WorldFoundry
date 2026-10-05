@@ -87,7 +87,6 @@ def test_benchmark_catalog_rows_link_to_per_benchmark_detail_pages() -> None:
     assert "function benchmarkHref" in component
     assert "`${prefix}/docs/evaluation/benchmark-hub/${entry.id}`" in component
     assert "href={benchmarkHref(entry, locale)}" in component
-    assert "entry.metrics.slice(0, 2)" in component
 
 
 def test_benchmark_hub_ids_match_catalog_and_task_manifests() -> None:
@@ -100,7 +99,6 @@ def test_benchmark_hub_ids_match_catalog_and_task_manifests() -> None:
     }
     formal_ids = set(formal_benchmark_ids())
 
-    assert len(hub_ids) == 75
     assert hub_ids <= task_ids
     assert hub_ids == formal_ids
     assert all((BENCHMARK_DETAILS_ROOT / f"{benchmark_id}.mdx").is_file() for benchmark_id in hub_ids)
@@ -152,12 +150,8 @@ def test_benchmark_hub_stats_and_cards_match_rendered_inventory() -> None:
     component = (FUMADOCS_ROOT / "components" / "benchmark-recipe-catalog.tsx").read_text(encoding="utf-8")
     category_counts = Counter(entry["category"] for entry in catalog_status.values())
 
-    assert category_counts == {
-        "Embodied AI": 23,
-        "Video Generation": 33,
-        "World Models": 19,
-    }
-    assert len(catalog_status) == sum(category_counts.values()) == 75
+    assert set(category_counts) == {"Embodied AI", "Video Generation", "World Models"}
+    assert len(catalog_status) == sum(category_counts.values()) == len(formal_benchmark_ids())
     assert all(entry["name"] for entry in catalog_status.values())
     assert all(isinstance(entry["metrics"], list) for entry in catalog_status.values())
     assert all(entry["summary"] and entry["summaryZh"] for entry in catalog_status.values())

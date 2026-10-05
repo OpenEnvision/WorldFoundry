@@ -29,9 +29,9 @@ catalog 记录的任务包括 视觉-语言-动作（VLA）、机器人策略、
 
 ## 运行时契约
 
-必填 `image`、`prompt`；可选 `model_id` (abot-m0)、`state`、`camera_keys`、`action_representation`；产物 `action_trace`、`abot_m0_action_trace.json`。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`abot_m0_action_trace.json`。
 
-记录的任务 profile：`vla`、`robot_policy`、`policy_rollout`、`bimanual_manipulation`。绑定的 pipeline 类是 `ABotM0Pipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `ABotM0Pipeline`。
 
 系列状态：**仅静态加载**。
 
@@ -43,11 +43,11 @@ Qwen3-VL, the AML flow action expert, optional VGGT fusion, released preprocessi
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run abot-m0 --pipeline.task-profile vla` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run abot-m0 --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是独立 profile `worldfoundry-vla-abot-m0`（Python 3.10，Cu128 Recommended，torch>=2.7,\<2.8）。
 
-记录的权重仓库包括 `acvlab/ABot-M0-LIBERO`、`acvlab/ABot-M0-Robocasa`、`acvlab/ABot-M0-RoboTwin2` 等。就位权重用 `bash scripts/inference/prepare_model_infer.sh abot-m0`。
+记录的权重仓库包括 `acvlab/ABot-M0-LIBERO`、`acvlab/ABot-M0-Robocasa`、`acvlab/ABot-M0-RoboTwin2` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh abot-m0`；下载缺失的公开权重时加 `--download`。
 
 状态：**仅静态加载**。
 

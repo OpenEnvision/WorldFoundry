@@ -21,19 +21,19 @@ FantasyWorld 通过统一视频与 3D 预测实现几何一致的世界建模：
 
 ## 用来做什么
 
-用 `fantasyworld-wan21` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
+用 `fantasyworld-wan21` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
 
 FantasyWorld 在 Wan 视频基座上增加统一的 3D 预测分支，使生成帧遵守场景几何（见 arXiv 2509.21657）。运行需要本地 FantasyWorld Wan2.1、Wan2.1 I2V、MoGe 与 CUDA 资产。该模型由阿里巴巴（高德 Fantasy-AMAP 团队）发布。
 
-catalog 记录的任务包括 geometry-consistent world modeling、official-camera-world。别名包括 `Geometry-Consistent World Modeling via Unified Video and 3D Prediction`。同系列还有 `fantasyworld-wan22`。
+catalog 记录的任务包括 geometry-consistent world modeling。别名包括 `Geometry-Consistent World Modeling via Unified Video and 3D Prediction`。同系列还有 `fantasyworld-wan22`。
 
 记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（评估几何一致的生成世界）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（相机控制质量评测）。
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (camera_path, camera_pose_sequence)；产物 `generated_world`、`fantasyworld.mp4`。
+可选 `input_path`、`prompt`、`camera_json_path`、`fps`、`seed`；产物 `generated_world`、`fantasyworld-wan21.mp4`。
 
-记录的任务 profile：`geometry-consistent world modeling`、`official-camera-world`。绑定的 pipeline 类是 `FantasyWorldPipeline`。
+CLI task profile：`official-camera-world`。绑定的 pipeline 类是 `FantasyWorldPipeline`。
 
 起步 variant 是 `fantasyworld-wan21`。catalog 登记了 2 个 variant（上方卡片）：`fantasyworld-wan21`（`image-to-world-video`）：Runner 一致性待确认、`fantasyworld-wan22`（`camera-controlled-world-video`）：Runner 一致性待确认。系列状态：**已验证**。
 
@@ -43,11 +43,11 @@ catalog 记录的任务包括 geometry-consistent world modeling、official-came
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run fantasyworld-wan21 --pipeline.task-profile official-camera-world` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run fantasyworld-wan21 --pipeline.task-profile official-camera-world` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `acvlab/FantasyWorld-Wan2.1-I2V-14B-480P`、`Wan-AI/Wan2.1-I2V-14B-480P`、`Ruicheng/moge-2-vitl-normal`。就位权重用 `bash scripts/inference/prepare_model_infer.sh fantasyworld-wan21`。
+记录的权重仓库包括 `acvlab/FantasyWorld-Wan2.1-I2V-14B-480P`、`Wan-AI/Wan2.1-I2V-14B-480P`、`Ruicheng/moge-2-vitl-normal`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh fantasyworld-wan21`；下载缺失的公开权重时加 `--download`。
 
 状态：**已验证**。
 

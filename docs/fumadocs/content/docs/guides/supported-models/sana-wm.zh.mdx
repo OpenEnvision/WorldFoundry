@@ -31,9 +31,9 @@ catalog 记录的任务包括 世界模型、相机可控视频、controllable-w
 
 ## 运行时契约
 
-必填 `prompt`、`image`；可选 `video`、`actions` (camera_action, world_action, interaction)；产物 `sana-wm.mp4`。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`guidance_scale`；产物 `sana-wm-streaming.mp4`。
 
-记录的任务 profile：`world-model`、`camera-controlled-video`、`controllable-world-generation`。绑定的 pipeline 类是 `SanaWMPipeline`。
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `SanaWMPipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
@@ -43,9 +43,9 @@ WorldFoundry registers an in-tree resident pipeline with configurable multi-GPU 
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run sana-wm-streaming --pipeline.task-profile camera-controlled-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run sana-wm-streaming --pipeline.task-profile interactive-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
-记录的权重仓库包括 `Efficient-Large-Model/SANA-WM_streaming`、`Efficient-Large-Model/SANA-WM_bidirectional`。就位权重用 `bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`。
+记录的权重仓库包括 `Efficient-Large-Model/SANA-WM_streaming`、`Efficient-Large-Model/SANA-WM_bidirectional`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
 

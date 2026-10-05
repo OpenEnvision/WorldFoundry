@@ -27,9 +27,9 @@ LingBot VLA v2。不是 v1 VLA 卡。
 
 ## 运行时契约
 
-必填 `prompt`、`image`、`state`；可选 `model_id` (lingbot-vla-v2)、`state_dim` (14)、`batch`、`camera_keys` (observation.images.cam_high, observation.images.cam_left_wrist, observation.images.cam_right_wrist)、`policy_family`；产物 `action_trace`、`lingbot_vla_v2_action_trace.json`。
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`lingbot_vla_v2_action_trace.json`。
 
-记录的任务 profile：`vla`、`vla.action_prediction`、`vla.policy_rollout`、`robot_policy`。绑定的 pipeline 类是 `LingBotVLAV2Pipeline`。
+CLI task profile：`default`。绑定的 pipeline 类是 `LingBotVLAV2Pipeline`。
 
 系列状态：**仅静态加载**。
 
@@ -39,11 +39,11 @@ Qwen3-VL/MoE policy inference, official batching, feature transforms, robot mapp
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run lingbot-vla-v2-6b --pipeline.task-profile vla.action_prediction` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+启动 `worldfoundry-eval run lingbot-vla-v2-6b --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
 
 运行环境是独立 profile `worldfoundry-lingbot-vla-v2-cu128`（Python 3.11，CUDA 12.8，torch==2.8.0）。
 
-记录的权重仓库包括 `robbyant/lingbot-vla-v2-6b`、`Qwen/Qwen3-VL-4B-Instruct`。就位权重用 `bash scripts/inference/prepare_model_infer.sh lingbot-vla-v2-6b`。
+记录的权重仓库包括 `robbyant/lingbot-vla-v2-6b`、`Qwen/Qwen3-VL-4B-Instruct`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-vla-v2-6b`；下载缺失的公开权重时加 `--download`。
 
 记录 license 为 apache-2.0；状态：**仅静态加载**。
 

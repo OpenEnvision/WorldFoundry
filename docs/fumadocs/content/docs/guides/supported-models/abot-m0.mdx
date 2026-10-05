@@ -29,9 +29,9 @@ Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub
 
 ## Runtime contract
 
-Required `image` and `prompt`; optional `model_id` (abot-m0), `state`, `camera_keys`, and `action_representation`; artifacts `action_trace` and `abot_m0_action_trace.json`.
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `abot_m0_action_trace.json`.
 
-Recorded task profiles: `vla`, `robot_policy`, `policy_rollout`, and `bimanual_manipulation`. WorldFoundry binds `ABotM0Pipeline`.
+CLI task profiles: `default`. WorldFoundry binds `ABotM0Pipeline`.
 
 Family status: **Static load only**.
 
@@ -41,11 +41,11 @@ Qwen3-VL, the AML flow action expert, optional VGGT fusion, released preprocessi
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run abot-m0 --pipeline.task-profile vla` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Launch `worldfoundry-eval run abot-m0 --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
 It runs in the dedicated environment `worldfoundry-vla-abot-m0` (Python 3.10, Cu128 Recommended, torch>=2.7,\<2.8).
 
-Recorded weight repositories include `acvlab/ABot-M0-LIBERO`, `acvlab/ABot-M0-Robocasa`, and `acvlab/ABot-M0-RoboTwin2` among others. Stage assets with `bash scripts/inference/prepare_model_infer.sh abot-m0`.
+Recorded weight repositories include `acvlab/ABot-M0-LIBERO`, `acvlab/ABot-M0-Robocasa`, and `acvlab/ABot-M0-RoboTwin2` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh abot-m0`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Static load only**.
 

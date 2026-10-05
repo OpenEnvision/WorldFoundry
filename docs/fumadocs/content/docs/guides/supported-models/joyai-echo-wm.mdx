@@ -27,7 +27,7 @@ JoyAI Echo world-model memory. Long-video is a sibling.
 
 ## Runtime contract
 
-Required `prompt` and `image`; optional `video` and `actions` (action_str, camera_navigation); artifacts `generated_world` and `joyai-echo-wm.mp4`.
+Required `input_path`; optional `prompt`, `load.checkpoint_dir`, `load.gemma_path`, `action_str`, and `num_frames`; artifacts `generated_world` and `joyai-echo-wm.mp4`.
 
 Recorded task profiles: `image-to-world-video`, `camera-controlled-video`, `interactive-world-model`, and `audio-video-generation`. WorldFoundry binds `JoyAIEchoWMPipeline`.
 
@@ -39,9 +39,9 @@ Base and Flash command construction, control mapping, and frame-count validation
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run joyai-echo-wm --pipeline.task-profile image-to-world-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+The catalog launch is `worldfoundry-eval run joyai-echo-wm`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
 
-Recorded weight repositories include `Echo-Team/Echo-WM` and `google/gemma-3-12b-it-qat-q4_0-unquantized`. Stage assets with `bash scripts/inference/prepare_model_infer.sh joyai-echo-wm`.
+Recorded weight repositories include `Echo-Team/Echo-WM` and `google/gemma-3-12b-it-qat-q4_0-unquantized`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh joyai-echo-wm`. Add `--download` to fetch missing public checkpoints.
 
 Status: **Runner parity pending**.
 
