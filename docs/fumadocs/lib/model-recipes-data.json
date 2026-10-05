@@ -16277,7 +16277,7 @@
               "kind": "path",
               "target": "call",
               "required": false,
-              "default": "/ckpts/openvla--openvla-7b",
+              "default": "openvla/openvla-7b",
               "choices": [],
               "description": "Checkpoint Dir passed to the pipeline for every generated sample."
             },
@@ -16471,7 +16471,7 @@
               "kind": "path",
               "target": "call",
               "required": false,
-              "default": "/ckpts/openvla--openvla-7b",
+              "default": "openvla/openvla-7b",
               "choices": [],
               "description": "Checkpoint Dir passed to the pipeline for every generated sample."
             },
@@ -19552,7 +19552,7 @@
               "kind": "path",
               "target": "call",
               "required": false,
-              "default": "/ckpts/StarVLA--Qwen3-VL-OFT-LIBERO-4in1",
+              "default": "StarVLA/Qwen3-VL-OFT-LIBERO-4in1",
               "choices": [],
               "description": "Checkpoint Dir passed to the pipeline for every generated sample."
             },
@@ -19563,7 +19563,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/ckpts/Qwen--Qwen3-VL-4B-Instruct",
+              "default": "Qwen/Qwen3-VL-4B-Instruct",
               "choices": [],
               "description": "Base Vlm passed to the pipeline for every generated sample."
             },
@@ -19705,7 +19705,7 @@
               "kind": "path",
               "target": "call",
               "required": false,
-              "default": "/ckpts/StarVLA--Qwen3-VL-OFT-LIBERO-4in1",
+              "default": "StarVLA/Qwen3-VL-OFT-LIBERO-4in1",
               "choices": [],
               "description": "Checkpoint Dir passed to the pipeline for every generated sample."
             },
@@ -19716,7 +19716,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/ckpts/Qwen--Qwen3-VL-4B-Instruct",
+              "default": "Qwen/Qwen3-VL-4B-Instruct",
               "choices": [],
               "description": "Base Vlm passed to the pipeline for every generated sample."
             },
@@ -54492,7 +54492,7 @@
               "kind": "path",
               "target": "input",
               "required": true,
-              "default": "/ckpts/jdopensource--JoyAI-Echo/assets/image.png",
+              "default": "jdopensource/JoyAI-Echo/assets/image.png",
               "choices": [],
               "description": "Input Path used as the input for direct JoyAI-Echo 1.5 / Echo-LongVideo inference."
             },
@@ -56322,7 +56322,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/ckpts/facebook--lagernvs_general_512",
+              "default": "/home/ubuntu/.cache/worldfoundry/checkpoints/lagernvs_general_512",
               "choices": [],
               "description": "Model Repo passed to the pipeline for every generated sample."
             },
@@ -76913,7 +76913,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/ckpts/mt5-xxl",
+              "default": "/home/ubuntu/.cache/worldfoundry/checkpoints/mt5-xxl",
               "choices": [],
               "description": "Text Encoder Name 1 passed to the pipeline for every generated sample."
             },
@@ -111333,7 +111333,7 @@
               "kind": "path",
               "target": "call",
               "required": false,
-              "default": "/ckpts/latent-action-pretraining--LAPA-7B-openx",
+              "default": "latent-action-pretraining/LAPA-7B-openx",
               "choices": [],
               "description": "Checkpoint Dir passed to the pipeline for every generated sample."
             },

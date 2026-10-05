@@ -1,5 +1,6 @@
 .PHONY: help install-core install-dev test test-infer test-infer-tensors test-infer-contracts test-infer-cuda-contracts test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
 .PHONY: test-infer-video-tensors plan-inference replay-inference coverage-inference verify-inference
+.PHONY: test-docs-contracts
 .PHONY: test-mg2-checkpoint-contracts test-mg2-trajectory-contracts test-mg2-conditioned-trajectory-contracts
 .PHONY: test-infer-sol-cuda-contracts test-lightvae-checkpoint-contracts
 
@@ -14,6 +15,8 @@ CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
 PUBLIC_TEST_MANIFEST ?= tmp/public-cpu-selection.json
 PUBLIC_TEST_JUNIT ?= tmp/public-cpu-contracts.xml
+DOCS_TEST_MANIFEST ?= tmp/docs-contract-selection.json
+DOCS_TEST_JUNIT ?= tmp/docs-contracts.xml
 INFER_TENSOR_MANIFEST ?= tmp/inference-cpu-selection.json
 INFER_TENSOR_JUNIT ?= tmp/inference-cpu-contracts.xml
 STRICT_TEST_RUNNER = $(PYTHON) tests/manual/validate_junit_contract.py run
@@ -174,6 +177,7 @@ help:
 		'  make install-core      Install the editable core package.' \
 		'  make install-dev       Install lightweight development dependencies.' \
 		'  make test              Run the public CPU inference and packaging gate.' \
+		'  make test-docs-contracts  Validate published CLI commands, catalog claims and documentation contracts; rejects skips.' \
 		'  make test-infer        Alias for the public CPU gate.' \
 		'  make test-infer-tensors  Test small checkpoint, geometry and execution tensors with CPU Torch and safetensors.' \
 		'  make test-infer-video-tensors  Check real small video operators, sampler math and resident request isolation with CPU Torch and einops.' \
@@ -213,6 +217,9 @@ test:
 	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest "$(PUBLIC_TEST_MANIFEST)" --junit "$(PUBLIC_TEST_JUNIT)" --include-public-defaults $(foreach test,$(PUBLIC_GATE_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
 
 test-infer: test
+
+test-docs-contracts:
+	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest "$(DOCS_TEST_MANIFEST)" --junit "$(DOCS_TEST_JUNIT)" --test tests/core/test_model_docs_codegen.py --test tests/eval_core/test_docs_quickstart.py --test tests/eval_core/test_benchmark_hub_docs.py -- $(TEST_ARGS)
 
 # This suite needs CPU Torch, safetensors and einops, with no weights or renderer.
 test-infer-tensors:
