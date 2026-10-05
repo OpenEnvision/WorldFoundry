@@ -355,10 +355,6 @@ body:has(.pi-doc-shell) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wf-home-hero-card-video {
-    display: none;
-  }
-
   .wf-home-reveal,
   .wf-home-hero-kicker,
   .pi-doc-welcome-workflow-stage,
