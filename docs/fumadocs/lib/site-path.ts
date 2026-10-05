@@ -6,20 +6,20 @@ function normalizeBasePath(value: string | undefined) {
 
 export const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH);
 
-// Official docs public/ on GitHub main. One repo/ref; two hosts because GitHub
-// serves LFS objects and regular blobs differently:
+// GitHub serves LFS objects and regular blobs on different hosts:
 // - /demos/*.mp4 are LFS → media.githubusercontent.com/media/
 //   (raw.githubusercontent.com would return the ~130B pointer text)
-// - /cover_4x4_hero.mp4 is a regular blob → raw.githubusercontent.com
+// - /cover_4x4_hero.mp4 is a regular blob at its published Git revision → raw.githubusercontent.com
 //   (the LFS media host 404s for non-LFS files)
 const OFFICIAL_MEDIA_REPO = 'OpenEnvision/WorldFoundry';
 const OFFICIAL_MEDIA_REF = 'main';
+const OFFICIAL_HERO_MEDIA_REF = 'ef8001ec617d9256ee439f2f3452b27b87e3b166';
 const OFFICIAL_PUBLIC_ROOT = 'docs/fumadocs/public';
 
 const OFFICIAL_LFS_ASSET_BASE_URL =
   `https://media.githubusercontent.com/media/${OFFICIAL_MEDIA_REPO}/${OFFICIAL_MEDIA_REF}/${OFFICIAL_PUBLIC_ROOT}`;
 const OFFICIAL_RAW_ASSET_BASE_URL =
-  `https://raw.githubusercontent.com/${OFFICIAL_MEDIA_REPO}/${OFFICIAL_MEDIA_REF}/${OFFICIAL_PUBLIC_ROOT}`;
+  `https://raw.githubusercontent.com/${OFFICIAL_MEDIA_REPO}/${OFFICIAL_HERO_MEDIA_REF}/${OFFICIAL_PUBLIC_ROOT}`;
 
 const lfsAssetBaseUrl = (
   process.env.NEXT_PUBLIC_DEMO_ASSET_BASE_URL || OFFICIAL_LFS_ASSET_BASE_URL
