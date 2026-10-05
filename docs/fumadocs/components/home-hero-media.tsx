@@ -1,12 +1,11 @@
 'use client';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { homeHeroSlides, type HomeHeroSlide } from '@/lib/home-hero-slides';
 
 type ConnectionLike = EventTarget & {
-  effectiveType?: string;
   saveData?: boolean;
 };
 
@@ -23,6 +22,8 @@ export function HomeHeroMedia({ children }: { children?: ReactNode }) {
   const [pageVisible, setPageVisible] = useState(true);
   const [carouselVisible, setCarouselVisible] = useState(true);
   const [videoReady, setVideoReady] = useState(false);
+  const [playbackRequested, setPlaybackRequested] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const mountedRef = useRef(false);
 
   const isCarousel = homeHeroSlides.length > 1;
@@ -40,7 +41,7 @@ export function HomeHeroMedia({ children }: { children?: ReactNode }) {
   }, [activeIndex, isCarousel]);
 
   const activeSlide = homeHeroSlides[activeIndex];
-  const showVideo = activeSlide.kind === 'video' && videoAllowed && motionAllowed;
+  const showVideo = activeSlide.kind === 'video' && ((videoAllowed && motionAllowed) || playbackRequested);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -51,45 +52,37 @@ export function HomeHeroMedia({ children }: { children?: ReactNode }) {
 
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const compactViewport = window.matchMedia('(max-width: 640px)');
     const connection = (navigator as Navigator & { connection?: ConnectionLike }).connection;
     let videoTimer = 0;
-
-    const mountVideoAfterLoad = () => {
-      videoTimer = window.setTimeout(() => setVideoAllowed(true), 900);
-    };
+    let saveData = Boolean(connection?.saveData);
 
     const updatePreference = () => {
       window.clearTimeout(videoTimer);
-      window.removeEventListener('load', mountVideoAfterLoad);
       const allowsMotion = !preference.matches;
-      const conservesData = Boolean(
-        connection?.saveData ||
-          ['slow-2g', '2g', '3g'].includes(connection?.effectiveType ?? '') ||
-          compactViewport.matches,
-      );
-
       setMotionAllowed(allowsMotion);
-      setVideoAllowed(false);
-      setVideoReady(false);
-
-      if (allowsMotion && !conservesData) {
-        if (document.readyState === 'complete') mountVideoAfterLoad();
-        else window.addEventListener('load', mountVideoAfterLoad, { once: true });
+      if (allowsMotion && !saveData) {
+        videoTimer = window.setTimeout(() => setVideoAllowed(true), 900);
+      } else {
+        setVideoAllowed(false);
+        setVideoReady(false);
       }
+    };
+
+    const updateConnection = () => {
+      const nextSaveData = Boolean(connection?.saveData);
+      if (nextSaveData === saveData) return;
+      saveData = nextSaveData;
+      updatePreference();
     };
 
     updatePreference();
     preference.addEventListener('change', updatePreference);
-    compactViewport.addEventListener('change', updatePreference);
-    connection?.addEventListener('change', updatePreference);
+    connection?.addEventListener('change', updateConnection);
 
     return () => {
       window.clearTimeout(videoTimer);
-      window.removeEventListener('load', mountVideoAfterLoad);
       preference.removeEventListener('change', updatePreference);
-      compactViewport.removeEventListener('change', updatePreference);
-      connection?.removeEventListener('change', updatePreference);
+      connection?.removeEventListener('change', updateConnection);
     };
   }, []);
 
@@ -126,24 +119,30 @@ export function HomeHeroMedia({ children }: { children?: ReactNode }) {
       setVideoReady(true);
     }
 
-    if (!motionAllowed || !pageVisible || !carouselVisible || !showVideo) {
+    if (!pageVisible || !carouselVisible || !showVideo) {
       video.pause();
       return;
     }
 
+    video.muted = true;
+    video.defaultMuted = true;
     void video.play().catch(() => {
-      // Poster remains visible if autoplay is blocked.
+      if (mountedRef.current) setPlaying(false);
     });
   }, [carouselVisible, motionAllowed, pageVisible, showVideo, activeIndex]);
 
   const goPrev = useCallback(() => {
     setActiveIndex((current) => (current - 1 + homeHeroSlides.length) % homeHeroSlides.length);
     setVideoReady(false);
+    setPlaybackRequested(false);
+    setPlaying(false);
   }, []);
 
   const goNext = useCallback(() => {
     setActiveIndex((current) => (current + 1) % homeHeroSlides.length);
     setVideoReady(false);
+    setPlaybackRequested(false);
+    setPlaying(false);
   }, []);
 
   function renderSlideMedia(slide: HomeHeroSlide, isActive: boolean) {
@@ -151,21 +150,27 @@ export function HomeHeroMedia({ children }: { children?: ReactNode }) {
       return (
         <>
           <img className="wf-home-hero-card-poster" src={slide.poster} alt="" aria-hidden="true" />
-          {isActive && showVideo ? (
+          {isActive ? (
             <video
               ref={videoRef}
               className={`wf-home-hero-card-video${videoReady ? ' is-ready' : ''}`}
-              src={slide.src}
+              src={showVideo ? slide.src : undefined}
               poster={slide.poster}
-              autoPlay
+              autoPlay={showVideo}
               loop
               muted
               playsInline
-              preload="auto"
+              preload={showVideo ? 'auto' : 'none'}
               aria-hidden="true"
               tabIndex={-1}
               onCanPlay={() => {
                 if (mountedRef.current) setVideoReady(true);
+              }}
+              onPlaying={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onError={() => {
+                setPlaying(false);
+                setVideoReady(false);
               }}
             />
           ) : null}
@@ -205,6 +210,25 @@ export function HomeHeroMedia({ children }: { children?: ReactNode }) {
                     {showOverlay ? (
                       <div className="wf-home-hero-card-overlay">{children}</div>
                     ) : null}
+                    {isActive && slide.kind === 'video' && !playing ? (
+                      <button
+                        type="button"
+                        className="wf-home-hero-play"
+                        aria-label="Play background video"
+                        onClick={() => {
+                          const video = videoRef.current;
+                          if (!video) return;
+                          video.muted = true;
+                          video.defaultMuted = true;
+                          if (!video.getAttribute('src')) video.src = slide.src;
+                          setPlaybackRequested(true);
+                          void video.play().catch(() => setPlaying(false));
+                        }}
+                      >
+                        <Play aria-hidden="true" size={16} />
+                        Play video
+                      </button>
+                    ) : null}
                   </div>
                 </article>
               );
@@ -234,6 +258,8 @@ export function HomeHeroMedia({ children }: { children?: ReactNode }) {
                   onClick={() => {
                     setActiveIndex(index);
                     setVideoReady(false);
+                    setPlaybackRequested(false);
+                    setPlaying(false);
                   }}
                 />
               ))}
